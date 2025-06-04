@@ -10,13 +10,26 @@ Thank you for your interest in contributing to the BARS website! This guide will
 - Git
 - A modern web browser for testing
 
+> **⚠️ Important for Authentication Development**: If you're working on authentication features, user management, or any functionality that requires user login, you **MUST** also clone and run the BARS backend API locally. The frontend alone cannot handle authentication without the backend.
+
 ### Development Setup
+
+> **🔧 Backend Requirement**: For authentication features, division management, airport contributions, or any user-related functionality, you need to run both the frontend and backend locally. Clone the BARS API repository and follow its setup instructions before proceeding with frontend development that involves authentication.
 
 1. **Fork and Clone**
 
    ```bash
    git clone https://github.com/stopbars/Website.git
    cd Website
+   ```
+
+   **For authentication development, also clone the backend:**
+
+   ```bash
+   git clone https://github.com/stopbars/API.git
+   cd API
+   # Follow the backend setup instructions in the API repository
+   cd ../Website
    ```
 
 2. **Install Dependencies**
@@ -49,11 +62,13 @@ Thank you for your interest in contributing to the BARS website! This guide will
 
    **Configure API URL for local development:**
 
-   If you need to test against a local backend or different API endpoint, update the API URL in `src/context/AuthContext.jsx`:
+   **⚠️ REQUIRED for authentication features**: Update the API URL in `src/context/AuthContext.jsx` to point to your local backend:
 
    ```javascript
-   const apiUrl = 'http://localhost:3000'; // Update this for your local development setup
+   const apiUrl = 'http://localhost:3000'; // Update this to match your local backend port
    ```
+
+   > **Critical**: Authentication, user management, division features, and airport contributions will NOT work without a running backend API. Make sure you have cloned and started the BARS API server before testing these features.
 
    > **Important**: Do not commit changes to the API URL. This should remain as a local modification for development purposes only.
 
