@@ -25,7 +25,29 @@ Thank you for your interest in contributing to the BARS website! This guide will
    npm install
    ```
 
-3. **Start Development Server**
+3. **Configure Environment Variables**
+
+   **Set up environment variables:**
+
+   ```bash
+   copy .env.example .env
+   ```
+
+   Edit `.env` and add your API credentials:
+
+   - `VITE_VATSIM_CLIENT_ID`: Your VATSIM Connect application client ID
+   - `VITE_MAPBOX_TOKEN`: Your Mapbox access token (optional for basic testing)
+
+   **Configure VATSIM Connect:**
+
+   To get VATSIM Connect credentials for testing:
+   1. Follow the [VATSIM Connect Sandbox Guide](https://vatsim.dev/services/connect/sandbox) to create a development application
+   2. Obtain your client ID and update the `VITE_VATSIM_CLIENT_ID` in your `.env` file
+   3. Set your redirect URL to `http://localhost:5173/auth/callback` in your VATSIM Connect application settings
+
+   > **Note**: The VATSIM client ID is required for authentication features to work properly during development.
+
+4. **Start Development Server**
 
    ```bash
    npm run dev
@@ -35,7 +57,7 @@ Thank you for your interest in contributing to the BARS website! This guide will
 
    > **💡 Developer Tip**: If you see the "Coming Soon" screen, type `barsv2` to reveal the developer toggle and exit maintenance mode.
 
-4. **Available Scripts**
+5. **Available Scripts**
 
    - `npm run dev` - Start development server with hot reload
    - `npm run build` - Build for production
