@@ -47,6 +47,16 @@ Thank you for your interest in contributing to the BARS website! This guide will
 
    > **Note**: The VATSIM client ID is required for authentication features to work properly during development.
 
+   **Configure API URL for local development:**
+
+   If you need to test against a local backend or different API endpoint, update the API URL in `src/context/AuthContext.jsx`:
+
+   ```javascript
+   const apiUrl = 'http://localhost:3000'; // Update this for your local development setup
+   ```
+
+   > **Important**: Do not commit changes to the API URL. This should remain as a local modification for development purposes only.
+
 4. **Start Development Server**
 
    ```bash
