@@ -65,7 +65,7 @@ Thank you for your interest in contributing to the BARS website! This guide will
    **⚠️ REQUIRED for authentication features**: Update the API URL in `src/context/AuthContext.jsx` to point to your local backend:
 
    ```javascript
-   const apiUrl = 'http://localhost:3000'; // Update this to match your local backend port
+   const apiUrl = 'http://localhost:8787'; // Update this to match your local backend port
    ```
 
    > **Critical**: Authentication, user management, division features, and airport contributions will NOT work without a running backend API. Make sure you have cloned and started the BARS API server before testing these features.
