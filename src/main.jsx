@@ -32,7 +32,6 @@ import { AuthCallback } from './components/auth/AuthCallback'
 import { DiscordRedirect } from './components/shared/DiscordRedirect'
 import StaffDashboard from './pages/StaffDashboard.jsx'
 import { ErrorBoundary, RouteError } from './components/shared/ErrorBoundary'
-import MaintenanceWrapper from './components/shared/MaintenanceWrapper'
 
 const router = createBrowserRouter([
   {
@@ -199,14 +198,12 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <MaintenanceWrapper>
-      <AuthProvider>
-        <ModalProvider>
-          <ErrorBoundary>
-            <RouterProvider router={router} />
-          </ErrorBoundary>
-        </ModalProvider>
-      </AuthProvider>
-    </MaintenanceWrapper>
+    <AuthProvider>
+      <ModalProvider>
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+        </ErrorBoundary>
+      </ModalProvider>
+    </AuthProvider>
   </StrictMode>,
 );
