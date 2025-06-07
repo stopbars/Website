@@ -2,7 +2,7 @@ import { useState, createContext, useContext, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
 export const AuthContext = createContext(null);
-const apiUrl = 'https://v2.stopbars.com'; // Update this in dev as needed
+const apiUrl = 'http://localhost:8787'; // Update this in dev as needed
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 export function AuthProvider({ children }) {
