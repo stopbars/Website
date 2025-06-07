@@ -26,9 +26,9 @@ Thank you for your interest in contributing to the BARS website! This guide will
    **For authentication development, also clone the backend:**
 
    ```bash
-   git clone https://github.com/stopbars/API.git
-   cd API
-   # Follow the backend setup instructions in the API repository
+   git clone https://github.com/stopbars/Core.git
+   cd Core
+   # Follow the backend setup instructions in the Core repository
    cd ../Website
    ```
 
@@ -56,7 +56,7 @@ Thank you for your interest in contributing to the BARS website! This guide will
    To get VATSIM Connect credentials for testing:
    1. Follow the [VATSIM Connect Sandbox Guide](https://vatsim.dev/services/connect/sandbox) to create a development application
    2. Obtain your client ID and update the `VITE_VATSIM_CLIENT_ID` in your `.env` file
-   3. Set your redirect URL to `http://localhost:5173/auth/callback` in your VATSIM Connect application settings
+   3. Set your redirect URL to `http://localhost:8787/auth/callback` in your VATSIM Connect application settings
 
    > **Note**: The VATSIM client ID is required for authentication features to work properly during development.
 
@@ -79,8 +79,6 @@ Thank you for your interest in contributing to the BARS website! This guide will
    ```
 
    The development server will start at `http://localhost:5173` with hot module replacement enabled.
-
-   > **💡 Developer Tip**: If you see the "Coming Soon" screen, type `barsv2` to reveal the developer toggle and exit maintenance mode.
 
 5. **Available Scripts**
 
