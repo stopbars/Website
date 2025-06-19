@@ -98,7 +98,7 @@ If multiple ADC controllers are present at one airport, each controller will be 
 
 ## Enroute Usage
 
-BARS Plugin suports stopbar usage for C1/C3 Centre controllers, however it's initial setup is slightly different. When connected to the center position, within vatSys go to Windows > BARS and enter the four-letter ICAO code for the airport you want to control.
+BARS Plugin supports stopbar usage for C1/C3 Centre controllers, however its initial setup is slightly different. When connected to the center position, within vatSys go to Windows > BARS and enter the four-letter ICAO code for the airport you want to control.
 
 <br>
 
