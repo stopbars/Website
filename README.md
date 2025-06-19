@@ -8,7 +8,7 @@
 ![GitHub License](https://img.shields.io/github/license/stopbars/Website)
 [![Discord](https://img.shields.io/discord/1323993176318414889.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://stopbars.com/discord)
 
-BARS Website serves as the primary entry point for users, providing user authentication through VATSIM Connect, real-time airport status, and community contributions with the division staff management dashboard, documentation, product downloads, and overall brand marketing for BARS.
+BARS Website serves as the entry point for users, providing authentication through VATSIM, real-time airport,  community contributions, with  division staff management dashboard, documentation, product downloads, and brand marketing for BARS.
 
 <br>
 
