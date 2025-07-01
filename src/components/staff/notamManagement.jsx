@@ -1,0 +1,431 @@
+import { useState, useEffect } from 'react';
+import { MessageSquareWarning, AlertTriangle, Info, Loader, Plus, Edit, Save, X, ChevronDown, Eye, FileText, Tag } from 'lucide-react';
+import { Button } from '../shared/Button';
+
+// Function to parse markdown-style links in NOTAM content (same as Navbar)
+const parseNotamLinks = (content) => {
+  if (!content) return '';
+  
+  // RegExp to match markdown style links: [text](url)
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  
+  // Replace all instances of markdown links with HTML links
+  // Add target="_blank" and rel="noopener noreferrer" for security
+  return content.replace(
+    linkRegex, 
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline hover:brightness-125 transition-all">$1</a>'
+  );
+};
+
+const NotamManagement = () => {
+  const [notamData, setNotamData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [editType, setEditType] = useState('warning');
+  const [newContent, setNewContent] = useState('');
+  const [newType, setNewType] = useState('warning');
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showNewTypeDropdown, setShowNewTypeDropdown] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
+
+  useEffect(() => {
+    const fetchNotam = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch('https://v2.stopbars.com/notam');
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch NOTAM: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setNotamData(data);
+        // Set edit content and type when data is loaded
+        if (data?.notam) {
+          setEditContent(data.notam);
+          setEditType(data.type || 'warning');
+        }
+      } catch (err) {
+        console.error('Error fetching NOTAM:', err);
+        setError(err.message || 'Failed to fetch NOTAM data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotam();
+  }, []);
+
+  const getNotamTypeStyles = (type) => {
+    switch (type) {
+      case "warning":
+        return {
+          bg: "bg-amber-500/10",
+          border: "border-amber-500/20",
+          text: "text-amber-400",
+          icon: AlertTriangle,
+          circle: "bg-amber-400"
+        };
+      case "info":
+        return {
+          bg: "bg-blue-500/10",
+          border: "border-blue-500/20",
+          text: "text-blue-400",
+          icon: Info,
+          circle: "bg-blue-400"
+        };
+      case "discord":
+        return {
+          bg: "bg-indigo-500/10",
+          border: "border-indigo-500/20",
+          text: "text-indigo-300",
+          icon: MessageSquareWarning,
+          circle: "bg-indigo-300"
+        };
+      case "success":
+        return {
+          bg: "bg-emerald-500/10",
+          border: "border-emerald-500/20",
+          text: "text-emerald-400",
+          icon: MessageSquareWarning,
+          circle: "bg-emerald-400"
+        };
+      case "error":
+        return {
+          bg: "bg-red-500/10",
+          border: "border-red-500/20",
+          text: "text-red-400",
+          icon: AlertTriangle,
+          circle: "bg-red-400"
+        };
+      default:
+        return {
+          bg: "bg-zinc-700/20",
+          border: "border-zinc-600/30",
+          text: "text-zinc-300",
+          icon: MessageSquareWarning,
+          circle: "bg-zinc-400"
+        };
+    }
+  };
+
+  // Get all available NOTAM types (excluding default)
+  const getNotamTypes = () => {
+    return ['warning', 'info', 'discord', 'success', 'error'];
+  };
+
+  // Handle starting edit mode
+  const handleStartEdit = () => {
+    setIsEditing(true);
+    setIsAdding(false);
+  };
+
+  // Handle starting add mode
+  const handleStartAdd = () => {
+    setIsAdding(true);
+    setIsEditing(false);
+    setNewContent('');
+    setNewType('warning');
+  };
+
+  // Handle canceling edit/add
+  const handleCancel = () => {
+    setIsEditing(false);
+    setIsAdding(false);
+    setShowTypeDropdown(false);
+    setShowNewTypeDropdown(false);
+    // Reset edit content to original
+    if (notamData?.notam) {
+      setEditContent(notamData.notam);
+      setEditType(notamData.type || 'warning');
+    }
+  };
+
+  // Handle copying NOTAM to clipboard
+  const handleCopyNotam = async () => {
+    if (!notamData?.notam) return;
+    
+    try {
+      await navigator.clipboard.writeText(notamData.notam);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+    }
+  };
+
+  // Handle saving (placeholder - no backend functionality yet)
+  const handleSave = () => {
+    // TODO: Implement backend save functionality
+    console.log('Save functionality not implemented yet');
+    setIsEditing(false);
+    setIsAdding(false);
+    setShowTypeDropdown(false);
+    setShowNewTypeDropdown(false);
+  };
+
+  // Render type tag
+  const renderTypeTag = (type) => {
+    const styles = getNotamTypeStyles(type);
+    return (
+      <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${styles.bg} ${styles.border} ${styles.text} border`}>
+        <div className={`w-2 h-2 rounded-full mr-2 ${styles.text.replace('text-', 'bg-')}`}></div>
+        {type || 'default'}
+      </div>
+    );
+  };
+
+  // Render type dropdown
+  const renderTypeDropdown = (currentType, setType, isOpen, setIsOpen) => {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center justify-between w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+        >
+          <div className="flex items-center space-x-2">
+            <div className={`w-3 h-3 rounded-full transition-colors duration-200 ${getNotamTypeStyles(currentType).circle}`}></div>
+            <span className="capitalize transition-colors duration-200">{currentType}</span>
+          </div>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+            {getNotamTypes().map((type, index) => (
+              <button
+                key={type}
+                onClick={() => {
+                  setType(type);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 flex items-center space-x-2 ${
+                  currentType === type ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                }`}
+                style={{
+                  animationDelay: `${index * 25}ms`,
+                  animationFillMode: 'both'
+                }}
+              >
+                <div className={`w-3 h-3 rounded-full transition-all duration-200 ${getNotamTypeStyles(type).circle}`}></div>
+                <span className="capitalize transition-colors duration-150">{type}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <MessageSquareWarning className="w-6 h-6 text-zinc-400" />
+          <h2 className="text-xl font-semibold">NOTAM Management</h2>
+        </div>
+        <div className="flex items-center space-x-3">
+          {!isEditing && !isAdding && (
+            <>
+              <Button
+                onClick={handleStartAdd}
+                variant="outline"
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New NOTAM
+              </Button>
+              {notamData?.notam && (
+                <Button
+                  onClick={handleStartEdit}
+                  variant="outline"
+                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit Current
+                </Button>
+              )}
+            </>
+          )}
+          {(isEditing || isAdding) && (
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={handleSave}
+                variant="outline"
+                className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
+                  isAdding && newContent.trim().length < 5 
+                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent' 
+                    : ''
+                }`}
+                disabled={isAdding && newContent.trim().length < 5}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {isAdding ? 'Publish' : 'Save'}
+              </Button>
+              <Button
+                onClick={handleCancel}
+                variant="outline"
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add New NOTAM Section */}
+      {isAdding && (
+        <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+          <div className="mb-4">
+            <h3 className="text-lg font-medium text-white">Add New NOTAM</h3>
+          </div>
+          
+          <div className="space-y-6">
+            {/* Content Section */}
+            <div>
+              <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                <FileText className="w-4 h-4" />
+                <span>Content</span>
+              </label>
+              <textarea
+                value={newContent}
+                onChange={(e) => setNewContent(e.target.value)}
+                className="w-full h-24 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 resize-none text-white placeholder-zinc-500"
+              />
+            </div>
+            
+            {/* Type Section */}
+            <div>
+              <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                <Tag className="w-4 h-4" />
+                <span>Type</span>
+              </label>
+              {renderTypeDropdown(newType, setNewType, showNewTypeDropdown, setShowNewTypeDropdown)}
+            </div>
+            
+            {/* Preview Section */}
+            <div>
+              <div className="flex items-center space-x-2 mb-2">
+                <Eye className="w-4 h-4 text-zinc-400" />
+                <label className="text-sm font-medium text-zinc-300">Preview</label>
+              </div>
+              <div className="h-24 border border-zinc-700 rounded-lg overflow-hidden">
+                {newContent ? (
+                  <div className={`p-4 h-full ${getNotamTypeStyles(newType).bg} ${getNotamTypeStyles(newType).border} border`}>
+                    <div 
+                      className={`${getNotamTypeStyles(newType).text} font-medium text-sm overflow-auto`}
+                      dangerouslySetInnerHTML={{ __html: parseNotamLinks(newContent) }}
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 h-full bg-zinc-800/50 flex items-center justify-center">
+                    <p className="text-zinc-500 text-sm">Preview will appear here...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Existing NOTAM Section */}
+      {isEditing && notamData?.notam && (
+        <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+          <div className="mb-4">
+            <h3 className="text-lg font-medium text-white">Edit Current NOTAM</h3>
+          </div>
+          
+          <div className="space-y-6">
+            {/* Content Section */}
+            <div>
+              <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                <FileText className="w-4 h-4" />
+                <span>Content</span>
+              </label>
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full h-24 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 resize-none text-white"
+              />
+            </div>
+            
+            {/* Type Section */}
+            <div>
+              <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                <Tag className="w-4 h-4" />
+                <span>Type</span>
+              </label>
+              {renderTypeDropdown(editType, setEditType, showTypeDropdown, setShowTypeDropdown)}
+            </div>
+            
+            {/* Preview Section */}
+            <div>
+              <div className="flex items-center space-x-2 mb-2">
+                <Eye className="w-4 h-4 text-zinc-400" />
+                <label className="text-sm font-medium text-zinc-300">Preview</label>
+              </div>
+              <div className="h-24 border border-zinc-700 rounded-lg overflow-hidden">
+                <div className={`p-4 h-full ${getNotamTypeStyles(editType).bg} ${getNotamTypeStyles(editType).border} border`}>
+                  <div 
+                    className={`${getNotamTypeStyles(editType).text} font-medium text-sm overflow-auto`}
+                    dangerouslySetInnerHTML={{ __html: parseNotamLinks(editContent) }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Current NOTAM Display */}
+      {!isEditing && !isAdding && (
+        <div className="space-y-4">
+          <div className="flex items-center space-x-3">
+            <h3 className="text-lg font-medium text-zinc-300">Current NOTAM:</h3>
+            {notamData?.notam && renderTypeTag(notamData.type)}
+          </div>
+          
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader className="w-6 h-6 animate-spin text-zinc-400" />
+              <span className="ml-2 text-zinc-400">Loading NOTAM...</span>
+            </div>
+          ) : error ? (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
+              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <p className="text-red-400">{error}</p>
+            </div>
+          ) : notamData?.notam ? (
+            <div className="space-y-4">
+              <div 
+                className={`p-4 rounded-lg border ${getNotamTypeStyles(notamData.type).bg} ${getNotamTypeStyles(notamData.type).border}`}
+              >
+                <div 
+                  className={`${getNotamTypeStyles(notamData.type).text} font-medium`}
+                  dangerouslySetInnerHTML={{ __html: parseNotamLinks(notamData.notam) }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Info className="w-5 h-5 text-zinc-400 flex-shrink-0" />
+                <p className="text-zinc-400">No NOTAM currently active</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default NotamManagement;

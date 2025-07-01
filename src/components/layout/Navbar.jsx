@@ -186,9 +186,9 @@ export const Navbar = () => {  const scrolled = useScroll();
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-6 lg:space-x-12">
               <div className="flex items-center space-x-6 lg:space-x-12">
-                <Link to="/donate" className="text-zinc-400 hover:text-white transition-colors">Donate</Link>
+                <Link to="/contribute" className="text-zinc-400 hover:text-white transition-colors">Contribute</Link>
                 <Link to="/documentation" className="text-zinc-400 hover:text-white transition-colors">Documentation</Link>
-                <Link to="/faq" className="text-zinc-400 hover:text-white transition-colors">FAQ</Link>
+                <a href="https://opencollective.com/stopbars" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors">Donate</a>
               </div>
               {user ? (
                 <div className="flex items-center space-x-4">
@@ -246,7 +246,8 @@ export const Navbar = () => {  const scrolled = useScroll();
               </button>
             </div>
           </div>
-        </div>        {/* Mobile menu, show/hide based on menu state with smooth animation */}
+        </div>        
+        {/* Mobile menu, show/hide based on menu state with smooth animation */}
         <div 
           className={`md:hidden fixed inset-x-0 transform transition-all duration-300 ease-in-out ${
             mobileMenuOpen 
@@ -258,11 +259,11 @@ export const Navbar = () => {  const scrolled = useScroll();
           <div className="bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 shadow-lg rounded-b-xl mx-2">
             <div className="px-5 py-4 space-y-1">
               <Link 
-                to="/donate" 
+                to="/contribute" 
                 className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="font-medium">Donate</span>
+                <span className="font-medium">Contribute</span>
               </Link>
               <Link 
                 to="/documentation" 
@@ -271,13 +272,15 @@ export const Navbar = () => {  const scrolled = useScroll();
               >
                 <span className="font-medium">Documentation</span>
               </Link>
-              <Link 
-                to="/faq" 
+              <a 
+                href="https://opencollective.com/stopbars"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="font-medium">FAQ</span>
-              </Link>
+                <span className="font-medium">Donate</span>
+              </a>
               
               {/* Auth section with subtle divider */}
               <div className="my-3 border-t border-zinc-800/70"></div>

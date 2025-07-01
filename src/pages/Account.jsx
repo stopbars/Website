@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { User, LogOut, AlertOctagon, Laptop, Shield, Eye, EyeOff, Copy, Check, RefreshCcw } from 'lucide-react';
+import { User, LogOut, AlertOctagon, Link, Shield, Eye, EyeOff, Copy, Check, RefreshCcw } from 'lucide-react';
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
 
 const Account = () => {
@@ -126,7 +126,10 @@ const Account = () => {
             <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-semibold mb-2">Staff Access</h2>
+                  <div className="flex items-center space-x-3 mb-2">
+                    <Shield className="w-6 h-6 text-blue-400" />
+                    <h2 className="text-2xl font-semibold">Staff Access</h2>
+                  </div>
                   <p className="text-zinc-400">Role: {staffRoles?.role?.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
                 </div>
                 <Button
@@ -134,7 +137,7 @@ const Account = () => {
                   onClick={() => window.location.href = '/staff'}
                   className="bg-blue-500 hover:bg-blue-600"
                 >
-                  <Laptop className="w-4 h-4 mr-2" />
+                  <Link className="w-4 h-4 mr-2" />
                   Staff Dashboard
                 </Button>
               </div>
@@ -191,7 +194,7 @@ const Account = () => {
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-zinc-500 mt-2">Keep this token secret. Use it to authenticate API requests.</p>
+                <p className="text-sm text-zinc-500 mt-2">Keep this token secret, never share it with anyone. It is used to authenticate API requests.</p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-6">

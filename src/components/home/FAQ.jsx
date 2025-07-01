@@ -55,11 +55,11 @@ export const FAQ = () => {
               {faqs.map((faq, index) => (
                 <div 
                   key={faq.id} 
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden transition-all duration-200 hover:shadow-lg"
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden"
                 >
                   <button
                     onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                    className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-zinc-800/50 transition-colors"
+                    className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-zinc-800/40 transition-colors duration-200"
                   >
                     <span className="font-medium pr-6">{faq.question}</span>
                     {openFaq === index ? 
@@ -67,11 +67,19 @@ export const FAQ = () => {
                       <Plus className="h-5 w-5 text-zinc-400 flex-shrink-0" />
                     }
                   </button>
-                  {openFaq === index && (
-                    <div className="px-6 py-4 text-zinc-400 border-t border-zinc-800">
-                      {faq.answer}
+                  <div 
+                    className={`transition-all duration-400 ease-out overflow-hidden ${
+                      openFaq === index 
+                        ? 'max-h-80 opacity-100' 
+                        : 'max-h-0 opacity-0'
+                    }`}
+                  >
+                    <div className="px-6 pb-4 text-zinc-400 border-t border-zinc-800">
+                      <div className="pt-4">
+                        {faq.answer}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>

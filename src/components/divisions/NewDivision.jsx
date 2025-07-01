@@ -18,6 +18,13 @@ const NewDivision = () => {
     setLoading(true);
     setError(null);
 
+    // Validate that division name starts with "VAT"
+    if (!name.toUpperCase().startsWith('VAT')) {
+      setError('Division Name must start with "VAT"');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('https://v2.stopbars.com/divisions', {
         method: 'POST',
@@ -71,7 +78,7 @@ const NewDivision = () => {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
-                    placeholder="e.g. European Division"
+                    placeholder="e.g. VATxxx"
                     required
                   />
                 </div>
@@ -86,7 +93,7 @@ const NewDivision = () => {
                     value={headCid}
                     onChange={(e) => setHeadCid(e.target.value)}
                     className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
-                    placeholder="VATSIM CID of Division Head"
+                    placeholder="VATSIM CID of Division Nav Head"
                     required
                   />
                   <p className="mt-2 text-sm text-zinc-500">

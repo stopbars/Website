@@ -70,7 +70,7 @@ const Changelog = () => {
           {/* Header */}
           <div className="mb-12">
             <div className="flex items-center space-x-3 mb-4">
-              <h1 className="text-3xl font-bold">Release History</h1>
+              <h1 className="text-3xl font-bold">Changelog</h1>
             </div>
             <p className="text-zinc-400">
               Track all changes and improvements to BARS components

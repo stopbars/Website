@@ -393,7 +393,7 @@ const ContributeDetails = () => {
                   className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
                 />
                 <p className="mt-1 text-xs text-zinc-400">
-                  This name will be shown on the public leaderboard. Leave empty to use your VATSIM ID.
+                  This name will be shown on the public leaderboard. Leave empty to use your VATSIM CID.
                 </p>
               </div>
 

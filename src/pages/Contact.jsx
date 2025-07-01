@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -11,6 +11,7 @@ import {
   Copy,
   ArrowRight,
   Users,
+  ChevronDown,
 } from 'lucide-react';
 
 const teamMembers = [
@@ -36,6 +37,33 @@ const Contact = () => {
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState('');
+  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const topicOptions = [
+    'Technical Support',
+    'Bug Report',
+    'Feature Request',
+    'Security Concern',
+    'Partnership Inquiry',
+    'Legal Inquiry',
+    'Media Request',
+    'Other'
+  ];
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowTopicDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleCopyEmail = async (email) => {
     try {
@@ -47,11 +75,60 @@ const Contact = () => {
     }
   };
 
+  // Render topic dropdown
+  const renderTopicDropdown = () => {
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setShowTopicDropdown(!showTopicDropdown)}
+          className="flex items-center justify-between w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+        >
+          <span className={selectedTopic ? 'text-white' : 'text-zinc-500'}>
+            {selectedTopic || 'Select a topic'}
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showTopicDropdown ? 'rotate-180' : ''}`} />
+        </button>
+        
+        {showTopicDropdown && (
+          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+            {topicOptions.map((topic, index) => (
+              <button
+                key={topic}
+                type="button"
+                onClick={() => {
+                  setSelectedTopic(topic);
+                  setShowTopicDropdown(false);
+                }}
+                className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
+                  selectedTopic === topic ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                }`}
+                style={{
+                  animationDelay: `${index * 25}ms`,
+                  animationFillMode: 'both'
+                }}
+              >
+                {topic}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
     setIsSubmitting(true);
+
+    // Validation
+    if (!selectedTopic) {
+      setError('Please select a topic');
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const response = await fetch('https://api.stopbars.com/help-me', {
@@ -75,6 +152,7 @@ const Contact = () => {
       setEmail('');
       setMessage('');
       setSelectedTopic('');
+      setShowTopicDropdown(false);
     } catch (err) {
       setError(err.message || 'Failed to send message. Please try again.');
     } finally {
@@ -117,20 +195,7 @@ const Contact = () => {
                 <label className="block text-sm font-medium mb-2">
                   What do you need help with?
                 </label>
-                <select
-                  value={selectedTopic}
-                  onChange={(e) => setSelectedTopic(e.target.value)}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select a topic</option>
-                  <option value="Installation Issues">Installation Issues</option>
-                  <option value="Technical Support">Technical Support</option>
-                  <option value="Feature Request">Feature Request</option>
-                  <option value="Bug Report">Bug Report</option>
-                  <option value="Media Inquiry">Media Inquiry</option>
-                  <option value="Other">Other</option>
-                </select>
+                {renderTopicDropdown()}
               </div>
 
               <div>
@@ -222,24 +287,26 @@ const Contact = () => {
           {/* Additional Support Options */}
           <div className="grid md:grid-cols-2 gap-6">
             {/* Discord Support */}
-            <Card className="p-6 hover:border-blue-500/20 transition-colors cursor-pointer group"
-                  onClick={() => window.open('https://discord.gg/7EhmtwKWzs', '_blank')}>
+            <Card className="p-6 hover:border-blue-500/30 transition-all cursor-pointer group"
+                  onClick={() => window.open('https://stopbars.com/discord', '_blank')}>
               <div className="flex items-center space-x-3">
-                <MessagesSquare className="w-5 h-5 text-blue-400" />
+                <MessagesSquare className="w-5 h-5 text-blue-400 group-hover:text-blue-300 transition-colors" />
                 <div>
-                  <h3 className="font-medium">Discord Community</h3>
-                  <p className="text-sm text-zinc-400">Get instant help from our community</p>
+                  <h3 className="font-medium group-hover:text-blue-100 transition-colors">Discord Community</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-zinc-400">Get instant help from our community</span>
+                    <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+                  </div>
                 </div>
-                <ArrowRight className="w-4 h-4 ml-auto text-zinc-500 group-hover:text-blue-400 transition-colors group-hover:translate-x-1 transform transition-transform" />
               </div>
             </Card>
 
             {/* General Support Email */}
-            <Card className="p-6">
+            <Card className="p-6 hover:border-emerald-500/30 transition-all cursor-pointer group">
               <div className="flex items-center space-x-3">
-                <Mail className="w-5 h-5 text-emerald-400" />
+                <Mail className="w-5 h-5 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
                 <div>
-                  <h3 className="font-medium">Support Email</h3>
+                  <h3 className="font-medium group-hover:text-emerald-100 transition-colors">Support Email</h3>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-zinc-400">support@stopbars.com</span>
                     <button

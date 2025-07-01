@@ -18,12 +18,12 @@ const Terms = () => {
                 <div className="p-4 bg-zinc-800/50 rounded-lg">
                   <p className="text-zinc-300">
                     <strong>Important Notice:</strong> BARS is an independent third-party software project. We are not affiliated with, 
-                    endorsed by, or connected to VATSIM, vatSys, Microsoft Flight Simulator, or any other simulation, controller client 
+                    endorsed by, or connected to VATSIM, vatSys, EuroScope Microsoft Flight Simulator, or any other simulation, controller client 
                     supported by our software. All respective trademarks, logos, and brand names are the property of their respective owners.
                   </p>
                 </div>
               </div>
-              <p className="text-zinc-300">
+              <p className="text-zinc-300 mt-6">
                 Last updated: January 29, 2025
               </p>
             </Card>

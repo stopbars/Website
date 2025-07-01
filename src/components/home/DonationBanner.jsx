@@ -1,5 +1,4 @@
 import { HeartHandshake, ArrowRight } from '../shared/Icons';
-import { Link } from 'react-router-dom';
 
 export const DonationBanner = () => {
   return (
@@ -7,7 +6,7 @@ export const DonationBanner = () => {
       <div className="max-w-3xl mx-auto px-6 text-center">
         <div className="flex items-center justify-center space-x-3 mb-6">
           <HeartHandshake className="w-6 h-6 text-emerald-400" />
-          <h2 className="text-2xl font-medium">Help Us Keep BARS&apos;s Free!</h2>
+          <h2 className="text-2xl font-medium">Help Keep BARS&apos;s Free!</h2>
         </div>
         
         <div className="space-y-4 mb-8">
@@ -22,10 +21,10 @@ export const DonationBanner = () => {
           </div>
         </div>
         
-        <Link to="/donate" className="group inline-flex text-lg items-center px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-emerald-500/20">
+        <a href="https://opencollective.com/stopbars" target="_blank" rel="noopener noreferrer" className="group inline-flex text-lg items-center px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-emerald-500/20">
           Support Development
           <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
-          </Link>
+        </a>
       </div>
     </section>
   );
