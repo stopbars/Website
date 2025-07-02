@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquareWarning, AlertTriangle, Info, Loader, Plus, Edit, Save, X, ChevronDown, Eye, FileText, Tag } from 'lucide-react';
+import { MessageSquareWarning, AlertTriangle, Info, Loader, Plus, Edit, X, ChevronDown, Eye, FileText, Tag, Send, HardDriveDownload, CheckCircle2 } from 'lucide-react';
 import { Button } from '../shared/Button';
 
 // Function to parse markdown-style links in NOTAM content (same as Navbar)
@@ -30,6 +30,9 @@ const NotamManagement = () => {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showNewTypeDropdown, setShowNewTypeDropdown] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [hasEditChanges, setHasEditChanges] = useState(false);
 
   useEffect(() => {
     const fetchNotam = async () => {
@@ -60,6 +63,17 @@ const NotamManagement = () => {
 
     fetchNotam();
   }, []);
+
+  // Track changes when editing
+  useEffect(() => {
+    if (isEditing && notamData?.notam) {
+      const hasContentChanged = editContent !== notamData.notam;
+      const hasTypeChanged = editType !== (notamData.type || 'warning');
+      setHasEditChanges(hasContentChanged || hasTypeChanged);
+    } else {
+      setHasEditChanges(false);
+    }
+  }, [editContent, editType, isEditing, notamData]);
 
   const getNotamTypeStyles = (type) => {
     switch (type) {
@@ -123,6 +137,7 @@ const NotamManagement = () => {
   const handleStartEdit = () => {
     setIsEditing(true);
     setIsAdding(false);
+    setHasEditChanges(false);
   };
 
   // Handle starting add mode
@@ -139,6 +154,7 @@ const NotamManagement = () => {
     setIsAdding(false);
     setShowTypeDropdown(false);
     setShowNewTypeDropdown(false);
+    setHasEditChanges(false);
     // Reset edit content to original
     if (notamData?.notam) {
       setEditContent(notamData.notam);
@@ -159,14 +175,95 @@ const NotamManagement = () => {
     }
   };
 
-  // Handle saving (placeholder - no backend functionality yet)
-  const handleSave = () => {
-    // TODO: Implement backend save functionality
-    console.log('Save functionality not implemented yet');
-    setIsEditing(false);
-    setIsAdding(false);
-    setShowTypeDropdown(false);
-    setShowNewTypeDropdown(false);
+  // Handle saving with backend API
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      
+      // Get the VATSIM token from localStorage
+      const token = localStorage.getItem('vatsimToken');
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+      
+      // Determine content and type based on mode
+      const content = isAdding ? newContent.trim() : editContent.trim();
+      const type = isAdding ? newType : editType;
+      
+      // Validate content
+      if (!content) {
+        throw new Error('NOTAM content cannot be empty.');
+      }
+      
+      // Make API request
+      const response = await fetch('https://v2.stopbars.com/notam', {
+        method: 'PUT',
+        headers: { 
+          'X-Vatsim-Token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          content: content,
+          type: type
+        })
+      });
+      
+      if (!response.ok) {
+        // Handle different error types
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Please log in again.');
+        } else if (response.status === 403) {
+          throw new Error('You do not have permission to manage NOTAMs.');
+        } else if (response.status === 400) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Invalid NOTAM data provided.');
+        } else {
+          throw new Error(`Failed to save NOTAM: ${response.status}`);
+        }
+      }
+      
+      // Update localStorage cache with new NOTAM data for immediate navbar update
+      try {
+        const currentTime = new Date().getTime();
+        localStorage.setItem('notam-content', content);
+        localStorage.setItem('notam-type', type);
+        localStorage.setItem('notam-last-fetch', currentTime.toString());
+      } catch (storageErr) {
+        console.error('Failed to update localStorage cache:', storageErr);
+        // Don't throw error - this is not critical for the save operation
+      }
+      
+      // Update local state with new data
+      const updatedNotamData = {
+        notam: content,
+        type: type
+      };
+      setNotamData(updatedNotamData);
+      
+      // Reset form states
+      setIsEditing(false);
+      setIsAdding(false);
+      setShowTypeDropdown(false);
+      setShowNewTypeDropdown(false);
+      
+      // Reset form content
+      setNewContent('');
+      setNewType('warning');
+      
+      // Update edit content for future edits
+      setEditContent(content);
+      setEditType(type);
+      
+      // Show success message
+      setSaveSuccess(true);
+      
+    } catch (err) {
+      console.error('Error saving NOTAM:', err);
+      setError(err.message || 'Failed to save NOTAM');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Render type tag
@@ -259,14 +356,28 @@ const NotamManagement = () => {
                 onClick={handleSave}
                 variant="outline"
                 className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
-                  isAdding && newContent.trim().length < 5 
+                  (isAdding && newContent.trim().length < 5) || (isEditing && !hasEditChanges) || saving
                     ? 'opacity-50 cursor-not-allowed hover:!bg-transparent' 
                     : ''
                 }`}
-                disabled={isAdding && newContent.trim().length < 5}
+                disabled={(isAdding && newContent.trim().length < 5) || (isEditing && !hasEditChanges) || saving}
               >
-                <Save className="w-4 h-4 mr-2" />
-                {isAdding ? 'Publish' : 'Save'}
+                {saving ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : isAdding ? (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Publish
+                  </>
+                ) : (
+                  <>
+                    <HardDriveDownload className="w-4 h-4 mr-2" />
+                    Save
+                  </>
+                )}
               </Button>
               <Button
                 onClick={handleCancel}
@@ -280,6 +391,25 @@ const NotamManagement = () => {
           )}
         </div>
       </div>
+
+      {/* Success Message */}
+      {saveSuccess && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-emerald-400 font-medium">NOTAM Updated Successfully</p>
+            <p className="text-emerald-300/80 text-sm mt-1">
+              The endpoint may take a short time to update. Users will see changes after 1 hour when their cache expires and the navbar fetches from the API. Your NOTAM in the navbar will be updated, but NOTAM Management will show outdated data until the endpoint updates.
+            </p>
+          </div>
+          <button
+            onClick={() => setSaveSuccess(false)}
+            className="text-emerald-400/60 hover:text-emerald-400 transition-colors flex-shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Add New NOTAM Section */}
       {isAdding && (
