@@ -13,17 +13,29 @@ const NewDivision = () => {
   const [error, setError] = useState(null);
   const token = localStorage.getItem('vatsimToken');
 
+  const handleNameBlur = () => {
+    if (name.toUpperCase().startsWith('VAT')) {
+      // Auto-uppercase VAT (e.g., "vatpac, VatPac" -> "VATPAC")
+      setName(name.toUpperCase());
+    } else if (name.toLowerCase().includes('vacc')) {
+      // Auto-format vACC (e.g., "Dutch vacc", "Dutch vAcC" -> "Dutch vACC")
+      setName(name.replace(/vacc/gi, 'vACC'));
+    }
+    // Other names keep their original casing
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    // Validate that division name starts with "VAT"
-    if (!name.toUpperCase().startsWith('VAT')) {
-      setError('Division Name must start with "VAT"');
-      setLoading(false);
-      return;
+    // Handle special formatting for divisions and vACCs
+    let formattedName = name;
+    if (name.toUpperCase().startsWith('VAT')) {
+      // Auto-uppercase VAT (e.g., "vatpac, VatPac" -> "VATPAC")
+      formattedName = name.toUpperCase();
     }
+    // vACC names keep their original casing to preserve "vACC" formatting
 
     try {
       const response = await fetch('https://v2.stopbars.com/divisions', {
@@ -33,7 +45,7 @@ const NewDivision = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          name,
+          name: formattedName,
           headVatsimId: headCid
         })
       });
@@ -77,8 +89,9 @@ const NewDivision = () => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    onBlur={handleNameBlur}
                     className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
-                    placeholder="e.g. VATxxx"
+                    placeholder="e.g. VATxxx, xxx vACC"
                     required
                   />
                 </div>
