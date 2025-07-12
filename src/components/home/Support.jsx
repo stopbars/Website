@@ -22,7 +22,7 @@ export const Support = () => {
       <div className="max-w-7xl mx-auto px-6">
         <h2 className="text-3xl font-bold mb-4">Need Help?</h2>
         <p className="text-zinc-400 mb-12 max-w-2xl">
-          We&apos;re here to help you get the most out of BARS, oin our community for support and updates.
+          We&apos;re here to help you get the most out of BARS, join our community for support and updates.
         </p>
         
         <div className="grid md:grid-cols-3 gap-8">
