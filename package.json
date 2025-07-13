@@ -18,7 +18,7 @@
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.471.2",
-    "mapbox-gl": "^3.9.4",
+    "mapbox-gl": "^3.13.0",
     "prop-types": "^15.8.1",
     "react": "^18.3.1",
     "react-confetti": "^6.2.2",
