@@ -3,6 +3,7 @@ import { Plane, Monitor, Download, Zap, Building2, RefreshCw } from 'lucide-reac
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
 import PropTypes from 'prop-types';
+import { roundDownloadCount } from '../../utils/numberUtils';
 
 const Feature = ({ icon: Icon, title, description }) => (
   <div className="flex items-start space-x-4">
@@ -50,7 +51,7 @@ const DownloadButton = ({ asset, icon: Icon, label, variant = "primary", version
           <div className="flex items-center gap-1.5 text-xs opacity-80">
             <span>v{version}</span>
             <span>•</span>
-            <span>{downloadCount?.toLocaleString()}+ downloads</span>
+            <span>{roundDownloadCount(downloadCount)?.toLocaleString()}+ downloads</span>
           </div>
         )}
       </div>
