@@ -163,7 +163,7 @@ export const Footer = () => {
 
         {/* Disclaimer */}
         <div className="mt-8 md:mt-16 pt-6 md:pt-8 border-t border-zinc-900">
-          <p className="text-zinc-500 hover:text-red-400/90 transition-colors duration-300 text-base md:text-base text-center max-w-4xl mx-auto leading-relaxed">
+          <p className="text-zinc-300 hover:text-red-400/90 transition-colors duration-300 text-base md:text-base text-center max-w-4xl mx-auto leading-relaxed">
             BARS is an independent third-party software project. We are not affiliated with, endorsed by, or connected to
             VATSIM, vatSys, EuroScope, Microsoft Flight Simulator, or any other simulation, controller client supported by our software.
           </p>

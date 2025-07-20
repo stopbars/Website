@@ -31,8 +31,6 @@ export const DocsSidebar = ({ currentDoc, onDocChange, content }) => {
       return;
     }
 
-    console.log('Content received in DocsSidebar:', content.substring(0, 100));
-
     // Parse markdown content to extract headers
     const headers = [];
     const lines = content.split('\n');
@@ -48,16 +46,12 @@ export const DocsSidebar = ({ currentDoc, onDocChange, content }) => {
           .replace(/[^\w\s-]/g, '')
           .replace(/\s+/g, '-');
         
-        console.log('Found header:', { level, title, id }); // Debug log
-        
         // Only include headers level 2 and deeper for the contents
         if (level >= 2) {
           headers.push({ level, title, id });
         }
       }
     });
-
-    console.log('Extracted headers:', headers); // Debug log
 
     setNavigationItems(prev => 
       prev.map(item => 
@@ -69,12 +63,10 @@ export const DocsSidebar = ({ currentDoc, onDocChange, content }) => {
   }, [content, currentDoc]);
 
   const handleItemClick = (itemId) => {
-    console.log('Item clicked:', itemId); // Debug log
     onDocChange(itemId);
   };
 
   const handleHeaderClick = (headerId) => {
-    console.log('Header clicked:', headerId); // Debug log
     const element = document.getElementById(headerId);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
@@ -88,18 +80,13 @@ export const DocsSidebar = ({ currentDoc, onDocChange, content }) => {
           {navigationItems.map((item) => {
             const Icon = item.icon;
             const isExpanded = currentDoc === item.id;
-            
-            // Debug log
-            console.log('Rendering item:', item.id, {
-              isExpanded,
-              contentsLength: item.contents.length
-            });
+
 
             return (
               <div key={item.id}>
                 <button
                   onClick={() => handleItemClick(item.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer ${
                     isExpanded
                       ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
                       : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -122,7 +109,7 @@ export const DocsSidebar = ({ currentDoc, onDocChange, content }) => {
                         key={index}
                         onClick={() => handleHeaderClick(header.id)}
                         className={`
-                          w-full text-left py-1 text-sm
+                          w-full text-left py-1 text-sm cursor-pointer
                           transition-all duration-200
                           ${header.level === 2 
                             ? 'text-zinc-300 hover:text-white font-medium pl-4' 

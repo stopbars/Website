@@ -129,7 +129,7 @@ export const Airports = () => {
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="w-4 h-4" aria-label='Previous Page' />
                   </Button>
                   <div className="flex items-center px-4 py-2 bg-zinc-800 rounded-lg">
                     <span className="text-zinc-400">
@@ -141,7 +141,7 @@ export const Airports = () => {
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4" aria-label='Next Page' />
                   </Button>
                 </div>
               </div>

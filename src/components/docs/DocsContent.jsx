@@ -146,9 +146,9 @@ const parseMarkdown = (content) => {
     temp.innerHTML = text;
     
     return Array.from(temp.childNodes).map((node, index) => {
-      if (node.nodeType === 3) return node.textContent; // Text node
+      if (node.nodeType === 3) return node.textContent;
       const Element = node.tagName.toLowerCase();
-      const props = {};
+      const props = { key: `inline-${Date.now()}-${index}` };
       
       // Add appropriate classes based on element type
       if (Element === 'strong') props.className = 'font-bold text-white';
@@ -163,7 +163,7 @@ const parseMarkdown = (content) => {
         }
       }
       
-      return React.createElement(Element, { ...props, key: index }, node.textContent);
+      return React.createElement(Element, props, node.textContent);
     });
   };
 

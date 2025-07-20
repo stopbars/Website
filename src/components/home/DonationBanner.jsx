@@ -21,7 +21,13 @@ export const DonationBanner = () => {
           </div>
         </div>
         
-        <a href="https://opencollective.com/stopbars" target="_blank" rel="noopener noreferrer" className="group inline-flex text-lg items-center px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-emerald-500/20">
+        <a 
+          href="https://opencollective.com/stopbars" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="group inline-flex text-lg items-center px-8 py-4 bg-emerald-700 hover:bg-emerald-600 focus:bg-emerald-600 text-white rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-emerald-500/20 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-zinc-900 font-medium"
+          aria-label="Support BARS development through donations on OpenCollective"
+        >
           Support Development
           <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
         </a>

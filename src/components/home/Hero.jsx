@@ -7,10 +7,10 @@ import { roundDownloadCount } from '../../utils/numberUtils';
 
 const Feature = ({ icon: Icon, title, description }) => (
   <div className="flex items-start space-x-4">
-    <Icon className="w-6 h-6 mt-1 text-zinc-400" />
+    <Icon className="w-6 h-6 mt-1 text-zinc-300" />
     <div>
-      <h3 className="font-medium mb-2">{title}</h3>
-      <p className="text-zinc-400 text-sm">{description}</p>
+      <h2 className="font-medium mb-2">{title}</h2>
+      <p className="text-zinc-300 text-sm">{description}</p>
     </div>
   </div>
 );
@@ -41,6 +41,7 @@ const DownloadButton = ({ asset, icon: Icon, label, variant = "primary", version
       variant={variant}
       onClick={handleDownload}
       className="group relative overflow-hidden h-14 px-5 w-full"
+      aria-label={`Download ${label}${version ? ` version ${version}` : ''} - ${roundDownloadCount(downloadCount)?.toLocaleString()}+ downloads`}
     >
       <div className="absolute left-0 inset-y-0 flex items-center justify-center w-12 border-r border-black/10">
         <Icon className="h-5 w-5" />
@@ -203,18 +204,18 @@ export const Hero = () => {
   const euroscopeAsset = getAssetInfo('euroscope');
 
   return (
-    <section className="relative pt-32 pb-20">
+    <section className="relative pt-32 pb-20" aria-labelledby="hero-heading">
       <div className="relative max-w-7xl mx-auto px-6">
         <div className="grid md:grid-cols-2 gap-16 items-center">
           <div>
-            <h1 className="text-7xl font-bold tracking-tight mb-8">
+            <h1 id="hero-heading" className="text-7xl font-bold tracking-tight mb-8">
               <span className="text-red-500">Stop Bar</span>
               <br />
               <span className="bg-gradient-to-r from-zinc-200 to-zinc-300 text-transparent bg-clip-text">
                 Simulation
               </span>
             </h1>
-            <p className="text-xl text-zinc-400 mb-8 leading-relaxed">
+            <p className="text-xl text-zinc-300 mb-8 leading-relaxed">
               BARS revolutionizes your VATSIM experience with realistic stopbar operations.
               Fully compatible with Microsoft Flight Simulator and seamlessly integrated
               with both default and major third-party sceneries.
@@ -227,6 +228,7 @@ export const Hero = () => {
                   variant="secondary"
                   onClick={retryDataFetch}
                   className="flex items-center space-x-2"
+                  aria-label="Retry loading download information"
                 >
                   <RefreshCw className="w-4 h-4" />
                   <span>Retry</span>
@@ -271,14 +273,30 @@ export const Hero = () => {
                 </div>
               </div>
             ) : (
-              <div className="flex gap-4">
-                <div className="h-14 w-64 bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 w-64 bg-zinc-800/80 rounded-lg animate-pulse" />
+              <div className="space-y-4">
+                {/* First Row: Two Buttons - Loading State */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <div className="sm:w-5/12">
+                    <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                  </div>
+                  <div className="sm:w-5/12">
+                    <div className="h-14 bg-zinc-800/80 rounded-lg animate-pulse" />
+                  </div>
+                </div>
+                {/* Second Row: Single Button - Loading State */}
+                <div className="flex justify-center">
+                  <div className="w-5/12">
+                    <div className="h-14 bg-zinc-800/60 rounded-lg animate-pulse" />
+                  </div>
+                </div>
               </div>
             )}
           </div>
-          <Card className="p-8">
+          <Card className="p-8" aria-labelledby="features-heading">
             <div className="space-y-6">
+              <div className="sr-only">
+                <h2 id="features-heading">Key Features</h2>
+              </div>
               <Feature
                 icon={Download}
                 title="One-Click Installation"
