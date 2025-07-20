@@ -42,6 +42,7 @@ const Contact = () => {
 
   const topicOptions = [
     'Technical Support',
+    'VATSIM Divisions',
     'Bug Report',
     'Feature Request',
     'Security Concern',
