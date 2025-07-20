@@ -1,7 +1,5 @@
 /* src/styles/globals.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   color-scheme: dark;
@@ -17,7 +15,8 @@ blockquote {
 }
 
 body {
-  @apply bg-zinc-950 text-white;
+  background-color: rgb(9 9 11);
+  color: white;
 }
 
 /* Custom scrollbar styles */
@@ -26,15 +25,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-zinc-900;
+  background-color: rgb(24 24 27);
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-zinc-700 rounded-full;
+  background-color: rgb(63 63 70);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-zinc-600;
+  background-color: rgb(82 82 91);
 }
 
 .leaflet-container {
