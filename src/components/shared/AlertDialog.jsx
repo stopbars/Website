@@ -88,7 +88,7 @@ const AlertDialogClose = ({ onClick, className = "" }) => {
   return (
     <button
       onClick={onClick}
-      className={`absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors ${className}`}
+      className={`absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors cursor-pointer ${className}`}
     >
       <X className="w-5 h-5" />
     </button>

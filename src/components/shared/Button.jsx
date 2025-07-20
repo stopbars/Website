@@ -6,7 +6,7 @@ export const Button = ({
     className = '', 
     ...props 
 }) => {
-    const baseStyles = 'px-6 py-3 rounded-lg transition-colors flex items-center justify-center';
+    const baseStyles = 'px-6 py-3 rounded-lg transition-colors flex items-center justify-center cursor-pointer';
     const variants = {
         primary: 'bg-white text-black hover:bg-zinc-100',
         secondary: 'bg-zinc-800 text-white hover:bg-zinc-700',
