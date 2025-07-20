@@ -303,7 +303,7 @@ const StaffDashboard = () => {
               <button 
                 onClick={handleRefresh} 
                 disabled={refreshing}
-                className={`p-2 rounded-lg ${refreshing ? 'bg-blue-500/70' : 'bg-zinc-800 hover:bg-zinc-700'} transition-all duration-200`}
+                className={`p-2 rounded-lg cursor-pointer ${refreshing ? 'bg-blue-500/70' : 'bg-zinc-800 hover:bg-zinc-700'} transition-all duration-200`}
                 title="Refresh current tool"
               >
                 <RefreshCw className={`w-4 h-4 text-white ${refreshing ? 'animate-spin' : ''}`} />
@@ -339,7 +339,7 @@ const StaffDashboard = () => {
                             <button
                               key={tab.id}
                               onClick={() => setActiveTab(tab.id)}
-                              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+                              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
@@ -371,7 +371,7 @@ const StaffDashboard = () => {
                             <button
                               key={tab.id}
                               onClick={() => setActiveTab(tab.id)}
-                              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+                              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
@@ -403,7 +403,7 @@ const StaffDashboard = () => {
                             <button
                               key={tab.id}
                               onClick={() => setActiveTab(tab.id)}
-                              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+                              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
