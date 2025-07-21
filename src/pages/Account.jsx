@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { User, LogOut, AlertOctagon, Link, Shield, Eye, EyeOff, Copy, Check, RefreshCcw, Building } from 'lucide-react';
+import { User, LogOut, AlertOctagon, Link, Shield, OctagonAlert, Eye, EyeOff, Copy, Check, RefreshCcw, Building2 } from 'lucide-react';
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
 
 const Account = () => {
@@ -147,7 +147,7 @@ const Account = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20 bg-950">  <div className="max-w-5xl mx-auto px-6">
+      <div className="min-h-screen pt-40 pb-20 bg-950">  <div className="max-w-5xl mx-auto px-6">
         <h1 className="text-4xl font-bold mb-8 text-white">Account Settings</h1>
         <div className="space-y-8">
           {staffRoles?.isStaff && (
@@ -207,7 +207,7 @@ const Account = () => {
                       className={`min-w-[100px] ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
                     >
                       {copySuccess ? (
-                        <><Check className="w-4 h-4 mr-2" /> Copied!</>
+                        <><Check className="w-4 h-4 mr-2 text-green-400" /> Copied </>
                       ) : (
                         <><Copy className="w-4 h-4 mr-2" /> Copy</>
                       )}
@@ -261,7 +261,7 @@ const Account = () => {
           {userDivisions.length > 0 && (
             <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
               <div className="flex items-center space-x-3 mb-8">
-                <Building className="w-6 h-6 text-blue-400" />
+                <Building2 className="w-6 h-6 text-blue-400" />
                 <h2 className="text-2xl font-semibold">Your Divisions</h2>
               </div>
 
@@ -325,7 +325,7 @@ const Account = () => {
                   className="border-red-500/20 text-red-500 hover:bg-red-500/10"
                   onClick={() => setIsDeleteDialogOpen(true)}
                 >
-                  <Shield className="w-4 h-4 mr-2" />
+                  <OctagonAlert className="w-4 h-4 mr-2" />
                   Delete Account
                 </Button>
               </div>

@@ -1431,8 +1431,7 @@ const AirportPointEditor = () => {
                 Cancel
               </Button>
               <Button
-                variant="outline"
-                className="text-red-500 hover:bg-red-500/10 hover:border-red-500"
+                className="!bg-red-500 hover:!bg-red-600 text-white"
                 onClick={() => handleDeletePoint(activePointId)}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
