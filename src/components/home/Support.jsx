@@ -1,5 +1,5 @@
 import { FileText, AlertCircle, ArrowRight } from '../shared/Icons';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, MessageSquareMore } from 'lucide-react';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { useState } from 'react';
@@ -47,7 +47,7 @@ export const Support = () => {
             <AlertCircle className="w-8 h-8 text-zinc-300 mb-4" />
             <h3 className="text-xl font-medium mb-4">Report an Issue</h3>
             <p className="text-zinc-300 text-sm mb-4">
-              Found a bug? Report it through our Discord server with detailed information to help us investigate.
+              Found a bug? Report it through our Discord server or GitHub with detailed information to help us investigate.
             </p>
             <div className="p-2 bg-zinc-800/50 rounded-lg mb-4">
               <p className="text-xs text-zinc-300 mb-1">
@@ -73,18 +73,18 @@ export const Support = () => {
           </Card>
 
           <Card className="p-8">
-            <div className="bg-[#6366F1]/10 rounded-xl p-6 mb-6">
-              <h3 className="text-xl font-medium mb-2">Join Our Community</h3>
-              <p className="text-zinc-400 text-sm">
-                Connect with other BARS users, get support, and stay updated with the latest news and features. 
-              </p>
-            </div>
+            <MessageSquareMore className="w-8 h-8 text-zinc-300 mb-4" />
+            <h3 className="text-xl font-medium mb-4">Join Our Community</h3>
+            <p className="text-zinc-300 text-sm mb-6">
+              Connect with other BARS users, get support, view previews, and stay updated with the latest news and features.
+            </p>
             <Button 
-              className="w-full bg-indigo-600 hover:bg-indigo-500 focus:bg-indigo-500"
+              variant="secondary" 
+              className="w-full"
               onClick={() => window.open('https://stopbars.com/discord', '_blank')}
               aria-label="Join BARS Discord community for support and updates"
             >
-              Join Discord Community
+              Join Discord Server
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Card>
