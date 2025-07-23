@@ -26,6 +26,8 @@ import { useNavigate } from 'react-router-dom';
 import UserManagement from '../components/staff/UserManagement';
 import ContributionManagement from '../components/staff/ContributionManagement';
 import NotamManagement from '../components/staff/notamManagement';
+import DivisionManagement from '../components/staff/DivisionManagement';
+import AirportManagement from '../components/staff/AirportManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -45,6 +47,14 @@ const TABS = {
     roles: ['lead_developer'],
     description: 'Manage staff roles and permissions',
     component: () => <div>Staff Management Component (Coming Soon)</div>
+  },
+  divisionManagement: {
+    id: 'divisionManagement',
+    label: 'Division Management',
+    icon: Building2,
+    roles: ['lead_developer', 'product_manager'],
+    description: 'Manage divisions and their settings',
+    component: DivisionManagement
   },
   releaseManagement: {
     id: 'releaseManagement',
@@ -70,7 +80,7 @@ const TABS = {
     icon: Building2,
     roles: ['product_manager', 'lead_developer'],
     description: 'Review and approve airport submissions',
-    component: () => <div>Airport Management Component (Coming Soon)</div>
+    component: AirportManagement
   },  contributionManagement: {
     id: 'contributionManagement',
     label: 'Contribution Management',
@@ -330,7 +340,7 @@ const StaffDashboard = () => {
                         <h4 className="text-xs font-medium text-zinc-500">System Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['userManagement', 'staffManagement', 'systemSettings', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['userManagement', 'staffManagement', 'divisionManagement', 'systemSettings', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;

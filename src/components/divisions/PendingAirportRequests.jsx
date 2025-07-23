@@ -58,7 +58,7 @@ const PendingAirportRequests = () => {
 
   useEffect(() => {
     if (token) fetchRequests();
-  }, [token, fetchRequests]);
+  }, [token]);
 
   const handleApprove = async (divisionId, airportId, approved) => {
     try {
@@ -73,8 +73,8 @@ const PendingAirportRequests = () => {
 
       if (!response.ok) throw new Error('Failed to update airport request');
 
-      // Refresh the requests list
-      await fetchRequests();
+      // Remove the approved/rejected request from the list immediately
+      setRequests(prevRequests => prevRequests.filter(req => req.id !== airportId));
     } catch (err) {
       setError(err.message);
     }
@@ -102,14 +102,14 @@ const PendingAirportRequests = () => {
           <div className="flex gap-2">
             <Button
               onClick={() => handleApprove(request.division_id, request.id, true)}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-600"
             >
               <Check className="w-4 h-4 mr-2" />
               Approve
             </Button>
             <Button
               onClick={() => handleApprove(request.division_id, request.id, false)}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-500"
             >
               <X className="w-4 h-4 mr-2" />
               Reject

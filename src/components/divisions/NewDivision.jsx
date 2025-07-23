@@ -110,7 +110,7 @@ const NewDivision = () => {
                     required
                   />
                   <p className="mt-2 text-sm text-zinc-500">
-                    This person will be assigned as the Nav Head of the division
+                    This person will be assigned as the Nav Head of the Division
                   </p>
                 </div>
 

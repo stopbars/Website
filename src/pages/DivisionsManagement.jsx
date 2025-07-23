@@ -4,8 +4,6 @@ import { Layout } from '../components/layout/Layout';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { Plus, FileCheck2 } from 'lucide-react';
-import PendingAirportRequests from '../components/divisions/PendingAirportRequests';
 
 const DivisionsManagement = () => {
   const [userDivisions, setUserDivisions] = useState([]);
@@ -71,14 +69,8 @@ const DivisionsManagement = () => {
     <Layout>
       <div className="pt-32 pb-20">
         <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center mb-8">
+          <div className="mb-8">
             <h1 className="text-3xl font-bold text-white">Divisions</h1>
-            {user?.roles?.LEAD_DEVELOPER === 1 && (
-              <Button onClick={() => navigate('/divisions/new')}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Division
-              </Button>
-            )}
           </div>
 
           <div>
@@ -106,22 +98,6 @@ const DivisionsManagement = () => {
               <p className="text-zinc-400">You are not a member of any divisions.</p>
             )}
           </div>
-
-          {user?.roles?.LEAD_DEVELOPER === 1 && (
-            <div className="mt-8">
-              <h2 className="text-xl font-semibold text-white mb-4">
-                <div className="flex items-center gap-2">
-                  <FileCheck2 className="w-5 h-5" />
-                  Airport Requests
-                </div>
-              </h2>
-              <Card>
-                <div className="p-4">
-                  <PendingAirportRequests />
-                </div>
-              </Card>
-            </div>
-          )}
         </div>
       </div>
     </Layout>

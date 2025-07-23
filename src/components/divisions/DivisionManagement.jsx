@@ -22,8 +22,23 @@ const DivisionManagement = () => {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState(null);
   const [addingMember, setAddingMember] = useState(false);
+  const [addingAirport, setAddingAirport] = useState(false);
   const [removingMember, setRemovingMember] = useState(false);
   const token = localStorage.getItem('vatsimToken');
+
+  // Helper function to get status color
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return 'bg-green-400';
+      case 'pending':
+        return 'bg-orange-400';
+      case 'rejected':
+        return 'bg-red-400';
+      default:
+        return 'bg-gray-400';
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -123,6 +138,7 @@ const DivisionManagement = () => {
 
   const handleAddAirport = async (e) => {
     e.preventDefault();
+    setAddingAirport(true);
     try {
       // First validate the airport exists
       const validateResponse = await fetch(`https://v2.stopbars.com/airports?icao=${newAirportIcao.toUpperCase()}`, {
@@ -154,6 +170,8 @@ const DivisionManagement = () => {
       setShowAddAirport(false);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setAddingAirport(false);
     }
   };
 
@@ -290,7 +308,14 @@ const DivisionManagement = () => {
                         />
                       </div>
                       <div className="flex gap-2">
-                        <Button type="submit">Request Airport</Button>
+                        <Button 
+                          type="submit" 
+                          disabled={addingAirport}
+                          className="active:scale-95 transition-transform duration-75"
+                        >
+                          {addingAirport && <Loader className="w-4 h-4 animate-spin mr-2" />}
+                          Request Airport
+                        </Button>
                         <Button type="button" onClick={() => setShowAddAirport(false)} variant="secondary">
                           Cancel
                         </Button>
@@ -304,7 +329,16 @@ const DivisionManagement = () => {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-white">{airport.icao}</p>
-                            <p className="text-zinc-400 text-sm">Status: {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}</p>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-zinc-400 text-sm">Status: {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}</span>
+                              <div className="relative">
+                                <div className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-300 shadow-lg`}></div>
+                                <div 
+                                  className={`absolute inset-0 w-2 h-2 rounded-full ${getStatusColor(airport.status)} animate-pulse opacity-50`}
+                                  style={{ animationDuration: '3s' }}
+                                ></div>
+                              </div>
+                            </div>
                             <p className="text-zinc-400 text-sm">
                               Requested by: {airport.requested_by}
                             </p>
