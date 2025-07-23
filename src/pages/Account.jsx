@@ -5,6 +5,7 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { User, LogOut, AlertOctagon, Link, Shield, OctagonAlert, Eye, EyeOff, Copy, Check, RefreshCcw, Building2 } from 'lucide-react';
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 const Account = () => {
   const { user, loading, logout, setUser } = useAuth();
@@ -19,7 +20,7 @@ const Account = () => {
 
   useEffect(() => {
     const fetchStaffRole = async () => {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
 
       try {
         const response = await fetch('https://v2.stopbars.com/auth/is-staff', {
@@ -39,7 +40,7 @@ const Account = () => {
     };
 
     const fetchUserDivisions = async () => {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
 
       try {
         const response = await fetch('https://v2.stopbars.com/divisions/user', {
@@ -84,7 +85,7 @@ const Account = () => {
   };
 
   const handleDeleteAccount = async () => {
-    const token = localStorage.getItem('vatsimToken');
+    const token = getVatsimToken();
     try {
       const response = await fetch('https://v2.stopbars.com/auth/delete', {
         method: 'DELETE',
@@ -97,7 +98,7 @@ const Account = () => {
   };
   const handleRegenerateApiKey = async () => {
     setRegeneratingApiKey(true);
-    const token = localStorage.getItem('vatsimToken');
+    const token = getVatsimToken();
 
     try {
       const response = await fetch('https://v2.stopbars.com/auth/regenerate-api-key', {

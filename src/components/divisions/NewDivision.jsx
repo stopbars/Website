@@ -11,7 +11,7 @@ const NewDivision = () => {
   const [headCid, setHeadCid] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
 
   const handleNameBlur = () => {
     if (name.toUpperCase().startsWith('VAT')) {

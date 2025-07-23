@@ -23,7 +23,7 @@ const DivisionManagement = () => {
   const [memberToRemove, setMemberToRemove] = useState(null);
   const [addingMember, setAddingMember] = useState(false);
   const [removingMember, setRemovingMember] = useState(false);
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
 
   useEffect(() => {
     const fetchData = async () => {

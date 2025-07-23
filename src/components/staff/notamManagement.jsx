@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MessageSquareWarning, AlertTriangle, Info, Loader, Plus, Edit, X, ChevronDown, Eye, FileText, Tag, Send, HardDriveDownload, CheckCircle2 } from 'lucide-react';
 import { Button } from '../shared/Button';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 // Function to parse markdown-style links in NOTAM content (same as Navbar)
 const parseNotamLinks = (content) => {
@@ -29,7 +30,6 @@ const NotamManagement = () => {
   const [newType, setNewType] = useState('warning');
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showNewTypeDropdown, setShowNewTypeDropdown] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [hasEditChanges, setHasEditChanges] = useState(false);
@@ -162,19 +162,6 @@ const NotamManagement = () => {
     }
   };
 
-  // Handle copying NOTAM to clipboard
-  const handleCopyNotam = async () => {
-    if (!notamData?.notam) return;
-    
-    try {
-      await navigator.clipboard.writeText(notamData.notam);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err);
-    }
-  };
-
   // Handle saving with backend API
   const handleSave = async () => {
     try {
@@ -182,7 +169,7 @@ const NotamManagement = () => {
       setError(null);
       
       // Get the VATSIM token from localStorage
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       if (!token) {
         throw new Error('Authentication token not found. Please log in again.');
       }

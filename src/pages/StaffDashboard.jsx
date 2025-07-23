@@ -21,6 +21,7 @@ import {
   Loader,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 // Import existing components
 import UserManagement from '../components/staff/UserManagement';
@@ -131,7 +132,7 @@ const StaffDashboard = () => {
   const [refreshing, setRefreshing] = useState(false); // Add state for refreshing
   const navigate = useNavigate();
   const { user } = useAuth();
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
 
   useEffect(() => {
     const fetchStaffRoles = async () => {

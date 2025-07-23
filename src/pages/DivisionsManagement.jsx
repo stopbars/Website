@@ -6,6 +6,7 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Plus, FileCheck2 } from 'lucide-react';
 import PendingAirportRequests from '../components/divisions/PendingAirportRequests';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 const DivisionsManagement = () => {
   const [userDivisions, setUserDivisions] = useState([]);
@@ -13,7 +14,7 @@ const DivisionsManagement = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
 
   useEffect(() => {
     const fetchData = async () => {

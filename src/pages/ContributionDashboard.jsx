@@ -13,11 +13,12 @@ import {
   Plus,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 const ContributionDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const vatsimToken = localStorage.getItem('vatsimToken');
+  const vatsimToken = getVatsimToken();
   
   const [loading, setLoading] = useState(true);
   const [, setError] = useState(null);  const [leaderboard, setLeaderboard] = useState([]);

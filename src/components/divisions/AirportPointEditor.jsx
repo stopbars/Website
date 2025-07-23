@@ -367,7 +367,7 @@ MapClickHandler.propTypes = {
 
 const AirportPointEditor = () => {
   const { airportId } = useParams();
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
   const mapRef = useRef(null);
   
   // State variables
