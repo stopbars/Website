@@ -14,7 +14,7 @@ export const setCrossDomainCookie = (name, value, days = 30) => {
   const expires = `expires=${date.toUTCString()}`;
   
   // Always try to set for .stopbars.com domain - will fail silently on localhost but that's fine :)
-  let cookieString = `${name}=${value}; ${expires}; domain=.stopbars.com; path=/; samesite=lax`;
+  let cookieString = `${name}=${value}; ${expires}; domain=.stopbars.com; path=/; samesite=strict`;
   
   // Add secure flag if we're on HTTPS
   if (window.location.protocol === 'https:') {
@@ -46,9 +46,7 @@ export const getCookie = (name) => {
  * @param {string} name - Cookie name
  */
 export const deleteCookie = (name) => {
-  // Delete for current domain
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-  // Delete for .stopbars.com domain
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=.stopbars.com; path=/;`;
 };
 
