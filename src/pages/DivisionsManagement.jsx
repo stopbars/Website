@@ -4,8 +4,6 @@ import { Layout } from '../components/layout/Layout';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { Plus, FileCheck2 } from 'lucide-react';
-import PendingAirportRequests from '../components/divisions/PendingAirportRequests';
 import { getVatsimToken } from '../utils/cookieUtils';
 
 const DivisionsManagement = () => {

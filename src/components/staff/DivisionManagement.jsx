@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
+import { getVatsimToken } from '../../utils/cookieUtils';
 import { 
   Plus, 
   Users, 
@@ -26,7 +27,7 @@ const DivisionManagement = () => {
   const [divisionAirports, setDivisionAirports] = useState({});
   const [loadingDetails, setLoadingDetails] = useState({});
   const navigate = useNavigate();
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
 
   useEffect(() => {
     const fetchDivisions = async () => {

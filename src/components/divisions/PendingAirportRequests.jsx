@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '../shared/Button';
 import { Check, X } from 'lucide-react';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 const PendingAirportRequests = () => {
   const [requests, setRequests] = useState([]);

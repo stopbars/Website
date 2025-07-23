@@ -5,6 +5,7 @@ import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { Plus, UserX, TowerControl, Users, MapPin, AlertOctagon, Loader } from 'lucide-react';
 import { Alert } from '../shared/Alert';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 const DivisionManagement = () => {
   const { id: divisionId } = useParams();
