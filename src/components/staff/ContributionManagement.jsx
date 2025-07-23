@@ -16,6 +16,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import XMLMap from '../shared/XMLMap';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 const CONTRIBUTIONS_PER_PAGE = 5;
 
@@ -403,7 +404,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
   const handleApprove = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       
       // Check if package name was modified
       const hasPackageNameChanged = updatedPackageName !== contribution.packageName;
@@ -441,7 +442,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
     
     setLoading(true);
     try {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       
       // Check if package name was modified
       const hasPackageNameChanged = updatedPackageName !== contribution.packageName;
@@ -795,7 +796,7 @@ const ContributionManagement = () => {
   const fetchContributions = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       const response = await fetch(
         `https://v2.stopbars.com/contributions?page=${currentPage}&limit=${CONTRIBUTIONS_PER_PAGE}&status=pending`, 
         {
@@ -821,7 +822,7 @@ const ContributionManagement = () => {
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       const response = await fetch(
         `https://v2.stopbars.com/contributions/stats`, 
         {

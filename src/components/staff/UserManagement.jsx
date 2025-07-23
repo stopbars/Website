@@ -20,6 +20,7 @@ import {
   FileUser
 } from 'lucide-react';
 import { formatLocalDateTime } from '../../utils/dateUtils';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 const USERS_PER_PAGE = 10;
 
@@ -250,7 +251,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       const response = await fetch(`https://v2.stopbars.com/staff/users?page=${currentPage}&limit=${USERS_PER_PAGE}`, {
         headers: { 'X-Vatsim-Token': token }
       });
@@ -277,7 +278,7 @@ const UserManagement = () => {
     setError('');
   
     try {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       const response = await fetch(`https://v2.stopbars.com/staff/users/${userId}`, {
         method: 'DELETE',
         headers: { 'X-Vatsim-Token': token }
@@ -309,7 +310,7 @@ const UserManagement = () => {
     setError('');
   
     try {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
       const user = users.find(u => u.id === userId);
       
       if (!user || !user.vatsim_id) {

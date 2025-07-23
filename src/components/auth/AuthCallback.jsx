@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Card } from '../shared/Card';
 import { Loader, AlertTriangle, Check } from 'lucide-react';
+import { setVatsimToken } from '../../utils/cookieUtils';
 
 export const AuthCallback = () => {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export const AuthCallback = () => {
       const redirectTo = localStorage.getItem('authRedirectPage') || '/account'; // Default to account page if no stored redirect
       
       if (token) {
-        localStorage.setItem('vatsimToken', token);
+        setVatsimToken(token);
         try {
           await fetchUserData(token);
           setStatus('success');

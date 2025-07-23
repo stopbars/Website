@@ -24,7 +24,7 @@ const DivisionManagement = () => {
   const [addingMember, setAddingMember] = useState(false);
   const [addingAirport, setAddingAirport] = useState(false);
   const [removingMember, setRemovingMember] = useState(false);
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
 
   // Helper function to get status color
   const getStatusColor = (status) => {

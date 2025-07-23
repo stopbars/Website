@@ -14,13 +14,14 @@ import {
   Search
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 const ContributeDetails = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const fileInputRef = useRef(null);
-  const vatsimToken = localStorage.getItem('vatsimToken');
+  const vatsimToken = getVatsimToken();
   
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);

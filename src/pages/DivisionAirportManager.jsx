@@ -5,11 +5,12 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { MapPin, ArrowLeft, Search, Plus } from 'lucide-react';
 import AirportPointEditor from '../components/divisions/AirportPointEditor';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 const DivisionAirportManager = () => {
   const { divisionId, airportId } = useParams();
   const navigate = useNavigate();
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
   
   const [division, setDivision] = useState(null);
   const [airports, setAirports] = useState([]);
