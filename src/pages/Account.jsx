@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { User, LogOut, AlertOctagon, Link, Shield, OctagonAlert, Eye, EyeOff, Copy, Check, RefreshCcw, Building2 } from 'lucide-react';
+import { User, LogOut, AlertOctagon, Link, Shield, OctagonAlert, Eye, EyeOff, Copy, Check, RefreshCcw, Building2, Loader } from 'lucide-react';
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
 import { getVatsimToken } from '../utils/cookieUtils';
 
@@ -141,7 +141,7 @@ const Account = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <Loader className="w-12 h-12 animate-spin text-zinc-300" />
       </div>
     );
   }
@@ -283,7 +283,7 @@ const Account = () => {
                         className="bg-blue-500 hover:bg-blue-600"
                       >
                         <Link className="w-4 h-4 mr-2" />
-                        View Division
+                        Manage Division
                       </Button>
                     </div>
                   );
