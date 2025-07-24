@@ -265,7 +265,8 @@ const DivisionManagement = () => {
                         </div>
                         <Button
                           onClick={() => confirmRemoveMember(member)}
-                          className="bg-red-600 hover:bg-red-700 hover:text-white active:scale-95 transition-transform duration-75"
+                          className={`bg-red-600 hover:bg-red-700 hover:text-white active:scale-95 transition-transform duration-75${members.length === 1 ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                          disabled={members.length === 1}
                         >
                           <UserX className="w-4 h-4 mr-2" />
                           Remove
