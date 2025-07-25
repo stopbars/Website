@@ -11,7 +11,7 @@ function deferCSS() {
         /<link[^>]*rel="stylesheet"[^>]*>/gi,
         (match) => {
           if (match.includes('assets/index')) {
-            const href = match.match(/href="([^"]*)"/) 
+            const href = match.match(/href=["']?([^"'\s>]+)["']?/) 
             if (href) {
               return `
                 <link rel="preload" href="${href[1]}" as="style" onload="this.onload=null;this.rel='stylesheet'">
