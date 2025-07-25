@@ -52,7 +52,7 @@ export default defineConfig({
     },
     // Optimize build performance
     target: 'esnext',
-    sourcemap: false, // Disable sourcemaps in production for faster builds
+    sourcemap: 'hidden', // Generate sourcemaps but do not serve them to users
   },
   // Optimize development server
   server: {
