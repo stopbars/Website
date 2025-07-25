@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MessageSquareWarning, AlertTriangle, Info, Loader, Plus, Edit, X, ChevronDown, Eye, FileText, Tag, Send, HardDriveDownload, CheckCircle2 } from 'lucide-react';
 import { Button } from '../shared/Button';
 import { getVatsimToken } from '../../utils/cookieUtils';
+import DOMPurify from 'dompurify';
 
 // Function to parse markdown-style links in NOTAM content (same as Navbar)
 const parseNotamLinks = (content) => {
@@ -12,10 +13,11 @@ const parseNotamLinks = (content) => {
   
   // Replace all instances of markdown links with HTML links
   // Add target="_blank" and rel="noopener noreferrer" for security
-  return content.replace(
+  const sanitizedContent = content.replace(
     linkRegex, 
     '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline hover:brightness-125 transition-all">$1</a>'
   );
+  return DOMPurify.sanitize(sanitizedContent);
 };
 
 const NotamManagement = () => {
@@ -493,7 +495,7 @@ const NotamManagement = () => {
                 <div className={`p-4 h-full ${getNotamTypeStyles(editType).bg} ${getNotamTypeStyles(editType).border} border`}>
                   <div 
                     className={`${getNotamTypeStyles(editType).text} font-medium text-sm overflow-auto`}
-                    dangerouslySetInnerHTML={{ __html: parseNotamLinks(editContent) }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parseNotamLinks(editContent)) }}
                   />
                 </div>
               </div>
