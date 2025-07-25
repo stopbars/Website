@@ -26,6 +26,7 @@ const DivisionManagement = () => {
   const [addingAirport, setAddingAirport] = useState(false);
   const [removingMember, setRemovingMember] = useState(false);
   const token = getVatsimToken();
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   // Helper function to get status color
   const getStatusColor = (status) => {
@@ -44,6 +45,14 @@ const DivisionManagement = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Fetch current user account info (only once)
+        const accountResponse = await fetch('https://v2.stopbars.com/auth/account', {
+          headers: { 'X-Vatsim-Token': token }
+        });
+        if (accountResponse.ok) {
+          const accountData = await accountResponse.json();
+          setCurrentUserId(accountData.vatsim_id);
+        }
         // Fetch division details
         const divisionResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
           headers: { 'X-Vatsim-Token': token }
@@ -51,7 +60,6 @@ const DivisionManagement = () => {
         if (!divisionResponse.ok) throw new Error('Failed to fetch division');
         const divisionData = await divisionResponse.json();
         setDivision(divisionData);
-
         // Fetch members
         const membersResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/members`, {
           headers: { 'X-Vatsim-Token': token }
@@ -59,7 +67,6 @@ const DivisionManagement = () => {
         if (!membersResponse.ok) throw new Error('Failed to fetch members');
         const membersData = await membersResponse.json();
         setMembers(membersData);
-
         // Fetch airports
         const airportsResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/airports`, {
           headers: { 'X-Vatsim-Token': token }
@@ -73,7 +80,6 @@ const DivisionManagement = () => {
         setLoading(false);
       }
     };
-
     if (token && divisionId) fetchData();
   }, [token, divisionId]);
 
@@ -265,8 +271,9 @@ const DivisionManagement = () => {
                         </div>
                         <Button
                           onClick={() => confirmRemoveMember(member)}
-                          className={`bg-red-600 hover:bg-red-700 hover:text-white active:scale-95 transition-transform duration-75${members.length === 1 ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                          disabled={members.length === 1}
+                          className={`bg-red-600 hover:bg-red-700 hover:text-white active:scale-95 transition-transform duration-75${currentUserId === member.vatsim_id ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                          disabled={currentUserId === member.vatsim_id}
+                          title={currentUserId === member.vatsim_id ? 'You cannot remove yourself from the division.' : undefined}
                         >
                           <UserX className="w-4 h-4 mr-2" />
                           Remove
