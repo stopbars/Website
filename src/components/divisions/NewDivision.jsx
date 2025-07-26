@@ -4,7 +4,7 @@ import { Layout } from '../layout/Layout';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { AlertTriangle } from 'lucide-react';
-import { getVatsimToken } from '../../utils/auth';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 const NewDivision = () => {
   const navigate = useNavigate();
