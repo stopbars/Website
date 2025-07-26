@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { Card } from '../shared/Card';
 import PendingAirportRequests from '../divisions/PendingAirportRequests';
-import { TowerControl, AlertTriangle } from 'lucide-react';
+import { TowerControl } from 'lucide-react';
 
 const AirportManagement = () => {
   return (

@@ -1,4 +1,4 @@
-import { MapPin, ArrowRight } from '../shared/Icons';
+import { ArrowRight } from '../shared/Icons';
 import { Github, PlaneTakeoff } from 'lucide-react';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';

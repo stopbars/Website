@@ -9,8 +9,6 @@ import {
   TowerControl, 
   Edit, 
   Trash2,
-  ExternalLink,
-  Calendar,
   AlertTriangle,
   ChevronDown,
   ChevronUp,

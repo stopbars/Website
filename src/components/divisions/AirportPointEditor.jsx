@@ -10,6 +10,7 @@ import { MapContainer, TileLayer, Marker, LayersControl, useMapEvents, Popup } f
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import PropTypes from 'prop-types';
+import { getVatsimToken } from '../../utils/auth';
 
 
 // Add Mapbox token from environment

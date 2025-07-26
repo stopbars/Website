@@ -1,18 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
-import { useAuth } from '../hooks/useAuth';
-import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { getVatsimToken } from '../utils/cookieUtils';
-import { Building2, Link, List, LayoutGrid, CircleUserRound, Loader } from 'lucide-react';
+import { Building2, Link, List, LayoutGrid, Loader } from 'lucide-react';
 
 const DivisionsManagement = () => {
   const [userDivisions, setUserDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const { user } = useAuth();
   const token = getVatsimToken();
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
 
