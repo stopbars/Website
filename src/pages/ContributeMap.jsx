@@ -678,7 +678,7 @@ const ContributeMap = () => {
               <div className="flex items-center mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                 <Info className="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" />
                 <p className="text-sm text-blue-400">
-                  These are the existing mapped points for this airport. Your contribution will add support for a specific scenery package.
+                  These are the existing mapped points for this airport, set by the Division. Your contribution will add support for a specific scenery package.
                 </p>
               </div>
               

@@ -82,7 +82,30 @@ export const Layout = ({ children }) => {  const { pathname } = useLocation();
     if (layoutRef.current) {
       restoreAllText();
     }
-  }, [pathname, restoreAllText]);  // Consent banner effect
+  }, [pathname, restoreAllText]);
+
+  // Console banner effect
+  useEffect(() => {
+    // Prevent duplicate logs in React StrictMode
+    if (!window._barsBannerLogged) {
+      console.log(`%c
+██████╗  █████╗ ██████╗ ███████╗
+██╔══██╗██╔══██╗██╔══██╗██╔════╝
+██████╔╝███████║██████╔╝███████╗
+██╔══██╗██╔══██║██╔══██╗╚════██║
+██████╔╝██║  ██║██║  ██║███████║
+╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
+
+%cContribute to BARS: https://github.com/stopbars
+Support BARS: https://stopbars.com/donate`, 
+        'color: #ef4444; font-weight: bold;',  // ASCII art
+        'color: inherit;'                       // Everything else normal
+      );
+      window._barsBannerLogged = true;
+    }
+  }, []);
+
+  // Consent banner effect
   useEffect(() => {
     const consent = localStorage.getItem('analytics-consent');
     if (!consent) {

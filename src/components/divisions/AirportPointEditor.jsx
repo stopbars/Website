@@ -10,6 +10,7 @@ import { MapContainer, TileLayer, Marker, LayersControl, useMapEvents, Popup } f
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import PropTypes from 'prop-types';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 
 // Add Mapbox token from environment
@@ -367,7 +368,7 @@ MapClickHandler.propTypes = {
 
 const AirportPointEditor = () => {
   const { airportId } = useParams();
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
   const mapRef = useRef(null);
   
   // State variables
@@ -991,7 +992,7 @@ const AirportPointEditor = () => {
                               className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
                             />
                             <label htmlFor="edit-elevated" className="text-sm font-medium">
-                              Has Elevated Bar
+                              Has Elevated Bar?
                             </label>
                           </div>
                         </>
@@ -1006,7 +1007,7 @@ const AirportPointEditor = () => {
                           className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
                         />
                         <label htmlFor="edit-ihp" className="text-sm font-medium">
-                          Is Intermediate Holding Point
+                          Intermediate Holding Point?
                         </label>
                       </div>
                     </>
@@ -1147,7 +1148,7 @@ const AirportPointEditor = () => {
                               className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
                             />
                             <label htmlFor="new-elevated" className="text-sm font-medium">
-                              Has Elevated Bar
+                              Has Elevated Bar?
                             </label>
                           </div>
                         </>
@@ -1162,7 +1163,7 @@ const AirportPointEditor = () => {
                           className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
                         />
                         <label htmlFor="new-ihp" className="text-sm font-medium">
-                          Is Intermediate Holding Point
+                          Is Intermediate Holding Point?
                         </label>
                       </div>
                     </>
@@ -1387,17 +1388,43 @@ const AirportPointEditor = () => {
 
       {/* Delete confirmation dialog */}
       {showConfirmDelete && activePointId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full border border-zinc-800">
-            <div className="flex items-center space-x-3 mb-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+            <div className="flex items-center space-x-3 mb-6">
               <AlertCircle className="w-6 h-6 text-red-500" />
-              <h3 className="text-xl font-medium">Confirm Deletion</h3>
+              <h3 className="text-xl font-bold text-red-500">Confirm Point Deletion</h3>
             </div>
-            <p className="text-zinc-300 mb-6">
-              Are you sure you want to delete this point? This action cannot be undone and will cause 
-              any scenery contribution using this BARS ID to no longer function correctly.
-            </p>
-            <div className="flex justify-end space-x-3">
+            <div className="space-y-4">
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <p className="text-zinc-200 mb-3">
+                  You are about to delete the following point:
+                </p>
+                {(() => {
+                  const pointToDelete = points.find(p => p.id === activePointId);
+                  return pointToDelete ? (
+                    <div className="flex items-start space-x-3">
+                      <div 
+                        className="w-3 h-3 rounded-full mt-1" 
+                        style={{ backgroundColor: getPointColor(pointToDelete) }}
+                      ></div>
+                      <div className="flex-1">
+                        <span className="font-medium text-red-200 block">{pointToDelete.name}</span>
+                        <div className="text-sm text-red-200/80 space-y-1 mt-1">
+                          <p>Type: {formatType(pointToDelete.type)}</p>
+                          <p>BARS ID: {pointToDelete.id}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+              
+              <p className="text-zinc-300">
+                This action cannot be undone and will cause any scenery contribution using this BARS ID to no longer function correctly.
+              </p>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
               <Button
                 variant="outline"
                 onClick={() => setShowConfirmDelete(false)}
@@ -1405,9 +1432,10 @@ const AirportPointEditor = () => {
                 Cancel
               </Button>
               <Button
-                className="bg-red-500 hover:bg-red-600 text-white"
+                className="!bg-red-500 hover:!bg-red-600 text-white"
                 onClick={() => handleDeletePoint(activePointId)}
               >
+                <Trash2 className="w-4 h-4 mr-2" />
                 Delete Point
               </Button>
             </div>

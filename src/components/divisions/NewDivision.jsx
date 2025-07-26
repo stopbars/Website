@@ -4,6 +4,7 @@ import { Layout } from '../layout/Layout';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { AlertTriangle } from 'lucide-react';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 const NewDivision = () => {
   const navigate = useNavigate();
@@ -11,12 +12,31 @@ const NewDivision = () => {
   const [headCid, setHeadCid] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
+
+  const handleNameBlur = () => {
+    if (name.toUpperCase().startsWith('VAT')) {
+      // Auto-uppercase VAT (e.g., "vatpac, VatPac" -> "VATPAC")
+      setName(name.toUpperCase());
+    } else if (name.toLowerCase().includes('vacc')) {
+      // Auto-format vACC (e.g., "Dutch vacc", "Dutch vAcC" -> "Dutch vACC")
+      setName(name.replace(/vacc/gi, 'vACC'));
+    }
+    // Other names keep their original casing
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // Handle special formatting for divisions and vACCs
+    let formattedName = name;
+    if (name.toUpperCase().startsWith('VAT')) {
+      // Auto-uppercase VAT (e.g., "vatpac, VatPac" -> "VATPAC")
+      formattedName = name.toUpperCase();
+    }
+    // vACC names keep their original casing to preserve "vACC" formatting
 
     try {
       const response = await fetch('https://v2.stopbars.com/divisions', {
@@ -26,7 +46,7 @@ const NewDivision = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          name,
+          name: formattedName,
           headVatsimId: headCid
         })
       });
@@ -70,8 +90,9 @@ const NewDivision = () => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    onBlur={handleNameBlur}
                     className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
-                    placeholder="e.g. European Division"
+                    placeholder="e.g. VATxxx, xxx vACC"
                     required
                   />
                 </div>
@@ -86,11 +107,11 @@ const NewDivision = () => {
                     value={headCid}
                     onChange={(e) => setHeadCid(e.target.value)}
                     className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
-                    placeholder="VATSIM CID of Division Head"
+                    placeholder="VATSIM CID of Division Nav Head"
                     required
                   />
                   <p className="mt-2 text-sm text-zinc-500">
-                    This person will be assigned as the Nav Head of the division
+                    This person will be assigned as the Nav Head of the Division
                   </p>
                 </div>
 

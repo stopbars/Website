@@ -13,7 +13,7 @@ import {
   Building2,
   Upload,
   Map,
-  BadgeCheck,
+  MessageSquareWarning,
   Settings,
   AlertTriangle,
   Check,
@@ -21,10 +21,14 @@ import {
   Loader,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 // Import existing components
 import UserManagement from '../components/staff/UserManagement';
 import ContributionManagement from '../components/staff/ContributionManagement';
+import NotamManagement from '../components/staff/notamManagement';
+import DivisionManagement from '../components/staff/DivisionManagement';
+import AirportManagement from '../components/staff/AirportManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -45,12 +49,20 @@ const TABS = {
     description: 'Manage staff roles and permissions',
     component: () => <div>Staff Management Component (Coming Soon)</div>
   },
+  divisionManagement: {
+    id: 'divisionManagement',
+    label: 'Division Management',
+    icon: Building2,
+    roles: ['lead_developer', 'product_manager'],
+    description: 'Manage divisions and their settings',
+    component: DivisionManagement
+  },
   releaseManagement: {
     id: 'releaseManagement',
     label: 'Release Management',
     icon: Upload,
     roles: ['lead_developer'],
-    description: 'Manage software releases',
+    description: 'Manage software releases and changelogs',
     component: () => <div>Release Management Component (Coming Soon)</div>
   },
   systemSettings: {
@@ -69,7 +81,7 @@ const TABS = {
     icon: Building2,
     roles: ['product_manager', 'lead_developer'],
     description: 'Review and approve airport submissions',
-    component: () => <div>Airport Management Component (Coming Soon)</div>
+    component: AirportManagement
   },  contributionManagement: {
     id: 'contributionManagement',
     label: 'Contribution Management',
@@ -77,6 +89,13 @@ const TABS = {
     roles: ['product_manager', 'lead_developer', 'MAP_APPROVER'],
     description: 'Review and manage user contributions',
     component: ContributionManagement
+  },  notamManagement: {
+    id: 'notamManagement',
+    label: 'NOTAM Management',
+    icon: MessageSquareWarning,
+    roles: ['product_manager', 'lead_developer'],
+    description: 'Update and post new website NOTAMs',
+    component: NotamManagement
   },
   docsManagement: {
     id: 'docsManagement',
@@ -123,7 +142,7 @@ const StaffDashboard = () => {
   const [refreshing, setRefreshing] = useState(false); // Add state for refreshing
   const navigate = useNavigate();
   const { user } = useAuth();
-  const token = localStorage.getItem('vatsimToken');
+  const token = getVatsimToken();
 
   useEffect(() => {
     const fetchStaffRoles = async () => {
@@ -282,11 +301,16 @@ const StaffDashboard = () => {
               <h1 className="text-3xl font-bold mb-2">Staff Dashboard</h1>
               <p className="text-zinc-400">Welcome back, {user?.email}</p>
             </div>
-            <div className="flex flex-col items-end">
-              <div className="flex items-center space-x-2 px-4 py-2 bg-zinc-800/50 rounded-lg mb-2">
-                <BadgeCheck className="w-5 h-5 text-emerald-500" />
-                <span className="text-sm text-zinc-300">Staff Portal</span>
-              </div>
+            <div className="flex items-center space-x-1 mt-4">
+              <iframe 
+                src="https://status.stopbars.com/badge?theme=dark" 
+                width="200" 
+                height="30" 
+                frameBorder="0" 
+                scrolling="no" 
+                style={{ colorScheme: 'normal' }}
+                title="BARS Status"
+              />
               <button 
                 onClick={handleRefresh} 
                 disabled={refreshing}
@@ -309,9 +333,6 @@ const StaffDashboard = () => {
             {/* Sidebar with tabs */}
             <div className="col-span-3">
               <Card className="p-4 overflow-hidden">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider px-4">Tools</h3>
-                </div>
                 <nav className="space-y-3">
                   {/* Group tabs by category */}
                   {hasTabAccess(TABS.userManagement) && (
@@ -320,7 +341,7 @@ const StaffDashboard = () => {
                         <h4 className="text-xs font-medium text-zinc-500">System Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['userManagement', 'staffManagement', 'systemSettings', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['userManagement', 'staffManagement', 'divisionManagement', 'systemSettings', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;
@@ -345,14 +366,14 @@ const StaffDashboard = () => {
                   
                   {/* Content Management Group */}
                   {Object.values(TABS).some(tab => 
-                    ['airportManagement', 'contributionManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab)
+                    ['airportManagement', 'contributionManagement', 'notamManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab)
                   ) && (
                     <div className="space-y-1 mb-2">
                       <div className="px-4 py-2">
                         <h4 className="text-xs font-medium text-zinc-500">Content Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['airportManagement', 'contributionManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['airportManagement', 'contributionManagement', 'notamManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;

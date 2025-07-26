@@ -1,5 +1,6 @@
 import { useState, createContext, useContext, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import { getVatsimToken, removeVatsimToken } from '../utils/cookieUtils';
 
 export const AuthContext = createContext(null);
 const apiUrl = 'https://v2.stopbars.com'; // Update this in dev as needed
@@ -123,7 +124,7 @@ export function AuthProvider({ children }) {
     window.location.href = `https://auth.vatsim.net/oauth/authorize?${params}`;
   };
   const logout = () => {
-    localStorage.removeItem('vatsimToken');
+    removeVatsimToken();
     sessionStorage.removeItem('userData'); // Clear user data cache on logout
     setUser(null);
     window.location.href = '/';
@@ -131,7 +132,7 @@ export function AuthProvider({ children }) {
   
   // Function to force refresh user data
   const refreshUserData = async () => {
-    const token = localStorage.getItem('vatsimToken');
+    const token = getVatsimToken();
     if (token) {
       return fetchUserData(token, true); // Force refresh from API
     }
@@ -139,7 +140,7 @@ export function AuthProvider({ children }) {
   };
   
   useEffect(() => {
-    const token = localStorage.getItem('vatsimToken');
+    const token = getVatsimToken();
     if (token) {
       // Try to load from cache first, then fetch if needed
       const cachedUser = loadUserFromCache();

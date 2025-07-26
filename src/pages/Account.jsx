@@ -3,8 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { User, LogOut, AlertOctagon, Laptop, Shield, Eye, EyeOff, Copy, Check, RefreshCcw } from 'lucide-react';
+import { User, LogOut, AlertOctagon, Link, Shield, OctagonAlert, Eye, EyeOff, Copy, Check, RefreshCcw, Building2, Loader } from 'lucide-react';
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
+import { getVatsimToken } from '../utils/cookieUtils';
 
 const Account = () => {
   const { user, loading, logout, setUser } = useAuth();
@@ -15,10 +16,11 @@ const Account = () => {
   const [regeneratingApiKey, setRegeneratingApiKey] = useState(false);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [regenerateError, setRegenerateError] = useState(null);
+  const [userDivisions, setUserDivisions] = useState([]);
 
   useEffect(() => {
     const fetchStaffRole = async () => {
-      const token = localStorage.getItem('vatsimToken');
+      const token = getVatsimToken();
 
       try {
         const response = await fetch('https://v2.stopbars.com/auth/is-staff', {
@@ -37,12 +39,39 @@ const Account = () => {
       }
     };
 
+    const fetchUserDivisions = async () => {
+      const token = getVatsimToken();
+
+      try {
+        const response = await fetch('https://v2.stopbars.com/divisions/user', {
+          headers: {
+            'X-Vatsim-Token': token
+          }
+        });
+
+        if (response.ok) {
+          const divisions = await response.json();
+          setUserDivisions(divisions);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user divisions:', error);
+      }
+    };
+
     fetchStaffRole();
+    fetchUserDivisions();
   }, [user]);
+
+  const formatRole = (role) => {
+    return role
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
 
   const formatApiKey = (key) => {
     if (!key) return 'No API token generated';
-    return showApiKey ? key : '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••';
+    return showApiKey ? key : '•'.repeat(key.length);
   };
 
   const handleCopyApiKey = async () => {
@@ -56,7 +85,7 @@ const Account = () => {
   };
 
   const handleDeleteAccount = async () => {
-    const token = localStorage.getItem('vatsimToken');
+    const token = getVatsimToken();
     try {
       const response = await fetch('https://v2.stopbars.com/auth/delete', {
         method: 'DELETE',
@@ -69,7 +98,7 @@ const Account = () => {
   };
   const handleRegenerateApiKey = async () => {
     setRegeneratingApiKey(true);
-    const token = localStorage.getItem('vatsimToken');
+    const token = getVatsimToken();
 
     try {
       const response = await fetch('https://v2.stopbars.com/auth/regenerate-api-key', {
@@ -112,21 +141,24 @@ const Account = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <Loader className="w-12 h-12 animate-spin text-zinc-300" />
       </div>
     );
   }
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20 bg-950">  <div className="max-w-5xl mx-auto px-6">
+      <div className="min-h-screen pt-40 pb-20 bg-950">  <div className="max-w-5xl mx-auto px-6">
         <h1 className="text-4xl font-bold mb-8 text-white">Account Settings</h1>
         <div className="space-y-8">
           {staffRoles?.isStaff && (
             <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-semibold mb-2">Staff Access</h2>
+                  <div className="flex items-center space-x-3 mb-2">
+                    <Shield className="w-6 h-6 text-blue-400" />
+                    <h2 className="text-2xl font-semibold">Staff Access</h2>
+                  </div>
                   <p className="text-zinc-400">Role: {staffRoles?.role?.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
                 </div>
                 <Button
@@ -134,7 +166,7 @@ const Account = () => {
                   onClick={() => window.location.href = '/staff'}
                   className="bg-blue-500 hover:bg-blue-600"
                 >
-                  <Laptop className="w-4 h-4 mr-2" />
+                  <Link className="w-4 h-4 mr-2" />
                   Staff Dashboard
                 </Button>
               </div>
@@ -176,7 +208,7 @@ const Account = () => {
                       className={`min-w-[100px] ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
                     >
                       {copySuccess ? (
-                        <><Check className="w-4 h-4 mr-2" /> Copied!</>
+                        <><Check className="w-4 h-4 mr-2 text-green-400" /> Copied </>
                       ) : (
                         <><Copy className="w-4 h-4 mr-2" /> Copy</>
                       )}
@@ -191,7 +223,7 @@ const Account = () => {
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-zinc-500 mt-2">Keep this token secret. Use it to authenticate API requests.</p>
+                <p className="text-sm text-zinc-500 mt-2">Keep this token secret, never share it with anyone. It is used to authenticate API requests.</p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-6">
@@ -227,6 +259,39 @@ const Account = () => {
             </div>
           </Card>
 
+          {userDivisions.length > 0 && (
+            <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
+              <div className="flex items-center space-x-3 mb-8">
+                <Building2 className="w-6 h-6 text-blue-400" />
+                <h2 className="text-2xl font-semibold">Your Divisions</h2>
+              </div>
+
+              <div className="space-y-4">
+                {userDivisions.map((userDiv) => {
+                  const division = userDiv.division ?? userDiv;
+                  const role = userDiv.role;
+                  
+                  return division && (
+                    <div key={division.id} className="flex items-center justify-between p-6 bg-zinc-900/50 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50">
+                      <div>
+                        <h3 className="text-xl font-semibold text-white">{division.name}</h3>
+                        <p className="text-zinc-400">Your Role: {formatRole(role)}</p>
+                      </div>
+                      <Button
+                        variant="primary"
+                        onClick={() => window.location.href = `/divisions/${division.id}/manage`}
+                        className="bg-blue-500 hover:bg-blue-600"
+                      >
+                        <Link className="w-4 h-4 mr-2" />
+                        Manage Division
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
           <Card className="p-8 border-red-500/20 hover:border-red-500/30 transition-all duration-300">
             <div className="flex items-center space-x-3 mb-8">
               <AlertOctagon className="w-6 h-6 text-red-500" />
@@ -261,7 +326,7 @@ const Account = () => {
                   className="border-red-500/20 text-red-500 hover:bg-red-500/10"
                   onClick={() => setIsDeleteDialogOpen(true)}
                 >
-                  <Shield className="w-4 h-4 mr-2" />
+                  <OctagonAlert className="w-4 h-4 mr-2" />
                   Delete Account
                 </Button>
               </div>

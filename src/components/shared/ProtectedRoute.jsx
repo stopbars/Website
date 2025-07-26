@@ -2,10 +2,11 @@ import { Navigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { useAuth } from '../../hooks/useAuth';
 import { Loader } from 'lucide-react';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 export const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  const savedToken = localStorage.getItem('vatsimToken');
+  const savedToken = getVatsimToken();
  
   if (loading) {
     return (

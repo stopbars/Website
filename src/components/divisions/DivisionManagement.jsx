@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../layout/Layout';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
-import { Plus, UserX, Building, Users, MapPin} from 'lucide-react';
+import { Plus, UserX, TowerControl, Users, MapPin, AlertOctagon, Loader } from 'lucide-react';
 import { Alert } from '../shared/Alert';
+import { getVatsimToken } from '../../utils/cookieUtils';
 
 const DivisionManagement = () => {
   const { id: divisionId } = useParams();
@@ -19,11 +20,39 @@ const DivisionManagement = () => {
   const [newMemberCid, setNewMemberCid] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('nav_member');
   const [newAirportIcao, setNewAirportIcao] = useState('');
-  const token = localStorage.getItem('vatsimToken');
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState(null);
+  const [addingMember, setAddingMember] = useState(false);
+  const [addingAirport, setAddingAirport] = useState(false);
+  const [removingMember, setRemovingMember] = useState(false);
+  const token = getVatsimToken();
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  // Helper function to get status color
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return 'bg-green-400';
+      case 'pending':
+        return 'bg-orange-400';
+      case 'rejected':
+        return 'bg-red-400';
+      default:
+        return 'bg-gray-400';
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Fetch current user account info (only once)
+        const accountResponse = await fetch('https://v2.stopbars.com/auth/account', {
+          headers: { 'X-Vatsim-Token': token }
+        });
+        if (accountResponse.ok) {
+          const accountData = await accountResponse.json();
+          setCurrentUserId(accountData.vatsim_id);
+        }
         // Fetch division details
         const divisionResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
           headers: { 'X-Vatsim-Token': token }
@@ -31,7 +60,6 @@ const DivisionManagement = () => {
         if (!divisionResponse.ok) throw new Error('Failed to fetch division');
         const divisionData = await divisionResponse.json();
         setDivision(divisionData);
-
         // Fetch members
         const membersResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/members`, {
           headers: { 'X-Vatsim-Token': token }
@@ -39,7 +67,6 @@ const DivisionManagement = () => {
         if (!membersResponse.ok) throw new Error('Failed to fetch members');
         const membersData = await membersResponse.json();
         setMembers(membersData);
-
         // Fetch airports
         const airportsResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/airports`, {
           headers: { 'X-Vatsim-Token': token }
@@ -53,12 +80,12 @@ const DivisionManagement = () => {
         setLoading(false);
       }
     };
-
     if (token && divisionId) fetchData();
   }, [token, divisionId]);
 
   const handleAddMember = async (e) => {
     e.preventDefault();
+    setAddingMember(true);
     try {
       const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/members`, {
         method: 'POST',
@@ -80,10 +107,13 @@ const DivisionManagement = () => {
       setShowAddMember(false);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setAddingMember(false);
     }
   };
 
   const handleRemoveMember = async (memberId) => {
+    setRemovingMember(true);
     try {
       const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/members/${memberId}`, {
         method: 'DELETE',
@@ -93,13 +123,29 @@ const DivisionManagement = () => {
       if (!response.ok) throw new Error('Failed to remove member');
 
       setMembers(members.filter(m => m.vatsim_id !== memberId));
+      setShowRemoveConfirm(false);
+      setMemberToRemove(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setRemovingMember(false);
     }
+  };
+
+  const confirmRemoveMember = (member) => {
+    setMemberToRemove(member);
+    setShowRemoveConfirm(true);
+  };
+
+  const cancelRemoveMember = () => {
+    setShowRemoveConfirm(false);
+    setMemberToRemove(null);
+    setRemovingMember(false);
   };
 
   const handleAddAirport = async (e) => {
     e.preventDefault();
+    setAddingAirport(true);
     try {
       // First validate the airport exists
       const validateResponse = await fetch(`https://v2.stopbars.com/airports?icao=${newAirportIcao.toUpperCase()}`, {
@@ -131,12 +177,14 @@ const DivisionManagement = () => {
       setShowAddAirport(false);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setAddingAirport(false);
     }
   };
 
   if (loading) return (
     <Layout>
-      <div className="pt-32 pb-20">
+      <div className="pt-40 pb-20">
         <div className="container mx-auto px-4">
           <h1 className="text-3xl font-bold text-white mb-8">Loading...</h1>
         </div>
@@ -146,7 +194,7 @@ const DivisionManagement = () => {
 
   return (
     <Layout>
-      <div className="pt-32 pb-20">
+      <div className="pt-40 pb-20">
         <div className="container mx-auto px-4">
           {error && (
             <Alert variant="destructive" className="mb-8" onClose={() => setError(null)}>
@@ -199,7 +247,14 @@ const DivisionManagement = () => {
                         </select>
                       </div>
                       <div className="flex gap-2">
-                        <Button type="submit">Add Member</Button>
+                        <Button 
+                          type="submit" 
+                          disabled={addingMember}
+                          className="active:scale-95 transition-transform duration-75"
+                        >
+                          {addingMember && <Loader className="w-4 h-4 animate-spin mr-2" />}
+                          Add Member
+                        </Button>
                         <Button type="button" onClick={() => setShowAddMember(false)} variant="secondary">
                           Cancel
                         </Button>
@@ -215,8 +270,10 @@ const DivisionManagement = () => {
                           <p className="text-zinc-400 text-sm">Role: {member.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
                         </div>
                         <Button
-                          onClick={() => handleRemoveMember(member.vatsim_id)}
-                          className="bg-red-600 hover:bg-red-700"
+                          onClick={() => confirmRemoveMember(member)}
+                          className={`bg-red-600 hover:bg-red-700 hover:text-white active:scale-95 transition-transform duration-75${currentUserId === member.vatsim_id ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                          disabled={currentUserId === member.vatsim_id}
+                          title={currentUserId === member.vatsim_id ? 'You cannot remove yourself from the division.' : undefined}
                         >
                           <UserX className="w-4 h-4 mr-2" />
                           Remove
@@ -232,7 +289,7 @@ const DivisionManagement = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                  <Building className="w-5 h-5" />
+                  <TowerControl className="w-5 h-5" />
                   Airports
                 </h2>
                 <div className="flex gap-2">
@@ -260,7 +317,14 @@ const DivisionManagement = () => {
                         />
                       </div>
                       <div className="flex gap-2">
-                        <Button type="submit">Request Airport</Button>
+                        <Button 
+                          type="submit" 
+                          disabled={addingAirport}
+                          className="active:scale-95 transition-transform duration-75"
+                        >
+                          {addingAirport && <Loader className="w-4 h-4 animate-spin mr-2" />}
+                          Request Airport
+                        </Button>
                         <Button type="button" onClick={() => setShowAddAirport(false)} variant="secondary">
                           Cancel
                         </Button>
@@ -274,7 +338,16 @@ const DivisionManagement = () => {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-white">{airport.icao}</p>
-                            <p className="text-zinc-400 text-sm">Status: {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}</p>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-zinc-400 text-sm">Status: {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}</span>
+                              <div className="relative">
+                                <div className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-300 shadow-lg`}></div>
+                                <div 
+                                  className={`absolute inset-0 w-2 h-2 rounded-full ${getStatusColor(airport.status)} animate-pulse opacity-50`}
+                                  style={{ animationDuration: '3s' }}
+                                ></div>
+                              </div>
+                            </div>
                             <p className="text-zinc-400 text-sm">
                               Requested by: {airport.requested_by}
                             </p>
@@ -301,6 +374,61 @@ const DivisionManagement = () => {
           </div>
         </div>
       </div>
+
+      {/* Remove Member Confirmation Modal */}
+      {showRemoveConfirm && memberToRemove && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+            <div className="flex items-center space-x-3 mb-6">
+              <AlertOctagon className="w-6 h-6 text-red-500" />
+              <h3 className="text-xl font-bold text-red-500">Confirm Member Removal</h3>
+            </div>
+            <div className="space-y-4">
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <p className="text-zinc-200 mb-3">
+                  You are about to remove the following member:
+                </p>
+                <div className="flex items-start space-x-3">
+                  <UserX className="w-4 h-4 mt-1 text-red-400" />
+                  <div className="flex-1">
+                    <span className="font-medium text-red-200 block">{memberToRemove.vatsim_id}</span>
+                    <div className="text-sm text-red-200/80 space-y-1 mt-1">
+                      <p>Role: {memberToRemove.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
+                      <p>Division: {division?.name}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <p className="text-zinc-300">
+                This action cannot be undone. The user will immediately lose all access to the division and must be manually added at a later date if needed.
+              </p>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={cancelRemoveMember}
+                disabled={removingMember}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="!bg-red-500 hover:!bg-red-600 text-white active:scale-95 transition-transform duration-75"
+                onClick={() => handleRemoveMember(memberToRemove.vatsim_id)}
+                disabled={removingMember}
+              >
+                {removingMember ? (
+                  <Loader className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <UserX className="w-4 h-4 mr-2" />
+                )}
+                Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };
