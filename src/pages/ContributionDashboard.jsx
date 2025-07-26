@@ -220,7 +220,8 @@ const ContributionDashboard = () => {
                   <h2 className="text-xl font-semibold">Top Contributors</h2>
                 </div>
                 
-                <div className="space-y-4">                  {leaderboard.map((contributor, index) => (
+                <div className="space-y-4">                  
+                  {leaderboard.map((contributor, index) => (
                     <div 
                       key={index}
                       className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50"
@@ -252,7 +253,7 @@ const ContributionDashboard = () => {
             <div className="lg:col-span-2">              {/* Tabs */}
               <div className="flex mb-6 border-b border-zinc-800">
                 <button
-                  className={`px-4 py-2 border-b-2 ${
+                  className={`px-4 py-2 border-b-2 cursor-pointer ${
                     currentTab === 'all' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
                   }`}
                   onClick={() => setCurrentTab('all')}
@@ -264,7 +265,7 @@ const ContributionDashboard = () => {
                 </button>
                 
                 <button
-                  className={`px-4 py-2 border-b-2 ml-4 ${
+                  className={`px-4 py-2 border-b-2 ml-4 cursor-pointer ${
                     currentTab === 'user' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
                   }`}
                   onClick={() => setCurrentTab('user')}
