@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
-import { ActivitySquare, CircleDot, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ActivitySquare, CircleDot, ChevronLeft, ChevronRight, Map, Grid3X3 } from 'lucide-react';
 import { Card } from '../shared/Card';
+import { MapContainer, TileLayer } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const ITEMS_PER_PAGE = 6;
 
@@ -12,6 +14,7 @@ export const Airports = () => {
   const [activeAirports, setActiveAirports] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'map'
 
   useEffect(() => {
     const fetchData = async () => {
@@ -57,13 +60,13 @@ export const Airports = () => {
   const paginatedAirports = sortedAirports.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
-    <section className="py-24 bg-zinc-900/50" id="status">
+    <section className="py-20 bg-zinc-900/50" id="status">
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 sm:mb-12 gap-4">
           <div>
             <h2 className="text-3xl font-bold mb-2">Live BARS Network</h2>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-zinc-400">Real-time stopbar status</p>
+              <p className="text-zinc-400">Real-time airport lighting status</p>
               <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full">
                 <CircleDot className="w-3 h-3 text-emerald-400" />
                 <span className="text-sm text-zinc-300">
@@ -72,78 +75,124 @@ export const Airports = () => {
               </div>
             </div>
           </div>
-          <Button 
-            onClick={() => navigate('/status')}
-            className="flex items-center self-start sm:self-center"
-          >
-            <ActivitySquare className="w-4 h-4 mr-2" />
-            Full Status Page
-          </Button>
+          <div className="flex items-center gap-4 self-start sm:self-center">
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-3 rounded-md transition-all duration-200 ${
+                  viewMode === 'grid' 
+                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' 
+                    : 'text-zinc-500 hover:text-white hover:bg-zinc-800 border border-zinc-700/50'
+                }`}
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode('map')}
+                className={`px-3 py-3 rounded-md transition-all duration-200 ${
+                  viewMode === 'map' 
+                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' 
+                    : 'text-zinc-500 hover:text-white hover:bg-zinc-800 border border-zinc-700/50'
+                }`}
+              >
+                <Map className="w-4 h-4" />
+              </Button>
+            </div>
+            <Button 
+              onClick={() => navigate('/status')}
+              className="flex items-center"
+            >
+              <ActivitySquare className="w-4 h-4 mr-2" />
+              Full Status Page
+            </Button>
+          </div>
         </div>
 
         {loading ? (
           <div className="text-center text-zinc-400">Loading status...</div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {paginatedAirports.map(([icao, data]) => (
-                <Card key={icao} className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-lg font-medium">{icao}</h3>
-                      <span className={`flex h-2 w-2 rounded-full ${
-                        activeAirports[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'
-                      }`} />
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      {data.runways.map(runway => (
-                        <span 
-                          key={runway} 
-                          className={`px-2 py-1 rounded text-xs ${
-                            activeAirports[icao] 
-                              ? 'bg-emerald-500/20 text-emerald-400' 
-                              : 'bg-zinc-800'
-                          }`}
-                        >
-                          {runway}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="text-sm text-zinc-400 space-y-1">
-                      {data.sceneries.map(s => (
-                        <div key={s.name}>{s.name}</div>
-                      ))}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-
-            {totalPages > 1 && (
-              <div className="mt-8 flex justify-center">
-                <div className="flex space-x-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="w-4 h-4" aria-label='Previous Page' />
-                  </Button>
-                  <div className="flex items-center px-4 py-2 bg-zinc-800 rounded-lg">
-                    <span className="text-zinc-400">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="w-4 h-4" aria-label='Next Page' />
-                  </Button>
+            {viewMode === 'grid' ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {paginatedAirports.map(([icao, data]) => (
+                    <Card key={icao} className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-lg font-medium">{icao}</h3>
+                          <span className={`flex h-2 w-2 rounded-full ${
+                            activeAirports[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'
+                          }`} />
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          {data.runways.map(runway => (
+                            <span 
+                              key={runway} 
+                              className={`px-2 py-1 rounded text-xs ${
+                                activeAirports[icao] 
+                                  ? 'bg-emerald-500/20 text-emerald-400' 
+                                  : 'bg-zinc-800'
+                              }`}
+                            >
+                              {runway}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="text-sm text-zinc-400 space-y-1">
+                          {data.sceneries.map(s => (
+                            <div key={s.name}>{s.name}</div>
+                          ))}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
+
+                {totalPages > 1 && (
+                  <div className="mt-8 flex justify-center">
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="w-4 h-4" aria-label='Previous Page' />
+                      </Button>
+                      <div className="flex items-center px-4 py-2 bg-zinc-800 rounded-lg">
+                        <span className="text-zinc-400">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="w-4 h-4" aria-label='Next Page' />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="h-[600px] rounded-lg overflow-hidden">
+                <MapContainer
+                  center={[0, 0]}
+                  zoom={2}
+                  style={{ height: '100%', width: '100%' }}
+                  className="rounded-lg"
+                >
+                  <TileLayer
+                    url={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`}
+                    attribution='© <a href="https://www.mapbox.com/">Mapbox</a>'
+                  />
+                </MapContainer>
               </div>
             )}
           </>

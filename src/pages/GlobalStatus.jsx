@@ -4,9 +4,12 @@ import { Card } from '../components/shared/Card';
 import { 
   Search, MapPin, Loader, Check, 
   CircleDot, ActivitySquare, ArrowUpDown, MenuIcon,
-  Square
+  Square, Map, ChevronDown
 } from 'lucide-react';
 import { Button } from '../components/shared/Button';
+import { MapContainer, TileLayer } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import { useRef } from 'react';
 
 const ITEMS_PER_PAGE = 12;
 
@@ -23,6 +26,12 @@ const GlobalStatus = () => {
   const [activeAirports, setActiveAirports] = useState({});
   const [controllerFilter, setControllerFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showControllerDropdown, setShowControllerDropdown] = useState(false);
+  const [showContinentDropdown, setShowContinentDropdown] = useState(false);
+  const [showSceneryDropdown, setShowSceneryDropdown] = useState(false);
+  const controllerDropdownRef = useRef(null);
+  const continentDropdownRef = useRef(null);
+  const sceneryDropdownRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -59,6 +68,24 @@ const GlobalStatus = () => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (controllerDropdownRef.current && !controllerDropdownRef.current.contains(event.target)) {
+        setShowControllerDropdown(false);
+      }
+      if (continentDropdownRef.current && !continentDropdownRef.current.contains(event.target)) {
+        setShowContinentDropdown(false);
+      }
+      if (sceneryDropdownRef.current && !sceneryDropdownRef.current.contains(event.target)) {
+        setShowSceneryDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const getAirportContinent = (icao) => {
@@ -112,22 +139,23 @@ const GlobalStatus = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20">
+      <div className="min-h-screen pt-44 pb-20">
         <div className="max-w-7xl mx-auto px-6">
-          {/* Header with Live Status */}          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 mb-8">
+          {/* Header with Live Status */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 mb-6">
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 mb-2">
                 <h1 className="text-3xl font-bold">Global BARS Status</h1>
-                <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full self-start mt-2 sm:mt-0">
+                <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full self-start mt-4">
                   <CircleDot className="w-3 h-3 text-emerald-400" />
                   <span className="text-sm text-zinc-300">
                     {Object.keys(activeAirports).length} Active Now
                   </span>
                 </div>
               </div>
-              <p className="text-zinc-400">Live stopbar availability across {stats.totalAirports} airports</p>
+              <p className="text-zinc-400">Live airport lighting availability across {stats.totalAirports} airports</p>
             </div>
-            <div className="flex items-center space-x-4 self-start">
+            <div className="flex items-center space-x-4 self-start mt-4">
               <Button
                 variant={view === 'grid' ? 'primary' : 'outline'}
                 onClick={() => setView('grid')}
@@ -141,6 +169,13 @@ const GlobalStatus = () => {
                 className="p-2"
               >
                 <MenuIcon className="w-5 h-5" />
+              </Button>
+              <Button
+                variant={view === 'map' ? 'primary' : 'outline'}
+                onClick={() => setView('map')}
+                className="p-2"
+              >
+                <Map className="w-5 h-5" />
               </Button>
             </div>
           </div>{/* Controls */}
@@ -161,40 +196,116 @@ const GlobalStatus = () => {
 
             {/* Filters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <select
-                value={controllerFilter}
-                onChange={(e) => setControllerFilter(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
-              >
-                <option value="all">All Airports</option>
-                <option value="active">Active Airports</option>
-                <option value="inactive">Un-Active Airports</option>
-              </select>
+              {/* Controller Filter Dropdown */}
+              <div className="relative" ref={controllerDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowControllerDropdown((v) => !v)}
+                  className="flex items-center justify-between w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+                >
+                  <span className={controllerFilter !== 'all' ? 'text-white' : 'text-zinc-500'}>
+                    {controllerFilter === 'all' ? 'All Airports' : controllerFilter === 'active' ? 'Active Airports' : 'Un-Active Airports'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showControllerDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showControllerDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+                    {[
+                      { value: 'all', label: 'All Airports' },
+                      { value: 'active', label: 'Active Airports' },
+                      { value: 'inactive', label: 'Un-Active Airports' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setControllerFilter(option.value);
+                          setShowControllerDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${controllerFilter === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              <select
-                value={continentFilter}
-                onChange={(e) => setContinentFilter(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
-              >
-                <option value="all">All Continents</option>
-                <option value="North America">North America</option>
-                <option value="South America">South America</option>
-                <option value="Europe">Europe</option>
-                <option value="Asia">Asia</option>
-                <option value="Oceania">Oceania</option>
-                <option value="Africa">Africa</option>
-              </select>
+              {/* Continent Filter Dropdown */}
+              <div className="relative" ref={continentDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowContinentDropdown((v) => !v)}
+                  className="flex items-center justify-between w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+                >
+                  <span className={continentFilter !== 'all' ? 'text-white' : 'text-zinc-500'}>
+                    {continentFilter === 'all' ? 'All Continents' : continentFilter}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showContinentDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showContinentDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+                    {[
+                      { value: 'all', label: 'All Continents' },
+                      { value: 'North America', label: 'North America' },
+                      { value: 'South America', label: 'South America' },
+                      { value: 'Europe', label: 'Europe' },
+                      { value: 'Asia', label: 'Asia' },
+                      { value: 'Oceania', label: 'Oceania' },
+                      { value: 'Africa', label: 'Africa' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setContinentFilter(option.value);
+                          setShowContinentDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${continentFilter === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              <select
-                value={sceneryFilter}
-                onChange={(e) => setSceneryFilter(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
-              >
-                <option value="all">All Scenery</option>
-                <option value="default">Default Only</option>
-                <option value="addon">Add-on Only</option>
-              </select>
+              {/* Scenery Filter Dropdown */}
+              <div className="relative" ref={sceneryDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowSceneryDropdown((v) => !v)}
+                  className="flex items-center justify-between w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+                >
+                  <span className={sceneryFilter !== 'all' ? 'text-white' : 'text-zinc-500'}>
+                    {sceneryFilter === 'all' ? 'All Scenery' : sceneryFilter === 'default' ? 'Default Only' : 'Add-on Only'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showSceneryDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showSceneryDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+                    {[
+                      { value: 'all', label: 'All Scenery' },
+                      { value: 'default', label: 'Default Only' },
+                      { value: 'addon', label: 'Add-on Only' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setSceneryFilter(option.value);
+                          setShowSceneryDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${sceneryFilter === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
+              {/* Sort Button (unchanged) */}
               <Button
                 variant="outline"
                 onClick={() => setSortConfig(prev => ({
@@ -281,7 +392,7 @@ const GlobalStatus = () => {
                     </Card>
                   ))}
                 </div>
-              ) : (
+              ) : view === 'list' ? (
                 <div className="overflow-auto">
                   <Card className="p-4">
                     <div className="min-w-[800px]">
@@ -342,10 +453,23 @@ const GlobalStatus = () => {
                     </div>
                   </Card>
                 </div>
+              ) : (
+                <div className="h-[600px] rounded-lg overflow-hidden">
+                  <MapContainer
+                    center={[0, 0]}
+                    zoom={2}
+                    style={{ height: '100%', width: '100%' }}
+                    className="rounded-lg"
+                  >
+                    <TileLayer
+                      url={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`}
+                      attribution='© <a href="https://www.mapbox.com/">Mapbox</a>'
+                    />
+                  </MapContainer>
+                </div>
               )}
-
               {/* Pagination */}
-              {totalPages > 1 && (
+              {totalPages > 1 && view !== 'map' && (
                 <div className="mt-8 flex justify-center">
                   <div className="flex space-x-2">
                     <Button
