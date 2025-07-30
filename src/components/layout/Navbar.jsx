@@ -4,6 +4,7 @@ import { Button } from '../shared/Button';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useState, useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 
 // Function to parse markdown-style links in NOTAM content
 const parseNotamLinks = (content) => {
@@ -14,10 +15,13 @@ const parseNotamLinks = (content) => {
   
   // Replace all instances of markdown links with HTML links
   // Add target="_blank" and rel="noopener noreferrer" for security
-  return content.replace(
+  const sanitizedContent = content.replace(
     linkRegex, 
     '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline hover:brightness-125 transition-all">$1</a>'
   );
+  
+  // Sanitize the content to prevent XSS attacks
+  return DOMPurify.sanitize(sanitizedContent);
 };
 
 export const Navbar = () => {  const scrolled = useScroll();
