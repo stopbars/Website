@@ -191,7 +191,7 @@ export const Navbar = () => {  const scrolled = useScroll();
             <div className="hidden md:flex items-center space-x-6 lg:space-x-12">
               <div className="flex items-center space-x-6 lg:space-x-12">
                 <Link to="/contribute" className="text-zinc-400 hover:text-white transition-colors">Contribute</Link>
-                <Link to="/documentation" className="text-zinc-400 hover:text-white transition-colors">Documentation</Link>
+                <a href="https://docs.stopbars.com" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors">Documentation</a>
                 <a href="https://opencollective.com/stopbars" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors">Donate</a>
               </div>
               {user ? (
@@ -269,13 +269,15 @@ export const Navbar = () => {  const scrolled = useScroll();
               >
                 <span className="font-medium">Contribute</span>
               </Link>
-              <Link 
-                to="/documentation" 
+              <a 
+                href="https://docs.stopbars.com"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">Documentation</span>
-              </Link>
+              </a>
               <a 
                 href="https://opencollective.com/stopbars"
                 target="_blank"
