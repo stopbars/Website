@@ -5,7 +5,6 @@ import './styles/globals.css'
 
 // Pages
 import Home from './pages/Home.jsx'
-import Documentation from './pages/Documentation.jsx'
 import Account from './pages/Account.jsx'
 import Privacy from './pages/Privacy.jsx'
 import Terms from './pages/Terms.jsx'
@@ -45,27 +44,12 @@ const router = createBrowserRouter([
     errorElement: <RouteError />
   },
   {
-    path: '/documentation',
-    element: <Documentation />,
-    errorElement: <RouteError />
-  },
-  {
     path: '/account',
     element: (
       <ProtectedRoute>
         <Account />
       </ProtectedRoute>
     ),
-    errorElement: <RouteError />
-  },
-  {
-    path: '/docs/:docType',
-    element: <Documentation />,
-    errorElement: <RouteError />
-  },
-  {
-    path: '/docs',
-    element: <Navigate to="/documentation" replace />,
     errorElement: <RouteError />
   },
   {

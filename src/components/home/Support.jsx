@@ -35,7 +35,7 @@ export const Support = () => {
             <Button 
               variant="secondary" 
               className="w-full"
-              onClick={() => window.location.href = '/documentation'}
+              onClick={() => window.open('https://docs.stopbars.com', '_blank')}
               aria-label="View installation and configuration guides"
             >
               View Guides

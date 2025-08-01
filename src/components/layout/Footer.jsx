@@ -131,9 +131,9 @@ export const Footer = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/documentation" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">
+                <a href="https://docs.stopbars.com" target="_blank" rel="noopener noreferrer" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">
                   Documentation
-                </Link>
+                </a>
               </li>
             </ul>
           </div>

@@ -442,10 +442,10 @@ const About = () => {
                </p>
              </div>
              <div className="mt-6">
-               <Button 
-                 onClick={() => window.location.href = 'https://docs.stopbars.com'}
-                 className="w-full group"
-               >
+                               <Button 
+                  onClick={() => window.open('https://docs.stopbars.com', '_blank')}
+                  className="w-full group"
+                >
                  View Documentation
                  <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
                </Button>
