@@ -29,6 +29,7 @@ import NewDivision from './components/divisions/NewDivision'
 import { ProtectedRoute } from './components/shared/ProtectedRoute'
 import { AuthCallback } from './components/auth/AuthCallback'
 import { DiscordRedirect } from './components/shared/DiscordRedirect'
+import { DocsRedirect } from './components/shared/DocsRedirect'
 import StaffDashboard from './pages/StaffDashboard.jsx'
 import { ErrorBoundary, RouteError } from './components/shared/ErrorBoundary'
 
@@ -90,6 +91,16 @@ const router = createBrowserRouter([
   {
     path: '/discord',
     element: <DiscordRedirect />,
+    errorElement: <RouteError />
+  },
+  {
+    path: '/docs',
+    element: <DocsRedirect />,
+    errorElement: <RouteError />
+  },
+  {
+    path: '/documentation',
+    element: <DocsRedirect />,
     errorElement: <RouteError />
   },
   {
