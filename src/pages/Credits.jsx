@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import PropTypes from 'prop-types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -83,6 +84,15 @@ const Credits = () => {
     </motion.div>
   );
 
+  FloatingHeart.propTypes = {
+    heart: PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
+      rotation: PropTypes.number.isRequired,
+      x: PropTypes.number.isRequired,
+      delay: PropTypes.number.isRequired,
+    }).isRequired,
+  };
+
   const handleImageError = (e) => {
     if (e.target && e.target.src !== new URL(FALLBACK_AVATAR, window.location.origin).href) {
       e.target.src = FALLBACK_AVATAR;
@@ -100,14 +110,10 @@ const Credits = () => {
         throw new Error(`Failed to fetch contributors: ${response.status}`);
       }
 
-      const data = await response.json();
-      
+  const data = await response.json();
   setContributors(Array.isArray(data.contributors) ? data.contributors : []);
   setRepositories(Array.isArray(data.repositories) ? data.repositories : []);
   setStatistics(data.statistics || null);
-    setContributors(Array.isArray(data.contributors) ? data.contributors : []);
-    setRepositories(Array.isArray(data.repositories) ? data.repositories : []);
-    setStatistics(data.statistics || null);
     setLastUpdated(new Date());
       
     } catch (err) {

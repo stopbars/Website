@@ -1,7 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './styles/globals.css'
+
+// PostHog
+import { PostHogProvider } from 'posthog-js/react'
 
 // Pages
 import Home from './pages/Home.jsx'
@@ -47,7 +50,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/credits',
-    element: <Credits />,
+    element: <Credits />,  
     errorElement: <RouteError />
   },
   {
@@ -61,81 +64,81 @@ const router = createBrowserRouter([
   },
   {
     path: '/auth/callback',
-    element: <AuthCallback />,
+    element: <AuthCallback />,  
     errorElement: <RouteError />
   },
   {
     path: '/status',
-    element: <GlobalStatus />,
+    element: <GlobalStatus />,  
     errorElement: <RouteError />
   },
   {
     path: '/changelog',
-    element: <Changelog />,
+    element: <Changelog />,  
     errorElement: <RouteError />
   },
   {
     path: '/support',
-    element: <Contact />,
+    element: <Contact />,  
     errorElement: <RouteError />
   },
   {
     path: '/contact',
-    element: <Contact />,
+    element: <Contact />,  
     errorElement: <RouteError />
   },
   {
     path: '/privacy',
-    element: <Privacy />,
+    element: <Privacy />,  
     errorElement: <RouteError />
   },
   {
     path: '/terms',
-    element: <Terms />,
+    element: <Terms />,  
     errorElement: <RouteError />
   },
   {
     path: '/discord',
-    element: <DiscordRedirect />,
+    element: <DiscordRedirect />,  
     errorElement: <RouteError />
   },
   {
     path: '/docs',
-    element: <DocsRedirect />,
+    element: <DocsRedirect />,  
     errorElement: <RouteError />
   },
   {
     path: '/documentation',
-    element: <DocsRedirect />,
+    element: <DocsRedirect />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute',
-    element: <ContributionDashboard />,
+    element: <ContributionDashboard />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute/new',
-    element: <ContributeNew />,
+    element: <ContributeNew />,  
     errorElement: <RouteError />
   }, {
     path: '/contribute/map/:icao',
-    element: <ContributeMap />,
+    element: <ContributeMap />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute/test/:icao',
-    element: <ContributeTest />,
+    element: <ContributeTest />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute/details/:icao',
-    element: <ContributeDetails />,
+    element: <ContributeDetails />,  
     errorElement: <RouteError />
   },
   {
     path: '/faq',
-    element: <FAQPage />,
+    element: <FAQPage />,  
     errorElement: <RouteError />
   },
   {
@@ -192,19 +195,29 @@ const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <NotFound />,
+    element: <NotFound />,  
     errorElement: <RouteError />
   }
 ]);
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AuthProvider>
-      <ModalProvider>
-        <ErrorBoundary>
-          <RouterProvider router={router} />
-        </ErrorBoundary>
-      </ModalProvider>
-    </AuthProvider>
+    <PostHogProvider
+      apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY}
+      options={{
+        api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
+        defaults: '2025-05-24',
+        capture_exceptions: true, // This enables capturing exceptions using Error Tracking
+        debug: import.meta.env.MODE === 'development',
+      }}
+    >
+      <AuthProvider>
+        <ModalProvider>
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+          </ErrorBoundary>
+        </ModalProvider>
+      </AuthProvider>
+    </PostHogProvider>
   </StrictMode>,
-);
+)

@@ -15,6 +15,7 @@
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.525.0",
+    "posthog-js": "^1.259.0",
     "prop-types": "^15.8.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.1",
