@@ -13,6 +13,7 @@ import GlobalStatus from './pages/GlobalStatus.jsx'
 import Changelog from './pages/Changelog.jsx'
 import Contact from './pages/Contact.jsx'
 import About from './pages/About.jsx'
+import Credits from './pages/Credits.jsx'
 import NotFound from './pages/NotFound.jsx'
 import DivisionAirportManager from './pages/DivisionAirportManager.jsx'
 import DebugGenerator from './pages/DebugGenerator.jsx'
@@ -42,6 +43,11 @@ const router = createBrowserRouter([
   {
     path: '/about',
     element: <About />,
+    errorElement: <RouteError />
+  },
+  {
+    path: '/credits',
+    element: <Credits />,
     errorElement: <RouteError />
   },
   {

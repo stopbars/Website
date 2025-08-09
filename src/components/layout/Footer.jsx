@@ -88,6 +88,11 @@ export const Footer = () => {
                 </Link>
               </li>
               <li>
+                <Link to="/credits" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">
+                  Credits
+                </Link>
+              </li>
+              <li>
                 <Link to="/changelog" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">
                   Changelog
                 </Link>

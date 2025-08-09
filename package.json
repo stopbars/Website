@@ -11,15 +11,15 @@
   },
   "dependencies": {
     "dompurify": "^3.2.6",
-    "framer-motion": "^12.0.6",
+    "framer-motion": "^12.23.12",
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.525.0",
     "prop-types": "^15.8.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react-dom": "^19.1.1",
     "react-leaflet": "^5.0.0",
-    "react-router-dom": "^7.1.1",
+    "react-router-dom": "^7.7.1",
     "wrangler": "^4.26.0"
   },
   "devDependencies": {
@@ -27,16 +27,16 @@
     "@tailwindcss/postcss": "^4.1.11",
     "@tailwindcss/typography": "^0.5.16",
     "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
+    "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
-    "eslint": "^9.31.0",
+    "eslint": "^9.32.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^16.3.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^4.1.11",
-    "vite": "^7.0.4"
+    "vite": "^7.0.6"
   }
 }
