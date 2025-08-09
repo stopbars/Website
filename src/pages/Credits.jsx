@@ -93,7 +93,7 @@ const Credits = () => {
             aria-atomic="true"
           >
             {loading && 'Loading contributors…'}
-            {!loading && !error && lastUpdated && `Loaded ${contributors.length} contributor${contributors.length === 1 ? '' : 's'} • Updated at ${lastUpdated.toUTCString()}`}
+            {!loading && !error && lastUpdated && `Loaded ${contributors.length} contributor${contributors.length === 1 ? '' : 's'} • Updated at ${lastUpdated.toLocaleString()}`}
             {!loading && error && 'Encountered an error while loading contributors.'}
           </div>
         </div>
