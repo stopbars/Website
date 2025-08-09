@@ -68,6 +68,9 @@ const About = () => {
             </Card>
           </section>
 
+          {/* Divider */}
+          <div className="border-t border-zinc-800"></div>
+
           {/* How It Works */}
           <section>
             <h2 className="text-3xl font-semibold mb-8">How It Works</h2>
@@ -307,7 +310,7 @@ const About = () => {
                </p>
              </div>
              <div className="mt-6">
-                               <Button 
+                <Button 
                   onClick={() => window.open('https://docs.stopbars.com', '_blank')}
                   className="w-full group"
                 >
