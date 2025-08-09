@@ -45,7 +45,10 @@ const Credits = () => {
   setContributors(Array.isArray(data.contributors) ? data.contributors : []);
   setRepositories(Array.isArray(data.repositories) ? data.repositories : []);
   setStatistics(data.statistics || null);
-  setLastUpdated(new Date());
+    setContributors(Array.isArray(data.contributors) ? data.contributors : []);
+    setRepositories(Array.isArray(data.repositories) ? data.repositories : []);
+    setStatistics(data.statistics || null);
+    setLastUpdated(new Date());
       
     } catch (err) {
       setError(err.message);
