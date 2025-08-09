@@ -49,14 +49,12 @@ const About = () => {
 
       {/* Main Content */}
        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pt-8 sm:pt-12 space-y-12 sm:space-y-16">
-         
             {/* Page Header */}
              <section className="text-center mb-8 sm:mb-12">
               <h1 className="text-5xl sm:text-5xl lg:text-6xl font-bold mb-4 text-white">
                 About BARS
               </h1>
             </section>
-         
           {/* What is BARS Section */}
           <section className="mb-6 sm:mb-8">
             <Card className="p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-zinc-900 to-zinc-900/50">
@@ -69,9 +67,6 @@ const About = () => {
                </p>
             </Card>
           </section>
-
-         {/* Divider */}
-         <div className="border-t border-zinc-800"></div>
 
           {/* How It Works */}
           <section>
@@ -300,85 +295,6 @@ const About = () => {
             </Card>
           </div>
           </section>
-
-         {/* Divider */}
-         <div className="border-t border-zinc-800"></div>
-
-          {/* History Timeline */}
-          <section>
-            <h2 className="text-2xl sm:text-3xl font-semibold mb-8 sm:mb-12">History</h2>
-            <div className="relative">
-                {/* Timeline line - starts from first dot */}
-                <div 
-                  className="absolute left-4 sm:left-20 w-0.5 sm:w-1 bg-red-500" 
-                  style={{ top: '36px', height: 'calc(100% - 6rem)' }}
-                ></div>
-             
-                {/* Timeline items */}
-               <div className="space-y-12 sm:space-y-20">
-                                   <div className="relative flex items-start">
-                    <div className="absolute left-1 sm:left-15 w-6 h-6 sm:w-9 sm:h-9 bg-red-500 rounded-full border-2 sm:border-4 border-zinc-900 shadow-lg"></div>
-                    <div className="ml-12 sm:ml-32">
-                      <div className="text-lg sm:text-xl text-red-400 font-medium mb-2 sm:mb-3">Q4 2024</div>
-                      <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">The Idea</h3>
-                      <p className="text-zinc-400 text-base sm:text-xl leading-relaxed">
-                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
-                      </p>
-                    </div>
-                  </div>
-
-                                        <div className="relative flex items-start">
-                    <div className="absolute left-1 sm:left-15 w-6 h-6 sm:w-9 sm:h-9 bg-red-500 rounded-full border-2 sm:border-4 border-zinc-900 shadow-lg"></div>
-                    <div className="ml-12 sm:ml-32">
-                      <div className="text-lg sm:text-xl text-red-400 font-medium mb-2 sm:mb-3">11 Jan 2025</div>
-                      <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">The Big Bang</h3>
-                      <p className="text-zinc-400 text-base sm:text-xl leading-relaxed">
-                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
-                      </p>
-                    </div>
-                  </div>
-
-                                   
-
-                    <div className="relative flex items-start">
-                    <div className="absolute left-1 sm:left-15 w-6 h-6 sm:w-9 sm:h-9 bg-red-500 rounded-full border-2 sm:border-4 border-zinc-900 shadow-lg"></div>
-                    <div className="ml-12 sm:ml-32">
-                      <div className="text-lg sm:text-xl text-red-400 font-medium mb-2 sm:mb-3">3 Feb 2025</div>
-                     <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">BARS Goes Global</h3>
-                     <p className="text-zinc-400 text-base sm:text-xl leading-relaxed">
-                       Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
-                     </p>
-                   </div>
-                 </div>
-
-                  <div className="relative flex items-start">
-                    <div className="absolute left-1 sm:left-15 w-6 h-6 sm:w-9 sm:h-9 bg-red-500 rounded-full border-2 sm:border-4 border-zinc-900 shadow-lg"></div>
-                    <div className="ml-12 sm:ml-32">
-                      <div className="text-lg sm:text-xl text-red-400 font-medium mb-2 sm:mb-3">14 Feb 2025</div>
-                     <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">The Future of Airport Lighting Simulation</h3>
-                     <p className="text-zinc-400 text-base sm:text-xl leading-relaxed">
-                       Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
-                     </p>
-                   </div>
-                 </div>
-
-                  <div className="relative flex items-start">
-                    <div className="absolute left-1 sm:left-15 w-6 h-6 sm:w-9 sm:h-9 bg-red-500 rounded-full border-2 sm:border-4 border-zinc-900 shadow-lg"></div>
-                    <div className="ml-12 sm:ml-32">
-                      <div className="text-lg sm:text-xl text-red-400 font-medium mb-2 sm:mb-3">Present</div>
-                     <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">What's Next?</h3>
-                     <p className="text-zinc-400 text-base sm:text-xl leading-relaxed">
-                       Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
-                     </p>
-                     {/* Idea: Product stats will be included here later*/}
-                   </div>
-                 </div>
-               </div>
-           </div>
-           </section>
-
-          {/* Divider */}
-          <div className="border-t border-zinc-800"></div>
 
          {/* Quick Links Section */}
          <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
