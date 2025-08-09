@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { ConsentBanner } from '../shared/ConsentBanner';
 
 export const Footer = () => {
   const [statusColor, setStatusColor] = useState('bg-gray-400'); // Default gray
+  const [showConsentBanner, setShowConsentBanner] = useState(false);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -41,6 +43,10 @@ export const Footer = () => {
     
     return () => clearInterval(interval);
   }, []);
+
+  const handleManageCookies = () => {
+    setShowConsentBanner(true);
+  };
 
   return (
     <footer className="py-8 md:py-16 border-t border-zinc-900">
@@ -131,6 +137,16 @@ export const Footer = () => {
                 </a>
               </li>
               <li>
+                <a 
+                  href="https://status.stopbars.com/maintenance" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
+                >
+                  Maintenance
+                </a>
+              </li>
+              <li>
                 <Link to="/contact" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">
                   Contact Us
                 </Link>
@@ -162,6 +178,14 @@ export const Footer = () => {
                   Terms Of Use
                 </Link>
               </li>
+              <li>
+                <button 
+                  onClick={handleManageCookies}
+                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors text-left"
+                >
+                  Manage Cookies
+                </button>
+              </li>
             </ul>
           </div>
         </div>
@@ -174,6 +198,8 @@ export const Footer = () => {
           </p>
         </div>
       </div>
+      
+      <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
     </footer>
   );
 };
