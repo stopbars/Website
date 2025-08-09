@@ -24,7 +24,7 @@ const Credits = () => {
   const FALLBACK_AVATAR = '/favicon.png';
 
   const handleImageError = (e) => {
-    if (e.target && e.target.src !== window.location.origin + FALLBACK_AVATAR) {
+    if (e.target && e.target.src !== new URL(FALLBACK_AVATAR, window.location.origin).href) {
       e.target.src = FALLBACK_AVATAR;
     }
   };
