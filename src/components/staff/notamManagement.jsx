@@ -543,7 +543,7 @@ const NotamManagement = () => {
               >
                 <button
                   onClick={copyNotamToClipboard}
-                  className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded"
+                  className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded cursor-pointer"
                   title="Copy NOTAM to clipboard"
                 >
                   {copied ? (

@@ -936,7 +936,7 @@ const ContributionManagement = () => {
           ) : paginatedContributions.length === 0 ? (
             <Card className="p-6">
               <div className="text-center text-zinc-400 py-8">
-                No pending contributions found
+                No pending contributions found.
               </div>
             </Card>
           ) : (

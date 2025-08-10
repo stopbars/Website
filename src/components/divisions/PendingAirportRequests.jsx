@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { Button } from '../shared/Button';
 import { Check, X } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
-const PendingAirportRequests = () => {
+const PendingAirportRequests = ({ onCountChange }) => {
   const [requests, setRequests] = useState([]);
   const [divisions, setDivisions] = useState({});
   const [loading, setLoading] = useState(true);
@@ -50,6 +51,11 @@ const PendingAirportRequests = () => {
       // Combine and flatten all pending airport requests
       const allPendingRequests = airportRequests.flat();
       setRequests(allPendingRequests);
+      
+      // Notify parent component of the count
+      if (onCountChange) {
+        onCountChange(allPendingRequests.length);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -75,7 +81,14 @@ const PendingAirportRequests = () => {
       if (!response.ok) throw new Error('Failed to update airport request');
 
       // Remove the approved/rejected request from the list immediately
-      setRequests(prevRequests => prevRequests.filter(req => req.id !== airportId));
+      setRequests(prevRequests => {
+        const updatedRequests = prevRequests.filter(req => req.id !== airportId);
+        // Notify parent component of the updated count
+        if (onCountChange) {
+          onCountChange(updatedRequests.length);
+        }
+        return updatedRequests;
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -83,7 +96,7 @@ const PendingAirportRequests = () => {
 
   if (loading) return <p className="text-zinc-400">Loading requests...</p>;
   if (error) return <p className="text-red-500">{error}</p>;
-  if (!requests?.length) return <p className="text-zinc-400">No pending airport requests.</p>;
+  if (!requests?.length) return <p className="text-zinc-400">No pending airport requests found.</p>;
 
   return (
     <div className="space-y-4">
@@ -120,6 +133,10 @@ const PendingAirportRequests = () => {
       ))}
     </div>
   );
+};
+
+PendingAirportRequests.propTypes = {
+  onCountChange: PropTypes.func
 };
 
 export default PendingAirportRequests;

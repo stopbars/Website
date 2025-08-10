@@ -18,6 +18,7 @@ import {
   Check,
   RefreshCw,
   Loader,
+  TowerControl,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -77,7 +78,7 @@ const TABS = {
   airportManagement: {
     id: 'airportManagement',
     label: 'Airport Management',
-    icon: Building2,
+    icon: TowerControl,
     roles: ['product_manager', 'lead_developer'],
     description: 'Review and approve airport submissions',
     component: AirportManagement
