@@ -398,14 +398,32 @@ const DivisionManagement = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-white">Division Management</h2>
-          <div className="animate-pulse bg-zinc-700 h-10 w-32 rounded-lg"></div>
+      <div className="container mx-auto p-4 max-w-4xl">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+          <div className="animate-pulse bg-zinc-700 h-8 w-48 rounded mb-4 md:mb-0"></div>
+          <div className="animate-pulse bg-zinc-700 h-9 w-32 rounded-lg"></div>
         </div>
         <div className="space-y-4">
           {[1, 2, 3].map(i => (
-            <div key={i} className="animate-pulse bg-zinc-800 h-24 rounded-lg"></div>
+            <Card key={i} className="p-6">
+              <div className="animate-pulse">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-1 mb-2">
+                      <div className="bg-zinc-700 h-6 w-40 rounded"></div>
+                      <div className="bg-zinc-700 h-4 w-8 rounded"></div>
+                    </div>
+                    <div className="bg-zinc-700 h-4 w-24 rounded"></div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="bg-zinc-700 h-8 w-8 rounded"></div>
+                    <div className="bg-zinc-700 h-8 w-8 rounded"></div>
+                    <div className="bg-zinc-700 h-8 w-8 rounded"></div>
+                  </div>
+                </div>
+                <div className="bg-zinc-700 h-4 w-3/4 rounded"></div>
+              </div>
+            </Card>
           ))}
         </div>
       </div>
