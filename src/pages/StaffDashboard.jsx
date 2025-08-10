@@ -97,29 +97,13 @@ const TABS = {
     description: 'Update and post new website NOTAMs',
     component: NotamManagement
   },
-  docsManagement: {
-    id: 'docsManagement',
-    label: 'Documentation',
-    icon: BookOpen,
-    roles: ['product_manager', 'lead_developer'],
-    description: 'Manage and update documentation',
-    component: () => <div>Documentation Management Component (Coming Soon)</div>
-  },
   faqManagement: {
     id: 'faqManagement',
-    label: 'FAQs',
+    label: 'FAQ Management',
     icon: FileQuestion,
     roles: ['product_manager', 'lead_developer'],
     description: 'Manage and update the FAQ section',
     component: () => <div>FAQ Management Component (Coming Soon)</div>
-  },
-  productStats: {
-    id: 'productStats',
-    label: 'Product Stats',
-    icon: BarChart2,
-    roles: ['product_manager', 'lead_developer'],
-    description: 'View BARS usage statistics',
-    component: () => <div>Product Stats Component (Coming Soon)</div>
   },
   
   // MAP_APPROVER Tabs
@@ -366,46 +350,14 @@ const StaffDashboard = () => {
                   
                   {/* Content Management Group */}
                   {Object.values(TABS).some(tab => 
-                    ['airportManagement', 'contributionManagement', 'notamManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab)
+                    ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'mapReview'].includes(tab.id) && hasTabAccess(tab)
                   ) && (
                     <div className="space-y-1 mb-2">
                       <div className="px-4 py-2">
                         <h4 className="text-xs font-medium text-zinc-500">Content Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['airportManagement', 'contributionManagement', 'notamManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab))
-                        .map((tab) => {
-                          const Icon = tab.icon;
-                          const isActive = activeTab === tab.id;
-                          
-                          return (
-                            <button
-                              key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
-                              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
-                                isActive 
-                                  ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
-                                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
-                              }`}
-                            >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
-                              <span className="text-sm">{tab.label}</span>
-                            </button>
-                          );
-                        })}
-                    </div>
-                  )}
-                  
-                  {/* Other Tools */}
-                  {Object.values(TABS).some(tab => 
-                    ['mapReview', 'productStats'].includes(tab.id) && hasTabAccess(tab)
-                  ) && (
-                    <div className="space-y-1">
-                      <div className="px-4 py-2">
-                        <h4 className="text-xs font-medium text-zinc-500">Analytics & Review</h4>
-                      </div>
-                      {Object.values(TABS)
-                        .filter(tab => ['mapReview', 'productStats'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'mapReview'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;
