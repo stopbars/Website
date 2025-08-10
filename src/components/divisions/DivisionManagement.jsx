@@ -271,7 +271,7 @@ const DivisionManagement = () => {
                         </div>
                         <Button
                           onClick={() => confirmRemoveMember(member)}
-                          className={`bg-red-600 hover:bg-red-700 hover:text-white active:scale-95 transition-transform duration-75${currentUserId === member.vatsim_id ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                          className={`bg-red-600 hover:bg-red-600/90 hover:text-white active:scale-95 transition-all duration-200 ease-in-out${currentUserId === member.vatsim_id ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                           disabled={currentUserId === member.vatsim_id}
                           title={currentUserId === member.vatsim_id ? 'You cannot remove yourself from the division.' : undefined}
                         >
