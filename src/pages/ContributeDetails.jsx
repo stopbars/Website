@@ -26,11 +26,9 @@ const ContributeDetails = () => {
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [notes, setNotes] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState(false);
-  const [isLoadingDisplayName, setIsLoadingDisplayName] = useState(false);
   const [topPackages, setTopPackages] = useState([]);
   const [isLoadingPackages, setIsLoadingPackages] = useState(false);
   const [allPackages, setAllPackages] = useState([]);
@@ -63,34 +61,7 @@ const ContributeDetails = () => {
     fetchTopPackages();
   }, [vatsimToken]);
 
-  // Fetch the user's display name when the component loads
-  useEffect(() => {
-    const fetchDisplayName = async () => {
-      if (!user?.id || !vatsimToken) return;
-      
-      setIsLoadingDisplayName(true);
-      try {
-        const response = await fetch(`https://v2.stopbars.com/contributions/user/display-name`, {
-          headers: {
-            'X-Vatsim-Token': vatsimToken
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.displayName) {
-            setDisplayName(data.displayName);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching display name:', error);
-      } finally {
-        setIsLoadingDisplayName(false);
-      }
-    };
-
-    fetchDisplayName();
-  }, [user?.id, vatsimToken]);
+  // (Display name feature removed)
 
   // Handle input change for scenery name with suggestions
   const handleSceneryNameChange = (e) => {
@@ -181,7 +152,7 @@ const ContributeDetails = () => {
         packageName: sceneryName,
         submittedXml: fileContent,
         notes: notes || undefined,
-        userDisplayName: displayName || undefined
+  // userDisplayName removed
       };
       
       // Send to the API
@@ -300,7 +271,7 @@ const ContributeDetails = () => {
                             allPackages.filter(pkg => pkg.toLowerCase().includes(sceneryName.toLowerCase())).slice(0, 6)
                           ) && setShowSuggestions(true)}
                           onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                          placeholder="Enter scenery name"
+                          placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
                           className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
                         />
                         <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
@@ -319,7 +290,7 @@ const ContributeDetails = () => {
                         </ul>
                       )}                      <p className="mt-1 text-xs text-zinc-400">
                         {showSuggestions ? 'Click a suggestion or continue typing' : 
-                        'Type to search existing packages or enter a new package name'}
+                        'Type to search existing packages or enter a new package name (examples: FlyTampa, iniBuilds)'}
                       </p>
                       <p className="mt-1 text-xs text-blue-400">
                         <Info className="inline-block w-3 h-3 mr-1" />
@@ -378,25 +349,7 @@ const ContributeDetails = () => {
                 </div>
               </div>
 
-              {/* Display Name */}
-              <div>
-                <label className="flex items-center text-sm font-medium mb-2">
-                  Display Name for Leaderboard (Optional)
-                  {isLoadingDisplayName && (
-                    <Loader className="ml-2 w-4 h-4 animate-spin text-blue-400" />
-                  )}
-                </label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  placeholder="Enter name to display on the contribution leaderboard"
-                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                />
-                <p className="mt-1 text-xs text-zinc-400">
-                  This name will be shown on the public leaderboard. Leave empty to use your VATSIM CID.
-                </p>
-              </div>
+              {/* Display Name field removed */}
 
               {/* Additional notes */}
               <div>
