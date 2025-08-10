@@ -6,7 +6,6 @@ import { useAuth } from '../context/AuthContext';
 import { 
   BarChart2, 
   Users, 
-  ClipboardList,
   Shield,
   BookOpen,
   FileQuestion,
@@ -110,7 +109,7 @@ const TABS = {
   mapReview: {
     id: 'mapReview',
     label: 'Map Review',
-    icon: ClipboardList,
+    icon: Map,
     roles: ['MAP_APPROVER', 'product_manager', 'lead_developer'],
     description: 'Review and approve map submissions',
     component: () => <div>Map Review Component (Coming Soon)</div>
