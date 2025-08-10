@@ -323,13 +323,10 @@ const NotamManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <MessageSquareWarning className="w-6 h-6 text-zinc-400" />
-          <h2 className="text-xl font-semibold">NOTAM Management</h2>
-        </div>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 className="text-2xl font-bold mb-4 md:mb-0">NOTAM Management</h1>
         <div className="flex items-center space-x-3">
           {!isEditing && !isAdding && (
             <>
@@ -394,6 +391,8 @@ const NotamManagement = () => {
           )}
         </div>
       </div>
+
+      <div className="space-y-6">
 
       {/* Success Message */}
       {saveSuccess && (
@@ -568,6 +567,7 @@ const NotamManagement = () => {
           )}
         </div>
       )}
+    </div>
     </div>
   );
 };

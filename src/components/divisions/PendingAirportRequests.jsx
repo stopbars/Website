@@ -116,14 +116,14 @@ const PendingAirportRequests = ({ onCountChange }) => {
           <div className="flex gap-2">
             <Button
               onClick={() => handleApprove(request.division_id, request.id, true)}
-              className="bg-green-600 hover:bg-green-600"
+              className="bg-green-600 hover:bg-green-500 hover:text-white"
             >
               <Check className="w-4 h-4 mr-2" />
               Approve
             </Button>
             <Button
               onClick={() => handleApprove(request.division_id, request.id, false)}
-              className="bg-red-600 hover:bg-red-500"
+              className="bg-red-600 hover:bg-red-500 hover:text-white"
             >
               <X className="w-4 h-4 mr-2" />
               Reject
