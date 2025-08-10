@@ -4,7 +4,6 @@ import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { 
   User, 
-  Users,  
   Search, 
   Mail,
   AlertTriangle,
@@ -24,7 +23,7 @@ import {
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
-const USERS_PER_PAGE = 10;
+const USERS_PER_PAGE = 6;
 
 const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -363,13 +362,16 @@ const UserManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-4 max-w-4xl">
       {/* Header and Search */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <Users className="w-6 h-6 text-zinc-400" />
-          <h2 className="text-xl font-semibold">User Management</h2>
-          {!loading && <span className="text-sm text-zinc-500">({totalUsers} users)</span>}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <div className="flex items-center space-x-3 mb-4 md:mb-0">
+          <h1 className="text-2xl font-bold">User Management</h1>
+          {!loading && (
+            <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs font-medium">
+              {totalUsers} users
+            </span>
+          )}
         </div>
         <div className="relative">
           <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
@@ -383,13 +385,14 @@ const UserManagement = () => {
         </div>
       </div>
 
-      {/* Status Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-          <p className="text-red-500">{error}</p>
-        </div>
-      )}
+      <div className="space-y-6">
+        {/* Status Messages */}
+        {error && (
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <p className="text-red-500">{error}</p>
+          </div>
+        )}
 
       {success && (
         <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
@@ -406,66 +409,66 @@ const UserManagement = () => {
       ) : (
         <>          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredUsers.map(user => (
-              <Card key={user.id} className="p-6 hover:border-zinc-700 transition-colors">
+              <Card key={user.id} className="p-4 hover:border-zinc-700 transition-colors">
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-3">
-                      <User className="w-5 h-5 text-zinc-400" />
-                      <h3 className="font-medium truncate">{user.vatsim_id || 'Not set'}</h3>
+                      <User className="w-6 h-6 text-zinc-400" />
+                      <h3 className="font-medium truncate text-base">{user.vatsim_id || 'Not set'}</h3>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
                       <Button
                         variant="outline"
                         onClick={() => setRegeneratingUser(user)}
-                        className="px-2 py-2 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                        className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
                       >
-                        <KeyRound className="w-4 h-4" />
+                        <KeyRound className="w-3.5 h-3.5" />
                       </Button>
                       <Button 
                         variant="outline"
                         onClick={() => setDeletingUser(user)}
-                        className="px-2 py-2 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                        className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>                  
                   
-                  <div className="flex items-center space-x-3 mb-2">
-                    <IdCard className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">
                       Account ID: {user.id || 'Not set'}
                     </span>
                   </div>
                   
-                  <div className="flex items-center space-x-3 mb-2">
+                  <div className="flex items-center space-x-2 mb-1.5">
                     {user.is_staff && user.role && user.role.toLowerCase() !== 'user' ? (
-                      <ShieldCheck className="w-4 h-4 text-zinc-400" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
                     ) : (
-                      <Shield className="w-4 h-4 text-zinc-400" />
+                      <Shield className="w-3.5 h-3.5 text-zinc-400" />
                     )}
-                    <span className="text-sm text-zinc-300">
+                    <span className="text-xs text-zinc-300">
                       Role: {user.is_staff ? `${user.role.replace(/_/g, ' ')}` : 'User'}
                     </span>
                   </div>
                   
-                  <div className="flex items-center space-x-3 mb-2">
-                    <Mail className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Mail className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">
                       Email: {user.email}
                     </span>
                   </div>
                   
-                  <div className="flex items-center space-x-3 mb-2">
-                    <Calendar className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">
                       Created: {formatLocalDateTime(user.created_at)}
                     </span>
                   </div>
                   
-                  <div className="flex items-center space-x-3">
-                    <Clock className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">
                       Last Login: {formatLocalDateTime(user.last_login)}
                     </span>
                   </div>
@@ -500,9 +503,9 @@ const UserManagement = () => {
               variant="outline"
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-4"
+              className="px-3 py-1.5 text-sm"
             >
-              <ChevronLeft className="w-4 h-4 mr-2" />
+              <ChevronLeft className="w-3.5 h-3.5 mr-1.5" />
               Previous
             </Button>
             <span className="text-sm text-zinc-400">
@@ -512,14 +515,15 @@ const UserManagement = () => {
               variant="outline"
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
-              className="px-4"
+              className="px-3 py-1.5 text-sm"
             >
               Next
-              <ChevronRight className="w-4 h-4 ml-2" />
+              <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
             </Button>
           </div>
         </>
       )}
+      </div>
     </div>
   );
 };

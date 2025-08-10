@@ -140,14 +140,11 @@ const DivisionManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <Building2 className="w-6 h-6 text-zinc-400" />
-          <h2 className="text-2xl font-semibold text-white">Division Management</h2>
-        </div>
-        <Button onClick={() => navigate('/divisions/new')}>
-          <Plus className="w-4 h-4 mr-2" />
+    <div className="container mx-auto p-4 max-w-4xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 className="text-2xl font-bold mb-4 md:mb-0">Division Management</h1>
+        <Button onClick={() => navigate('/divisions/new')} className="text-sm px-3 py-1.5">
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
           Create Division
         </Button>
       </div>
