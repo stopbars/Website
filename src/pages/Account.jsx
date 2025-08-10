@@ -187,7 +187,7 @@ const Account = () => {
       const optimisticName = computeDisplayName(user.full_name, user.vatsim_id, newMode);
       setUser({ ...user, display_mode: newMode, display_name: optimisticName });
     }
-    setDisplayModeStatus({ type: 'success', message: 'Display mode updated.' });
+    setDisplayModeStatus({ type: 'success', message: 'Preferred Display Name updated.' });
 
     // Fire & forget request
     fetch('https://v2.stopbars.com/auth/display-mode', {
@@ -324,7 +324,7 @@ const Account = () => {
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <div>
                     <h3 className="text-lg font-semibold">Preferred Display Name Mode</h3>
-                    <p className="text-sm text-zinc-400">Controls how your name appears publicly across BARS.</p>
+                    <p className="text-sm text-zinc-400">Choose how your name appears publicly across BARS.</p>
                   </div>
                   {user?.display_name && (
                     <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60">
