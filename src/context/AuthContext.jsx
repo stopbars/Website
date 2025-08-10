@@ -119,7 +119,7 @@ export function AuthProvider({ children }) {
       client_id: import.meta.env.VITE_VATSIM_CLIENT_ID,
       redirect_uri: `${apiUrl}/auth/vatsim/callback`,
       response_type: 'code',
-      scope: 'vatsim_details email'
+      scope: 'vatsim_details email full_name'
     });
     window.location.href = `https://auth.vatsim.net/oauth/authorize?${params}`;
   };

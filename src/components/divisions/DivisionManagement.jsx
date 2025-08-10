@@ -266,7 +266,7 @@ const DivisionManagement = () => {
                     {members.map(member => (
                       <div key={member.id} className="flex items-center justify-between p-4 border border-zinc-800 rounded-lg">
                         <div>
-                          <p className="text-white">{member.vatsim_id}</p>
+                          <p className="text-white">{member.display_name}</p>
                           <p className="text-zinc-400 text-sm">Role: {member.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
                         </div>
                         <Button

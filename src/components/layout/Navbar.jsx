@@ -202,7 +202,7 @@ export const Navbar = () => {  const scrolled = useScroll();
                       className="flex items-center space-x-2 px-4"
                     >
                       <UserCircle className="w-5 h-5" />
-                      <span>{user.vatsim_id}</span>
+                      <span>{user.display_name}</span>
                     </Button>
                   </Link>
                   <Button 

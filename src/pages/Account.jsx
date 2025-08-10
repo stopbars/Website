@@ -8,7 +8,7 @@ import { formatDateAccordingToLocale } from '../utils/dateUtils';
 import { getVatsimToken } from '../utils/cookieUtils';
 
 const Account = () => {
-  const { user, loading, logout, setUser } = useAuth();
+  const { user, loading, logout, setUser, refreshUserData } = useAuth();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [staffRoles, setStaffRoles] = useState(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -17,6 +17,15 @@ const Account = () => {
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [regenerateError, setRegenerateError] = useState(null);
   const [userDivisions, setUserDivisions] = useState([]);
+  const [displayMode, setDisplayMode] = useState(user?.display_mode ?? 0);
+  const [displayModeStatus, setDisplayModeStatus] = useState(null); // {type:'success'|'error', message:string}
+
+  // Sync local state when user loads / changes
+  useEffect(() => {
+    if (user?.display_mode !== undefined && user.display_mode !== displayMode) {
+      setDisplayMode(user.display_mode);
+    }
+  }, [user?.display_mode, displayMode]);
 
   useEffect(() => {
     const fetchStaffRole = async () => {
@@ -138,6 +147,78 @@ const Account = () => {
     }
   };
 
+  const displayModeOptions = [
+    { value: 0, label: 'First Name', example: (user?.full_name ? user.full_name.split(' ')[0] : 'John') },
+    { value: 1, label: 'First Name + Last Initial', example: (() => {
+      if (!user?.full_name) return 'John D';
+      const parts = user.full_name.split(' ');
+      if (parts.length === 1) return parts[0];
+      return `${parts[0]} ${parts[parts.length - 1][0]}`;
+    })() },
+    { value: 2, label: 'VATSIM CID', example: user?.vatsim_id || '1234567' }
+  ];
+
+  const computeDisplayName = (fullName, cid, mode) => {
+    if (!fullName && mode !== 2) return cid || '';
+    const parts = (fullName || '').trim().split(/\s+/).filter(Boolean);
+    switch (mode) {
+      case 0:
+        return parts[0] || cid || '';
+      case 1: {
+        if (parts.length === 0) return cid || '';
+        const last = parts[parts.length - 1] || '';
+        return `${parts[0]}${last ? ' ' + last[0] : ''}`.trim();
+      }
+      case 2:
+        return cid || '';
+      default:
+        return fullName || cid || '';
+    }
+  };
+
+  const handleUpdateDisplayMode = (newMode) => {
+    if (user?.display_mode === newMode) return; // no change
+    const token = getVatsimToken();
+    const prevUser = user ? { ...user } : null;
+    setDisplayMode(newMode);
+
+    // Optimistic update of user in context
+    if (user) {
+      const optimisticName = computeDisplayName(user.full_name, user.vatsim_id, newMode);
+      setUser({ ...user, display_mode: newMode, display_name: optimisticName });
+    }
+    setDisplayModeStatus({ type: 'success', message: 'Display mode updated.' });
+
+    // Fire & forget request
+    fetch('https://v2.stopbars.com/auth/display-mode', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Vatsim-Token': token
+      },
+      body: JSON.stringify({ mode: newMode })
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed');
+      // Optionally refresh in background to ensure server canonical values
+      setTimeout(() => { refreshUserData().catch(() => {}); }, 500);
+    }).catch(err => {
+      console.error('Failed to persist display mode:', err);
+      setDisplayModeStatus({ type: 'error', message: 'Failed to save preference. Reverted.' });
+      if (prevUser) {
+        setUser(prevUser);
+        setDisplayMode(prevUser.display_mode);
+      }
+    });
+  };
+
+  // Auto clear success message after a few seconds
+  useEffect(() => {
+    if (displayModeStatus?.type === 'success') {
+      const t = setTimeout(() => setDisplayModeStatus(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [displayModeStatus]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -236,6 +317,45 @@ const Account = () => {
                     <p className="font-medium">{field.value}</p>
                   </div>
                 ))}
+              </div>
+
+              {/* Display Name Mode */}
+              <div className="bg-zinc-900/50 p-6 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-lg font-semibold">Preferred Display Name Mode</h3>
+                    <p className="text-sm text-zinc-400">Controls how your name appears publicly across BARS.</p>
+                  </div>
+                  {user?.display_name && (
+                    <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60">
+                      Current: <span className="font-medium">{user.display_name}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {displayModeOptions.map(opt => {
+                    const active = Number(displayMode) === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleUpdateDisplayMode(opt.value)}
+                        className={`text-left group relative rounded-lg border p-4 transition-all ${active ? 'border-blue-500/60 bg-blue-500/10' : 'border-zinc-800/70 hover:border-zinc-600/60 hover:bg-zinc-800/40'}`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">{opt.label}</span>
+                          <span className={`w-3 h-3 rounded-full border ${active ? 'bg-blue-500 border-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'border-zinc-600 group-hover:border-zinc-400'}`}></span>
+                        </div>
+                        <p className="text-xs text-zinc-400">Example: <span className="text-zinc-300 font-mono">{opt.example}</span></p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {displayModeStatus && (
+                  <div className={`mt-4 text-sm rounded-md px-3 py-2 border ${displayModeStatus.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
+                    {displayModeStatus.message}
+                  </div>
+                )}
               </div>
 
               <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/50">
