@@ -72,15 +72,13 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
             </p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-red-200">
+                <User className="w-4 h-4" />
+                <span>{user.full_name || 'Not set'}</span>
+              </div>
+              <div className="flex items-center space-x-2 text-red-200 mt-1">
                 <Mail className="w-4 h-4" />
                 <span>{user.email}</span>
               </div>
-              {user.vatsim_id && (
-                <div className="flex items-center space-x-2 text-red-200 mt-1">
-                  <IdCard className="w-4 h-4" />
-                  <span>VATSIM ID: {user.vatsim_id}</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -175,15 +173,13 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
             </p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-orange-200">
+                <User className="w-4 h-4" />
+                <span>{user.full_name || 'Not set'}</span>
+              </div>
+              <div className="flex items-center space-x-2 text-orange-200 mt-1">
                 <Mail className="w-4 h-4" />
                 <span>{user.email}</span>
               </div>
-              {user.vatsim_id && (
-                <div className="flex items-center space-x-2 text-orange-200 mt-1">
-                  <IdCard className="w-4 h-4" />
-                  <span>VATSIM ID: {user.vatsim_id}</span>
-                </div>
-              )}
             </div>
           </div>
 

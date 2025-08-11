@@ -9,7 +9,7 @@ const NotFound = () => {
 
   return (
     <Layout>
-      <div className="min-h-[80vh] flex items-center justify-center px-6">
+      <div className="min-h-[80vh] flex items-center justify-center px-6 pt-24">
         <Card className="max-w-2xl w-full p-12 text-center">
           <div className="flex justify-center mb-8">
             <AlertOctagon className="w-20 h-20 text-red-500" />
