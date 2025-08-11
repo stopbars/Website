@@ -114,7 +114,8 @@ const GlobalStatus = () => {
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
-          {/* Header with Live Status */}          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 mb-8">
+          {/* Header with Live Status */}          
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 mb-8">
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 mb-2">
                 <h1 className="text-3xl font-bold">Global BARS Status</h1>
@@ -125,7 +126,7 @@ const GlobalStatus = () => {
                   </span>
                 </div>
               </div>
-              <p className="text-zinc-400">Live stopbar availability across {stats.totalAirports} airports</p>
+              <p className="text-zinc-400">Live airport lighting availability across {stats.totalAirports} airports</p>
             </div>
             <div className="flex items-center space-x-4 self-start">
               <Button
@@ -143,7 +144,8 @@ const GlobalStatus = () => {
                 <MenuIcon className="w-5 h-5" />
               </Button>
             </div>
-          </div>{/* Controls */}
+          </div>
+          {/* Controls */}
           <div className="space-y-4 mb-8">
             {/* Search */}
             <div className="w-full">
@@ -151,7 +153,7 @@ const GlobalStatus = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
                 <input
                   type="text"
-                  placeholder="Search by ICAO or scenery name..."
+                  placeholder="Search by ICAO or scenery name...."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

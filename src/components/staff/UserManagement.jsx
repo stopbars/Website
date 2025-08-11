@@ -25,6 +25,28 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 
 const USERS_PER_PAGE = 6;
 
+// Helper function to calculate display name based on display mode
+const getDisplayName = (user) => {
+  if (!user.full_name) return 'Not set';
+  
+  const displayMode = user.display_mode ?? 0; // Default to 0 if not provided
+  
+  switch (displayMode) {
+    case 0: // First name only
+      return user.full_name.split(' ')[0];
+    case 1: // First + Last Initial
+      const nameParts = user.full_name.split(' ');
+      if (nameParts.length > 1) {
+        return `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}`;
+      }
+      return nameParts[0];
+    case 2: // CID (VATSIM ID)
+      return user.vatsim_id || 'Not set';
+    default:
+      return user.full_name.split(' ')[0]; // Fallback to first name
+  }
+};
+
 const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   
@@ -351,7 +373,9 @@ const UserManagement = () => {
   const filteredUsers = users.filter(user => 
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (user.vatsim_id && user.vatsim_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (user.id && user.id.toString().includes(searchTerm))
+    (user.id && user.id.toString().includes(searchTerm)) ||
+    (user.full_name && user.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (getDisplayName(user).toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
@@ -456,6 +480,20 @@ const UserManagement = () => {
                     <Mail className="w-3.5 h-3.5 text-zinc-400" />
                     <span className="text-xs text-zinc-300">
                       Email: {user.email}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <User className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">
+                      Full Name: {user.full_name || 'Not set'}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">
+                      Display Name: {getDisplayName(user)}
                     </span>
                   </div>
                   

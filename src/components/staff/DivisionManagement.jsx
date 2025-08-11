@@ -20,7 +20,7 @@ import {
   IdCard
 } from 'lucide-react';
 
-const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleting }) => {
+const DeleteConfirmationModal = ({ division, memberCount, onCancel, onConfirmDelete, isDeleting }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   
   const handleSubmit = (e) => {
@@ -52,11 +52,15 @@ const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleti
                 <IdCard className="w-4 h-4" />
                 <span className="text-sm">Division ID: {division.id}</span>
               </div>
+              <div className="flex items-center space-x-2 text-red-200 mt-1">
+                <Users className="w-4 h-4" />
+                <span className="text-sm">Member Count: {memberCount || 0}</span>
+              </div>
             </div>
           </div>
 
           <p className="text-zinc-300">
-            This action cannot be undone. All associated data including managed points, requested airports, division members, everything will be permanently deleted.
+            This action cannot be undone. All associated data including managed points, requested airports, division members, will be permanently deleted.
           </p>
 
           <form onSubmit={handleSubmit}>
@@ -116,6 +120,7 @@ DeleteConfirmationModal.propTypes = {
     id: PropTypes.number.isRequired,
     name: PropTypes.string.isRequired
   }).isRequired,
+  memberCount: PropTypes.number,
   onCancel: PropTypes.func.isRequired,
   onConfirmDelete: PropTypes.func.isRequired,
   isDeleting: PropTypes.bool.isRequired
@@ -610,6 +615,7 @@ const DivisionManagement = () => {
       {deletingDivision && (
         <DeleteConfirmationModal
           division={deletingDivision}
+          memberCount={divisionMembers[deletingDivision.id]?.length}
           onCancel={cancelDelete}
           onConfirmDelete={() => handleDeleteDivision(deletingDivision.id)}
           isDeleting={isDeletingDivision}
