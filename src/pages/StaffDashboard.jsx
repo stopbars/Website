@@ -29,6 +29,7 @@ import ContributionManagement from '../components/staff/ContributionManagement';
 import NotamManagement from '../components/staff/notamManagement';
 import DivisionManagement from '../components/staff/DivisionManagement';
 import AirportManagement from '../components/staff/AirportManagement';
+import FAQManagement from '../components/staff/FAQManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -103,7 +104,7 @@ const TABS = {
     icon: FileQuestion,
     roles: ['product_manager', 'lead_developer'],
     description: 'Manage and update the FAQ section',
-    component: () => <div>FAQ Management Component (Coming Soon)</div>
+    component: FAQManagement
   },
   
   // MAP_APPROVER Tabs
