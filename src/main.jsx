@@ -26,7 +26,6 @@ import ContributeMap from './pages/ContributeMap.jsx'
 import ContributeDetails from './pages/ContributeDetails.jsx'
 import ContributeTest from './pages/ContributeTest.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
-import { ModalProvider } from './context/ModalContext'
 import DivisionsManagement from './pages/DivisionsManagement'
 import DivisionManagement from './components/divisions/DivisionManagement'
 import NewDivision from './components/divisions/NewDivision'
@@ -212,11 +211,9 @@ createRoot(document.getElementById('root')).render(
       }}
     >
       <AuthProvider>
-        <ModalProvider>
-          <ErrorBoundary>
-            <RouterProvider router={router} />
-          </ErrorBoundary>
-        </ModalProvider>
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+        </ErrorBoundary>
       </AuthProvider>
     </PostHogProvider>
   </StrictMode>,

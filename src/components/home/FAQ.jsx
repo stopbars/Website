@@ -59,7 +59,7 @@ export const FAQ = () => {
                 >
                   <button
                     onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                    className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-zinc-800/40 transition-colors duration-200"
+                    className="w-full px-6 py-4 text-left flex justify-between cursor-pointer items-center hover:bg-zinc-800/40 transition-colors duration-200"
                   >
                     <span className="font-medium pr-6">{faq.question}</span>
                     {openFaq === index ? 

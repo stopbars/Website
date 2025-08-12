@@ -4,10 +4,8 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { useAuth } from '../context/AuthContext';
 import { 
-  BarChart2, 
   Users, 
   Shield,
-  BookOpen,
   FileQuestion,
   Building2,
   Upload,

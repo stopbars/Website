@@ -35,11 +35,11 @@ const getDisplayName = (user) => {
     case 0: // First name only
       return user.full_name.split(' ')[0];
     case 1: // First + Last Initial
-      const nameParts = user.full_name.split(' ');
+      { const nameParts = user.full_name.split(' ');
       if (nameParts.length > 1) {
         return `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}`;
       }
-      return nameParts[0];
+      return nameParts[0]; }
     case 2: // CID (VATSIM ID)
       return user.vatsim_id || 'Not set';
     default:
@@ -140,6 +140,7 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
 DeleteConfirmationModal.propTypes = {
   user: PropTypes.shape({
     id: PropTypes.number.isRequired,
+    full_name: PropTypes.string,
     email: PropTypes.string.isRequired,
     vatsim_id: PropTypes.string
   }).isRequired,
@@ -242,6 +243,7 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
 RegenerateTokenModal.propTypes = {
   user: PropTypes.shape({
     id: PropTypes.number.isRequired,
+    full_name: PropTypes.string,
     email: PropTypes.string.isRequired,
     vatsim_id: PropTypes.string
   }).isRequired,
