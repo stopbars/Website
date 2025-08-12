@@ -14,7 +14,7 @@ export const FAQ = () => {
   useEffect(() => {
     const fetchFaqs = async () => {
       try {
-        const response = await fetch('https://api.stopbars.com/faqs');
+        const response = await fetch('https://v2.stopbars.com/faqs');
         if (!response.ok) throw new Error('Failed to fetch FAQs');
         const data = await response.json();
         // Sort by order and take first 5

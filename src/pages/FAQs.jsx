@@ -22,7 +22,7 @@ const FAQPage = () => {
   useEffect(() => {
     const fetchFaqs = async () => {
       try {
-        const response = await fetch('https://api.stopbars.com/faqs');
+        const response = await fetch('https://v2.stopbars.com/faqs');
         if (!response.ok) throw new Error('Failed to fetch FAQs');
         const data = await response.json();
         const sortedFaqs = data.faqs.sort((a, b) => a.order - b.order);
@@ -65,13 +65,14 @@ const FAQPage = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20">
+      <div className="min-h-screen pt-40 pb-20">
         <div className="max-w-4xl mx-auto px-6">
           {/* Header Section */}
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
             <p className="text-zinc-400 max-w-2xl mx-auto">
-              Find answers to common questions about BARS. Can&apos;t find what you&apos;re looking for? Join our Discord community for support.
+              Find answers to common questions about BARS. Our team is always happy to help! 
+              Can&apos;t find what you&apos;re looking for? Feel free to reach out or join our Discord community for support.
             </p>
           </div>
 
