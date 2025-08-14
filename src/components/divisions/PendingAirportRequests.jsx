@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Button } from '../shared/Button';
-import { Check, X } from 'lucide-react';
+import { Check, X, MapPin } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 const PendingAirportRequests = ({ onCountChange }) => {
@@ -103,7 +103,8 @@ const PendingAirportRequests = ({ onCountChange }) => {
       {requests.map(request => (
         <div key={request.id} className="flex items-center justify-between p-4 border border-zinc-800 rounded-lg">
           <div>
-            <h3 className="text-lg font-semibold text-white">
+            <h3 className="text-lg font-semibold text-white flex items-center">
+              <MapPin className="w-5 h-5 mr-2 text-zinc-400" />
               {request.icao} - {divisions[request.division_id]}
             </h3>
             <p className="text-zinc-400">
