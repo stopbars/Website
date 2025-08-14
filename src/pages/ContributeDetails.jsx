@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -19,12 +19,14 @@ import { getVatsimToken } from '../utils/cookieUtils';
 const ContributeDetails = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const fileInputRef = useRef(null);
   const vatsimToken = getVatsimToken();
   
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [preloaded, setPreloaded] = useState(false);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,6 +36,21 @@ const ContributeDetails = () => {
   const [allPackages, setAllPackages] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Preload file from navigation state if provided
+  useEffect(() => {
+    if (!preloaded && location.state?.testedXml) {
+      try {
+        const { testedXml, fileName } = location.state;
+        const blob = new Blob([testedXml], { type: 'application/xml' });
+        const syntheticFile = new File([blob], fileName || `${icao}.xml`, { type: 'application/xml' });
+        setSelectedFile(syntheticFile);
+        setPreloaded(true);
+      } catch (e) {
+        console.error('Failed to preload tested XML:', e);
+      }
+    }
+  }, [location.state, preloaded, icao]);
 
   // Fetch top packages when component loads
   useEffect(() => {
