@@ -436,7 +436,7 @@ const UserManagement = () => {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-3">
                       <User className="w-6 h-6 text-zinc-400" />
-                      <h3 className="font-medium truncate text-base">{user.vatsim_id || 'Not set'}</h3>
+                      <h3 className="font-medium truncate text-base">{user.full_name || 'Not Set'}</h3>
                     </div>
                     <div className="flex items-center space-x-1">
                       <Button
@@ -482,9 +482,9 @@ const UserManagement = () => {
                   </div>
                   
                   <div className="flex items-center space-x-2 mb-1.5">
-                    <User className="w-3.5 h-3.5 text-zinc-400" />
+                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
                     <span className="text-xs text-zinc-300">
-                      Full Name: {user.full_name || 'Not set'}
+                      VATSIM ID: {user.vatsim_id || 'Not set'}
                     </span>
                   </div>
                   

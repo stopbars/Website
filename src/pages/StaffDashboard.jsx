@@ -29,6 +29,7 @@ import DivisionManagement from '../components/staff/DivisionManagement';
 import AirportManagement from '../components/staff/AirportManagement';
 import FAQManagement from '../components/staff/FAQManagement';
 import ReleaseManagement from '../components/staff/ReleaseManagement';
+import StaffManagement from '../components/staff/StaffManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -47,7 +48,7 @@ const TABS = {
     icon: Shield,
     roles: ['lead_developer'],
     description: 'Manage staff roles and permissions',
-    component: () => <div>Staff Management Component (Coming Soon)</div>
+    component: StaffManagement
   },
   divisionManagement: {
     id: 'divisionManagement',

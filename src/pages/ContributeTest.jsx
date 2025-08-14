@@ -25,6 +25,7 @@ const ContributeTest = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [originalFileName, setOriginalFileName] = useState('');
   const [xmlData, setXmlData] = useState('');
+  const [originalXmlData, setOriginalXmlData] = useState('');
   const [supportsXmlData, setSupportsXmlData] = useState('');
   const [error, setError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -70,6 +71,7 @@ const ContributeTest = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       setXmlData(e.target.result);
+      setOriginalXmlData(e.target.result);
       // Reset visualization toggles when new file is loaded
       setShowPolyLines(false);
       setShowRemoveAreas(false);
@@ -143,8 +145,8 @@ const ContributeTest = () => {
 
       setIsXmlTested(true);
       
-      // Set the XML data for visualization
-      setXmlData(data.barsXml);
+  // Replace visualization XML with the generated BARS XML (keep original stored separately)
+  setXmlData(data.barsXml);
       
       // Store original file name for passing forward
       if (selectedFile?.name) {
@@ -191,7 +193,7 @@ const ContributeTest = () => {
     if (isXmlTested && !error) {
       navigate(`/contribute/details/${icao}` , {
         state: {
-          testedXml: xmlData,
+          originalXml: originalXmlData,
           fileName: originalFileName || `${icao}.xml`
         }
       });
