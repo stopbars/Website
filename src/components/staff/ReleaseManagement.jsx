@@ -3,7 +3,7 @@ import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { 
-  Upload, Image as ImageIcon, FileUp, RefreshCw, Check, AlertTriangle, History, Edit3, X, Info,
+  Upload, Image as ImageIcon, FileUp, RefreshCw, Check, AlertTriangle, History, Edit3, X, Info, Plus, Edit, Loader,
 } from 'lucide-react';
 import { marked } from 'marked';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
@@ -25,6 +25,10 @@ const MAX_ZIP_BYTES = 90 * 1024 * 1024; // 90MB
 const SEMVER_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 const ReleaseManagement = () => {
+  // Mode state
+  const [isAdding, setIsAdding] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
   // Upload form state
   const [product, setProduct] = useState('Pilot-Client');
   const [version, setVersion] = useState('');
@@ -110,6 +114,15 @@ const ReleaseManagement = () => {
     setChangelog('');
     setFile(null);
     setImage(null);
+    setUploadError('');
+    setUploadSuccess('');
+  };
+
+  const resetUpdateForm = () => {
+    setEditReleaseId('');
+    setNewChangelog('');
+    setUpdateError('');
+    setUpdateSuccess('');
   };
 
   const renderMarkdown = (md) => {
@@ -179,6 +192,7 @@ const ReleaseManagement = () => {
       }
       setUploadSuccess('Release created successfully');
       resetUploadForm();
+      fetchReleases(productFilter); // Refresh the releases list
     } catch (err) {
       setUploadError(err.message);
     } finally {
@@ -186,6 +200,26 @@ const ReleaseManagement = () => {
       setPendingUploadData(null);
       setTimeout(() => setUploadSuccess(''), 4000);
     }
+  };
+
+  // Mode handling functions
+  const handleStartAdd = () => {
+    setIsAdding(true);
+    setIsUpdating(false);
+    resetUploadForm();
+  };
+
+  const handleStartUpdate = () => {
+    setIsUpdating(true);
+    setIsAdding(false);
+    resetUpdateForm();
+  };
+
+  const handleCancel = () => {
+    setIsAdding(false);
+    setIsUpdating(false);
+    resetUploadForm();
+    resetUpdateForm();
   };
 
   // submitUpload replaced by confirmation modal flow
@@ -221,14 +255,14 @@ const ReleaseManagement = () => {
       });
 
       if (!response.ok) {
-        let message = 'Failed to update changelog';
+        let message = 'Failed to edit changelog';
   try { const data = await response.json(); if (data.error) message = data.error; } catch { /* ignore json parse */ }
         throw new Error(message);
       }
 
       setUpdateSuccess('Changelog updated successfully');
-      setNewChangelog('');
-      setEditReleaseId('');
+      fetchReleases(productFilter); // Refresh the releases list
+      resetUpdateForm();
     } catch (err) {
       setUpdateError(err.message);
     } finally {
@@ -239,309 +273,363 @@ const ReleaseManagement = () => {
 
   const handleSelectRelease = (rel) => {
     setEditReleaseId(rel.id?.toString() || '');
-    changelogSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setNewChangelog(rel.changelog || '');
   };
 
   return (
-    <div className="space-y-10">
-      {/* Releases Listing */}
-      <div>
-        <div className="flex items-center mb-4 space-x-3">
-          <History className="w-5 h-5 text-blue-400" />
-          <h2 className="text-xl font-semibold">Existing Releases</h2>
-        </div>
-        <Card className="p-6 bg-zinc-900/40 border-zinc-800 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center space-x-3">
-              <label className="text-sm text-zinc-400">Filter Product:</label>
-              <select
-                value={productFilter}
-                onChange={(e) => setProductFilter(e.target.value)}
-                className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 className="text-2xl font-bold mb-4 md:mb-0">Release Management</h1>
+        <div className="flex items-center space-x-3">
+          {!isAdding && !isUpdating && (
+            <>
+              <Button
+                onClick={handleStartAdd}
+                variant="outline"
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                <option value="">All</option>
-                {PRODUCT_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
-            </div>
-            <Button variant="outline" onClick={() => fetchReleases(productFilter)} disabled={releasesLoading}>
-              {releasesLoading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Refreshing...</> : <><RefreshCw className="w-4 h-4 mr-2" />Refresh</>}
-            </Button>
-          </div>
-
-          {releasesError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
-              <span>{releasesError}</span>
-            </div>
+                <Plus className="w-4 h-4 mr-2" />
+                New Release
+              </Button>
+              <Button
+                onClick={handleStartUpdate}
+                variant="outline"
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit Changelog
+              </Button>
+            </>
           )}
-
-            <div className="overflow-x-auto -mx-2">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-zinc-400 border-b border-zinc-800">
-                    <th className="py-2 px-2 font-medium">ID</th>
-                    <th className="py-2 px-2 font-medium">Product</th>
-                    <th className="py-2 px-2 font-medium">Version</th>
-                    <th className="py-2 px-2 font-medium">Uploaded</th>
-                    <th className="py-2 px-2 font-medium">Changelog</th>
-                    <th className="py-2 px-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {releasesLoading ? (
-                    <tr><td colSpan={6} className="py-8 text-center text-zinc-500">Loading...</td></tr>
-                  ) : releases.length === 0 ? (
-                    <tr><td colSpan={6} className="py-8 text-center text-zinc-500">No releases found.</td></tr>
-                  ) : (
-                    releases.slice(0, 50).map(rel => (
-                      <tr key={rel.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/40">
-                        <td className="py-2 px-2 text-zinc-300">{rel.id}</td>
-                        <td className="py-2 px-2 text-zinc-300">{rel.product}</td>
-                        <td className="py-2 px-2 text-zinc-300">{rel.version}</td>
-                        <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">{rel.created_at ? new Date(rel.created_at).toLocaleDateString() : '-'}</td>
-                        <td className="py-2 px-2 text-zinc-400 truncate max-w-[180px]">{rel.changelog ? rel.changelog.slice(0, 60) : <span className="italic text-zinc-600">(none)</span>}</td>
-                        <td className="py-2 px-2">
-                          <Button size="sm" variant="outline" onClick={() => handleSelectRelease(rel)}>
-                            Edit Changelog
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-[11px] text-zinc-500">Showing up to 50 results. Apply a filter for narrower view.</p>
-        </Card>
-      </div>
-
-      {/* Upload New Release */}
-      <div>
-        <div className="flex items-center mb-4 space-x-3">
-          <Upload className="w-5 h-5 text-blue-400" />
-          <h2 className="text-xl font-semibold">Create New Release</h2>
-        </div>
-        <Card className="p-6 bg-zinc-900/40 border-zinc-800 space-y-6">
-          <form onSubmit={(e) => { e.preventDefault(); openConfirm(); }} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-zinc-300">Product</label>
-                <select
-                  value={product}
-                  onChange={(e) => setProduct(e.target.value)}
-                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                >
-                  {PRODUCT_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-zinc-300">Version</label>
-                <input
-                  type="text"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  placeholder="e.g. 1.2.0"
-                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2 text-zinc-300">Changelog (Markdown supported)</label>
-              <textarea
-                value={changelog}
-                onChange={(e) => setChangelog(e.target.value)}
-                rows={6}
-                placeholder="List key changes, features, fixes..."
-                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 resize-y"
-              />
-              <div className="flex justify-between mt-1 text-xs text-zinc-500">
-                <span>{changelog.length} chars</span>
-                <span className="text-zinc-600">Preview auto-updates below</span>
-              </div>
-              {changelog.trim() && (
-                <div className="mt-3 border border-zinc-700 bg-zinc-900/60 rounded-lg p-4 max-w-none text-sm overflow-x-auto">
-                  <article className="markdown-preview prose-invert prose-sm max-w-none">
-                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(changelog) }} />
-                  </article>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-zinc-300">Release ZIP File</label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="file"
-                    accept=".zip,application/zip"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="release-zip-input"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => document.getElementById('release-zip-input').click()}
-                    className="w-full justify-start"
-                  >
-                    <FileUp className="w-4 h-4 mr-2" />
-                    {file ? file.name : 'Select ZIP file'}
-                  </Button>
-                </div>
-                <p className="text-xs text-zinc-500 mt-2">Required. Must be a .zip archive.</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2 text-zinc-300">Promo Image (PNG/JPG)</label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    onChange={handleImageChange}
-                    className="hidden"
-                    id="release-image-input"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => document.getElementById('release-image-input').click()}
-                    className="w-full justify-start"
-                  >
-                    <ImageIcon className="w-4 h-4 mr-2" />
-                    {image ? image.name : 'Select optional image'}
-                  </Button>
-                </div>
-                <p className="text-xs text-zinc-500 mt-2">Optional. PNG or JPG up to 2MB.</p>
-              </div>
-            </div>
-
-            {uploadError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
-                <AlertTriangle className="w-4 h-4 mt-0.5" />
-                <span>{uploadError}</span>
-              </div>
-            )}
-            {uploadSuccess && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-sm text-emerald-400 flex items-start space-x-2">
-                <Check className="w-4 h-4 mt-0.5" />
-                <span>{uploadSuccess}</span>
-              </div>
-            )}
-
-            <div className="flex items-center space-x-3">
-              <Button type="submit" disabled={uploading}>
-                {uploading ? (
+          {(isAdding || isUpdating) && (
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={isAdding ? () => openConfirm() : submitChangelogUpdate}
+                variant="outline"
+                className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
+                  (isAdding && (!version.trim() || !file)) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating
+                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent' 
+                    : ''
+                }`}
+                disabled={(isAdding && (!version.trim() || !file)) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating}
+              >
+                {uploading || updating ? (
                   <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Uploading...
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    {isAdding ? 'Publishing...' : 'Updating...'}
                   </>
-                ) : (
+                ) : isAdding ? (
                   <>
                     <Upload className="w-4 h-4 mr-2" />
                     Publish Release
                   </>
-                )}
-              </Button>
-              <Button type="button" variant="outline" onClick={resetUploadForm} disabled={uploading}>
-                <X className="w-4 h-4 mr-2" />
-                Reset
-              </Button>
-            </div>
-          </form>
-        </Card>
-      </div>
-
-      {/* Update Changelog */}
-      <div ref={changelogSectionRef}>
-        <div className="flex items-center mb-4 space-x-3">
-          <History className="w-5 h-5 text-blue-400" />
-          <h2 className="text-xl font-semibold">Update Release Changelog</h2>
-        </div>
-        <Card className="p-6 bg-zinc-900/40 border-zinc-800 space-y-6">
-          <form onSubmit={submitChangelogUpdate} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-1">
-                <label className="block text-sm font-medium mb-2 text-zinc-300">Release ID</label>
-                <input
-                  type="text"
-                  value={editReleaseId}
-                  onChange={(e) => setEditReleaseId(e.target.value)}
-                  placeholder="e.g. 42"
-                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-2 text-zinc-300">New Changelog</label>
-                <textarea
-                  value={newChangelog}
-                  onChange={(e) => setNewChangelog(e.target.value)}
-                  rows={4}
-                  placeholder="Enter updated changelog text..."
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 resize-y"
-                />
-                <div className="flex justify-between mt-1 text-xs text-zinc-500">
-                  <span>{newChangelog.length} / 20000</span>
-                  <span>Required</span>
-                </div>
-                {newChangelog.trim() && (
-                  <div className="mt-3 border border-zinc-700 bg-zinc-900/60 rounded-lg p-4 max-w-none text-sm overflow-x-auto">
-                    <article className="markdown-preview prose-invert prose-sm max-w-none">
-                      <div dangerouslySetInnerHTML={{ __html: renderMarkdown(newChangelog) }} />
-                    </article>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {updateError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
-                <AlertTriangle className="w-4 h-4 mt-0.5" />
-                <span>{updateError}</span>
-              </div>
-            )}
-            {updateSuccess && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-sm text-emerald-400 flex items-start space-x-2">
-                <Check className="w-4 h-4 mt-0.5" />
-                <span>{updateSuccess}</span>
-              </div>
-            )}
-
-            <div className="flex items-center space-x-3">
-              <Button type="submit" disabled={updating}>
-                {updating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Updating...
-                  </>
                 ) : (
                   <>
                     <Edit3 className="w-4 h-4 mr-2" />
-                    Update Changelog
+                    Edit Changelog
                   </>
                 )}
               </Button>
               <Button
-                type="button"
+                onClick={handleCancel}
                 variant="outline"
-                disabled={updating}
-                onClick={() => { setEditReleaseId(''); setNewChangelog(''); }}
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                disabled={uploading || updating}
               >
                 <X className="w-4 h-4 mr-2" />
-                Clear
+                Cancel
               </Button>
             </div>
+          )}
+        </div>
+      </div>
 
-            <div className="p-3 bg-zinc-800/60 border border-zinc-700 rounded-lg text-xs text-zinc-400 flex space-x-2">
-              <Info className="w-4 h-4 flex-shrink-0 text-zinc-500" />
-              <p>
-                Select a release from the table above to pre-fill its ID. Update only the changelog text—other fields require a new release upload.
+      <div className="space-y-6">
+        {/* Success Messages */}
+        {uploadSuccess && (
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
+            <Check className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-emerald-400 font-medium">Release Published Successfully</p>
+              <p className="text-emerald-300/80 text-sm mt-1">
+                The new release has been published and is now available for download.
               </p>
             </div>
-          </form>
-        </Card>
+            <button
+              onClick={() => setUploadSuccess('')}
+              className="text-emerald-400/60 hover:text-emerald-400 transition-colors flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {updateSuccess && (
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
+            <Check className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-emerald-400 font-medium">Changelog Updated Successfully</p>
+              <p className="text-emerald-300/80 text-sm mt-1">
+                The release changelog has been updated.
+              </p>
+            </div>
+            <button
+              onClick={() => setUpdateSuccess('')}
+              className="text-emerald-400/60 hover:text-emerald-400 transition-colors flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Add New Release Section */}
+        {isAdding && (
+          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+            <div className="mb-4">
+              <h3 className="text-lg font-medium text-white">Create New Release</h3>
+            </div>
+            
+            <form onSubmit={(e) => { e.preventDefault(); openConfirm(); }} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">Product</label>
+                  <select
+                    value={product}
+                    onChange={(e) => setProduct(e.target.value)}
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                  >
+                    {PRODUCT_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">Version</label>
+                  <input
+                    type="text"
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                    placeholder="e.g. 2.0.1"
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2 text-zinc-300">Changelog</label>
+                <textarea
+                  value={changelog}
+                  onChange={(e) => setChangelog(e.target.value)}
+                  rows={6}
+                  placeholder="List key changes, features, fixes..."
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 resize-y"
+                />
+                <div className="flex justify-between mt-1 text-xs text-zinc-500">
+                  <span>{changelog.length} chars</span>
+                  <span className="text-zinc-600">Preview auto-updates below</span>
+                </div>
+                {changelog.trim() && (
+                  <div className="mt-3 border border-zinc-700 bg-zinc-900/60 rounded-lg p-4 max-w-none text-sm overflow-x-auto">
+                    <article className="markdown-preview prose-invert prose-sm max-w-none">
+                      <div dangerouslySetInnerHTML={{ __html: renderMarkdown(changelog) }} />
+                    </article>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">Release ZIP File</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      accept=".zip,application/zip"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="release-zip-input"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById('release-zip-input').click()}
+                      className="w-full justify-start"
+                    >
+                      <FileUp className="w-4 h-4 mr-2" />
+                      {file ? file.name : 'Select ZIP file'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2">Required. Must be a .zip archive.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">Promo Image (PNG/JPG)</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      onChange={handleImageChange}
+                      className="hidden"
+                      id="release-image-input"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById('release-image-input').click()}
+                      className="w-full justify-start"
+                    >
+                      <ImageIcon className="w-4 h-4 mr-2" />
+                      {image ? image.name : 'Select optional image'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2">Optional. PNG or JPG up to 2MB.</p>
+                </div>
+              </div>
+
+              {uploadError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+            </form>
+          </div>
+        )}
+
+        {/* Edit Changelog Section */}
+        {isUpdating && (
+          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+            <div className="mb-4">
+              <h3 className="text-lg font-medium text-white">Update Edit Changelog</h3>
+            </div>
+            
+            <form onSubmit={submitChangelogUpdate} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">Release ID</label>
+                  <input
+                    type="text"
+                    value={editReleaseId}
+                    onChange={(e) => setEditReleaseId(e.target.value)}
+                    placeholder="e.g. 42"
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">New Changelog</label>
+                  <textarea
+                    value={newChangelog}
+                    onChange={(e) => setNewChangelog(e.target.value)}
+                    rows={4}
+                    placeholder="Enter updated changelog text..."
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 resize-y"
+                  />
+                  <div className="flex justify-between mt-1 text-xs text-zinc-500">
+                    <span>{newChangelog.length} / 20000</span>
+                    <span>Required</span>
+                  </div>
+                  {newChangelog.trim() && (
+                    <div className="mt-3 border border-zinc-700 bg-zinc-900/60 rounded-lg p-4 max-w-none text-sm overflow-x-auto">
+                      <article className="markdown-preview prose-invert prose-sm max-w-none">
+                        <div dangerouslySetInnerHTML={{ __html: renderMarkdown(newChangelog) }} />
+                      </article>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {updateError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5" />
+                  <span>{updateError}</span>
+                </div>
+              )}
+
+              <div className="p-3 bg-zinc-800/60 border border-zinc-700 rounded-lg text-xs text-zinc-400 flex space-x-2">
+                <Info className="w-4 h-4 flex-shrink-0 text-zinc-500" />
+                <p>
+                  Select a release from the table below to pre-fill its ID and current changelog. Update only the changelog text—other fields require a new release upload.
+                </p>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Existing Releases Section */}
+        {!isAdding && !isUpdating && (
+          <div>
+            <div className="flex items-center mb-4 space-x-3">
+              <History className="w-5 h-5 text-blue-400" />
+              <h3 className="text-lg font-medium text-zinc-300">Existing Releases</h3>
+            </div>
+            <Card className="p-6 bg-zinc-900/40 border-zinc-800 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex items-center space-x-3">
+                  <label className="text-sm text-zinc-400">Filter Product:</label>
+                  <select
+                    value={productFilter}
+                    onChange={(e) => setProductFilter(e.target.value)}
+                    className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                  >
+                    <option value="">All</option>
+                    {PRODUCT_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                </div>
+                <Button variant="outline" onClick={() => fetchReleases(productFilter)} disabled={releasesLoading}>
+                  {releasesLoading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Refreshing...</> : <><RefreshCw className="w-4 h-4 mr-2" />Refresh</>}
+                </Button>
+              </div>
+
+              {releasesError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5" />
+                  <span>{releasesError}</span>
+                </div>
+              )}
+
+              <div className="overflow-x-auto -mx-2">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-zinc-400 border-b border-zinc-800">
+                      <th className="py-2 px-2 font-medium">ID</th>
+                      <th className="py-2 px-2 font-medium">Product</th>
+                      <th className="py-2 px-2 font-medium">Version</th>
+                      <th className="py-2 px-2 font-medium">Uploaded</th>
+                      <th className="py-2 px-2 font-medium">Changelog</th>
+                      <th className="py-2 px-2 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {releasesLoading ? (
+                      <tr><td colSpan={6} className="py-8 text-center text-zinc-500">Loading...</td></tr>
+                    ) : releases.length === 0 ? (
+                      <tr><td colSpan={6} className="py-8 text-center text-zinc-500">No releases found.</td></tr>
+                    ) : (
+                      releases.slice(0, 50).map(rel => (
+                        <tr key={rel.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/40">
+                          <td className="py-2 px-2 text-zinc-300">{rel.id}</td>
+                          <td className="py-2 px-2 text-zinc-300">{rel.product}</td>
+                          <td className="py-2 px-2 text-zinc-300">{rel.version}</td>
+                          <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">{rel.created_at ? new Date(rel.created_at).toLocaleDateString() : '-'}</td>
+                          <td className="py-2 px-2 text-zinc-400 truncate max-w-[180px]">{rel.changelog ? rel.changelog.slice(0, 60) : <span className="italic text-zinc-600">(none)</span>}</td>
+                          <td className="py-2 px-2">
+                            <Button size="sm" variant="outline" onClick={() => {
+                              handleSelectRelease(rel);
+                              handleStartUpdate();
+                            }}>
+                              Edit Changelog
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-zinc-500">Showing up to 50 results. Apply a filter for narrower view.</p>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* Confirmation Modal */}
