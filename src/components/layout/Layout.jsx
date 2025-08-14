@@ -126,8 +126,8 @@ Support BARS: https://stopbars.com/donate`,
           <Navbar />
         </div>
         <main className="flex-grow container mx-auto px-6 relative">{children}</main>
-        <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
-        <Footer />
+  <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
+  <Footer onOpenConsent={() => setShowConsentBanner(true)} />
       </div>
     </div>
   );

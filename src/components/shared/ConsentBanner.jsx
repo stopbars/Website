@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 import { useEffect } from 'react';
 import { X, Cookie } from 'lucide-react';
 import { Button } from './Button';
@@ -6,33 +5,44 @@ import PropTypes from 'prop-types';
 
 export const ConsentBanner = ({ show, setShow }) => {
   useEffect(() => {
-    // Check if user has already made a choice
     const consent = localStorage.getItem('analytics-consent');
-    if (!consent) {
-      // Set default denied state for GA4
-      gtag('consent', 'default', {
-        'analytics_storage': 'denied'
-      });
+    if (!window.posthog) return;
+    if (consent === 'granted') {
+      window.posthog.opt_in_capturing();
+      if (window.posthog.startSessionRecording) {
+        window.posthog.startSessionRecording();
+      }
+    } else if (consent === 'denied') {
+      window.posthog.opt_out_capturing();
+      if (window.posthog.stopSessionRecording) {
+        window.posthog.stopSessionRecording();
+      }
     } else {
-      // Apply saved preference
-      gtag('consent', 'update', {
-        'analytics_storage': consent === 'granted' ? 'granted' : 'denied'
-      });
+      // Default: deny until user acts
+      window.posthog.opt_out_capturing();
     }
   }, []);
 
   const handleAccept = () => {
-    gtag('consent', 'update', {
-      'analytics_storage': 'granted'
-    });
+    if (window.posthog) {
+      window.posthog.opt_in_capturing();
+      if (window.posthog.startSessionRecording) {
+        window.posthog.startSessionRecording();
+      }
+      window.posthog.capture('consent_granted');
+    }
     localStorage.setItem('analytics-consent', 'granted');
     setShow(false);
   };
 
   const handleDecline = () => {
-    gtag('consent', 'update', {
-      'analytics_storage': 'denied'
-    });
+    if (window.posthog) {
+      window.posthog.capture('consent_denied');
+      window.posthog.opt_out_capturing();
+      if (window.posthog.stopSessionRecording) {
+        window.posthog.stopSessionRecording();
+      }
+    }
     localStorage.setItem('analytics-consent', 'denied');
     setShow(false);
   };

@@ -206,8 +206,14 @@ createRoot(document.getElementById('root')).render(
       options={{
         api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
         defaults: '2025-05-24',
-        capture_exceptions: true, // This enables capturing exceptions using Error Tracking
+        capture_exceptions: true,
         debug: import.meta.env.MODE === 'development',
+        persistence: 'localStorage+cookie',
+        autocapture: true,
+        session_recording: {
+          maskAllInputs: true,
+          maskInputOptions: { password: true, email: true },
+        },
       }}
     >
       <AuthProvider>

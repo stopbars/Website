@@ -105,16 +105,6 @@ const TABS = {
     description: 'Manage and update the FAQ section',
     component: FAQManagement
   },
-  
-  // MAP_APPROVER Tabs
-  mapReview: {
-    id: 'mapReview',
-    label: 'Map Review',
-    icon: Map,
-    roles: ['MAP_APPROVER', 'product_manager', 'lead_developer'],
-    description: 'Review and approve map submissions',
-    component: () => <div>Map Review Component (Coming Soon)</div>
-  }
 };
 
 const StaffDashboard = () => {

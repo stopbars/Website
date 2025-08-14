@@ -51,30 +51,12 @@
     <link rel="preconnect" href="https://cdn.stopbars.com">
     <link rel="dns-prefetch" href="https://api.stopbars.com">
     <link rel="dns-prefetch" href="https://cdn.stopbars.com">
-    <link rel="dns-prefetch" href="https://www.googletagmanager.com">
+  <!-- Removed Google Tag Manager dns-prefetch as GA is no longer used -->
     
     <!-- Preload critical fonts if any -->
     <link rel="preload" href="/src/main.jsx" as="script" crossorigin="anonymous">
 
-    <!-- Google tag (gtag.js) -->
-
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V7RB43CHTC"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      
-      // Set default consent to 'denied' first
-      gtag('consent', 'default', {
-      'analytics_storage': 'denied'
-      });
-
-      // Enable URL passthrough for better measurement when cookies are denied
-      gtag('set', 'url_passthrough', true);
-
-      // Initialize analytics after consent settings
-      gtag('js', new Date());
-      gtag('config', 'G-V7RB43CHTC');
-    </script>
+  <!-- Google Analytics removed (migrated to PostHog) -->
 
 
     <!-- Structured Data for Organization -->

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
@@ -778,22 +778,13 @@ const ContributionManagement = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedContribution, setSelectedContribution] = useState(null);
   const [,] = useState('pending');
-  const [totalCounts, setTotalCounts] = useState({
-    pending: 0,
-    approved: 0,
-    rejected: 0,
-    total: 0
-  });
+  // Track only pending count (stats endpoint removed)
+  const [pendingCount, setPendingCount] = useState(0);
   // eslint-disable-next-line no-empty-pattern
   const [] = useState(false);
   const [, setActivePoints] = useState([]);
   const [, setComparisonResults] = useState(null);
-  useEffect(() => {
-    fetchContributions();
-    fetchStats();
-  }, [currentPage]); // Only re-run when currentPage changes
-
-  const fetchContributions = async () => {
+  const fetchContributions = useCallback(async () => {
     setLoading(true);
     try {
       const token = getVatsimToken();
@@ -813,40 +804,17 @@ const ContributionManagement = () => {
       const data = await response.json();
       setContributions(data.contributions);
       setTotalPages(Math.ceil(data.totalCount / CONTRIBUTIONS_PER_PAGE));
+  setPendingCount(data.totalCount || 0);
       setLoading(false);
     } catch (err) {
       setError(err.message);
       setLoading(false);
     }
-  };
+  }, [currentPage]);
 
-  const fetchStats = async () => {
-    try {
-      const token = getVatsimToken();
-      const response = await fetch(
-        `https://v2.stopbars.com/contributions/stats`, 
-        {
-          headers: {
-            'X-Vatsim-Token': token
-          }
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch contribution statistics');
-      }
-      
-      const data = await response.json();
-      setTotalCounts({
-        pending: data.pendingCount || 0,
-        approved: data.approvedCount || 0,
-        rejected: data.rejectedCount || 0,
-        total: data.totalCount || 0
-      });
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
-    }
-  };
+  useEffect(() => {
+    fetchContributions();
+  }, [fetchContributions]);
 
   const handleReview = (contribution) => {
     setSelectedContribution(contribution);
@@ -855,12 +823,10 @@ const ContributionManagement = () => {
 
   const handleApproval = async () => {
     await fetchContributions();
-    await fetchStats();
   };
 
   const handleRejection = async () => {
     await fetchContributions();
-    await fetchStats();
   };
   
   const handleContributionSelect = (contribution) => {
@@ -909,7 +875,7 @@ const ContributionManagement = () => {
     <div className="container mx-auto p-4 max-w-4xl">      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <h1 className="text-2xl font-bold mb-4 md:mb-0">Contribution Management</h1>
         <div className="text-sm bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full">
-          {totalCounts.pending || '0'} Pending Contributions
+          {pendingCount || '0'} Pending Contributions
         </div>
       </div>
 
