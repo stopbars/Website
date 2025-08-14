@@ -4,6 +4,7 @@ import { Card } from '../shared/Card';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { 
   Upload, Image as ImageIcon, FileUp, RefreshCw, Check, AlertTriangle, History, Edit3, X, Info, Plus, Edit, Loader,
+  Package, Hash, FileText, Eye, ChevronDown,
 } from 'lucide-react';
 import { marked } from 'marked';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
@@ -19,7 +20,7 @@ const PRODUCT_OPTIONS = [
   { value: 'EuroScope-Plugin', label: 'EuroScope Plugin' }
 ];
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB per spec
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB per spec
 const MAX_ZIP_BYTES = 90 * 1024 * 1024; // 90MB
 // Semantic versioning regex: major.minor.patch with optional pre-release and build metadata
 const SEMVER_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
@@ -55,6 +56,13 @@ const ReleaseManagement = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingUploadData, setPendingUploadData] = useState(null);
   const changelogSectionRef = useRef(null);
+  // Custom dropdown state
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  // Drag and drop state
+  const [isDragActiveFile, setIsDragActiveFile] = useState(false);
+  const [isDragActiveImage, setIsDragActiveImage] = useState(false);
+  const [dragErrorFile, setDragErrorFile] = useState('');
+  const [dragErrorImage, setDragErrorImage] = useState('');
 
   const fetchReleases = async (selectedProduct = '') => {
     setReleasesLoading(true);
@@ -93,19 +101,112 @@ const ReleaseManagement = () => {
     if (image) {
       const isValidType = ['image/png', 'image/jpeg'].includes(image.type) || /\.(png|jpe?g)$/i.test(image.name);
       if (!isValidType) return 'Image must be PNG or JPG';
-      if (image.size > MAX_IMAGE_BYTES) return 'Image exceeds 2MB limit';
+      if (image.size > MAX_IMAGE_BYTES) return 'Image exceeds 5MB limit';
     }
     return '';
   };
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
-    if (selected) setFile(selected);
+    if (selected) {
+      setFile(selected);
+      setUploadError(''); // Clear validation errors when changing file
+    }
   };
 
   const handleImageChange = (e) => {
     const selected = e.target.files[0];
-    if (selected) setImage(selected);
+    if (selected) {
+      setImage(selected);
+      setUploadError(''); // Clear validation errors when changing image
+    }
+  };
+
+  // Drag and drop handlers for release file
+  const handleFileDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragActiveFile) setIsDragActiveFile(true);
+  };
+
+  const handleFileDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget === e.target) {
+      setIsDragActiveFile(false);
+      setDragErrorFile('');
+    }
+  };
+
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActiveFile(false);
+    const droppedFile = e.dataTransfer.files && e.dataTransfer.files[0];
+    
+    if (droppedFile) {
+      // Validate file type
+      if (droppedFile.type !== 'application/zip' && !droppedFile.name.toLowerCase().endsWith('.zip')) {
+        setDragErrorFile('Please upload a .zip file');
+        setTimeout(() => setDragErrorFile(''), 3000);
+        return;
+      }
+      
+      // Validate file size
+      if (droppedFile.size > MAX_ZIP_BYTES) {
+        setDragErrorFile('File exceeds 90MB limit');
+        setTimeout(() => setDragErrorFile(''), 3000);
+        return;
+      }
+      
+      setDragErrorFile('');
+      setFile(droppedFile);
+      setUploadError(''); // Clear validation errors when changing file
+    }
+  };
+
+  // Drag and drop handlers for image
+  const handleImageDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragActiveImage) setIsDragActiveImage(true);
+  };
+
+  const handleImageDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget === e.target) {
+      setIsDragActiveImage(false);
+      setDragErrorImage('');
+    }
+  };
+
+  const handleImageDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActiveImage(false);
+    const droppedFile = e.dataTransfer.files && e.dataTransfer.files[0];
+    
+    if (droppedFile) {
+      // Validate file type
+      const isValidType = ['image/png', 'image/jpeg'].includes(droppedFile.type) || /\.(png|jpe?g)$/i.test(droppedFile.name);
+      if (!isValidType) {
+        setDragErrorImage('Please upload a PNG or JPG file');
+        setTimeout(() => setDragErrorImage(''), 3000);
+        return;
+      }
+      
+      // Validate file size
+      if (droppedFile.size > MAX_IMAGE_BYTES) {
+        setDragErrorImage('File exceeds 5MB limit');
+        setTimeout(() => setDragErrorImage(''), 3000);
+        return;
+      }
+      
+      setDragErrorImage('');
+      setImage(droppedFile);
+      setUploadError(''); // Clear validation errors when changing image
+    }
   };
 
   const resetUploadForm = () => {
@@ -116,6 +217,11 @@ const ReleaseManagement = () => {
     setImage(null);
     setUploadError('');
     setUploadSuccess('');
+    setShowProductDropdown(false);
+    setIsDragActiveFile(false);
+    setIsDragActiveImage(false);
+    setDragErrorFile('');
+    setDragErrorImage('');
   };
 
   const resetUpdateForm = () => {
@@ -157,6 +263,7 @@ const ReleaseManagement = () => {
   };
 
   const openConfirm = () => {
+    setUploadError(''); // Clear any previous errors first
     const validation = validateUpload();
     if (validation) {
       setUploadError(validation);
@@ -192,6 +299,7 @@ const ReleaseManagement = () => {
       }
       setUploadSuccess('Release created successfully');
       resetUploadForm();
+      setIsAdding(false);
       fetchReleases(productFilter); // Refresh the releases list
     } catch (err) {
       setUploadError(err.message);
@@ -206,6 +314,7 @@ const ReleaseManagement = () => {
   const handleStartAdd = () => {
     setIsAdding(true);
     setIsUpdating(false);
+    setShowProductDropdown(false);
     resetUploadForm();
   };
 
@@ -218,6 +327,7 @@ const ReleaseManagement = () => {
   const handleCancel = () => {
     setIsAdding(false);
     setIsUpdating(false);
+    setShowProductDropdown(false);
     resetUploadForm();
     resetUpdateForm();
   };
@@ -274,6 +384,55 @@ const ReleaseManagement = () => {
   const handleSelectRelease = (rel) => {
     setEditReleaseId(rel.id?.toString() || '');
     setNewChangelog(rel.changelog || '');
+  };
+
+  // Render custom product dropdown
+  const renderProductDropdown = (currentProduct, setProduct, isOpen, setIsOpen) => {
+    const currentOption = PRODUCT_OPTIONS.find(opt => opt.value === currentProduct);
+    
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}
+          className="flex items-center justify-between w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+        >
+          <span className="transition-colors duration-200">{currentOption?.label || currentProduct}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+            {PRODUCT_OPTIONS.map((option, index) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setProduct(option.value);
+                  setIsOpen(false);
+                  setUploadError(''); // Clear any validation errors when changing product
+                }}
+                className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
+                  currentProduct === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                }`}
+                style={{
+                  animationDelay: `${index * 25}ms`,
+                  animationFillMode: 'both'
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -393,55 +552,119 @@ const ReleaseManagement = () => {
             <form onSubmit={(e) => { e.preventDefault(); openConfirm(); }} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">Product</label>
-                  <select
-                    value={product}
-                    onChange={(e) => setProduct(e.target.value)}
-                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                  >
-                    {PRODUCT_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                  <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                    <Package className="w-4 h-4" />
+                    <span>Product</span>
+                  </label>
+                  {renderProductDropdown(product, setProduct, showProductDropdown, setShowProductDropdown)}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">Version</label>
+                  <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                    <Hash className="w-4 h-4" />
+                    <span>Version</span>
+                  </label>
                   <input
                     type="text"
                     value={version}
-                    onChange={(e) => setVersion(e.target.value)}
-                    placeholder="e.g. 2.0.1"
+                    onChange={(e) => {
+                      setVersion(e.target.value);
+                      setUploadError(''); // Clear validation errors when changing version
+                    }}
+                    placeholder="2.0.1"
                     className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-zinc-300">Changelog</label>
+                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                  <FileText className="w-4 h-4" />
+                  <span>Changelog</span>
+                </label>
                 <textarea
                   value={changelog}
                   onChange={(e) => setChangelog(e.target.value)}
                   rows={6}
-                  placeholder="List key changes, features, fixes..."
                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 resize-y"
                 />
                 <div className="flex justify-between mt-1 text-xs text-zinc-500">
-                  <span>{changelog.length} chars</span>
-                  <span className="text-zinc-600">Preview auto-updates below</span>
+                  <span>{changelog.length} characters</span>
                 </div>
-                {changelog.trim() && (
-                  <div className="mt-3 border border-zinc-700 bg-zinc-900/60 rounded-lg p-4 max-w-none text-sm overflow-x-auto">
-                    <article className="markdown-preview prose-invert prose-sm max-w-none">
-                      <div dangerouslySetInnerHTML={{ __html: renderMarkdown(changelog) }} />
-                    </article>
-                  </div>
-                )}
+              </div>
+
+              {/* Preview Section */}
+              <div>
+                <div className="flex items-center space-x-2 mb-2">
+                  <Eye className="w-4 h-4 text-zinc-400" />
+                  <label className="text-sm font-medium text-zinc-300">Preview</label>
+                </div>
+                <div className="min-h-24 border border-zinc-700 rounded-lg overflow-hidden">
+                  {changelog.trim() ? (
+                    <div className="p-4 bg-zinc-900/60">
+                      <article className="markdown-preview prose-invert prose-sm max-w-none">
+                        <div dangerouslySetInnerHTML={{ __html: renderMarkdown(changelog) }} />
+                      </article>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-zinc-800/50 flex items-center justify-center min-h-24">
+                      <p className="text-zinc-500 text-sm">Preview will appear here...</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">Release ZIP File</label>
-                  <div className="flex items-center space-x-2">
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">
+                    Release File<span className="text-red-400 ml-1">*</span>
+                  </label>
+                  <div 
+                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                      dragErrorFile ? 'border-red-400 bg-red-500/10' : 
+                      isDragActiveFile ? 'border-blue-400 bg-blue-500/10' : 
+                      file ? 'border-emerald-500/50 bg-emerald-500/5' : 
+                      'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                    }`}
+                    onClick={() => document.getElementById('release-zip-input').click()}
+                    onDragOver={handleFileDragOver}
+                    onDragLeave={handleFileDragLeave}
+                    onDrop={handleFileDrop}
+                    role="button"
+                    aria-label="Upload release file via click or drag and drop"
+                  >
+                    {dragErrorFile ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-3">
+                          <X className="w-6 h-6 text-red-500" />
+                        </div>
+                        <p className="font-medium mb-1 text-red-400">{dragErrorFile}</p>
+                        <p className="text-sm text-zinc-400">
+                          Please try again with a valid file
+                        </p>
+                      </div>
+                    ) : file ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+                          <Check className="w-6 h-6 text-emerald-500" />
+                        </div>
+                        <p className="font-medium mb-1">{file.name}</p>
+                        <p className="text-sm text-zinc-400">
+                          {(file.size / (1024*1024)).toFixed(2)} MB / 90 MB  •  Click to change
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
+                          <Upload className="w-6 h-6 text-zinc-400" />
+                        </div>
+                        <p className="font-medium mb-1">
+                          {isDragActiveFile ? 'Drop to upload release file' : 'Click to upload or drag and drop'}
+                        </p>
+                        <p className="text-sm text-zinc-400">
+                          .zip required, max 90MB file size
+                        </p>
+                      </div>
+                    )}
                     <input
                       type="file"
                       accept=".zip,application/zip"
@@ -449,22 +672,58 @@ const ReleaseManagement = () => {
                       className="hidden"
                       id="release-zip-input"
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => document.getElementById('release-zip-input').click()}
-                      className="w-full justify-start"
-                    >
-                      <FileUp className="w-4 h-4 mr-2" />
-                      {file ? file.name : 'Select ZIP file'}
-                    </Button>
                   </div>
-                  <p className="text-xs text-zinc-500 mt-2">Required. Must be a .zip archive.</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">Promo Image (PNG/JPG)</label>
-                  <div className="flex items-center space-x-2">
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">Promo Image</label>
+                  <div 
+                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                      dragErrorImage ? 'border-red-400 bg-red-500/10' : 
+                      isDragActiveImage ? 'border-blue-400 bg-blue-500/10' : 
+                      image ? 'border-emerald-500/50 bg-emerald-500/5' : 
+                      'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                    }`}
+                    onClick={() => document.getElementById('release-image-input').click()}
+                    onDragOver={handleImageDragOver}
+                    onDragLeave={handleImageDragLeave}
+                    onDrop={handleImageDrop}
+                    role="button"
+                    aria-label="Upload promo image via click or drag and drop"
+                  >
+                    {dragErrorImage ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-3">
+                          <X className="w-6 h-6 text-red-500" />
+                        </div>
+                        <p className="font-medium mb-1 text-red-400">{dragErrorImage}</p>
+                        <p className="text-sm text-zinc-400">
+                          Please try again with a valid file
+                        </p>
+                      </div>
+                    ) : image ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+                          <Check className="w-6 h-6 text-emerald-500" />
+                        </div>
+                        <p className="font-medium mb-1">{image.name}</p>
+                        <p className="text-sm text-zinc-400">
+                          {(image.size / (1024*1024)).toFixed(2)} MB / 5 MB  •  Click to change
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
+                          <ImageIcon className="w-6 h-6 text-zinc-400" />
+                        </div>
+                        <p className="font-medium mb-1">
+                          {isDragActiveImage ? 'Drop to upload promo image' : 'Click to upload or drag and drop'}
+                        </p>
+                        <p className="text-sm text-zinc-400">
+                          PNG or JPG, max 5MB file size
+                        </p>
+                      </div>
+                    )}
                     <input
                       type="file"
                       accept="image/png,image/jpeg"
@@ -472,17 +731,7 @@ const ReleaseManagement = () => {
                       className="hidden"
                       id="release-image-input"
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => document.getElementById('release-image-input').click()}
-                      className="w-full justify-start"
-                    >
-                      <ImageIcon className="w-4 h-4 mr-2" />
-                      {image ? image.name : 'Select optional image'}
-                    </Button>
                   </div>
-                  <p className="text-xs text-zinc-500 mt-2">Optional. PNG or JPG up to 2MB.</p>
                 </div>
               </div>
 
@@ -635,7 +884,7 @@ const ReleaseManagement = () => {
       {/* Confirmation Modal */}
       {confirmOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full p-6 space-y-5">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
             <div className="flex items-start space-x-3">
               <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0" />
               <div>
@@ -643,25 +892,35 @@ const ReleaseManagement = () => {
                 <p className="text-sm text-zinc-400">Releases cannot be deleted once created. Please review all details carefully before confirming.</p>
               </div>
             </div>
-            <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
-              <div className="flex justify-between"><span className="text-zinc-400">Product:</span><span className="font-medium">{product}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-400">Version:</span><span className="font-medium">{version || '—'}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-400">ZIP File:</span><span className="font-medium truncate max-w-[240px]" title={file?.name}>{file?.name}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-400">ZIP Size:</span><span className="font-medium">{file ? (file.size / (1024*1024)).toFixed(2) + ' MB' : '—'}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-400">Promo Image:</span><span className="font-medium truncate max-w-[240px]" title={image?.name}>{image ? image.name : '(none)'}</span></div>
-              {image && <div className="flex justify-between"><span className="text-zinc-400">Image Size:</span><span className="font-medium">{(image.size / 1024).toFixed(1)} KB</span></div>}
-              <div>
-                <p className="text-zinc-400 mb-1">Changelog Preview:</p>
-                <div className="max-h-40 overflow-y-auto border border-zinc-700 rounded p-2 bg-zinc-900/60 text-xs">
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left side - Release Details */}
+              <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
+                <h4 className="font-medium text-zinc-200 mb-3">Release Details</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between"><span className="text-zinc-400">Product:</span><span className="font-medium">{product}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-400">Version:</span><span className="font-medium">{version || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-400">ZIP File:</span><span className="font-medium truncate max-w-[200px]" title={file?.name}>{file?.name}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-400">ZIP Size:</span><span className="font-medium">{file ? (file.size / (1024*1024)).toFixed(2) + ' MB' : '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-400">Promo Image:</span><span className="font-medium truncate max-w-[200px]" title={image?.name}>{image ? image.name : '(none)'}</span></div>
+                  {image && <div className="flex justify-between"><span className="text-zinc-400">Image Size:</span><span className="font-medium">{(image.size / (1024*1024)).toFixed(2)} MB</span></div>}
+                </div>
+                <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] leading-relaxed mt-4">
+                  Double-check you selected the correct build (ZIP) and optional image. Mistakes require publishing a new release; this one will remain immutable.
+                </div>
+              </div>
+
+              {/* Right side - Changelog Preview */}
+              <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
+                <h4 className="font-medium text-zinc-200 mb-3">Changelog Preview</h4>
+                <div className="max-h-64 overflow-y-auto border border-zinc-700 rounded p-3 bg-zinc-900/60 text-xs">
                   <article className="markdown-preview prose-invert prose-xs max-w-none">
                     <div dangerouslySetInnerHTML={{ __html: renderMarkdown(changelog || '*No changelog provided*') }} />
                   </article>
                 </div>
               </div>
-              <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] leading-relaxed">
-                Double-check you selected the correct build (ZIP) and optional image. Mistakes require publishing a new release; this one will remain immutable.
-              </div>
             </div>
+
             {uploadError && (
               <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">{uploadError}</div>
             )}
