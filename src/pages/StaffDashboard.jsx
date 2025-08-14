@@ -28,6 +28,7 @@ import NotamManagement from '../components/staff/notamManagement';
 import DivisionManagement from '../components/staff/DivisionManagement';
 import AirportManagement from '../components/staff/AirportManagement';
 import FAQManagement from '../components/staff/FAQManagement';
+import ReleaseManagement from '../components/staff/ReleaseManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -62,7 +63,7 @@ const TABS = {
     icon: Upload,
     roles: ['lead_developer'],
     description: 'Manage software releases and changelogs',
-    component: () => <div>Release Management Component (Coming Soon)</div>
+  component: ReleaseManagement
   },
   systemSettings: {
     id: 'systemSettings',
