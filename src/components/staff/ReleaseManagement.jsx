@@ -4,7 +4,7 @@ import { Card } from '../shared/Card';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { 
   Upload, Image as ImageIcon, FileUp, RefreshCw, Check, AlertTriangle, History, Edit3, X, Info, Plus, Edit, Loader,
-  Package, Hash, FileText, Eye, ChevronDown,
+  Package, Hash, FileText, Eye, ChevronDown, Send,
 } from 'lucide-react';
 import { marked } from 'marked';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
@@ -58,6 +58,7 @@ const ReleaseManagement = () => {
   const changelogSectionRef = useRef(null);
   // Custom dropdown state
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   // Drag and drop state
   const [isDragActiveFile, setIsDragActiveFile] = useState(false);
   const [isDragActiveImage, setIsDragActiveImage] = useState(false);
@@ -218,6 +219,7 @@ const ReleaseManagement = () => {
     setUploadError('');
     setUploadSuccess('');
     setShowProductDropdown(false);
+    setShowFilterDropdown(false);
     setIsDragActiveFile(false);
     setIsDragActiveImage(false);
     setDragErrorFile('');
@@ -315,6 +317,7 @@ const ReleaseManagement = () => {
     setIsAdding(true);
     setIsUpdating(false);
     setShowProductDropdown(false);
+    setShowFilterDropdown(false);
     resetUploadForm();
   };
 
@@ -328,6 +331,7 @@ const ReleaseManagement = () => {
     setIsAdding(false);
     setIsUpdating(false);
     setShowProductDropdown(false);
+    setShowFilterDropdown(false);
     resetUploadForm();
     resetUpdateForm();
   };
@@ -435,6 +439,58 @@ const ReleaseManagement = () => {
     );
   };
 
+  // Render custom filter dropdown for existing releases
+  const renderFilterDropdown = (currentFilter, setFilter, isOpen, setIsOpen) => {
+    const filterOptions = [
+      { value: '', label: 'All Products' },
+      ...PRODUCT_OPTIONS
+    ];
+    const currentOption = filterOptions.find(opt => opt.value === currentFilter);
+    
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}
+          className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750 text-sm min-w-[180px]"
+        >
+          <span className="transition-colors duration-200">{currentOption?.label || 'All Products'}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+            {filterOptions.map((option, index) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setFilter(option.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-3 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 text-sm ${
+                  currentFilter === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                }`}
+                style={{
+                  animationDelay: `${index * 25}ms`,
+                  animationFillMode: 'both'
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
       {/* Header */}
@@ -480,8 +536,8 @@ const ReleaseManagement = () => {
                   </>
                 ) : isAdding ? (
                   <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Publish Release
+                    <Send className="w-4 h-4 mr-2" />
+                    Publish
                   </>
                 ) : (
                   <>
@@ -806,28 +862,18 @@ const ReleaseManagement = () => {
 
         {/* Existing Releases Section */}
         {!isAdding && !isUpdating && (
-          <div>
-            <div className="flex items-center mb-4 space-x-3">
-              <History className="w-5 h-5 text-blue-400" />
-              <h3 className="text-lg font-medium text-zinc-300">Existing Releases</h3>
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-2">
+                <History className="w-5 h-5 text-blue-400" />
+                <h3 className="text-lg font-medium text-zinc-300">Existing Releases</h3>
+              </div>
+              <div className="flex items-center space-x-3">
+                <label className="text-sm text-zinc-400">Filter Product:</label>
+                {renderFilterDropdown(productFilter, setProductFilter, showFilterDropdown, setShowFilterDropdown)}
+              </div>
             </div>
             <Card className="p-6 bg-zinc-900/40 border-zinc-800 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-center space-x-3">
-                  <label className="text-sm text-zinc-400">Filter Product:</label>
-                  <select
-                    value={productFilter}
-                    onChange={(e) => setProductFilter(e.target.value)}
-                    className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
-                  >
-                    <option value="">All</option>
-                    {PRODUCT_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                  </select>
-                </div>
-                <Button variant="outline" onClick={() => fetchReleases(productFilter)} disabled={releasesLoading}>
-                  {releasesLoading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Refreshing...</> : <><RefreshCw className="w-4 h-4 mr-2" />Refresh</>}
-                </Button>
-              </div>
 
               {releasesError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
@@ -889,14 +935,16 @@ const ReleaseManagement = () => {
               <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0" />
               <div>
                 <h3 className="text-lg font-semibold mb-1">Confirm Release Publication</h3>
-                <p className="text-sm text-zinc-400">Releases cannot be deleted once created. Please review all details carefully before confirming.</p>
               </div>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left side - Release Details */}
-              <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
-                <h4 className="font-medium text-zinc-200 mb-3">Release Details</h4>
+              <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 flex flex-col justify-center">
+                <div className="flex items-center space-x-2 mb-3">
+                  <Package className="w-4 h-4 text-zinc-400" />
+                  <h4 className="font-medium text-zinc-200">Release Details</h4>
+                </div>
                 <div className="space-y-2">
                   <div className="flex justify-between"><span className="text-zinc-400">Product:</span><span className="font-medium">{product}</span></div>
                   <div className="flex justify-between"><span className="text-zinc-400">Version:</span><span className="font-medium">{version || '—'}</span></div>
@@ -905,14 +953,17 @@ const ReleaseManagement = () => {
                   <div className="flex justify-between"><span className="text-zinc-400">Promo Image:</span><span className="font-medium truncate max-w-[200px]" title={image?.name}>{image ? image.name : '(none)'}</span></div>
                   {image && <div className="flex justify-between"><span className="text-zinc-400">Image Size:</span><span className="font-medium">{(image.size / (1024*1024)).toFixed(2)} MB</span></div>}
                 </div>
-                <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] leading-relaxed mt-4">
-                  Double-check you selected the correct build (ZIP) and optional image. Mistakes require publishing a new release; this one will remain immutable.
+                <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed mt-4 mb-2">
+                  Releases cannot be deleted once created. Please review all details carefully before confirming. Double-check you selected the correct build (ZIP) and optional image. Mistakes require publishing a new release; this one will remain immutable.
                 </div>
               </div>
 
               {/* Right side - Changelog Preview */}
               <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
-                <h4 className="font-medium text-zinc-200 mb-3">Changelog Preview</h4>
+                <div className="flex items-center space-x-2 mb-3">
+                  <Eye className="w-4 h-4 text-zinc-400" />
+                  <h4 className="font-medium text-zinc-200">Changelog Preview</h4>
+                </div>
                 <div className="max-h-64 overflow-y-auto border border-zinc-700 rounded p-3 bg-zinc-900/60 text-xs">
                   <article className="markdown-preview prose-invert prose-xs max-w-none">
                     <div dangerouslySetInnerHTML={{ __html: renderMarkdown(changelog || '*No changelog provided*') }} />
@@ -929,7 +980,7 @@ const ReleaseManagement = () => {
                 <X className="w-4 h-4 mr-1" /> Cancel
               </Button>
               <Button onClick={executeUpload} disabled={uploading} className="bg-amber-600 hover:bg-amber-500">
-                {uploading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Publishing...</> : <><Upload className="w-4 h-4 mr-2" />Confirm Publish</>}
+                {uploading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Publishing...</> : <><Send className="w-4 h-4 mr-2" />Publish</>}
               </Button>
             </div>
           </div>

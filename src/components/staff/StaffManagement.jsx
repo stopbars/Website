@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
-import { AlertTriangle, Loader, RefreshCw, ShieldPlus, Trash2, UserPlus, Save } from 'lucide-react';
+import { AlertTriangle, Loader, ShieldPlus, Trash2, UserPlus, Lock, ChevronDown } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
 const ROLE_OPTIONS = [
@@ -32,6 +32,7 @@ export default function StaffManagement() {
   const [form, setForm] = useState({ vatsimId: '', role: 'PRODUCT_MANAGER' });
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
   const apiBase = 'https://v2.stopbars.com';
 
@@ -128,6 +129,54 @@ export default function StaffManagement() {
     }
   };
 
+  // Render custom role dropdown
+  const renderRoleDropdown = (currentRole, setRole, isOpen, setIsOpen) => {
+    const currentOption = ROLE_OPTIONS.find(opt => opt.value === currentRole);
+    
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}
+          className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750 text-sm"
+        >
+          <span className="transition-colors duration-200">{currentOption?.label || currentRole}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+            {ROLE_OPTIONS.map((option, index) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setRole(option.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-3 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 text-sm ${
+                  currentRole === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                }`}
+                style={{
+                  animationDelay: `${index * 25}ms`,
+                  animationFillMode: 'both'
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-40">
@@ -137,15 +186,13 @@ export default function StaffManagement() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <ShieldPlus className="w-5 h-5 text-blue-400" /> Staff Management
-        </h2>
-        <Button onClick={fetchStaff} disabled={refreshing} className="flex items-center gap-2">
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-        </Button>
+    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 className="text-2xl font-bold mb-4 md:mb-0">Staff Management</h1>
       </div>
+
+      <div className="space-y-7">
 
       {error && (
         <div className="p-3 bg-red-500/10 border border-red-500/30 rounded flex items-center gap-2 text-sm text-red-400">
@@ -160,6 +207,7 @@ export default function StaffManagement() {
 
       {/* Add / Update Form */}
       <Card className="p-5">
+        <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2"><UserPlus className="w-4 h-4" /> Add Staff</h3>
         <form onSubmit={handleSubmit} className="grid md:grid-cols-4 gap-4 items-end">
           <div className="md:col-span-2">
             <label className="block text-xs uppercase tracking-wide text-zinc-400 mb-1">VATSIM CID</label>
@@ -174,22 +222,13 @@ export default function StaffManagement() {
           </div>
           <div>
             <label className="block text-xs uppercase tracking-wide text-zinc-400 mb-1">Role</label>
-            <select
-              name="role"
-              value={form.role}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              {ROLE_OPTIONS.map(r => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
+            {renderRoleDropdown(form.role, (role) => setForm(f => ({ ...f, role })), showRoleDropdown, setShowRoleDropdown)}
           </div>
           <div className="flex gap-2">
-            <Button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2">
-              {submitting ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+            <Button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2 text-sm px-2 py-1.5">
+              {submitting ? <Loader className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />} Save
             </Button>
-            <Button type="button" variant="secondary" onClick={() => setForm({ vatsimId: '', role: 'PRODUCT_MANAGER' })} disabled={submitting} className="px-3">
+            <Button type="button" variant="secondary" onClick={() => setForm({ vatsimId: '', role: 'PRODUCT_MANAGER' })} disabled={submitting} className="px-2 py-1.5 text-sm">
               Reset
             </Button>
           </div>
@@ -240,6 +279,7 @@ export default function StaffManagement() {
           </div>
         )}
       </Card>
+    </div>
     </div>
   );
 }

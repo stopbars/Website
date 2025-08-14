@@ -11,6 +11,7 @@ import {
   Upload,
   Map,
   MessageSquareWarning,
+  MessageSquare,
   Settings,
   AlertTriangle,
   Check,
@@ -87,7 +88,7 @@ const TABS = {
     id: 'contributionManagement',
     label: 'Contribution Management',
     icon: Map,
-    roles: ['product_manager', 'lead_developer', 'MAP_APPROVER'],
+    roles: ['product_manager', 'lead_developer'],
     description: 'Review and manage user contributions',
     component: ContributionManagement
   },  notamManagement: {
@@ -105,6 +106,14 @@ const TABS = {
     roles: ['product_manager', 'lead_developer'],
     description: 'Manage and update the FAQ section',
     component: FAQManagement
+  },
+  contactMessages: {
+    id: 'contactMessages',
+    label: 'Contact Messages',
+    icon: MessageSquare,
+    roles: ['product_manager', 'lead_developer'],
+    description: 'View and respond to user contact messages',
+    component: () => <div>Contact Messages Component (Coming Soon)</div>
   },
 };
 
@@ -281,10 +290,8 @@ const StaffDashboard = () => {
                 if (hour < 12) greeting = 'Good morning';
                 else if (hour < 18) greeting = 'Good afternoon';
                 else greeting = 'Good evening';
-                const fullName = user?.full_name || user?.fullName || user?.name ||
-                  ([user?.first_name, user?.last_name].filter(Boolean).join(' ') || undefined);
-                const displayName = fullName || user?.email || 'there';
-                return `${greeting}, ${displayName}`;
+                const firstName = user?.first_name || (user?.full_name || user?.fullName || user?.name || user?.email || '').split(' ')[0] || 'there';
+                return `${greeting}, ${firstName}`;
               })()}</p>
             </div>
             <div className="flex items-center space-x-1 mt-4">
@@ -352,14 +359,14 @@ const StaffDashboard = () => {
                   
                   {/* Content Management Group */}
                   {Object.values(TABS).some(tab => 
-                    ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'mapReview'].includes(tab.id) && hasTabAccess(tab)
+                    ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'contactMessages'].includes(tab.id) && hasTabAccess(tab)
                   ) && (
                     <div className="space-y-1 mb-2">
                       <div className="px-4 py-2">
                         <h4 className="text-xs font-medium text-zinc-500">Content Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'mapReview'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'contactMessages'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;
