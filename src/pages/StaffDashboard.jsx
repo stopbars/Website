@@ -271,10 +271,21 @@ const StaffDashboard = () => {
   return (
     <Layout>
       <div className="pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-6">          <div className="flex items-center justify-between mb-8">
+        <div className="max-w-7xl mx-auto px-6">          
+          <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold mb-2">Staff Dashboard</h1>
-              <p className="text-zinc-400">Welcome back, {user?.email}</p>
+              <p className="text-zinc-400">{(() => {
+                const hour = new Date().getHours();
+                let greeting;
+                if (hour < 12) greeting = 'Good morning';
+                else if (hour < 18) greeting = 'Good afternoon';
+                else greeting = 'Good evening';
+                const fullName = user?.full_name || user?.fullName || user?.name ||
+                  ([user?.first_name, user?.last_name].filter(Boolean).join(' ') || undefined);
+                const displayName = fullName || user?.email || 'there';
+                return `${greeting}, ${displayName}`;
+              })()}</p>
             </div>
             <div className="flex items-center space-x-1 mt-4">
               <iframe 
