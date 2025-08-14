@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
@@ -24,6 +24,17 @@ import { formatLocalDateTime } from '../../utils/dateUtils';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 const USERS_PER_PAGE = 6;
+
+// Helper to format role strings (e.g. "LEAD_DEVELOPER" -> "Lead Developer")
+const formatRole = (role) => {
+  if (!role) return '';
+  return role
+    .replace(/_/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
 
 // Helper function to calculate display name based on display mode
 const getDisplayName = (user) => {
@@ -264,12 +275,9 @@ const UserManagement = () => {
   const [regeneratingUser, setRegeneratingUser] = useState(null);
   const [isRegeneratingToken, setIsRegeneratingToken] = useState(false);
   const [totalUsers, setTotalUsers] = useState(0);
+  // Removed list view; only card view is supported now
 
-  useEffect(() => {
-    fetchUsers();
-  }, [currentPage]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const token = getVatsimToken();
@@ -291,7 +299,11 @@ const UserManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [currentPage, fetchUsers]);
   // No edit functionality needed
 
   const handleDeleteUser = async (userId) => {
@@ -395,15 +407,17 @@ const UserManagement = () => {
             </span>
           )}
         </div>
-        <div className="relative">
-          <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={searchTerm}
-            onChange={handleSearch}
-            className="pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 w-64"
-          />
+  <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={handleSearch}
+              className="pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 w-64"
+            />
+          </div>
         </div>
       </div>
 
@@ -429,7 +443,13 @@ const UserManagement = () => {
           <Loader className="w-8 h-8 animate-spin text-zinc-400" />
         </div>
       ) : (
-        <>          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredUsers.length === 0 && (
+              <div className="col-span-full p-6 text-center text-zinc-400 border border-dashed border-zinc-700 rounded-lg">
+                No users found.
+              </div>
+            )}
             {filteredUsers.map(user => (
               <Card key={user.id} className="p-4 hover:border-zinc-700 transition-colors">
                 <div>
@@ -454,59 +474,38 @@ const UserManagement = () => {
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
-                  </div>                  
-                  
+                  </div>
                   <div className="flex items-center space-x-2 mb-1.5">
                     <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">
-                      Account ID: {user.id || 'Not set'}
-                    </span>
+                    <span className="text-xs text-zinc-300">Account ID: {user.id || 'Not set'}</span>
                   </div>
-                  
                   <div className="flex items-center space-x-2 mb-1.5">
                     {user.is_staff && user.role && user.role.toLowerCase() !== 'user' ? (
                       <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
                     ) : (
                       <Shield className="w-3.5 h-3.5 text-zinc-400" />
                     )}
-                    <span className="text-xs text-zinc-300">
-                      Role: {user.is_staff ? `${user.role.replace(/_/g, ' ')}` : 'User'}
-                    </span>
+                    <span className="text-xs text-zinc-300">Role: {user.is_staff ? formatRole(user.role) : 'User'}</span>
                   </div>
-                  
                   <div className="flex items-center space-x-2 mb-1.5">
                     <Mail className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">
-                      Email: {user.email}
-                    </span>
+                    <span className="text-xs text-zinc-300">Email: {user.email}</span>
                   </div>
-                  
                   <div className="flex items-center space-x-2 mb-1.5">
                     <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">
-                      VATSIM ID: {user.vatsim_id || 'Not set'}
-                    </span>
+                    <span className="text-xs text-zinc-300">VATSIM ID: {user.vatsim_id || 'Not set'}</span>
                   </div>
-                  
                   <div className="flex items-center space-x-2 mb-1.5">
                     <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">
-                      Display Name: {getDisplayName(user)}
-                    </span>
+                    <span className="text-xs text-zinc-300">Display Name: {getDisplayName(user)}</span>
                   </div>
-                  
                   <div className="flex items-center space-x-2 mb-1.5">
                     <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">
-                      Created: {formatLocalDateTime(user.created_at)}
-                    </span>
+                    <span className="text-xs text-zinc-300">Created: {formatLocalDateTime(user.created_at)}</span>
                   </div>
-                  
                   <div className="flex items-center space-x-2">
                     <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">
-                      Last Login: {formatLocalDateTime(user.last_login)}
-                    </span>
+                    <span className="text-xs text-zinc-300">Last Login: {formatLocalDateTime(user.last_login)}</span>
                   </div>
                 </div>
               </Card>
