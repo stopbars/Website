@@ -3,8 +3,8 @@ import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { 
-  Upload, Image as ImageIcon, FileUp, RefreshCw, Check, AlertTriangle, History, Edit3, X, Info, Plus, Edit, Loader,
-  Package, Hash, FileText, Eye, ChevronDown, Send,
+  Upload, Image as ImageIcon, FileUp, RefreshCw, Check, AlertTriangle, History, X, Info, Plus, Edit, Loader,
+  Package, Hash, FileText, Eye, ChevronDown, Send, HardDriveDownload, ALargeSmall,
 } from 'lucide-react';
 import { marked } from 'marked';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
@@ -217,7 +217,7 @@ const ReleaseManagement = () => {
     setFile(null);
     setImage(null);
     setUploadError('');
-    setUploadSuccess('');
+    // Don't clear success message here - let it show for 4 seconds
     setShowProductDropdown(false);
     setShowFilterDropdown(false);
     setIsDragActiveFile(false);
@@ -230,7 +230,7 @@ const ReleaseManagement = () => {
     setEditReleaseId('');
     setNewChangelog('');
     setUpdateError('');
-    setUpdateSuccess('');
+    // Don't clear success message here - let it show for 4 seconds
   };
 
   const renderMarkdown = (md) => {
@@ -319,12 +319,14 @@ const ReleaseManagement = () => {
     setShowProductDropdown(false);
     setShowFilterDropdown(false);
     resetUploadForm();
+    setUploadSuccess(''); // Clear any previous success message
   };
 
   const handleStartUpdate = () => {
     setIsUpdating(true);
     setIsAdding(false);
     resetUpdateForm();
+    setUpdateSuccess(''); // Clear any previous success message
   };
 
   const handleCancel = () => {
@@ -334,6 +336,8 @@ const ReleaseManagement = () => {
     setShowFilterDropdown(false);
     resetUploadForm();
     resetUpdateForm();
+    setUpdateSuccess(''); // Clear success message when canceling
+    setUploadSuccess(''); // Clear upload success message when canceling
   };
 
   // submitUpload replaced by confirmation modal flow
@@ -532,7 +536,7 @@ const ReleaseManagement = () => {
                 {uploading || updating ? (
                   <>
                     <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    {isAdding ? 'Publishing...' : 'Updating...'}
+                    {isAdding ? 'Publishing...' : 'Saving...'}
                   </>
                 ) : isAdding ? (
                   <>
@@ -541,8 +545,8 @@ const ReleaseManagement = () => {
                   </>
                 ) : (
                   <>
-                    <Edit3 className="w-4 h-4 mr-2" />
-                    Edit Changelog
+                    <HardDriveDownload className="w-4 h-4 mr-2" />
+                    Save
                   </>
                 )}
               </Button>
@@ -644,7 +648,7 @@ const ReleaseManagement = () => {
                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 resize-y"
                 />
                 <div className="flex justify-between mt-1 text-xs text-zinc-500">
-                  <span>{changelog.length} characters</span>
+                  <span>{changelog.length} / 20000 </span>
                 </div>
               </div>
 
@@ -805,39 +809,75 @@ const ReleaseManagement = () => {
         {isUpdating && (
           <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
             <div className="mb-4">
-              <h3 className="text-lg font-medium text-white">Update Edit Changelog</h3>
+              <h3 className="text-lg font-medium text-white">Edit Changelog</h3>
             </div>
-            
             <form onSubmit={submitChangelogUpdate} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-1">
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">Release ID</label>
+              {/* Release ID */}
+              <div>
+                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                  <Hash className="w-4 h-4" />
+                  <span>Release ID</span>
+                </label>
+                <div className="relative">
                   <input
                     type="text"
                     value={editReleaseId}
                     onChange={(e) => setEditReleaseId(e.target.value)}
                     placeholder="e.g. 42"
-                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full pr-14 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600"
                   />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!editReleaseId.trim()) { setUpdateError('Enter an ID to autofill'); return; }
+                      const match = releases.find(r => r.id?.toString() === editReleaseId.trim());
+                      if (match) {
+                        setNewChangelog(match.changelog || '');
+                        setUpdateError('');
+                      } else {
+                        setUpdateError('Release not found in current list (adjust filter)');
+                      }
+                    }}
+                    className="absolute inset-y-0 right-2 flex items-center justify-center px-2 text-zinc-400 hover:text-white transition-colors"
+                    title="Autofill changelog from this Release ID"
+                    aria-label="Autofill changelog"
+                  >
+                    <ALargeSmall className="w-5 h-5" />
+                  </button>
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">New Changelog</label>
-                  <textarea
-                    value={newChangelog}
-                    onChange={(e) => setNewChangelog(e.target.value)}
-                    rows={4}
-                    placeholder="Enter updated changelog text..."
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 resize-y"
-                  />
-                  <div className="flex justify-between mt-1 text-xs text-zinc-500">
-                    <span>{newChangelog.length} / 20000</span>
-                    <span>Required</span>
-                  </div>
-                  {newChangelog.trim() && (
-                    <div className="mt-3 border border-zinc-700 bg-zinc-900/60 rounded-lg p-4 max-w-none text-sm overflow-x-auto">
+              </div>
+              {/* Content */}
+              <div>
+                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
+                  <FileText className="w-4 h-4" />
+                  <span>Content</span>
+                </label>
+                <textarea
+                  value={newChangelog}
+                  onChange={(e) => setNewChangelog(e.target.value)}
+                  rows={6}
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 resize-none text-white"
+                />
+                <div className="flex justify-between mt-1 text-xs text-zinc-500">
+                  <span>{newChangelog.length} / 20000</span>
+                </div>
+              </div>
+              {/* Preview */}
+              <div>
+                <div className="flex items-center space-x-2 mb-2">
+                  <Eye className="w-4 h-4 text-zinc-400" />
+                  <label className="text-sm font-medium text-zinc-300">Preview</label>
+                </div>
+                <div className="h-48 border border-zinc-700 rounded-lg overflow-hidden">
+                  {newChangelog.trim() ? (
+                    <div className="p-4 h-full bg-zinc-900/60 overflow-auto">
                       <article className="markdown-preview prose-invert prose-sm max-w-none">
                         <div dangerouslySetInnerHTML={{ __html: renderMarkdown(newChangelog) }} />
                       </article>
+                    </div>
+                  ) : (
+                    <div className="p-4 h-full bg-zinc-800/50 flex items-center justify-center">
+                      <p className="text-zinc-500 text-sm">Preview will appear here...</p>
                     </div>
                   )}
                 </div>
@@ -849,13 +889,6 @@ const ReleaseManagement = () => {
                   <span>{updateError}</span>
                 </div>
               )}
-
-              <div className="p-3 bg-zinc-800/60 border border-zinc-700 rounded-lg text-xs text-zinc-400 flex space-x-2">
-                <Info className="w-4 h-4 flex-shrink-0 text-zinc-500" />
-                <p>
-                  Select a release from the table below to pre-fill its ID and current changelog. Update only the changelog text—other fields require a new release upload.
-                </p>
-              </div>
             </form>
           </div>
         )}
@@ -869,7 +902,6 @@ const ReleaseManagement = () => {
                 <h3 className="text-lg font-medium text-zinc-300">Existing Releases</h3>
               </div>
               <div className="flex items-center space-x-3">
-                <label className="text-sm text-zinc-400">Filter Product:</label>
                 {renderFilterDropdown(productFilter, setProductFilter, showFilterDropdown, setShowFilterDropdown)}
               </div>
             </div>
@@ -908,12 +940,14 @@ const ReleaseManagement = () => {
                           <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">{rel.created_at ? new Date(rel.created_at).toLocaleDateString() : '-'}</td>
                           <td className="py-2 px-2 text-zinc-400 truncate max-w-[180px]">{rel.changelog ? rel.changelog.slice(0, 60) : <span className="italic text-zinc-600">(none)</span>}</td>
                           <td className="py-2 px-2">
-                            <Button size="sm" variant="outline" onClick={() => {
-                              handleSelectRelease(rel);
-                              handleStartUpdate();
-                            }}>
-                              Edit Changelog
-                            </Button>
+                            <button
+                              onClick={() => { handleStartUpdate(); handleSelectRelease(rel); }}
+                              className="p-1.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:text-blue-200 transition w-8 h-8 flex items-center justify-center"
+                              title="Edit changelog"
+                              aria-label={`Edit changelog for release ${rel.id}`}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -921,7 +955,7 @@ const ReleaseManagement = () => {
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-zinc-500">Showing up to 50 results. Apply a filter for narrower view.</p>
+              <p className="text-[11px] text-zinc-500">Showing up to 50 results, apply a filter for narrower view.</p>
             </Card>
           </div>
         )}
