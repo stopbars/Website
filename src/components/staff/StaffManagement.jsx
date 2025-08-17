@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
-import { AlertTriangle, Loader, ShieldPlus, Trash2, UserPlus, Lock, ChevronDown, UserCheck } from 'lucide-react';
+import { AlertTriangle, Loader, Trash2, UserPlus, Lock, ChevronDown, UserCheck } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
 const ROLE_OPTIONS = [
@@ -31,7 +31,7 @@ export default function StaffManagement() {
   const [success, setSuccess] = useState(null);
   const [form, setForm] = useState({ vatsimId: '', role: 'PRODUCT_MANAGER' });
   const [submitting, setSubmitting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [, setRefreshing] = useState(false);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
   const apiBase = 'https://v2.stopbars.com';
