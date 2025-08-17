@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { 
-  Upload, Image as ImageIcon, FileUp, RefreshCw, Check, AlertTriangle, History, X, Info, Plus, Edit, Loader,
-  Package, Hash, FileText, Eye, ChevronDown, Send, HardDriveDownload, ALargeSmall,
+  Upload, Image as ImageIcon, RefreshCw, Check, AlertTriangle, History, X, Plus, Edit, Loader,
+  Package, Hash, FileText, Eye, ChevronDown, Send, HardDriveDownload, ALargeSmall, Info,
 } from 'lucide-react';
 import { marked } from 'marked';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
@@ -17,7 +17,9 @@ import DOMPurify from 'dompurify';
 const PRODUCT_OPTIONS = [
   { value: 'Pilot-Client', label: 'Pilot Client' },
   { value: 'vatSys-Plugin', label: 'vatSys Plugin' },
-  { value: 'EuroScope-Plugin', label: 'EuroScope Plugin' }
+  { value: 'EuroScope-Plugin', label: 'EuroScope Plugin' },
+  { value: 'Installer', label: 'Installer (.exe)' },
+  { value: 'SimConnect.NET', label: 'SimConnect.NET (NuGet)' }
 ];
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB per spec
@@ -55,7 +57,6 @@ const ReleaseManagement = () => {
   // Preview is auto-shown when there is changelog content; no manual toggle anymore
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingUploadData, setPendingUploadData] = useState(null);
-  const changelogSectionRef = useRef(null);
   // Custom dropdown state
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -88,17 +89,29 @@ const ReleaseManagement = () => {
 
   // Validation helpers
   const validateUpload = () => {
-  if (!version.trim()) return 'Version is required';
-  if (!SEMVER_REGEX.test(version.trim())) return 'Version must follow semantic versioning (e.g. 1.2.3, 2.0.0-beta.1)';
-    if (!file) return 'Release ZIP file is required';
-    if (file) {
-      if (file.type !== 'application/zip' && !file.name.toLowerCase().endsWith('.zip')) {
-        return 'Release file must be a .zip';
-      }
-      if (file.size > MAX_ZIP_BYTES) {
-        return 'ZIP exceeds 90MB limit';
+    const trimmedVersion = version.trim();
+    if (!trimmedVersion) return 'Version is required';
+    if (!SEMVER_REGEX.test(trimmedVersion)) return 'Version must follow semantic versioning (e.g. 1.2.3, 2.0.0-beta.1)';
+
+    const isSimConnect = product === 'SimConnect.NET';
+    const isInstaller = product === 'Installer';
+
+    if (isSimConnect) {
+      // External product: must NOT have a file
+      if (file) return 'SimConnect.NET releases do not accept a file upload';
+    } else {
+      if (!file) return isInstaller ? 'Installer .exe file is required' : 'Release ZIP file is required';
+      if (file) {
+        const lower = file.name.toLowerCase();
+        if (isInstaller) {
+          if (!lower.endsWith('.exe')) return 'Installer product must be a .exe file';
+        } else {
+          if (file.type !== 'application/zip' && !lower.endsWith('.zip')) return 'Release file must be a .zip';
+        }
+        if (file.size > MAX_ZIP_BYTES) return `${isInstaller ? 'File' : 'ZIP'} exceeds 90MB limit`;
       }
     }
+
     if (image) {
       const isValidType = ['image/png', 'image/jpeg'].includes(image.type) || /\.(png|jpe?g)$/i.test(image.name);
       if (!isValidType) return 'Image must be PNG or JPG';
@@ -109,10 +122,23 @@ const ReleaseManagement = () => {
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
-    if (selected) {
-      setFile(selected);
-      setUploadError(''); // Clear validation errors when changing file
+    if (!selected) return;
+    if (product === 'SimConnect.NET') {
+      // Should not allow file selection
+      setUploadError('SimConnect.NET releases do not accept file uploads');
+      e.target.value = '';
+      setFile(null);
+      return;
     }
+    const lower = selected.name.toLowerCase();
+    if (product === 'Installer') {
+      if (!lower.endsWith('.exe')) { setUploadError('Installer product must be a .exe file'); return; }
+    } else {
+      if (selected.type !== 'application/zip' && !lower.endsWith('.zip')) { setUploadError('Release file must be a .zip'); return; }
+    }
+    if (selected.size > MAX_ZIP_BYTES) { setUploadError('File exceeds 90MB limit'); return; }
+    setFile(selected);
+    setUploadError('');
   };
 
   const handleImageChange = (e) => {
@@ -146,23 +172,33 @@ const ReleaseManagement = () => {
     const droppedFile = e.dataTransfer.files && e.dataTransfer.files[0];
     
     if (droppedFile) {
-      // Validate file type
-      if (droppedFile.type !== 'application/zip' && !droppedFile.name.toLowerCase().endsWith('.zip')) {
-        setDragErrorFile('Please upload a .zip file');
+      const lower = droppedFile.name.toLowerCase();
+      if (product === 'SimConnect.NET') {
+        setDragErrorFile('No file upload required for SimConnect.NET');
         setTimeout(() => setDragErrorFile(''), 3000);
         return;
       }
-      
-      // Validate file size
+      if (product === 'Installer') {
+        if (!lower.endsWith('.exe')) {
+          setDragErrorFile('Please upload a .exe file for Installer');
+          setTimeout(() => setDragErrorFile(''), 3000);
+          return;
+        }
+      } else {
+        if (droppedFile.type !== 'application/zip' && !lower.endsWith('.zip')) {
+          setDragErrorFile('Please upload a .zip file');
+          setTimeout(() => setDragErrorFile(''), 3000);
+          return;
+        }
+      }
       if (droppedFile.size > MAX_ZIP_BYTES) {
         setDragErrorFile('File exceeds 90MB limit');
         setTimeout(() => setDragErrorFile(''), 3000);
         return;
       }
-      
       setDragErrorFile('');
       setFile(droppedFile);
-      setUploadError(''); // Clear validation errors when changing file
+      setUploadError('');
     }
   };
 
@@ -211,7 +247,7 @@ const ReleaseManagement = () => {
   };
 
   const resetUploadForm = () => {
-    setProduct('Pilot-Client');
+    setProduct('Pilot-Client'); // default remains Pilot Client
     setVersion('');
     setChangelog('');
     setFile(null);
@@ -284,10 +320,11 @@ const ReleaseManagement = () => {
       setUploading(true);
       const token = getVatsimToken();
       const formData = new FormData();
-      formData.append('product', pendingUploadData.product);
-      formData.append('version', pendingUploadData.version);
-      if (pendingUploadData.changelog) formData.append('changelog', pendingUploadData.changelog);
-      formData.append('file', pendingUploadData.file);
+  formData.append('product', pendingUploadData.product);
+  formData.append('version', pendingUploadData.version);
+  if (pendingUploadData.changelog) formData.append('changelog', pendingUploadData.changelog);
+  // Only append file if present (SimConnect.NET should not send a file field)
+  if (pendingUploadData.file) formData.append('file', pendingUploadData.file);
       if (pendingUploadData.image) formData.append('image', pendingUploadData.image);
       const response = await fetch('https://v2.stopbars.com/releases/upload', {
         method: 'POST',
@@ -423,6 +460,10 @@ const ReleaseManagement = () => {
                   e.preventDefault();
                   e.stopPropagation();
                   setProduct(option.value);
+                  if (option.value === 'SimConnect.NET') {
+                    // Clear any previously selected file; external product should not send a file
+                    setFile(null);
+                  }
                   setIsOpen(false);
                   setUploadError(''); // Clear any validation errors when changing product
                 }}
@@ -526,12 +567,15 @@ const ReleaseManagement = () => {
               <Button
                 onClick={isAdding ? () => openConfirm() : submitChangelogUpdate}
                 variant="outline"
-                className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
-                  (isAdding && (!version.trim() || !file)) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating
-                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent' 
-                    : ''
-                }`}
-                disabled={(isAdding && (!version.trim() || !file)) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating}
+                className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${(() => {
+                  const needsFile = product !== 'SimConnect.NET';
+                  return (isAdding && (!version.trim() || (needsFile && !file))) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating
+                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent' : '';
+                })()}`}
+                disabled={(() => {
+                  const needsFile = product !== 'SimConnect.NET';
+                  return (isAdding && (!version.trim() || (needsFile && !file))) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating;
+                })()}
               >
                 {uploading || updating ? (
                   <>
@@ -674,66 +718,69 @@ const ReleaseManagement = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">
-                    Release File<span className="text-red-400 ml-1">*</span>
-                  </label>
-                  <div 
-                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                      dragErrorFile ? 'border-red-400 bg-red-500/10' : 
-                      isDragActiveFile ? 'border-blue-400 bg-blue-500/10' : 
-                      file ? 'border-emerald-500/50 bg-emerald-500/5' : 
-                      'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
-                    }`}
-                    onClick={() => document.getElementById('release-zip-input').click()}
-                    onDragOver={handleFileDragOver}
-                    onDragLeave={handleFileDragLeave}
-                    onDrop={handleFileDrop}
-                    role="button"
-                    aria-label="Upload release file via click or drag and drop"
-                  >
-                    {dragErrorFile ? (
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-3">
-                          <X className="w-6 h-6 text-red-500" />
+                {product !== 'SimConnect.NET' ? (
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                      {product === 'Installer' ? 'Installer File' : 'Release File'}<span className="text-red-400 ml-1">*</span>
+                    </label>
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                        dragErrorFile ? 'border-red-400 bg-red-500/10' :
+                        isDragActiveFile ? 'border-blue-400 bg-blue-500/10' :
+                        file ? 'border-emerald-500/50 bg-emerald-500/5' :
+                        'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                      }`}
+                      onClick={() => document.getElementById('release-file-input').click()}
+                      onDragOver={handleFileDragOver}
+                      onDragLeave={handleFileDragLeave}
+                      onDrop={handleFileDrop}
+                      role="button"
+                      aria-label="Upload release file via click or drag and drop"
+                    >
+                      {dragErrorFile ? (
+                        <div className="flex flex-col items-center">
+                          <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-3">
+                            <X className="w-6 h-6 text-red-500" />
+                          </div>
+                          <p className="font-medium mb-1 text-red-400">{dragErrorFile}</p>
+                          <p className="text-sm text-zinc-400">Please try again with a valid file</p>
                         </div>
-                        <p className="font-medium mb-1 text-red-400">{dragErrorFile}</p>
-                        <p className="text-sm text-zinc-400">
-                          Please try again with a valid file
-                        </p>
-                      </div>
-                    ) : file ? (
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
-                          <Check className="w-6 h-6 text-emerald-500" />
+                      ) : file ? (
+                        <div className="flex flex-col items-center">
+                          <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+                            <Check className="w-6 h-6 text-emerald-500" />
+                          </div>
+                          <p className="font-medium mb-1">{file.name}</p>
+                          <p className="text-sm text-zinc-400">{(file.size / (1024*1024)).toFixed(2)} MB / 90 MB  •  Click to change</p>
                         </div>
-                        <p className="font-medium mb-1">{file.name}</p>
-                        <p className="text-sm text-zinc-400">
-                          {(file.size / (1024*1024)).toFixed(2)} MB / 90 MB  •  Click to change
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
-                          <Upload className="w-6 h-6 text-zinc-400" />
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
+                            <Upload className="w-6 h-6 text-zinc-400" />
+                          </div>
+                          <p className="font-medium mb-1">{isDragActiveFile ? 'Drop to upload file' : 'Click to upload or drag and drop'}</p>
+                          <p className="text-sm text-zinc-400">{product === 'Installer' ? '.exe required, max 90MB' : '.zip required, max 90MB'}</p>
                         </div>
-                        <p className="font-medium mb-1">
-                          {isDragActiveFile ? 'Drop to upload release file' : 'Click to upload or drag and drop'}
-                        </p>
-                        <p className="text-sm text-zinc-400">
-                          .zip required, max 90MB file size
-                        </p>
-                      </div>
-                    )}
-                    <input
-                      type="file"
-                      accept=".zip,application/zip"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="release-zip-input"
-                    />
+                      )}
+                      <input
+                        type="file"
+                        accept={product === 'Installer' ? '.exe' : '.zip,application/zip'}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        id="release-file-input"
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-col justify-start gap-3 p-4 border border-zinc-700 rounded-lg bg-zinc-800/40 text-sm">
+                    <div className="flex items-center gap-2 text-amber-400">
+                      <Info className="w-4 h-4" />
+                      <span className="font-medium">SimConnect.NET (External)</span>
+                    </div>
+                    <p className="text-zinc-300 leading-relaxed">No file upload required. The version you publish will link users directly to the matching NuGet package on publication.</p>
+                    <p className="text-xs text-zinc-500">Optional promo image still allowed.</p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium mb-2 text-zinc-300">Promo Image</label>
@@ -982,13 +1029,19 @@ const ReleaseManagement = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between"><span className="text-zinc-400">Product:</span><span className="font-medium">{product}</span></div>
                   <div className="flex justify-between"><span className="text-zinc-400">Version:</span><span className="font-medium">{version || '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-400">ZIP File:</span><span className="font-medium truncate max-w-[200px]" title={file?.name}>{file?.name}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-400">ZIP Size:</span><span className="font-medium">{file ? (file.size / (1024*1024)).toFixed(2) + ' MB' : '—'}</span></div>
+                  {product === 'SimConnect.NET' ? (
+                    <div className="flex justify-between"><span className="text-zinc-400">File:</span><span className="font-medium">External (NuGet)</span></div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between"><span className="text-zinc-400">{product === 'Installer' ? 'Installer File:' : 'ZIP File:'}</span><span className="font-medium truncate max-w-[200px]" title={file?.name}>{file?.name}</span></div>
+                      <div className="flex justify-between"><span className="text-zinc-400">{product === 'Installer' ? 'File Size:' : 'ZIP Size:'}</span><span className="font-medium">{file ? (file.size / (1024*1024)).toFixed(2) + ' MB' : '—'}</span></div>
+                    </>
+                  )}
                   <div className="flex justify-between"><span className="text-zinc-400">Promo Image:</span><span className="font-medium truncate max-w-[200px]" title={image?.name}>{image ? image.name : '(none)'}</span></div>
                   {image && <div className="flex justify-between"><span className="text-zinc-400">Image Size:</span><span className="font-medium">{(image.size / (1024*1024)).toFixed(2)} MB</span></div>}
                 </div>
                 <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed mt-4 mb-2">
-                  Releases cannot be deleted once created. Please review all details carefully before confirming. Double-check you selected the correct build (ZIP) and optional image. Mistakes require publishing a new release; this one will remain immutable.
+                  Releases cannot be deleted once created. Please review all details carefully before confirming. Double-check you selected the correct build file ({product === 'Installer' ? '.exe' : product === 'SimConnect.NET' ? 'external NuGet version' : '.zip'}) and optional image. Mistakes require publishing a new release; this one will remain immutable.
                 </div>
               </div>
 

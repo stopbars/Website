@@ -1,6 +1,7 @@
 // Changelog.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
+import { Select } from '../components/shared/Select';
 import { Loader, AlertTriangle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -16,30 +17,48 @@ const Changelog = () => {
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lineHeights, setLineHeights] = useState([]); // dynamic heights for connector lines
+
+  // Refs to each release block for measuring distances
+  const releaseRefs = useRef([]);
+  releaseRefs.current = [];
+
+  const addReleaseRef = (el) => {
+    if (el) releaseRefs.current.push(el);
+  };
 
   // Filter options
   const filterOptions = [
-    { id: 'pilot-client', label: 'Pilot Client', productName: 'pilot-client' },
-    { id: 'vatsys-plugin', label: 'vatSys Plugin', productName: 'vatsys-plugin' },
-    { id: 'euroscope-plugin', label: 'EuroScope Plugin', productName: 'euroscope-plugin' }
+    { id: 'pilot-client', label: 'Pilot Client' },
+    { id: 'vatsys-plugin', label: 'vatSys Plugin' },
+    { id: 'euroscope-plugin', label: 'EuroScope Plugin' },
+    { id: 'simconnect.net', label: 'SimConnect.NET' },
+    { id: 'installer', label: 'Installer' }
   ];
 
-  // Toggle filter (only one at a time)
-  const toggleFilter = (filterId) => {
-    setActiveFilters(prev => 
-      prev.includes(filterId) ? [] : [filterId]
-    );
+  const normalizeProduct = (p) => (p || '').toLowerCase().replace(/\s+/g, '-');
+
+  // Handle selection via dropdown
+  const handleSelectFilter = (value) => {
+    if (!value || value === '__all__') {
+      setActiveFilters([]);
+      return;
+    }
+    setActiveFilters([value]);
+  };
+
+  const currentFilterLabel = () => {
+    if (activeFilters.length === 0) return 'All Products';
+    const f = filterOptions.find(o => o.id === activeFilters[0]);
+    return f ? f.label : 'All Products';
   };
 
   // Filter releases based on active filter
-  const filteredReleases = activeFilters.length === 0 
-    ? releases 
+  const filteredReleases = activeFilters.length === 0
+    ? releases
     : releases.filter(release => {
-        const releaseProduct = release.product?.toLowerCase().replace(/\s+/g, '-');
-        return activeFilters.some(filterId => {
-          const filter = filterOptions.find(f => f.id === filterId);
-          return filter && releaseProduct === filter.productName;
-        });
+        const releaseProduct = normalizeProduct(release.product);
+        return activeFilters.some(filterId => releaseProduct === filterId);
       });
 
   // Fetch releases from API
@@ -72,6 +91,56 @@ const Changelog = () => {
     };
 
     fetchReleases();
+  }, []);
+
+  // Function to calculate dynamic line heights between timeline dots
+  const calculateLineHeights = () => {
+    try {
+      const refs = releaseRefs.current;
+      if (!refs.length) {
+        setLineHeights([]);
+        return;
+      }
+      const newHeights = [];
+      for (let i = 0; i < refs.length - 1; i++) {
+        const current = refs[i];
+        const next = refs[i + 1];
+        if (!current || !next) {
+          newHeights.push(0);
+          continue;
+        }
+        const currentDot = current.querySelector('.timeline-dot');
+        const nextDot = next.querySelector('.timeline-dot');
+        if (!currentDot || !nextDot) {
+          newHeights.push(0);
+          continue;
+        }
+        const currRect = currentDot.getBoundingClientRect();
+        const nextRect = nextDot.getBoundingClientRect();
+        // Distance from bottom of current dot to top of next dot
+        const distance = nextRect.top - currRect.top - currRect.height;
+        newHeights.push(distance > 0 ? distance : 0);
+      }
+      setLineHeights(newHeights);
+    } catch (e) {
+      // Fail silently – lines just won't show
+      console.warn('Failed to compute timeline line heights', e);
+    }
+  };
+
+  // Recalculate after layout changes (initial load, filtering, window resize)
+  useLayoutEffect(() => {
+    // Use rAF to ensure DOM is painted (particularly after images load)
+    const id = requestAnimationFrame(() => calculateLineHeights());
+    return () => cancelAnimationFrame(id);
+  }, [filteredReleases]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      calculateLineHeights();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Render markdown with custom processing (same as ReleaseManagement)
@@ -111,7 +180,9 @@ const Changelog = () => {
     const productMap = {
       'Pilot-Client': 'Pilot Client',
       'vatSys-Plugin': 'vatSys Plugin',
-      'EuroScope-Plugin': 'EuroScope Plugin'
+  'EuroScope-Plugin': 'EuroScope Plugin',
+  'SimConnect.net': 'SimConnect.net',
+  'Installer': 'Installer'
     };
     return productMap[product] || product;
   };
@@ -126,7 +197,7 @@ const Changelog = () => {
 
   return (
     <Layout>
-      <style jsx>{`
+      <style>{`
         .markdown-preview h3 {
           color: white !important;
           font-size: 1.125rem !important;
@@ -172,21 +243,38 @@ const Changelog = () => {
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-4xl font-semibold">Changelog</h1>
             
-            {/* Filter Buttons */}
-            <div className="flex gap-3">
-              {filterOptions.map((filter) => (
-                <button
-                  key={filter.id}
-                  onClick={() => toggleFilter(filter.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    activeFilters.includes(filter.id)
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25'
-                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
+            {/* Filter Dropdown */}
+            <div className="w-56">
+              <Select
+                value={currentFilterLabel()}
+                onValueChange={(val) => handleSelectFilter(val === currentFilterLabel() ? '__all__' : val)}
+                placeholder="All Products"
+              >
+                {({ active, onSelect }) => (
+                  <ul className="py-1 text-sm text-zinc-200">
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => onSelect('__all__')}
+                        className={`flex w-full items-center px-3 py-2 rounded-md text-left hover:bg-zinc-800 ${active === 'All Products' ? 'bg-zinc-800 text-white' : 'text-zinc-300'}`}
+                      >
+                        All Products
+                      </button>
+                    </li>
+                    {filterOptions.map(opt => (
+                      <li key={opt.id}>
+                        <button
+                          type="button"
+                          onClick={() => onSelect(opt.id)}
+                          className={`flex w-full items-center px-3 py-2 rounded-md text-left hover:bg-zinc-800 ${active === opt.label ? 'bg-zinc-800 text-white' : 'text-zinc-300'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Select>
             </div>
           </div>
 
@@ -228,11 +316,15 @@ const Changelog = () => {
               {/* Main Content (Right Side) */}
               <div className="ml-48">
                 {filteredReleases.map((release, index) => (
-                  <div key={release.id} className={`relative ${index > 0 ? 'mt-20' : ''}`}>
+                  <div
+                    key={release.id}
+                    ref={addReleaseRef}
+                    className={`relative ${index > 0 ? 'mt-20' : ''}`}
+                  >
                     {/* Timeline dot positioned relative to this release */}
                     <div className="absolute -left-48 flex items-baseline" style={{ top: '2px' }}>
                       <div className="relative">
-                        <div className={`w-3.5 h-3.5 ${index === 0 ? 'bg-green-500' : 'bg-zinc-600'} rounded-full border-2 border-zinc-900 shadow-lg transition-colors duration-300`}></div>
+                        <div className={`timeline-dot w-3.5 h-3.5 ${index === 0 ? 'bg-green-500' : 'bg-zinc-600'} rounded-full border-2 border-zinc-900 shadow-lg transition-colors duration-300`}></div>
                         {index === 0 && (
                           <>
                             <div 
@@ -247,11 +339,11 @@ const Changelog = () => {
                         )}
                         {/* Timeline line connecting to next release */}
                         {index < filteredReleases.length - 1 && (
-                          <div 
-                            className="absolute left-1.75 w-px bg-zinc-800"
-                            style={{ 
+                          <div
+                            className="absolute left-1.75 w-px bg-zinc-800 transition-[height] duration-300 ease-out"
+                            style={{
                               top: '14px',
-                              height: '5rem'
+                              height: lineHeights[index] || 0
                             }}
                           ></div>
                         )}
@@ -269,12 +361,14 @@ const Changelog = () => {
                     {/* Release Image (only if available) */}
                     {release.image_url && (
                       <div className="mb-6">
-                        <img 
+                        <img
                           src={release.image_url}
                           alt={`${formatProductName(release.product)} v${release.version} preview`}
                           className="rounded-lg"
+                          onLoad={calculateLineHeights}
                           onError={(e) => {
                             e.target.style.display = 'none';
+                            calculateLineHeights();
                           }}
                         />
                       </div>
