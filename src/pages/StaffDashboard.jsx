@@ -31,6 +31,7 @@ import AirportManagement from '../components/staff/AirportManagement';
 import FAQManagement from '../components/staff/FAQManagement';
 import ReleaseManagement from '../components/staff/ReleaseManagement';
 import StaffManagement from '../components/staff/StaffManagement';
+import ContactMessages from '../components/staff/ContactMessages';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -113,7 +114,7 @@ const TABS = {
     icon: MessageSquare,
     roles: ['product_manager', 'lead_developer'],
     description: 'View and respond to user contact messages',
-    component: () => <div>Contact Messages Component (Coming Soon)</div>
+    component: ContactMessages
   },
 };
 

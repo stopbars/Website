@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
-import { AlertTriangle, Loader, ShieldPlus, Trash2, UserPlus, Lock, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Loader, ShieldPlus, Trash2, UserPlus, Lock, ChevronDown, UserCheck } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
 const ROLE_OPTIONS = [
@@ -237,7 +237,7 @@ export default function StaffManagement() {
 
       {/* Staff List */}
       <Card className="p-5">
-        <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2"><UserPlus className="w-4 h-4" /> Current Staff</h3>
+        <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2"><UserCheck className="w-4 h-4" /> Current Staff</h3>
         {staff.length === 0 ? (
           <p className="text-sm text-zinc-500">No staff members found.</p>
         ) : (

@@ -42,7 +42,7 @@ const Contact = () => {
 
   const topicOptions = [
     'Technical Support',
-    'VATSIM Divisions',
+    'VATSIM Division',
     'Bug Report',
     'Feature Request',
     'Security Concern',
@@ -132,7 +132,7 @@ const Contact = () => {
     }
 
     try {
-      const response = await fetch('https://api.stopbars.com/help-me', {
+      const response = await fetch('https://v2.stopbars.com/contact', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -163,7 +163,7 @@ const Contact = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20">
+      <div className="min-h-screen pt-40 pb-20">
         <div className="max-w-4xl mx-auto px-6">
           {/* Header */}
           <div className="text-center mb-12">
@@ -296,7 +296,7 @@ const Contact = () => {
                   <h3 className="font-medium group-hover:text-blue-100 transition-colors">Discord Community</h3>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-zinc-400">Get instant help from our community</span>
-                    <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-blue-400 transition-all" />
                   </div>
                 </div>
               </div>

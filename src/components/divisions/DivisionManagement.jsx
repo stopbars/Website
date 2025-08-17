@@ -184,9 +184,11 @@ const DivisionManagement = () => {
 
   if (loading) return (
     <Layout>
-      <div className="pt-40 pb-20">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold text-white mb-8">Loading...</h1>
+      <div className="pt-40 pb-20 min-h-screen">
+        <div className="container mx-auto px-4 h-full">
+          <div className="flex items-center justify-center h-96">
+            <Loader className="w-8 h-8 animate-spin text-zinc-400" />
+          </div>
         </div>
       </div>
     </Layout>
