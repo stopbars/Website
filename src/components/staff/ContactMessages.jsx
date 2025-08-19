@@ -14,6 +14,8 @@ import {
 	CircleDashed,
 	MessageSquare,
 	XCircle,
+	AlertOctagon,
+	ExternalLink,
 } from 'lucide-react';
 
 // Allowed statuses per spec
@@ -37,18 +39,90 @@ const StatusBadge = ({ status }) => {
 			cls = 'bg-zinc-600/20 text-zinc-400 border-zinc-600/30';
 			text = 'unknown';
 	}
+	// Capitalize first letter only
+	const displayText = text.charAt(0).toUpperCase() + text.slice(1);
 	return (
-		<span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border uppercase tracking-wide ${cls}`}>
-			{status === 'pending' && <Clock className="w-3 h-3" />}
-			{status === 'handling' && <CircleDashed className="w-3 h-3 animate-spin-slow" />}
-			{status === 'handled' && <CheckCircle2 className="w-3 h-3" />}
-			{text}
+		<span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border tracking-wide ${cls}`}>
+			{displayText}
 		</span>
 	);
 };
 
 StatusBadge.propTypes = {
 	status: PropTypes.string
+};
+
+const DeleteConfirmationModal = ({ message, onCancel, onConfirmDelete, isDeleting }) => {
+	return (
+		<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+			<div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+				<div className="flex items-center space-x-3 mb-6">
+					<AlertOctagon className="w-6 h-6 text-red-500" />
+					<h3 className="text-xl font-bold text-red-500">Delete Message</h3>
+				</div>
+				
+				<div className="space-y-4">
+					<div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+						<p className="text-zinc-200 mb-3">
+							You are about to delete this message:
+						</p>
+						<div className="space-y-2">
+							<div className="flex items-center space-x-2 text-red-200">
+								<Mail className="w-4 h-4 flex-shrink-0" />
+								<span className="text-sm truncate">{message.email || 'Unknown sender'}</span>
+							</div>
+							<div className="flex items-start space-x-2 text-red-200">
+								<MessageSquare className="w-4 h-4 mt-0.5 flex-shrink-0" />
+								<span className="text-sm leading-relaxed">{message.subject || '(No subject)'}</span>
+							</div>
+						</div>
+					</div>
+
+					<p className="text-zinc-300">
+						This action cannot be undone. The message will be permanently removed from the database, all associated data will be lost.
+					</p>
+
+					<div className="flex space-x-3 pt-2">
+						<Button
+							onClick={onConfirmDelete}
+							className="!bg-red-500 hover:!bg-red-600 text-white"
+							disabled={isDeleting}
+						>
+							{isDeleting ? (
+								<>
+									<Loader className="w-4 h-4 mr-2 animate-spin" />
+									Deleting...
+								</>
+							) : (
+								<>
+									<Trash2 className="w-4 h-4 mr-2" />
+									Delete Message
+								</>
+							)}
+						</Button>
+						<Button
+							variant="outline"
+							onClick={onCancel}
+							disabled={isDeleting}
+						>
+							Cancel
+						</Button>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+};
+
+DeleteConfirmationModal.propTypes = {
+	message: PropTypes.shape({
+		id: PropTypes.number.isRequired,
+		email: PropTypes.string,
+		subject: PropTypes.string
+	}).isRequired,
+	onCancel: PropTypes.func.isRequired,
+	onConfirmDelete: PropTypes.func.isRequired,
+	isDeleting: PropTypes.bool.isRequired
 };
 
 export default function ContactMessages() {
@@ -64,6 +138,8 @@ export default function ContactMessages() {
 	// Filtering/search removed per request; newest first always maintained
 	const [updatingStatusId, setUpdatingStatusId] = useState(null);
 	const [deletingId, setDeletingId] = useState(null);
+	const [deletingMessage, setDeletingMessage] = useState(null);
+	const [isDeletingMessage, setIsDeletingMessage] = useState(false);
 
 	const clearBanners = () => { setError(null); setSuccess(null); };
 
@@ -102,6 +178,16 @@ export default function ContactMessages() {
 
 	useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
+	// Auto-dismiss success messages after 3 seconds
+	useEffect(() => {
+		if (success) {
+			const timer = setTimeout(() => {
+				setSuccess(null);
+			}, 3000);
+			return () => clearTimeout(timer);
+		}
+	}, [success]);
+
 	const filteredMessages = messages; // Direct list (already newest first)
 
 	const selectedMessage = useMemo(() => messages.find(m => m.id === selectedId) || null, [messages, selectedId]);
@@ -136,9 +222,8 @@ export default function ContactMessages() {
 	};
 
 	const deleteMessage = async (id) => {
-		if (!window.confirm('Delete this message permanently?')) return;
 		clearBanners();
-		setDeletingId(id);
+		setIsDeletingMessage(true);
 		try {
 			const res = await fetch(`${apiBase}/contact/${id}`, { method: 'DELETE', headers: { 'X-Vatsim-Token': token } });
 			if (!res.ok) {
@@ -150,12 +235,17 @@ export default function ContactMessages() {
 			// 204 No Content expected
 			setMessages(prev => prev.filter(m => m.id !== id));
 			if (selectedId === id) setSelectedId(null);
-			setSuccess('Message deleted');
+			setSuccess('Message deleted successfully');
+			setDeletingMessage(null);
 		} catch (e) {
 			setError(e.message || 'Failed to delete message');
 		} finally {
-			setDeletingId(null);
+			setIsDeletingMessage(false);
 		}
+	};
+
+	const cancelDelete = () => {
+		setDeletingMessage(null);
 	};
 
 	if (loading) {
@@ -167,18 +257,15 @@ export default function ContactMessages() {
 	}
 
 	return (
-		<div className="space-y-6">
-			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-				<div>
-					<h2 className="text-xl font-bold flex items-center gap-2"><MessageSquare className="w-5 h-5" /> Contact Messages</h2>
-					<p className="text-sm text-zinc-400">View, track, and resolve user inquiries</p>
-				</div>
-				<div className="flex items-center gap-2">
-					<Button variant="outline" size="sm" onClick={() => fetchMessages()} disabled={refreshing} className="flex items-center gap-2">
-						<RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-					</Button>
+		<div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
+			<div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+				<h1 className="text-2xl font-bold mb-4 md:mb-0">Contact Messages</h1>
+				<div className="text-sm bg-zinc-500/20 text-zinc-400 px-3 py-1 rounded-full">
+					{messages.length} Total Messages
 				</div>
 			</div>
+
+			<div className="space-y-6">
 
 			{error && (
 				<div className="p-3 bg-red-500/10 border border-red-500/30 rounded flex items-center gap-2 text-sm text-red-400">
@@ -186,8 +273,8 @@ export default function ContactMessages() {
 				</div>
 			)}
 			{success && (
-				<div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded text-sm text-emerald-400">
-					{success}
+				<div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded text-sm text-emerald-400 flex items-center gap-2">
+					<CheckCircle2 className="w-4 h-4" /> {success}
 				</div>
 			)}
 
@@ -214,7 +301,7 @@ export default function ContactMessages() {
 											<p className="font-medium text-sm truncate">{msg.subject || '(No subject)'}</p>
 										</div>
 										<p className="text-xs text-zinc-400 truncate mb-1">{msg.email || msg.from || 'Unknown sender'}</p>
-										<p className="text-xs text-zinc-500 line-clamp-2 mb-2">
+										<p className="text-xs text-zinc-500 line-clamp-2 mb-4">
 											{msg.message || msg.body || ''}
 										</p>
 										<div className="flex items-center justify-between">
@@ -234,8 +321,8 @@ export default function ContactMessages() {
 							{/* Header with subject & status */}
 							<div className="flex items-start justify-between gap-4 w-full">
 								<div className="min-w-0">
-									<h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
-										<Mail className="w-5 h-5 text-blue-400" /> {selectedMessage.subject || 'No subject'}
+									<h3 className="text-xl font-semibold mb-2">
+										{selectedMessage.subject || 'No subject'}
 									</h3>
 									{selectedMessage.email && (
 										<p className="text-sm text-zinc-300 mb-1 truncate max-w-[420px]">{selectedMessage.name || selectedMessage.fullName || selectedMessage.email}</p>
@@ -263,7 +350,7 @@ export default function ContactMessages() {
 								))}
 								<Button
 									size="xs"
-									variant="secondary"
+									variant="outline"
 									onClick={() => {
 										if (selectedMessage.email) {
 											navigator.clipboard.writeText(selectedMessage.email).catch(() => {});
@@ -271,18 +358,18 @@ export default function ContactMessages() {
 											setSuccess('Email copied & ZoHo opened');
 										}
 									}}
-									className="text-xs whitespace-nowrap"
+									className="text-xs whitespace-nowrap border-zinc-700 text-zinc-300 hover:bg-zinc-800"
 								>
+									<ExternalLink className="w-3 h-3 mr-1" />
 									Reply
 								</Button>
 								<Button
-									variant="outline"
 									size="xs"
-									onClick={() => deleteMessage(selectedMessage.id)}
-									disabled={deletingId === selectedMessage.id}
-									className="text-xs flex items-center gap-1 whitespace-nowrap border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/60"
+									onClick={() => setDeletingMessage(selectedMessage)}
+									disabled={isDeletingMessage}
+									className="text-xs flex items-center gap-1 whitespace-nowrap !bg-red-500/10 hover:!bg-red-500/20 border border-red-500/30 text-red-300 hover:text-red-200 transition"
 								>
-									{deletingId === selectedMessage.id ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+									<Trash2 className="w-3 h-3" />
 									Delete
 								</Button>
 							</div>
@@ -304,6 +391,17 @@ export default function ContactMessages() {
 					)}
 				</div>
 			</div>
+
+			{/* Delete Confirmation Modal */}
+			{deletingMessage && (
+				<DeleteConfirmationModal
+					message={deletingMessage}
+					onCancel={cancelDelete}
+					onConfirmDelete={() => deleteMessage(deletingMessage.id)}
+					isDeleting={isDeletingMessage}
+				/>
+			)}
+		</div>
 		</div>
 	);
 }
