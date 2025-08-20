@@ -250,14 +250,14 @@ export default function ContactMessages() {
 
 	return (
 		<div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
-			<div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+			<div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
 				<h1 className="text-2xl font-bold mb-4 md:mb-0">Contact Messages</h1>
 				<div className="text-sm bg-zinc-500/20 text-zinc-400 px-3 py-1 rounded-full">
 					{messages.length} Total Messages
 				</div>
 			</div>
 
-			<div className="space-y-6">
+			<div className="space-y-6 mt-2">
 
 			{error && (
 				<div className="p-3 bg-red-500/10 border border-red-500/30 rounded flex items-center gap-2 text-sm text-red-400">

@@ -38,7 +38,7 @@ export const Support = () => {
               onClick={() => window.open('https://docs.stopbars.com', '_blank')}
               aria-label="View installation and configuration guides"
             >
-              View Guides
+              View Docs
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Card>

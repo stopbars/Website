@@ -244,7 +244,7 @@ const Changelog = () => {
             <h1 className="text-4xl font-semibold">Changelog</h1>
             
             {/* Filter Dropdown */}
-            <div className="w-56">
+            <div className="w-56 mt-1">
               <Select
                 value={currentFilterLabel()}
                 onValueChange={(val) => handleSelectFilter(val === currentFilterLabel() ? '__all__' : val)}

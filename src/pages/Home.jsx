@@ -5,6 +5,7 @@ import { Documentation } from '../components/home/Documentation';
 import { Airports } from '../components/home/Airports';
 import { FAQ } from '../components/home/FAQ';
 import { Support } from '../components/home/Support';
+import { CTA } from '../components/home/CTA';
 import { useEffect } from 'react';
 
 const Home = () => {
@@ -28,6 +29,7 @@ const Home = () => {
       <Documentation />
       <FAQ />
       <Support />
+      <CTA />
     </Layout>
   );
 };

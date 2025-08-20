@@ -337,7 +337,7 @@ const Credits = () => {
               >
                 <Github className="w-5 h-5 mr-2" />
                 View on GitHub
-                <ExternalLink className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
+                <ExternalLink className="ml-2 w-4 h-4" />
               </Button>
             </div>
           </Card>
