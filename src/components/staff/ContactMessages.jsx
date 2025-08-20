@@ -6,12 +6,9 @@ import { Button } from '../shared/Button';
 import {
 	AlertTriangle,
 	Loader,
-	RefreshCw,
 	Trash2,
 	Mail,
-	Clock,
 	CheckCircle2,
-	CircleDashed,
 	MessageSquare,
 	XCircle,
 	AlertOctagon,
@@ -131,13 +128,10 @@ export default function ContactMessages() {
 
 	const [messages, setMessages] = useState([]);
 	const [loading, setLoading] = useState(true);
-	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState(null);
 	const [success, setSuccess] = useState(null);
 	const [selectedId, setSelectedId] = useState(null);
-	// Filtering/search removed per request; newest first always maintained
 	const [updatingStatusId, setUpdatingStatusId] = useState(null);
-	const [deletingId, setDeletingId] = useState(null);
 	const [deletingMessage, setDeletingMessage] = useState(null);
 	const [isDeletingMessage, setIsDeletingMessage] = useState(false);
 
@@ -146,7 +140,6 @@ export default function ContactMessages() {
 	const fetchMessages = useCallback(async () => {
 		if (!token) return;
 		try {
-			setRefreshing(true);
 			const res = await fetch(`${apiBase}/contact`, { headers: { 'X-Vatsim-Token': token } });
 			if (!res.ok) {
 				if (res.status === 401) throw new Error('Unauthorized: please re-login');
@@ -172,7 +165,6 @@ export default function ContactMessages() {
 			setError(e.message || 'Error fetching messages');
 		} finally {
 			setLoading(false);
-			setRefreshing(false);
 		}
 	}, [token]);
 
