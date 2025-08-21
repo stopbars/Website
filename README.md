@@ -22,7 +22,7 @@
     <img src="https://img.shields.io/static/v1?label=&message=Open%20Collective&color=297EF2&logo=opencollective&logoColor=white" />
   </a>
   <a href="https://www.gnu.org/licenses/agpl-3.0">
-    <img src="https://img.shields.io/static/v1?label=Licence&message=AGPL%20v3&color=000" />
+    <img src="https://img.shields.io/static/v1?label=License&message=AGPL%20v3&color=000" />
   </a>
   <br />
 </p>
