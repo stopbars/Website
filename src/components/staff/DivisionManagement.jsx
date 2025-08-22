@@ -541,6 +541,9 @@ const DivisionManagement = () => {
                                       <div key={member.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
                                         <div>
                                           <p className="text-white font-medium">{member.display_name}</p>
+                                          {member.vatsim_id && (
+                                            <p className="text-zinc-400 text-sm font-mono">{member.vatsim_id}</p>
+                                          )}
                                           <p className="text-zinc-400 text-sm">
                                             {member.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                                           </p>

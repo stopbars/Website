@@ -63,7 +63,7 @@ export const Airports = () => {
           <div>
             <h2 className="text-3xl font-bold mb-2">Live BARS Network</h2>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-zinc-400">Real-time stopbar status</p>
+              <p className="text-zinc-400">Real-time airport lighting status</p>
               <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full">
                 <CircleDot className="w-3 h-3 text-emerald-400" />
                 <span className="text-sm text-zinc-300">

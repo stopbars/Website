@@ -772,13 +772,15 @@ const ReleaseManagement = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col justify-start gap-3 p-4 border border-zinc-700 rounded-lg bg-zinc-800/40 text-sm">
-                    <div className="flex items-center gap-2 text-amber-400">
-                      <Info className="w-4 h-4" />
-                      <span className="font-medium">SimConnect.NET (External)</span>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">{product === 'Installer' ? 'Installer File' : 'Release File'}<span className="text-red-400 ml-1">*</span></label>
+                    <div className="border-2 rounded-lg p-6 text-center transition-colors border-zinc-600 bg-zinc-800/50 text-sm min-h-[140px] flex flex-col items-center justify-center max-w-[420px] mx-auto">
+                      <div className="flex items-center gap-2 text-amber-400 mb-2">
+                        <Info className="w-6 h-6" />
+                        <span className="font-medium">SimConnect.NET (External)</span>
+                      </div>
+                      <p className="text-zinc-300 leading-relaxed mb-2">No file upload required. The version you publish will link users directly to the matching NuGet package on publication.</p>
                     </div>
-                    <p className="text-zinc-300 leading-relaxed">No file upload required. The version you publish will link users directly to the matching NuGet package on publication.</p>
-                    <p className="text-xs text-zinc-500">Optional promo image still allowed.</p>
                   </div>
                 )}
 
