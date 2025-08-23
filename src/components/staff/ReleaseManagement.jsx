@@ -65,6 +65,8 @@ const ReleaseManagement = () => {
   const [isDragActiveImage, setIsDragActiveImage] = useState(false);
   const [dragErrorFile, setDragErrorFile] = useState('');
   const [dragErrorImage, setDragErrorImage] = useState('');
+  // Separate cache of all releases (unfiltered) for version hint accuracy
+  const [allReleases, setAllReleases] = useState([]);
 
   const fetchReleases = async (selectedProduct = '') => {
     setReleasesLoading(true);
@@ -86,6 +88,60 @@ const ReleaseManagement = () => {
   };
 
   useEffect(() => { fetchReleases(productFilter); }, [productFilter]);
+
+  // Fetch all releases once for hinting current version irrespective of UI filters
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const res = await fetch('https://v2.stopbars.com/releases');
+        if (!res.ok) throw new Error('Failed to fetch releases for hint');
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.releases || data.items || []);
+        setAllReleases(list);
+      } catch (e) {
+        // Keep failure silent in UI; optional console for debugging
+        console.error('Release hint fetch failed:', e);
+      }
+    };
+    fetchAll();
+  }, []);
+
+  // Determine latest version for a product from allReleases
+  const getLatestVersionForProduct = (prod) => {
+    if (!prod || !Array.isArray(allReleases) || allReleases.length === 0) return null;
+    const list = allReleases.filter(r => r && r.product === prod);
+    if (list.length === 0) return null;
+    // Prefer created_at ordering if available
+    const withDate = list.filter(r => r.created_at);
+    if (withDate.length) {
+      const latestByDate = withDate.sort((a, b) => {
+        const ta = new Date(a.created_at).getTime() || 0;
+        const tb = new Date(b.created_at).getTime() || 0;
+        return tb - ta;
+      })[0];
+      return latestByDate?.version || null;
+    }
+    // Fallback: naive semver compare
+    const parse = (v) => {
+      const s = (v || '').toString().trim().replace(/^v/i, '');
+      const m = s.match(SEMVER_REGEX);
+      if (!m) return { M: -1, m: -1, p: -1, pre: '' };
+      return { M: parseInt(m[1], 10), m: parseInt(m[2], 10), p: parseInt(m[3], 10), pre: m[4] || '' };
+    };
+    const cmp = (va, vb) => {
+      const a = parse(va), b = parse(vb);
+      if (a.M !== b.M) return a.M - b.M;
+      if (a.m !== b.m) return a.m - b.m;
+      if (a.p !== b.p) return a.p - b.p;
+      // If both have pre-release, lex compare; absence of pre means higher precedence
+      if (!!a.pre && !!b.pre) return a.pre.localeCompare(b.pre);
+      if (!!a.pre && !b.pre) return -1;
+      if (!a.pre && !!b.pre) return 1;
+      return 0;
+    };
+    const sorted = [...list].sort((a, b) => cmp(a.version, b.version)).reverse();
+    return sorted[0]?.version || null;
+  };
 
   // Validation helpers
   const validateUpload = () => {
@@ -666,6 +722,15 @@ const ReleaseManagement = () => {
                   <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
                     <Hash className="w-4 h-4" />
                     <span>Version</span>
+                  <div className="flex items-center gap-2 text-xs text-zinc-400 mb-1">
+                    <span>
+                      Current published: {(() => {
+                        const lv = getLatestVersionForProduct(product);
+                        if (!lv) return 'no releases yet';
+                        return `v${lv.replace(/^v/i, '')}`;
+                      })()}
+                    </span>
+                  </div>
                   </label>
                   <input
                     type="text"
