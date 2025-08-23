@@ -446,7 +446,7 @@ const DivisionManagement = () => {
     <div className="container mx-auto p-4 max-w-4xl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <h1 className="text-2xl font-bold mb-4 md:mb-0">Division Management</h1>
-        <Button onClick={() => navigate('/divisions/new')} className="text-sm px-3 py-1.5">
+        <Button onClick={() => navigate('/divisions/new')} className="text-sm px-4 py-2">
           <Plus className="w-3.5 h-3.5 mr-1.5" />
           Create Division
         </Button>
@@ -541,7 +541,7 @@ const DivisionManagement = () => {
                                       <div key={member.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
                                         <div>
                                           <p className="text-white font-medium">{member.display_name}</p>
-                                          {member.vatsim_id && (
+                                          {member.vatsim_id && String(member.display_name) !== String(member.vatsim_id) && (
                                             <p className="text-zinc-400 text-sm font-mono">{member.vatsim_id}</p>
                                           )}
                                           <p className="text-zinc-400 text-sm">

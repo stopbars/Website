@@ -207,6 +207,14 @@ const DivisionManagement = () => {
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-white">{division?.name}</h1>
             <p className="text-zinc-400">Division Management</p>
+            <div className="mt-2 text-sm text-zinc-500 space-y-1">
+              {division?.id && (
+                <div>Division ID: {division.id}</div>
+              )}
+              {division?.created_at && (
+                <div>Created: {new Date(division.created_at).toLocaleString()}</div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -218,7 +226,7 @@ const DivisionManagement = () => {
                   Members
                 </h2>
                 <Button onClick={() => setShowAddMember(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
+                  <Plus className="w-4 h-4 mr-2 cursor-pointer" />
                   Add Member
                 </Button>
               </div>
@@ -269,14 +277,14 @@ const DivisionManagement = () => {
                       <div key={member.id} className="flex items-center justify-between p-4 border border-zinc-800 rounded-lg">
                         <div>
                           <p className="text-white">{member.display_name}</p>
-                          {member.vatsim_id && (
+                          {member.vatsim_id && String(member.display_name) !== String(member.vatsim_id) && (
                             <p className="text-zinc-400 text-sm font-mono">{member.vatsim_id}</p>
                           )}
                           <p className="text-zinc-400 text-sm">Role: {member.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
                         </div>
                         <Button
                           onClick={() => confirmRemoveMember(member)}
-                          className={`bg-red-600 hover:bg-red-600/90 hover:text-white active:scale-95 transition-all duration-200 ease-in-out${currentUserId === member.vatsim_id ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                          className={`bg-red-600 hover:bg-red-600/90 hover:text-white transition-all duration-200 ease-in-out${currentUserId === member.vatsim_id ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                           disabled={currentUserId === member.vatsim_id}
                           title={currentUserId === member.vatsim_id ? 'You cannot remove yourself from the division.' : undefined}
                         >
@@ -299,7 +307,7 @@ const DivisionManagement = () => {
                 </h2>
                 <div className="flex gap-2">
                   <Button onClick={() => setShowAddAirport(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="w-4 h-4 mr-2 cursor-pointer" />
                     Request Airport
                   </Button>
                 </div>

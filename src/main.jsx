@@ -26,7 +26,7 @@ import ContributeMap from './pages/ContributeMap.jsx'
 import ContributeDetails from './pages/ContributeDetails.jsx'
 import ContributeTest from './pages/ContributeTest.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
-import DivisionsManagement from './pages/DivisionsManagement'
+import Divisions from './pages/Divisions.jsx'
 import DivisionManagement from './components/divisions/DivisionManagement'
 import NewDivision from './components/divisions/NewDivision'
 import { ProtectedRoute } from './components/shared/ProtectedRoute'
@@ -144,7 +144,7 @@ const router = createBrowserRouter([
     path: '/divisions',
     element: (
       <ProtectedRoute>
-        <DivisionsManagement />
+        <Divisions />
       </ProtectedRoute>
     ),
     errorElement: <RouteError />
