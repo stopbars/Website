@@ -1,38 +1,61 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
-import { ActivitySquare, CircleDot, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ActivitySquare, CircleDot, ChevronLeft, ChevronRight, Users, Radio, MapPin } from 'lucide-react';
 import { Card } from '../shared/Card';
 
 const ITEMS_PER_PAGE = 6;
 
 export const Airports = () => {
   const navigate = useNavigate();
+  // Approved airports from contributions API: { [icao]: { packages: string[] } }
   const [airports, setAirports] = useState({});
-  const [activeAirports, setActiveAirports] = useState({});
+  // Live state map from v2 /state: { [icao]: { controllers: number, pilots: number, lightsOn: number } }
+  const [liveMap, setLiveMap] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [globalResponse, activeResponse] = await Promise.all([
-          fetch('https://api.stopbars.com/airports/global-status'),
-          fetch('https://api.stopbars.com/all')
+        const [contribRes, stateRes] = await Promise.all([
+          fetch('https://v2.stopbars.com/contributions?status=approved'),
+          fetch('https://v2.stopbars.com/state?airport=all')
         ]);
-        
-        const globalData = await globalResponse.json();
-        const activeData = await activeResponse.json();
 
-        setAirports(globalData.airports || {});
+        const contribData = await contribRes.json();
+        const stateData = await stateRes.json();
 
-        const active = {};
-        activeData.runways?.forEach(runway => {
-          if (new Date(runway.expiresAt) > new Date()) {
-            active[runway.airportICAO] = true;
-          }
+        // Build airport -> packages map
+        const byAirport = {};
+        (contribData.contributions || []).forEach(c => {
+          const icao = (c.airportIcao || '').toUpperCase();
+          if (!icao) return;
+          if (!byAirport[icao]) byAirport[icao] = { packages: new Set() };
+          if (c.packageName) byAirport[icao].packages.add(c.packageName);
         });
-        setActiveAirports(active);
+        // Convert package sets to arrays
+        const airportsObj = Object.fromEntries(
+          Object.entries(byAirport).map(([icao, v]) => [
+            icao,
+            { packages: Array.from(v.packages).sort() }
+          ])
+        );
+        setAirports(airportsObj);
+
+        // Build live map: states array of airports active right now
+        const map = {};
+        (stateData.states || []).forEach(s => {
+          const icao = (s.airport || '').toUpperCase();
+          if (!icao) return;
+          const lightsOn = (s.objects || []).filter(o => o.state === true).length;
+          map[icao] = {
+            controllers: (s.controllers || []).length,
+            pilots: (s.pilots || []).length,
+            lightsOn
+          };
+        });
+        setLiveMap(map);
       } catch (err) {
         console.error('Error:', err);
       } finally {
@@ -41,16 +64,33 @@ export const Airports = () => {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(fetchData, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  const sortedAirports = Object.entries(airports)
-    .sort(([icaoA], [icaoB]) => {
-      if (activeAirports[icaoA] && !activeAirports[icaoB]) return -1;
-      if (!activeAirports[icaoA] && activeAirports[icaoB]) return 1;
-      return icaoA.localeCompare(icaoB);
-    });
+  const getAirportContinent = (icao) => {
+    const prefix = icao.charAt(0);
+    switch (prefix) {
+      case 'K': case 'C': case 'M': return 'North America';
+      case 'S': return 'South America';
+      case 'E': case 'L': return 'Europe';
+      case 'R': case 'Z': case 'V': case 'O': case 'U': return 'Asia';
+      case 'Y': case 'N': return 'Oceania';
+      case 'F': case 'D': case 'G': case 'H': return 'Africa';
+      default: return 'Other';
+    }
+  };
+
+  const sortedAirports = useMemo(() => {
+    return Object.entries(airports)
+      .sort(([icaoA], [icaoB]) => {
+        const aActive = !!liveMap[icaoA];
+        const bActive = !!liveMap[icaoB];
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return icaoA.localeCompare(icaoB);
+      });
+  }, [airports, liveMap]);
 
   const totalPages = Math.ceil(sortedAirports.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -63,11 +103,11 @@ export const Airports = () => {
           <div>
             <h2 className="text-3xl font-bold mb-2">Live BARS Network</h2>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-zinc-400">Real-time airport lighting status</p>
+              <p className="text-zinc-400">Real-time BARS connection status</p>
               <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full">
                 <CircleDot className="w-3 h-3 text-emerald-400" />
                 <span className="text-sm text-zinc-300">
-                  {Object.keys(activeAirports).length} Active Now
+                  {Object.keys(liveMap).length} Active Now
                 </span>
               </div>
             </div>
@@ -87,35 +127,38 @@ export const Airports = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedAirports.map(([icao, data]) => (
-                <Card key={icao} className="p-6">
+                <Card key={icao} className="p-4 sm:p-6 hover:border-zinc-700 transition-all duration-200">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-lg font-medium">{icao}</h3>
-                      <span className={`flex h-2 w-2 rounded-full ${
-                        activeAirports[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'
-                      }`} />
+                    <div className="flex items-center space-x-3">
+                      <MapPin className="w-5 h-5 text-zinc-400 flex-shrink-0" />
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-lg font-medium">{icao}</h3>
+                          <span className={`flex h-2 w-2 rounded-full ${liveMap[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+                        </div>
+                        <div className="text-xs text-zinc-500">{getAirportContinent(icao)}</div>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      {data.runways.map(runway => (
-                        <span 
-                          key={runway} 
-                          className={`px-2 py-1 rounded text-xs ${
-                            activeAirports[icao] 
-                              ? 'bg-emerald-500/20 text-emerald-400' 
-                              : 'bg-zinc-800'
-                          }`}
-                        >
-                          {runway}
-                        </span>
-                      ))}
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2 text-sm text-zinc-300">
+                      <div className="flex items-center gap-2"><Users className="w-4 h-4 text-zinc-400" />{liveMap[icao]?.controllers || 0} Controllers</div>
+                      <div className="flex items-center gap-2"><Radio className="w-4 h-4 text-zinc-400" />{liveMap[icao]?.pilots || 0} Pilots</div>
                     </div>
-                    <div className="text-sm text-zinc-400 space-y-1">
-                      {data.sceneries.map(s => (
-                        <div key={s.name}>{s.name}</div>
-                      ))}
-                    </div>
+
+                    {data.packages?.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-zinc-300 mb-2">Packages</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {data.packages.map(pkg => (
+                            <span key={pkg} className={`px-2 py-1 rounded text-xs ${liveMap[icao] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800'}`}>
+                              {pkg}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </Card>
               ))}
