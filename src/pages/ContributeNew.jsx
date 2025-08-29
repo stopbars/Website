@@ -43,8 +43,8 @@ const ContributeNew = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20">
-        <div className="max-w-3xl mx-auto px-6">
+      <div className="min-h-screen pt-32 pb-20 flex items-center">
+        <div className="w-full max-w-3xl mx-auto px-6">
           <div className="mb-12 text-center">
             <h1 className="text-3xl font-bold mb-4">Contribute to BARS</h1>
             <p className="text-zinc-400 max-w-xl mx-auto">

@@ -463,12 +463,11 @@ const ContributeMap = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
+        <div className="min-h-screen pt-32 pb-20 flex items-center">
+          <div className="w-full max-w-7xl mx-auto px-6">
             <div className="flex items-center justify-center h-64">
               <div className="flex flex-col items-center">
-                <Loader className="w-12 h-12 animate-spin text-blue-500 mb-4" />
-                <p className="text-zinc-400">Loading airport data...</p>
+                <Loader className="w-12 h-12 animate-spin text-zinc-400" />
               </div>
             </div>
           </div>

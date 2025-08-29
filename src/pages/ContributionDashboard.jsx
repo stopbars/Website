@@ -11,6 +11,7 @@ import {
   Search,
   FileDown,
   Plus,
+  Loader
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -129,7 +130,7 @@ const ContributionDashboard = () => {
     };
 
     fetchData();
-  }, [user]);
+  }, [user, vatsimToken]);
   const handleDownload = async (airportCode, sceneryId) => {
     try {
       // Fetch the specific contribution
@@ -180,10 +181,12 @@ const ContributionDashboard = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
+        <div className="min-h-screen pt-32 pb-20 flex items-center">
+          <div className="w-full max-w-7xl mx-auto px-6">
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+              <div className="flex flex-col items-center">
+                <Loader className="w-12 h-12 animate-spin text-zinc-400" />
+              </div>
             </div>
           </div>
         </div>

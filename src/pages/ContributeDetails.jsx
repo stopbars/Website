@@ -3,9 +3,12 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import ReactConfetti from 'react-confetti';
+import { useWindowSize } from '../hooks/useWindowSize';
 import { 
   AlertCircle, 
   ChevronLeft, 
+  ArrowRight,
   FileUp, 
   Upload,
   Check,
@@ -39,6 +42,8 @@ const ContributeDetails = () => {
   const [allPackages, setAllPackages] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const { width, height } = useWindowSize();
+  const [confettiRun, setConfettiRun] = useState(true);
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -220,11 +225,6 @@ const ContributeDetails = () => {
       }
       
       setSubmissionSuccess(true);
-      
-      // Auto-redirect to the contributions dashboard
-      setTimeout(() => {
-        navigate('/contribute');
-      }, 5000);
     } catch (err) {
       setError(err.message || 'Failed to submit contribution');
       console.error('Submission error:', err);
@@ -240,22 +240,32 @@ const ContributeDetails = () => {
   if (submissionSuccess) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20">
-          <div className="max-w-3xl mx-auto px-6">
+        <ReactConfetti
+        width={width}
+        height={height}
+        numberOfPieces={700}
+        recycle={false}
+        run={confettiRun}
+        tweenDuration={2000}
+        onConfettiComplete={() => setConfettiRun(false)}
+        style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 60, pointerEvents: 'none' }}
+        />
+        <div className="min-h-screen pt-32 pb-20 flex items-center">
+          <div className="w-full max-w-3xl mx-auto px-6">
             <Card className="p-8 text-center">
               <div className="mx-auto w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
                 <Check className="w-8 h-8 text-emerald-500" />
               </div>
-              <h1 className="text-2xl font-bold mb-2">Submission Successful!</h1>
+              <h1 className="text-2xl font-bold mb-2">Submission Successful</h1>
               <p className="text-zinc-400 mb-6">
                 Thank you for contributing to BARS! Your submission for {icao} will be reviewed by our team.
               </p>
-              <p className="text-zinc-400 mb-8">
-                You will be redirected to the contribution dashboard in a few seconds...
-              </p>
-              <Button onClick={() => navigate('/contribute')}>
-                Go to Dashboard Now
-              </Button>
+              <div className="flex justify-center">
+                <Button onClick={() => navigate('/contribute')}>
+                  Visit Contribution Dashboard
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
             </Card>
           </div>
         </div>
