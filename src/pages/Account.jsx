@@ -83,6 +83,15 @@ const Account = () => {
     return showApiKey ? key : '•'.repeat(key.length);
   };
 
+  // Format objects like { id: 'APAC', name: 'Asia Pacific' } as "APAC - Asia Pacific"
+  const formatIdName = (obj) => {
+    if (!obj) return '—';
+    const id = obj?.id ?? '';
+    const name = obj?.name ?? '';
+    if (id && name) return `${id} - ${name}`;
+    return id || name || '—';
+  };
+
   const handleCopyApiKey = async () => {
     try {
       await navigator.clipboard.writeText(user?.api_key);
@@ -317,6 +326,23 @@ const Account = () => {
                     <p className="font-medium">{field.value}</p>
                   </div>
                 ))}
+              </div>
+
+              <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/50">
+                <div className="grid md:grid-cols-3 gap-6 p-6">
+                  <div className="space-y-2">
+                    <h3 className="text-zinc-400 text-sm font-medium">Region</h3>
+                    <p className="font-medium">{formatIdName(user?.region)}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-zinc-400 text-sm font-medium">Division</h3>
+                    <p className="font-medium">{formatIdName(user?.division)}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-zinc-400 text-sm font-medium">Subdivision</h3>
+                    <p className="font-medium">{user?.subdivision ? formatIdName(user?.subdivision) : 'N/A'}</p>
+                  </div>
+                </div>
               </div>
 
               {/* Display Name Mode */}
