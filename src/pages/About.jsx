@@ -1,39 +1,27 @@
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { useEffect, useRef } from 'react';
 import { 
   MessagesSquare, 
   ArrowRight, 
-  Server,
-  Network,
   Settings,
   Users,
   Download,
   Github,
   PlaneTakeoff,
-  Lightbulb,
   Zap,
-  Shield,
-  Globe,
-  Code,
+  Network,
   Users2,
-  Heart,
-  Clock,
-  Star,
   CheckCircle,
-  Sparkles,
   Building,
   Wifi,
-  Palette,
-  Lock,
-  Eye,
   SunDim,
   ArrowRightFromLine,
   Cuboid,
   TowerControl,
   Building2,
-  CodeXml
+  CodeXml,
+  Code
 } from 'lucide-react';
 
 const About = () => {
@@ -91,7 +79,7 @@ const About = () => {
                   <h3 className="text-xl font-medium">Seamless Integration</h3>
                 </div>
                 <p className="text-zinc-300 leading-relaxed">
-                  BARS communicates with your simulator and sends requests to the BARS Pilot Client via the Core backend server, with these requests it updates lighting in your simulator through SimConnect and SimObjects, functioning similarly to how popular add-ons like "GSX" work.
+                  BARS communicates with your simulator and sends requests to the BARS Pilot Client via the Core backend server, with these requests it updates lighting in your simulator through SimConnect and SimObjects, functioning similarly to how popular add-ons like &quot;GSX&quot; work.
                 </p>
               </Card>
 

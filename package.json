@@ -10,12 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-  "marked": "^15.0.12",
     "dompurify": "^3.2.6",
     "framer-motion": "^12.23.12",
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.525.0",
+    "marked": "^15.0.12",
     "posthog-js": "^1.259.0",
     "prop-types": "^15.8.1",
     "react": "^19.1.0",

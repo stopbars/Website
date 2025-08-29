@@ -239,8 +239,21 @@ const DivisionManagement = () => {
                         <label className="block text-zinc-400 mb-2">VATSIM CID</label>
                         <input
                           type="text"
+                          inputMode="numeric"
+                          pattern="\d*"
                           value={newMemberCid}
-                          onChange={(e) => setNewMemberCid(e.target.value)}
+                          onChange={(e) => {
+                            // Keep only digits as the user types
+                            const digits = e.target.value.replace(/\D/g, '');
+                            setNewMemberCid(digits);
+                          }}
+                          onPaste={(e) => {
+                            // Sanitize pasted content to digits only
+                            e.preventDefault();
+                            const paste = (e.clipboardData || window.clipboardData).getData('text') || '';
+                            const digits = paste.replace(/\D/g, '');
+                            if (digits) setNewMemberCid(prev => (prev + digits).replace(/\D/g, ''));
+                          }}
                           className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
                           required
                         />
