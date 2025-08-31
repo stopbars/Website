@@ -11,7 +11,9 @@ import {
   Search,
   FileDown,
   Plus,
-  Loader
+  Loader,
+  AlertOctagon,
+  X
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -28,6 +30,7 @@ const ContributionDashboard = () => {
   const [userContributionSummary, setUserContributionSummary] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentTab, setCurrentTab] = useState('all');
+  const [viewingRejection, setViewingRejection] = useState(null); // { airport, scenery, reason }
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -397,10 +400,23 @@ const ContributionDashboard = () => {
                               </div>
                             )}                              
                             {contribution.status === 'rejected' && (
-                              <div className="text-xs flex items-center">
-                                <span className="text-zinc-400">Rejection reason: </span>
-                                <span className="text-red-400 ml-1">{contribution.rejectionReason || 'No reason provided'}</span>
-                              </div>
+                              contribution.rejectionReason ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setViewingRejection({
+                                    airport: airport.airport,
+                                    scenery: contribution.scenery,
+                                    reason: contribution.rejectionReason
+                                  })}
+                                  className="flex items-center space-x-2 text-xs text-red-500 border-red-500/20 hover:bg-red-500/10"
+                                >
+                                  <AlertOctagon className="w-3.5 h-3.5" />
+                                  <span>View Reason</span>
+                                </Button>
+                              ) : (
+                                <div className="text-xs text-zinc-400">No reason provided</div>
+                              )
                             )}
                           </div>
                         ))}
@@ -413,6 +429,40 @@ const ContributionDashboard = () => {
           </div>
         </div>
       </div>
+
+      {viewingRejection && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <AlertOctagon className="w-6 h-6 text-red-500" />
+                <h3 className="text-xl font-semibold text-red-500">Rejection Reason</h3>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setViewingRejection(null)}
+                className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
+                  {viewingRejection.airport}
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
+                  {viewingRejection.scenery}
+                </span>
+              </div>
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-red-200">
+                {viewingRejection.reason}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

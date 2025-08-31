@@ -10,6 +10,8 @@ import { getVatsimToken } from '../utils/cookieUtils';
 const Account = () => {
   const { user, loading, logout, setUser, refreshUserData } = useAuth();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [staffRoles, setStaffRoles] = useState(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -103,6 +105,7 @@ const Account = () => {
   };
 
   const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
     const token = getVatsimToken();
     try {
       const response = await fetch('https://v2.stopbars.com/auth/delete', {
@@ -112,6 +115,8 @@ const Account = () => {
       if (response.ok) logout();
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
   const handleRegenerateApiKey = async () => {
@@ -390,7 +395,8 @@ const Account = () => {
                     <h3 className="text-zinc-400 text-sm font-medium">Account ID</h3>
                     <p className="font-medium">{user?.id}</p>
                   </div>
-                  <div className="space-y-2">            <h3 className="text-zinc-400 text-sm font-medium">Created At</h3>
+                  <div className="space-y-2">            
+                    <h3 className="text-zinc-400 text-sm font-medium">Created At</h3>
                     <p className="font-medium">
                       {formatDateAccordingToLocale(user?.created_at)}
                     </p>
@@ -481,29 +487,73 @@ const Account = () => {
         </div>
 
         {isDeleteDialogOpen && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div className="bg-zinc-900 p-8 rounded-lg max-w-md w-full mx-4 border border-red-500/20">
-              <h2 className="text-2xl font-semibold text-red-500 mb-4">
-                Delete Account
-              </h2>
-              <p className="text-zinc-400 mb-6">
-                This action cannot be undone. This will permanently delete your
-                account and remove all associated data.
-              </p>
-              <div className="flex space-x-4">
-                <Button
-                  className="!bg-red-500 hover:!bg-red-600 text-white"
-                  onClick={handleDeleteAccount}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+              <div className="flex items-center space-x-3 mb-6">
+                <AlertOctagon className="w-6 h-6 text-red-500" />
+                <h3 className="text-xl font-bold text-red-500">Delete Account</h3>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-zinc-400">
+                  This action cannot be undone. This will permanently delete your
+                  account and remove all associated data.
+                </p>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (deleteConfirmation === 'DELETE' && !isDeletingAccount) {
+                      handleDeleteAccount();
+                    }
+                  }}
                 >
-                  Delete Account
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDeleteDialogOpen(false)}
-                  className="hover:bg-zinc-800"
-                >
-                  Cancel
-                </Button>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                      Type DELETE to confirm:
+                    </label>
+                    <input
+                      type="text"
+                      value={deleteConfirmation}
+                      onChange={(e) => setDeleteConfirmation(e.target.value)}
+                      onPaste={(e) => e.preventDefault()}
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
+                      disabled={isDeletingAccount}
+                    />
+                  </div>
+                  <div className="flex space-x-4 mt-6">
+                    <Button
+                      type="submit"
+                      className={`${
+                        deleteConfirmation === 'DELETE' && !isDeletingAccount
+                          ? '!bg-red-500 hover:!bg-red-600 text-white'
+                          : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                      }`}
+                      disabled={deleteConfirmation !== 'DELETE' || isDeletingAccount}
+                    >
+                      {isDeletingAccount ? (
+                        <>
+                          <Loader className="w-4 h-4 mr-2 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        'Delete Account'
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setDeleteConfirmation('');
+                        setIsDeleteDialogOpen(false);
+                      }}
+                      className="hover:bg-zinc-800"
+                      disabled={isDeletingAccount}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
