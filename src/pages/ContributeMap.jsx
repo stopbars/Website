@@ -677,15 +677,17 @@ const ContributeMap = () => {
                 <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
                   <Info className="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" />
                   <p className="text-sm text-blue-400">
-                    These are the existing mapped points for this airport, set by the Division. Your contribution will add support for a specific scenery package.
+                    These are the existing mapped points for this airport, set by the Division. Your contribution will add support for a specific simulator scenery package.
                   </p>
                 </div>
               )}
               
-              {/* Continue button */}
+              {/* Continue button (disabled when no Division points) */}
               <Button 
-                onClick={handleContinue}
-                className="w-full"
+                onClick={points.length === 0 ? undefined : handleContinue}
+                disabled={points.length === 0}
+                aria-disabled={points.length === 0}
+                className={`w-full ${points.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <span>Continue to Next Step</span>
                 <ChevronRight className="w-4 h-4 ml-2" />
