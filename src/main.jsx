@@ -18,6 +18,7 @@ import Contact from './pages/Contact.jsx'
 import About from './pages/About.jsx'
 import Credits from './pages/Credits.jsx'
 import NotFound from './pages/NotFound.jsx'
+import Banned from './pages/Banned.jsx'
 import DivisionAirportManager from './pages/DivisionAirportManager.jsx'
 import DebugGenerator from './pages/DebugGenerator.jsx'
 import ContributionDashboard from './pages/ContributionDashboard.jsx'
@@ -182,6 +183,11 @@ const router = createBrowserRouter([
     element: (
       <DebugGenerator />
     ),
+    errorElement: <RouteError />
+  },
+  {
+    path: '/banned',
+    element: <Banned />,
     errorElement: <RouteError />
   },
   {

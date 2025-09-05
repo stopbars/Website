@@ -2,7 +2,7 @@ import { useScroll } from '../../hooks/useScroll';
 import { UserCircle, LogOut, ChevronRight, Menu, X } from 'lucide-react';
 import { Button } from '../shared/Button';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 

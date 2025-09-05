@@ -20,7 +20,12 @@ export const AuthCallback = () => {
       if (token) {
         setVatsimToken(token);
         try {
-          await fetchUserData(token);
+          const result = await fetchUserData(token);
+          if (result?.status === 'banned') {
+            // Go straight to banned page
+            navigate('/banned', { replace: true });
+            return;
+          }
           setStatus('success');
           // Brief delay to show success message before redirecting
           setTimeout(() => navigate(redirectTo), 1000);
@@ -40,7 +45,7 @@ export const AuthCallback = () => {
     handleAuthentication();
     // Remove fetchUserData from dependencies to prevent infinite loops
     // Only run this effect once when the component mounts
-  }, [navigate]);
+  }, [navigate, fetchUserData]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-zinc-950">

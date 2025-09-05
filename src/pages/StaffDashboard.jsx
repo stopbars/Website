@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { 
   Users, 
   Shield,
@@ -35,6 +35,8 @@ import StaffManagement from '../components/staff/StaffManagement';
 import ContactMessages from '../components/staff/ContactMessages';
 import PackagesManagement from '../components/staff/PackagesManagement';
 import VatSysProfiles from '../components/staff/VatSysProfiles';
+import CacheManagement from '../components/staff/CacheManagement';
+import BansManagement from '../components/staff/BansManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -87,13 +89,21 @@ const TABS = {
     description: 'Manage public vatSys profile XMLs',
     component: VatSysProfiles
   },
-  systemSettings: {
-    id: 'systemSettings',
-    label: 'System Settings',
+  cacheManagement: {
+    id: 'cacheManagement',
+    label: 'Cache Management',
     icon: Settings,
     roles: ['lead_developer'],
-    description: 'Configure system parameters',
-    component: () => <div>System Settings Component (Coming Soon)</div>
+    description: 'Purge cache keys and namespaces',
+    component: CacheManagement
+  },
+  bansManagement: {
+    id: 'bansManagement',
+    label: 'Bans Management',
+    icon: AlertTriangle,
+    roles: ['lead_developer'],
+    description: 'List, create, and remove user bans',
+    component: BansManagement
   },
   
   // Product Manager & Lead Developer Tabs
@@ -224,6 +234,7 @@ const StaffDashboard = () => {
       setError('Authentication required');
       navigate('/');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, navigate, user]);  // Function to refresh the current tab data by simulating a tab change
 
   // Keep activeTab in sync when the URL param changes (back/forward navigation)
@@ -381,7 +392,7 @@ const StaffDashboard = () => {
                         <h4 className="text-xs font-medium text-zinc-500">System Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['userManagement', 'staffManagement', 'divisionManagement', 'systemSettings', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['userManagement', 'staffManagement', 'divisionManagement', 'cacheManagement', 'bansManagement', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;

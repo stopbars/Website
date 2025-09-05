@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -250,7 +250,8 @@ const Account = () => {
       // Debounced background refresh to align with server canonical values
       if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
       refreshDebounceRef.current = setTimeout(() => {
-        refreshUserData().catch(() => {});
+        // Silent refresh so we don't toggle global loading state
+        refreshUserData({ silent: true }).catch(() => {});
         refreshDebounceRef.current = null;
       }, 600);
     }).catch(err => {

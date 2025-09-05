@@ -5,7 +5,7 @@ import { Loader } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 export const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, bannedInfo } = useAuth();
   const savedToken = getVatsimToken();
  
   if (loading) {
@@ -15,12 +15,17 @@ export const ProtectedRoute = ({ children }) => {
       </div>
     );
   }
+  // If banned, always redirect to banned page
+  if (bannedInfo?.banned) {
+    return <Navigate to="/banned" replace />;
+  }
   
-  if (savedToken) {
+  // Allow access if we have a valid token (not banned) or a resolved user
+  if (savedToken || user) {
     return children;
   }
- 
-  return user ? children : <Navigate to="/" />;
+
+  return <Navigate to="/" replace />;
 };
 
 ProtectedRoute.propTypes = {

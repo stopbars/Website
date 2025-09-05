@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import useSearchQuery from '../../hooks/useSearchQuery';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
@@ -20,6 +21,9 @@ import {
   KeyRound,
   Shield,
   ShieldCheck,
+  Globe,
+  Map,
+  MapPin,
 } from 'lucide-react';
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import { getVatsimToken } from '../../utils/cookieUtils';
@@ -61,6 +65,17 @@ const getDisplayName = (user) => {
 
 const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -69,9 +84,9 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+  return createPortal(
+    <div className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4" role="dialog" aria-modal="true">
+      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full border border-zinc-800 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center space-x-3 mb-6">
           <AlertOctagon className="w-6 h-6 text-red-500" />
           <h3 className="text-xl font-bold text-red-500">Delete User Account</h3>
@@ -145,7 +160,8 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -163,6 +179,17 @@ DeleteConfirmationModal.propTypes = {
 
 const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerating }) => {
   const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -171,9 +198,9 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+  return createPortal(
+    <div className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4" role="dialog" aria-modal="true">
+      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full border border-zinc-800 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center space-x-3 mb-6">
           <KeyRound className="w-6 h-6 text-orange-300" />
           <h3 className="text-xl font-bold text-orange-300">Regenerate API Token</h3>
@@ -248,7 +275,8 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -386,7 +414,20 @@ const UserManagement = () => {
     (user.vatsim_id && user.vatsim_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (user.id && user.id.toString().includes(searchTerm)) ||
     (user.full_name && user.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (getDisplayName(user).toLowerCase().includes(searchTerm.toLowerCase()))
+    (getDisplayName(user).toLowerCase().includes(searchTerm.toLowerCase())) ||
+    // Also allow searching by region/division/subdivision
+    (user.region && (
+      (user.region.name && user.region.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.region.id && user.region.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    )) ||
+    (user.division && (
+      (user.division.name && user.division.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.division.id && user.division.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    )) ||
+    (user.subdivision && (
+      (user.subdivision.name && user.subdivision.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.subdivision.id && user.subdivision.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    ))
   );
 
   const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
@@ -495,6 +536,19 @@ const UserManagement = () => {
                   <div className="flex items-center space-x-2 mb-1.5">
                     <IdCard className="w-3.5 h-3.5 text-zinc-400" />
                     <span className="text-xs text-zinc-300">VATSIM ID: {user.vatsim_id || 'Not set'}</span>
+                  </div>
+                  {/* Region / Division / Subdivision */}
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Globe className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Region: {user.region?.name || user.region?.id || 'Not set'}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Map className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Division: {user.division?.name || user.division?.id || 'Not set'}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Subdivision: {user.subdivision?.name || user.subdivision?.id || 'None'}</span>
                   </div>
                   <div className="flex items-center space-x-2 mb-1.5">
                     <IdCard className="w-3.5 h-3.5 text-zinc-400" />
