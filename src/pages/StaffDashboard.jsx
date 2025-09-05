@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Loader,
   TowerControl,
+  FileUp,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -33,6 +34,7 @@ import ReleaseManagement from '../components/staff/ReleaseManagement';
 import StaffManagement from '../components/staff/StaffManagement';
 import ContactMessages from '../components/staff/ContactMessages';
 import PackagesManagement from '../components/staff/PackagesManagement';
+import VatSysProfiles from '../components/staff/VatSysProfiles';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -76,6 +78,14 @@ const TABS = {
     roles: ['product_manager', 'lead_developer'],
     description: 'Upload installer data packages (models & removals)',
     component: PackagesManagement
+  },
+  vatsysProfiles: {
+    id: 'vatsysProfiles',
+    label: 'vatSys Profiles',
+    icon: FileUp,
+    roles: ['product_manager', 'lead_developer'],
+    description: 'Manage public vatSys profile XMLs',
+    component: VatSysProfiles
   },
   systemSettings: {
     id: 'systemSettings',
@@ -399,13 +409,13 @@ const StaffDashboard = () => {
                     </div>
                   )}
                   {/* Data Management Group (packages) */}
-                  {Object.values(TABS).some(tab => ['packagesManagement'].includes(tab.id) && hasTabAccess(tab)) && (
+                  {Object.values(TABS).some(tab => ['packagesManagement', 'vatsysProfiles'].includes(tab.id) && hasTabAccess(tab)) && (
                     <div className="space-y-1 mb-2">
                       <div className="px-4 py-2">
                         <h4 className="text-xs font-medium text-zinc-500">Data Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['packagesManagement'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['packagesManagement', 'vatsysProfiles'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;

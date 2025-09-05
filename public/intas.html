@@ -120,7 +120,9 @@
             zoomDelta: 0.25,
             zoomSnap: 0,
             wheelPxPerZoomLevel: 120,
-            maxZoom: 25
+            maxZoom: 25,
+            // Use Canvas renderer for better performance with many vectors
+            preferCanvas: true
         }).setView([-37.67, 144.84], 15);
         // Base layers
         var osmStreets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -139,6 +141,8 @@
         var overlays = {};
 
     var drawnItems = L.featureGroup().addTo(map);
+    // Lightweight default styling for polylines to reduce paint cost
+    var defaultLineOpts = { weight: 2, opacity: 0.9, smoothFactor: 2, lineJoin: 'round', lineCap: 'round' };
     overlays['Drawings'] = drawnItems;
     var layersControl = L.control.layers(baseLayers, overlays, { position: 'topleft', collapsed: true }).addTo(map);
     // Scale bar
@@ -252,6 +256,28 @@
     // UI state for the Stopbar LeadOn selector
     var stopLeadonsUIState = { filter: '', selected: new Set() };
 
+        // Track active editing layers to avoid enabling edit globally
+        var editingLayers = new Set();
+        function enableLayerEdit(layer){
+            try {
+                if (!layer || !layer.pm) return;
+                if (layer.pm.setOptions) layer.pm.setOptions({ pmIgnore: false });
+                layer.pm.enable();
+                editingLayers.add(layer);
+            } catch(_) {}
+        }
+        function disableLayerEdit(layer){
+            try {
+                if (!layer || !layer.pm) return;
+                layer.pm.disable();
+                if (layer.pm.setOptions) layer.pm.setOptions({ pmIgnore: true });
+                editingLayers.delete(layer);
+            } catch(_) {}
+        }
+        function disableAllEditing(){
+            try { editingLayers.forEach(function(l){ disableLayerEdit(l); }); } catch(_) {}
+        }
+
         // Keep LeadOn ID list in sync with what's on the map
         function refreshLeadonIds() {
             var ids = [];
@@ -288,16 +314,19 @@
             var layer = e.layer;
             if (currentMode === 'taxiway') {
                 layer.properties = { type: 'taxiway' };
+                try { layer.setStyle && layer.setStyle(defaultLineOpts); } catch(_) {}
                 drawnItems.addLayer(layer);
-                layer.pm.enable();
+                enableLayerEdit(layer); // allow immediate fine-tuning of new line only
                 attachTaxiwaySplit(layer);
+                attachFeatureHandlers(layer);
             } else if (currentMode === 'leadon') {
                 tempLayer = layer;
                 openModal('leadonModal', { type: 'leadon', mode: 'create', layer: tempLayer });
             } else if (currentMode === 'windsock') {
                 layer.properties = { type: 'windsock' };
                 drawnItems.addLayer(layer);
-                layer.pm.enable();
+                enableLayerEdit(layer);
+                attachFeatureHandlers(layer);
             } else if (currentMode === 'stopbar') {
                 tempLayer = layer;
                 openModal('stopbarModal', { type: 'stopbar', mode: 'create', layer: tempLayer });
@@ -350,11 +379,12 @@
                 elements.forEach(el => {
                     if (el.type === 'way') {
                         var coords = el.nodes.map(id => nodes[id]);
-                        var poly = L.polyline(coords);
+                        var poly = L.polyline(coords, defaultLineOpts);
                         poly.properties = { type: 'taxiway' };
                         drawnItems.addLayer(poly);
-                        poly.pm.enable();
+                        try { poly.pm && poly.pm.setOptions({ pmIgnore: true }); } catch(_) {}
                         attachTaxiwaySplit(poly);
+                        attachFeatureHandlers(poly);
                     }
                 });
                 var waysCount = elements.filter(function(e){ return e.type === 'way'; }).length;
@@ -417,7 +447,7 @@
             } else if (tempLayer) {
                 tempLayer.properties = { type: 'leadon', id: id, barsId: (barsIdInput || id) };
                 drawnItems.addLayer(tempLayer);
-                tempLayer.pm.enable();
+                enableLayerEdit(tempLayer);
                 attachFeatureHandlers(tempLayer);
                 updateLabel(tempLayer);
                 refreshLeadonIds();
@@ -453,7 +483,7 @@
             } else if (tempLayer) {
                 tempLayer.properties = { type: 'stopbar', barsid: barsid, displayname: displayname, heading: heading, leadons: leadons };
                 drawnItems.addLayer(tempLayer);
-                tempLayer.pm.enable();
+                enableLayerEdit(tempLayer);
                 attachFeatureHandlers(tempLayer);
                 updateLabel(tempLayer);
                 setStatus('Stopbar created.');
@@ -765,11 +795,12 @@
                         }
                     }
                     if (coords.length >= 2) {
-                        var poly = L.polyline(coords);
+                        var poly = L.polyline(coords, defaultLineOpts);
                         poly.properties = { type: 'taxiway' };
                         drawnItems.addLayer(poly);
-                        poly.pm.enable();
+                        try { poly.pm && poly.pm.setOptions({ pmIgnore: true }); } catch(_) {}
                         attachTaxiwaySplit(poly);
+                        attachFeatureHandlers(poly);
                     }
                 }
             }
@@ -797,10 +828,10 @@
                     }
                 }
                 if (coords2.length >= 2) {
-                    var lead = L.polyline(coords2);
+                    var lead = L.polyline(coords2, defaultLineOpts);
                     lead.properties = { type: 'leadon', id: idAttr || barsId, barsId: barsId || idAttr };
                     drawnItems.addLayer(lead);
-                    lead.pm.enable();
+                    try { lead.pm && lead.pm.setOptions({ pmIgnore: true }); } catch(_) {}
                     attachFeatureHandlers(lead);
                     updateLabel(lead);
                     if (lead.properties.id) newLeadonIds.push(lead.properties.id);
@@ -820,7 +851,7 @@
                         var marker = L.marker([wlat, wlon]);
                         marker.properties = { type: 'windsock' };
                         drawnItems.addLayer(marker);
-                        marker.pm.enable();
+                        try { marker.pm && marker.pm.setOptions({ pmIgnore: true }); } catch(_) {}
                         extendBounds(L.latLng(wlat, wlon));
                     }
                 }
@@ -851,13 +882,16 @@
                         var m = L.marker([slat, slon]);
                         m.properties = { type: 'stopbar', barsid: barsid, displayname: displayname, heading: heading, leadons: leadRefs };
                         drawnItems.addLayer(m);
-                        m.pm.enable();
+                        try { m.pm && m.pm.setOptions({ pmIgnore: true }); } catch(_) {}
                         attachFeatureHandlers(m);
                         updateLabel(m);
                         extendBounds(L.latLng(slat, slon));
                     }
                 }
             }
+
+            // After import, ensure all layers are ignored by Geoman until explicitly edited
+            try { drawnItems.eachLayer(function(l){ if (l && l.pm) { if (l.pm.disable) l.pm.disable(); if (l.pm.setOptions) l.pm.setOptions({ pmIgnore: true }); } }); } catch(_) {}
 
             if (importedBounds && importedBounds.isValid()) {
                 map.fitBounds(importedBounds.pad(0.1));
@@ -940,11 +974,12 @@
             drawnItems.removeLayer(layer);
             map.removeLayer(layer);
 
-            var l1 = L.polyline(left); l1.properties = { type: 'taxiway' };
-            var l2 = L.polyline(right); l2.properties = { type: 'taxiway' };
+            var l1 = L.polyline(left, defaultLineOpts); l1.properties = { type: 'taxiway' };
+            var l2 = L.polyline(right, defaultLineOpts); l2.properties = { type: 'taxiway' };
             drawnItems.addLayer(l1); drawnItems.addLayer(l2);
-            l1.pm.enable(); l2.pm.enable();
             attachTaxiwaySplit(l1); attachTaxiwaySplit(l2);
+            try { l1.pm && l1.pm.setOptions({ pmIgnore: true }); l2.pm && l2.pm.setOptions({ pmIgnore: true }); } catch(_) {}
+            attachFeatureHandlers(l1); attachFeatureHandlers(l2);
             setStatus('Taxiway split into two lines.');
         }
 
@@ -958,6 +993,11 @@
                     modalContext = { type: 'leadon', mode: 'edit', layer: layer, originalId: layer.properties.id };
                     openModal('leadonModal', modalContext);
                 });
+                // Double-click to toggle editing for this layer only
+                layer.off('dblclick');
+                layer.on('dblclick', function(e){ L.DomEvent.stop(e); if (editingLayers.has(layer)) { disableLayerEdit(layer); } else { enableLayerEdit(layer); } });
+                layer.off('pm:editend');
+                layer.on('pm:editend', function(){ disableLayerEdit(layer); });
             } else if (layer.properties.type === 'stopbar' && layer instanceof L.Marker) {
                 layer.off('contextmenu');
                 layer.on('contextmenu', function(e) {
@@ -965,6 +1005,16 @@
                     modalContext = { type: 'stopbar', mode: 'edit', layer: layer };
                     openModal('stopbarModal', modalContext);
                 });
+                layer.off('dblclick');
+                layer.on('dblclick', function(e){ L.DomEvent.stop(e); if (editingLayers.has(layer)) { disableLayerEdit(layer); } else { enableLayerEdit(layer); } });
+                layer.off('pm:dragend');
+                layer.on('pm:dragend', function(){ disableLayerEdit(layer); });
+            } else if (layer.properties.type === 'taxiway' && layer instanceof L.Polyline) {
+                // Allow quick per-line editing for taxiways too
+                layer.off('dblclick');
+                layer.on('dblclick', function(e){ L.DomEvent.stop(e); if (editingLayers.has(layer)) { disableLayerEdit(layer); } else { enableLayerEdit(layer); } });
+                layer.off('pm:editend');
+                layer.on('pm:editend', function(){ disableLayerEdit(layer); });
             }
             // Ensure a label exists/updates when handlers are attached
             updateLabel(layer);
@@ -1082,8 +1132,10 @@
         }
 
         // Keep labels in sync during geometry edits/moves
-        map.on('pm:edit', function(e){ try { updateLabel(e.layer); } catch(_) {} });
-        map.on('pm:dragend', function(e){ try { updateLabel(e.layer); } catch(_) {} });
+    map.on('pm:edit', function(e){ try { updateLabel(e.layer); } catch(_) {} });
+    map.on('pm:dragend', function(e){ try { updateLabel(e.layer); } catch(_) {} });
+    // Click on the map to exit any active single-layer edits
+    map.on('click', function(){ if (editingLayers.size > 0) disableAllEditing(); });
     </script>
 </body>
 </html>
