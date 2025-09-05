@@ -35,6 +35,7 @@ import { DiscordRedirect } from './components/shared/DiscordRedirect'
 import { DocsRedirect } from './components/shared/DocsRedirect'
 import StaffDashboard from './pages/StaffDashboard.jsx'
 import { ErrorBoundary, RouteError } from './components/shared/ErrorBoundary'
+import { PostHogConsentBootstrap } from './components/shared/PostHogConsentBootstrap'
 
 const router = createBrowserRouter([
   {
@@ -206,17 +207,15 @@ createRoot(document.getElementById('root')).render(
       options={{
         api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
         defaults: '2025-05-24',
-        capture_exceptions: true,
         debug: import.meta.env.MODE === 'development',
-        persistence: 'localStorage+cookie',
-        autocapture: true,
-        session_recording: {
-          maskAllInputs: true,
-          maskInputOptions: { password: true, email: true },
-        },
+        opt_out_capturing_by_default: true,
+        autocapture: false,
+        capture_exceptions: false,
+        persistence: 'memory',
       }}
     >
       <AuthProvider>
+        <PostHogConsentBootstrap />
         <ErrorBoundary>
           <RouterProvider router={router} />
         </ErrorBoundary>

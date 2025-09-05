@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import useSearchQuery from '../../hooks/useSearchQuery';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
@@ -267,7 +268,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useSearchQuery();
   const [success, setSuccess] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingUser, setDeletingUser] = useState(null);

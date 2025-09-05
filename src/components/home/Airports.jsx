@@ -136,7 +136,7 @@ export const Airports = () => {
                           <h3 className="text-lg font-medium">{icao}</h3>
                           <span className={`flex h-2 w-2 rounded-full ${liveMap[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
                         </div>
-                        <div className="text-xs text-zinc-500">{getAirportContinent(icao)}</div>
+                        <div className="text-xs text-zinc-300">{getAirportContinent(icao)}</div>
                       </div>
                     </div>
                   </div>

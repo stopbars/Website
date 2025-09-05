@@ -2,35 +2,44 @@ import { HeartHandshake, ArrowRight } from '../shared/Icons';
 
 export const DonationBanner = () => {
   return (
-    <section className="py-12 bg-gradient-to-r from-emerald-900/20 to-emerald-800/20">
-      <div className="max-w-3xl mx-auto px-6 text-center">
-        <div className="flex items-center justify-center space-x-3 mb-6">
-          <HeartHandshake className="w-6 h-6 text-emerald-400" />
-          <h2 className="text-2xl font-medium">Help Keep BARS&apos;s Free!</h2>
-        </div>
-        
-        <div className="space-y-4 mb-8">
-          <p className="text-emerald-300 text-lg">
-            Every donation helps us expand our features and improve our services
-          </p>
-          <div className="bg-zinc-900/30 rounded-lg p-6 max-w-2xl mx-auto">
-            <p className="text-zinc-300">
-              As our community grows, so do our development and server costs. Your support, 
-              no matter how small, directly helps keep BARS free and accessible for everyone.
+    <section className="py-12">
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="relative overflow-hidden rounded-2xl bg-emerald-800 border border-emerald-700">
+
+          <div className="relative px-8 py-10 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <HeartHandshake className="w-7 h-7 text-white" />
+              <h2 className="text-2xl font-semibold text-white">Keep BARS free for everyone!</h2>
+            </div>
+
+            <p className="text-lg text-emerald-50">
+              We’re 100% community‑funded. Even $5 helps cover servers and development.
             </p>
+
+            <div className="mt-6">
+              <div className="mx-auto max-w-2xl rounded-lg bg-emerald-900 border border-emerald-700 p-6">
+                <p className="text-emerald-50">
+                  As our community grows, so do our costs. Your support directly keeps BARS free and
+                  accessible for everyone.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <a
+                href="https://opencollective.com/stopbars"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group inline-flex items-center justify-center px-7 py-3 text-base font-semibold rounded-md text-white bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-800 transition-transform duration-200 hover:scale-[1.02] shadow-lg shadow-emerald-900/30"
+                aria-label="Support BARS with a donation on Open Collective"
+              >
+                Support BARS
+                <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
+                
+              </a>
+            </div>    
           </div>
         </div>
-        
-        <a 
-          href="https://opencollective.com/stopbars" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="group inline-flex text-lg items-center px-8 py-4 bg-emerald-700 hover:bg-emerald-600 focus:bg-emerald-600 text-white rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-emerald-500/20 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-zinc-900 font-medium"
-          aria-label="Support BARS development through donations on OpenCollective"
-        >
-          Support Development
-          <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
-        </a>
       </div>
     </section>
   );

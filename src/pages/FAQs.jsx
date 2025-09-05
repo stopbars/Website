@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Search, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -10,7 +11,7 @@ const FAQPage = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useSearchQuery();
   const [filteredFaqs, setFilteredFaqs] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
 

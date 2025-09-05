@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import {
@@ -17,7 +18,7 @@ const GlobalStatus = () => {
   const [live, setLive] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useSearchQuery();
   const [view, setView] = useState('grid');
   const [sortConfig, setSortConfig] = useState({ key: 'icao', direction: 'asc' });
   const [continentFilter, setContinentFilter] = useState('all');
@@ -129,7 +130,7 @@ const GlobalStatus = () => {
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 mb-2">
                 <h1 className="text-3xl font-bold">Global BARS Status</h1>
                 <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full self-start mt-2 sm:mt-0">
-                  <CircleDot className="w-3 h-3 text-emerald-400" />
+                  <CircleDot className="w-3 h-3 text-emerald-400" aria-hidden="true" />
                   <span className="text-sm text-zinc-300">
                     {Object.keys(live).length} Active Now
                   </span>
@@ -142,15 +143,19 @@ const GlobalStatus = () => {
                 variant={view === 'grid' ? 'primary' : 'outline'}
                 onClick={() => setView('grid')}
                 className="p-2"
+                aria-label="Grid view"
+                aria-pressed={view === 'grid'}
               >
-                <Square className="w-5 h-5" />
+                <Square className="w-5 h-5" aria-hidden="true" />
               </Button>
               <Button
                 variant={view === 'list' ? 'primary' : 'outline'}
                 onClick={() => setView('list')}
                 className="p-2"
+                aria-label="List view"
+                aria-pressed={view === 'list'}
               >
-                <MenuIcon className="w-5 h-5" />
+                <MenuIcon className="w-5 h-5" aria-hidden="true" />
               </Button>
             </div>
           </div>
@@ -158,8 +163,10 @@ const GlobalStatus = () => {
           <div className="space-y-4 mb-8">
             <div className="w-full">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
+                <label htmlFor="global-status-search" className="sr-only">Search airports</label>
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" aria-hidden="true" />
                 <input
+                  id="global-status-search"
                   type="text"
                   placeholder="Search by ICAO or package name..."
                   value={searchTerm}
@@ -170,29 +177,37 @@ const GlobalStatus = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <select
-                value={activityFilter}
-                onChange={(e) => setActivityFilter(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
-              >
-                <option value="all">All Airports</option>
-                <option value="active">Active Airports</option>
-                <option value="inactive">Inactive Airports</option>
-              </select>
+              <div>
+                <label htmlFor="activity-filter" className="sr-only">Filter by activity</label>
+                <select
+                  id="activity-filter"
+                  value={activityFilter}
+                  onChange={(e) => setActivityFilter(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
+                >
+                  <option value="all">All Airports</option>
+                  <option value="active">Active Airports</option>
+                  <option value="inactive">Inactive Airports</option>
+                </select>
+              </div>
 
-              <select
-                value={continentFilter}
-                onChange={(e) => setContinentFilter(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
-              >
-                <option value="all">All Continents</option>
-                <option value="North America">North America</option>
-                <option value="South America">South America</option>
-                <option value="Europe">Europe</option>
-                <option value="Asia">Asia</option>
-                <option value="Oceania">Oceania</option>
-                <option value="Africa">Africa</option>
-              </select>
+              <div>
+                <label htmlFor="continent-filter" className="sr-only">Filter by continent</label>
+                <select
+                  id="continent-filter"
+                  value={continentFilter}
+                  onChange={(e) => setContinentFilter(e.target.value)}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
+                >
+                  <option value="all">All Continents</option>
+                  <option value="North America">North America</option>
+                  <option value="South America">South America</option>
+                  <option value="Europe">Europe</option>
+                  <option value="Asia">Asia</option>
+                  <option value="Oceania">Oceania</option>
+                  <option value="Africa">Africa</option>
+                </select>
+              </div>
 
               <div className="hidden lg:block" />
 
@@ -203,19 +218,21 @@ const GlobalStatus = () => {
                   direction: prev.direction === 'asc' ? 'desc' : 'asc'
                 }))}
                 className="w-full flex justify-center items-center"
+                aria-label="Sort by ICAO"
               >
-                <ArrowUpDown className="w-4 h-4 mr-2" />
+                <ArrowUpDown className="w-4 h-4 mr-2" aria-hidden="true" />
                 Sort by ICAO
               </Button>
             </div>
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader className="w-8 h-8 animate-spin text-zinc-400" />
+            <div className="flex items-center justify-center h-64" role="status" aria-live="polite">
+              <Loader className="w-8 h-8 animate-spin text-zinc-400" aria-hidden="true" />
+              <span className="sr-only">Loading global status…</span>
             </div>
           ) : error ? (
-            <Card className="p-6 text-red-400">{error}</Card>
+            <Card className="p-6 text-red-400" role="alert">{error}</Card>
           ) : (
             <>
               {view === 'grid' ? (
@@ -224,26 +241,26 @@ const GlobalStatus = () => {
                     <Card key={icao} className="p-4 sm:p-6 hover:border-zinc-700 transition-all duration-200">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-3">
-                          <MapPin className="w-5 h-5 text-zinc-400 flex-shrink-0" />
+                          <MapPin className="w-5 h-5 text-zinc-400 flex-shrink-0" aria-hidden="true" />
                           <div>
                             <div className="flex items-center space-x-2">
-                              <h3 className="text-lg font-medium">{icao}</h3>
-                              <span className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+                              <h2 className="text-lg font-medium">{icao}</h2>
+                              <span className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} aria-hidden="true" />
                             </div>
-                            <div className="text-xs text-zinc-500">{getAirportContinent(icao)}</div>
+                            <div className="text-xs text-zinc-400">{getAirportContinent(icao)}</div>
                           </div>
                         </div>
                       </div>
 
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-2 text-sm text-zinc-300">
-                          <div className="flex items-center gap-2"><Users className="w-4 h-4 text-zinc-400" />{live[icao]?.controllers || 0} Controllers</div>
-                          <div className="flex items-center gap-2"><Radio className="w-4 h-4 text-zinc-400" />{live[icao]?.pilots || 0} Pilots</div>
+                          <div className="flex items-center gap-2"><Users className="w-4 h-4 text-zinc-400" aria-hidden="true" />{live[icao]?.controllers || 0} Controllers</div>
+                          <div className="flex items-center gap-2"><Radio className="w-4 h-4 text-zinc-400" aria-hidden="true" />{live[icao]?.pilots || 0} Pilots</div>
                         </div>
 
                         {data.packages?.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium text-zinc-300 mb-2">Packages</h4>
+                            <h3 className="text-sm font-medium text-zinc-300 mb-2">Packages</h3>
                             <div className="flex flex-wrap gap-2">
                               {data.packages.map(pkg => (
                                 <span key={pkg} className={`px-2 py-1 rounded text-xs ${live[icao] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800'}`}>
@@ -264,10 +281,10 @@ const GlobalStatus = () => {
                       <table className="w-full">
                         <thead className="border-b border-zinc-800">
                           <tr>
-                            <th className="text-left py-3 px-4 font-medium">ICAO</th>
-                            <th className="text-left py-3 px-4 font-medium">Continent</th>
-                            <th className="text-center py-3 px-4 font-medium">Connections</th>
-                            <th className="text-left py-3 px-4 font-medium">Packages</th>
+                            <th scope="col" className="text-left py-3 px-4 font-medium">ICAO</th>
+                            <th scope="col" className="text-left py-3 px-4 font-medium">Continent</th>
+                            <th scope="col" className="text-center py-3 px-4 font-medium">Connections</th>
+                            <th scope="col" className="text-left py-3 px-4 font-medium">Packages</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800">
@@ -276,7 +293,7 @@ const GlobalStatus = () => {
                               <td className="py-4 px-4">
                                 <div className="flex items-center space-x-2">
                                   <span className="font-medium">{icao}</span>
-                                  <span className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+                                  <span className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} aria-hidden="true" />
                                 </div>
                               </td>
                               <td className="py-4 px-4 text-zinc-400">{getAirportContinent(icao)}</td>

@@ -34,6 +34,8 @@ export const Navbar = () => {  const scrolled = useScroll();
   const notamRef = useRef(null);
   const [notamFitsOnOneLine, setNotamFitsOnOneLine] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
+  // Track when NOTAM state has been resolved to avoid initial border flash
+  const [notamInitialized, setNotamInitialized] = useState(false);
   
   // Close mobile menu when navigating to a new page or resizing to desktop
   useEffect(() => {
@@ -107,6 +109,9 @@ export const Navbar = () => {  const scrolled = useScroll();
         } else {
           setShowNotam(false);
         }
+      } finally {
+        // Mark NOTAM state as initialized (whether available or not)
+        setNotamInitialized(true);
       }
     };
 
@@ -175,8 +180,11 @@ export const Navbar = () => {  const scrolled = useScroll();
             </div>
           </div>
         </div>
-      )}      <nav className={`fixed bg-zinc-950/95 left-0 w-full z-50 transition-all duration-100 ${
-        scrolled || !showNotam || !notamFitsOnOneLine || !notamContent ? 'bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800 top-0' : 'top-10'
+      )}      <nav className={`fixed bg-zinc-950 left-0 w-full z-50 border-b transition-colors duration-100 ${
+        // Avoid showing the border until NOTAM state is initialized to prevent white flash
+        scrolled || (notamInitialized && (!showNotam || !notamFitsOnOneLine || !notamContent))
+          ? 'backdrop-blur-md border-zinc-800 top-0'
+          : 'border-transparent top-10'
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-20">

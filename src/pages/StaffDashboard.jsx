@@ -20,7 +20,7 @@ import {
   TowerControl,
   FileUp,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getVatsimToken } from '../utils/cookieUtils';
 
 // Import existing components
@@ -145,6 +145,8 @@ const StaffDashboard = () => {
   const [success,] = useState(null);
   const [refreshing, setRefreshing] = useState(false); // Add state for refreshing
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Note: active tab is kept in sync with URL ?tool=<tabId> so refresh/back links persist selection
   const { user } = useAuth();
   const token = getVatsimToken();
 
@@ -179,21 +181,33 @@ const StaffDashboard = () => {
         }
         
         setStaffRoles(roles);
-        
-        // Set initial active tab to first accessible tab
-        const accessibleTabs = Object.values(TABS).filter(tab => 
-          tab.roles.some(role => {
-            const normalizedRole = role.toLowerCase();
-            return roles[normalizedRole] === 1;
-          })
+
+        // Determine accessible tabs from the fetched roles
+        const accessibleTabs = Object.values(TABS).filter(tab =>
+          tab.roles.some(role => roles[role.toLowerCase()] === 1)
         );
-        
-        if (accessibleTabs.length > 0) {
-          setActiveTab(accessibleTabs[0].id);
-        } else {
+
+        if (accessibleTabs.length === 0) {
           // No accessible tabs - redirect to account page
           navigate('/account');
           setError('You do not have access to the staff dashboard');
+          return;
+        }
+
+        // Read the desired tool from URL and validate access
+        const urlTool = searchParams.get('tool');
+        const isUrlToolValid = urlTool && accessibleTabs.some(t => t.id === urlTool);
+
+        const initialTab = isUrlToolValid ? urlTool : accessibleTabs[0].id;
+        setActiveTab(initialTab);
+
+        // If URL didn't have a valid tool, update it to reflect the chosen tab
+        if (!isUrlToolValid) {
+          setSearchParams(prev => {
+            const params = new URLSearchParams(prev);
+            params.set('tool', initialTab);
+            return params;
+          }, { replace: true });
         }
       } catch (error) {
         console.error('Error fetching staff roles:', error);
@@ -211,6 +225,19 @@ const StaffDashboard = () => {
       navigate('/');
     }
   }, [token, navigate, user]);  // Function to refresh the current tab data by simulating a tab change
+
+  // Keep activeTab in sync when the URL param changes (back/forward navigation)
+  useEffect(() => {
+    if (!staffRoles) return;
+    const urlTool = searchParams.get('tool');
+    if (!urlTool) return;
+
+    // Validate access for the current roles
+    const hasAccess = Object.values(TABS).some(tab => tab.id === urlTool && tab.roles.some(r => staffRoles[r.toLowerCase()] === 1));
+    if (hasAccess && urlTool !== activeTab) {
+      setActiveTab(urlTool);
+    }
+  }, [searchParams, staffRoles, activeTab]);
   const handleRefresh = async () => {
     if (refreshing) return; // Prevent multiple refreshes
     
@@ -362,7 +389,15 @@ const StaffDashboard = () => {
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                // Persist selection in URL (?tool=...)
+                                setSearchParams(prev => {
+                                  const params = new URLSearchParams(prev);
+                                  params.set('tool', tab.id);
+                                  return params;
+                                });
+                              }}
                               className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
@@ -394,7 +429,14 @@ const StaffDashboard = () => {
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setSearchParams(prev => {
+                                  const params = new URLSearchParams(prev);
+                                  params.set('tool', tab.id);
+                                  return params;
+                                });
+                              }}
                               className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
@@ -422,7 +464,14 @@ const StaffDashboard = () => {
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setSearchParams(prev => {
+                                  const params = new URLSearchParams(prev);
+                                  params.set('tool', tab.id);
+                                  return params;
+                                });
+                              }}
                               className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 

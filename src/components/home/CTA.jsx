@@ -1,8 +1,10 @@
 import { Button } from '../shared/Button';
+import { useNavigate } from 'react-router-dom';
 
 // CTA banner displayed beneath the Support section on the Home page
 // TODO: Wire the Download button href once installer / download page is available.
 export const CTA = () => {
+  const navigate = useNavigate();
   return (
   <section className="pt-12 pb-24">
       <div className="max-w-5xl mx-auto px-6">
@@ -21,7 +23,7 @@ export const CTA = () => {
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
             <Button
               variant="secondary"
-              onClick={() => window.open('https://docs.stopbars.com', '_blank', 'noopener')}
+              onClick={() => navigate('/about')} 
               className="w-full sm:w-auto px-8 py-3 text-sm font-medium"
             >
               Learn more

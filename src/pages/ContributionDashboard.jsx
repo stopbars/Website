@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useSearchQuery from '../hooks/useSearchQuery';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -32,7 +33,7 @@ const ContributionDashboard = () => {
   const [allContributions, setAllContributions] = useState([]);
   const [userContributions, setUserContributions] = useState([]);
   const [userContributionSummary, setUserContributionSummary] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useSearchQuery();
   const [currentTab, setCurrentTab] = useState('all');
   const [viewingRejection, setViewingRejection] = useState(null); // { airport, scenery, reason }
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery, status }

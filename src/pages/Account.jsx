@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -21,13 +21,27 @@ const Account = () => {
   const [userDivisions, setUserDivisions] = useState([]);
   const [displayMode, setDisplayMode] = useState(user?.display_mode ?? 0);
   const [displayModeStatus, setDisplayModeStatus] = useState(null); // {type:'success'|'error', message:string}
+  const [isDisplayModeSaving, setIsDisplayModeSaving] = useState(false);
+  const [pendingDisplayMode, setPendingDisplayMode] = useState(null);
+  const displayModeRequestRef = useRef({ id: 0, controller: null });
+  const refreshDebounceRef = useRef(null);
 
   // Sync local state when user loads / changes
   useEffect(() => {
+    // Don't override local selection while a change is pending
+    if (isDisplayModeSaving) return;
     if (user?.display_mode !== undefined && user.display_mode !== displayMode) {
       setDisplayMode(user.display_mode);
     }
-  }, [user?.display_mode, displayMode]);
+  }, [user?.display_mode, displayMode, isDisplayModeSaving]);
+
+  // When server reflects the pending mode, clear saving state
+  useEffect(() => {
+    if (isDisplayModeSaving && pendingDisplayMode != null && user?.display_mode === pendingDisplayMode) {
+      setIsDisplayModeSaving(false);
+      setPendingDisplayMode(null);
+    }
+  }, [user?.display_mode, isDisplayModeSaving, pendingDisplayMode]);
 
   useEffect(() => {
     const fetchStaffRole = async () => {
@@ -150,8 +164,7 @@ const Account = () => {
         api_key: data.apiKey
       }));
 
-      // Show the API key after regenerating
-      setShowApiKey(true);
+      setShowApiKey(false);
       setIsRegenerateDialogOpen(false);
     } catch (error) {
       console.error('Failed to regenerate API key:', error);
@@ -191,7 +204,12 @@ const Account = () => {
   };
 
   const handleUpdateDisplayMode = (newMode) => {
-    if (user?.display_mode === newMode) return; // no change
+    // Avoid redundant updates
+    const sameAsUser = Number(user?.display_mode) === Number(newMode);
+    const sameAsPending = Number(pendingDisplayMode) === Number(newMode);
+    if ((sameAsUser && !isDisplayModeSaving) || (sameAsPending && isDisplayModeSaving)) {
+      return;
+    }
     const token = getVatsimToken();
     const prevUser = user ? { ...user } : null;
     setDisplayMode(newMode);
@@ -201,29 +219,75 @@ const Account = () => {
       const optimisticName = computeDisplayName(user.full_name, user.vatsim_id, newMode);
       setUser({ ...user, display_mode: newMode, display_name: optimisticName });
     }
-    setDisplayModeStatus({ type: 'success', message: 'Preferred Display Name updated.' });
+    setIsDisplayModeSaving(true);
+    setPendingDisplayMode(newMode);
+    setDisplayModeStatus({ type: 'success', message: 'Updating preference…' });
 
     // Fire & forget request
+    // Cancel any in-flight request (latest-wins)
+    if (displayModeRequestRef.current.controller) {
+      displayModeRequestRef.current.controller.abort();
+    }
+    const controller = new AbortController();
+    const requestId = (displayModeRequestRef.current.id || 0) + 1;
+    displayModeRequestRef.current = { id: requestId, controller };
+
     fetch('https://v2.stopbars.com/auth/display-mode', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'X-Vatsim-Token': token
       },
-      body: JSON.stringify({ mode: newMode })
+      body: JSON.stringify({ mode: newMode }),
+      signal: controller.signal
     }).then(res => {
+      // Ignore stale responses
+      if (displayModeRequestRef.current.id !== requestId) return;
       if (!res.ok) throw new Error('Failed');
-      // Optionally refresh in background to ensure server canonical values
-      setTimeout(() => { refreshUserData().catch(() => {}); }, 500);
+      setDisplayModeStatus({ type: 'success', message: 'Preferred Display Name updated.' });
+      setIsDisplayModeSaving(false);
+      setPendingDisplayMode(null);
+      // Debounced background refresh to align with server canonical values
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      refreshDebounceRef.current = setTimeout(() => {
+        refreshUserData().catch(() => {});
+        refreshDebounceRef.current = null;
+      }, 600);
     }).catch(err => {
+      // Handle abort errors and stale responses
+      const aborted = err?.name === 'AbortError';
+      if (aborted) {
+        // If the aborted request is still considered the latest, clear pending so user can retry
+        if (displayModeRequestRef.current.id === requestId) {
+          setIsDisplayModeSaving(false);
+          setPendingDisplayMode(null);
+        }
+        return;
+      }
+      if (displayModeRequestRef.current.id !== requestId) return;
       console.error('Failed to persist display mode:', err);
       setDisplayModeStatus({ type: 'error', message: 'Failed to save preference. Reverted.' });
+      setIsDisplayModeSaving(false);
+      setPendingDisplayMode(null);
       if (prevUser) {
         setUser(prevUser);
         setDisplayMode(prevUser.display_mode);
       }
     });
   };
+
+  // Cleanup on unmount: abort any in-flight request and clear timers
+  useEffect(() => {
+    return () => {
+      if (displayModeRequestRef.current.controller) {
+        displayModeRequestRef.current.controller.abort();
+      }
+      if (refreshDebounceRef.current) {
+        clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = null;
+      }
+    };
+  }, []);
 
   // Auto clear success message after a few seconds
   useEffect(() => {
@@ -358,8 +422,16 @@ const Account = () => {
                     <p className="text-sm text-zinc-400">Choose how your name appears publicly across BARS.</p>
                   </div>
                   {user?.display_name && (
-                    <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60">
-                      Current: <span className="font-medium">{user.display_name}</span>
+                    <div className="flex items-center gap-3">
+                      {isDisplayModeSaving && (
+                        <div className="text-xs text-zinc-400 flex items-center gap-2">
+                          <Loader className="w-3 h-3 animate-spin" />
+                          Saving…
+                        </div>
+                      )}
+                      <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60">
+                        Current: <span className="font-medium">{user.display_name}</span>
+                      </div>
                     </div>
                   )}
                 </div>
