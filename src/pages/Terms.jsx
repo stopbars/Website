@@ -242,7 +242,6 @@ const Terms = () => {
                   <u> support@stopbars.com</u>. Appeals can be made by email, and final decisions remain at BARS’ discretion. We will review appeals in good faith but are not obligated to reinstate access.
                 </p>
                 <p>
-                  Likewise, BARS agrees to indemnify you against third‑party claims to the extent caused by BARS’s willful misconduct or violation of applicable law in providing the Services, subject to the limitations and exclusions set forth in these Terms, and capped to direct damages up to AUD $100.
                   Upon termination, your right to use the service will immediately cease. All provisions of these Terms 
                   that by their nature should survive termination shall survive.
                 </p>
