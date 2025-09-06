@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BARS Legacy XML Profile Creator</title>
+  <meta name="description" content="Simple visual editor to create legacy BARS profiles (XML)">
+  <style>
+    :root { --controls-bg:#f8f9fa; --border:#dcdcdc; --text:#333; --sub:#555; --panel-bg:#fff; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:#fff;color:var(--text);font:14px/1.4 Arial,Helvetica,sans-serif}
+    a{color:#0b72e7;text-decoration:none}
+  .container{max-width:1400px;margin:0 auto;padding:16px}
+  .row{display:flex;gap:16px;align-items:stretch;flex-wrap:wrap}
+    .col{flex:1 1 0}
+    .panel{background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;padding:12px}
+    h1{font-size:20px;margin:0 0 8px}
+    h2{font-size:16px;margin:12px 0 8px;color:var(--sub)}
+    label{display:block;margin:6px 0 2px;color:var(--sub)}
+    input[type="text"],input[type="number"],select,textarea{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:#fff;color:#111}
+    input[type="checkbox"]{transform:translateY(1px)}
+    .row.cols-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .row.cols-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+    button{background:#fff;color:#111;border:1px solid #ccc;border-radius:4px;padding:6px 10px;cursor:pointer}
+    button:hover{background:#f0f0f0}
+    button.primary{background:#0b72e7;color:#fff;border-color:#0b72e7}
+    button.success{background:#28a745;color:#fff;border-color:#24963e}
+    button.warn{background:#ffc107;color:#111;border-color:#e0ad06}
+    button.ghost{background:#fff;border-style:dashed}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .small{font-size:12px;color:var(--sub)}
+    .grid{display:grid;gap:8px}
+
+  /* Visual board (WinForms coordinates scaled to fit) */
+  .board{position:relative;width:100%;aspect-ratio:1067/535;background:#000;border:1px solid #bbb;border-radius:8px;overflow:hidden}
+  .el{position:absolute}
+  .runwayH{background:#6b6b6b;border-radius:4px}
+  .runwayV{background:#6b6b6b;border-radius:4px}
+  .label{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  .stopbar{background:#dcdcdc;color:#111;border:1px solid #cfcfcf;border-radius:4px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden}
+  .stopbar.disabled{opacity:.35}
+  .stopbar .name{display:flex;align-items:center;justify-content:center;height:33.61%;font-weight:700}
+  .stopbar .tri{height:13.45%;background:#888}
+  .stopbar.top .tri{order:0}
+  .stopbar.top .name{order:1}
+  .stopbar.bottom .name{order:0}
+  .stopbar.bottom .tri{order:1}
+  .stopbar .idtag{position:absolute;left:6%;bottom:4%;font-size:10px;color:#333}
+  .selected{outline:2px solid #0b72e7}
+  .triT, .triB{width:0;height:0;position:absolute;border-left:31.7px solid transparent;border-right:31.7px solid transparent}
+  .triT{border-bottom:20px solid peachpuff}
+  .triB{border-top:20px solid peachpuff}
+  .crossSquare{display:flex;align-items:center;justify-content:center;background:#a9a9a9;color:#000;border:1px solid #777;border-radius:2px;font-weight:700}
+
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+    th{color:var(--sub);text-align:left;background:#fafafa}
+    .table-wrap{max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f4f5f7;color:#333;border:1px solid var(--border);font-size:12px}
+  .row-selected{background: #fff6d6;}
+
+    #xmlOutput{width:100%;height:220px;resize:vertical}
+    .footer{margin-top:12px;color:#666}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>BARS Legacy XML Profile Creator</h1>
+    <div class="small">Create and edit legacy XML profiles with a simple visual layout. File naming uses ICAO_Right-Left or ICAO_Top-Bottom.</div>
+
+    <div class="row" style="margin-top:10px">
+      <div class="col panel" style="flex-basis:100%">
+        <h2>Airport</h2>
+        <div class="row cols-2">
+          <div>
+            <label for="icao">ICAO</label>
+            <input id="icao" type="text" maxlength="6" placeholder="YSSY" />
+          </div>
+        </div>
+
+        <h2>Runway Config</h2>
+        <div class="row cols-2">
+          <div class="panel">
+            <label><input id="hVisible" type="checkbox" /> Horizontal runway visible</label>
+            <div class="row cols-2">
+              <div>
+                <label for="leftEnd">Left End</label>
+                <input id="leftEnd" type="text" placeholder="34L" />
+              </div>
+              <div>
+                <label for="rightEnd">Right End</label>
+                <input id="rightEnd" type="text" placeholder="16R" />
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <label><input id="vVisible" type="checkbox" /> Vertical runway visible</label>
+            <div class="row cols-2">
+              <div>
+                <label for="topEnd">Top End</label>
+                <input id="topEnd" type="text" placeholder="07" />
+              </div>
+              <div>
+                <label for="bottomEnd">Bottom End</label>
+                <input id="bottomEnd" type="text" placeholder="25" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <input id="xmlFile" type="file" accept=".xml" style="display:none" />
+          <button id="btnImport" class="ghost">Import XML…</button>
+          <button id="btnPreview" class="primary">Preview XML</button>
+          <button id="btnDownload" class="success">Download XML</button>
+          <button id="btnCopyXml" class="ghost">Copy XML</button>
+          <span class="pill" id="fileNamePill">filename: -</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div class="col panel" style="flex-basis:100%">
+        <h2>Visual</h2>
+        <div class="board" id="legacyBoard" aria-label="Legacy Visual Board"></div>
+        <div class="controls">
+          <button id="btnEnableAll" class="ghost">Enable all stopbars</button>
+          <button id="btnDisableAll" class="ghost">Disable all stopbars</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="col panel">
+  <h2>Stopbars (s1–s32)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Use</th>
+                <th>ID</th>
+                <th style="width:20%">Display Name</th>
+                <th style="width:20%">BARS Id</th>
+                <th style="width:20%">LeadOn Id (optional)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="stopbarRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="col panel">
+        <h2>Crossbars</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Use</th><th>ID</th><th>Display Name</th><th>BARS Id</th></tr></thead>
+            <tbody id="crossbarRows"></tbody>
+          </table>
+        </div>
+
+        <h2 style="margin-top:16px">XML Preview</h2>
+        <textarea id="xmlOutput" readonly placeholder="Click &quot;Preview XML&quot; to generate the XML preview"></textarea>
+      </div>
+    </div>
+
+    <div class="footer small">
+      Tip: Filename will be ICAO_Right-Left if horizontal is visible; otherwise ICAO_Top-Bottom if vertical is visible. Example: YSSY_16R-34L.xml
+    </div>
+  </div>
+
+  <script>
+  // State
+  const state = {
+    airport: { icao: '' },
+    runways: {
+      horizontal: { visible: false, left: '', right: '' },
+      vertical: { visible: false, top: '', bottom: '' }
+    },
+    stopbars: [],
+    crossbars: [
+      { id: 'T_S', enabled: false, displayName: '', barsId: '' },
+      { id: 'B_S', enabled: false, displayName: '', barsId: '' },
+    ],
+    selectedStopbar: null,
+  };
+
+  // Initialize stopbars s1..s32
+  for (let i=1;i<=32;i++) {
+    state.stopbars.push({ id: 's'+i, enabled: false, displayName: '', barsId: '', leadOnId: '' });
+  }
+
+  // Helpers
+  const $ = sel => document.querySelector(sel);
+  const esc = s => (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Auto-generate BARS IDs for enabled stopbars that don't have one yet
+  function random3(){ return Math.floor(100 + Math.random()*900).toString(); }
+  function sanitizeName(s){
+    const trimmed = (s||'').trim();
+    return (trimmed ? trimmed : 'SB').replace(/[^A-Za-z0-9_-]+/g,'_');
+  }
+  function ensureBarsIds(){
+    let generated = false;
+    state.stopbars.forEach(sb=>{
+      if (sb.enabled && (!sb.barsId || !sb.barsId.trim())){
+        const base = sanitizeName(sb.displayName || sb.id);
+        sb.barsId = base + '_' + random3();
+        generated = true;
+      }
+    });
+    if (generated) renderStopbarTable();
+  }
+
+  function updateFromInputs(){
+    state.airport.icao = $('#icao').value.trim().toUpperCase();
+  // legacy: no airport name used
+
+    state.runways.horizontal.visible = $('#hVisible').checked;
+    state.runways.horizontal.left = $('#leftEnd').value.trim();
+    state.runways.horizontal.right = $('#rightEnd').value.trim();
+
+    state.runways.vertical.visible = $('#vVisible').checked;
+    state.runways.vertical.top = $('#topEnd').value.trim();
+    state.runways.vertical.bottom = $('#bottomEnd').value.trim();
+
+    renderVisual();
+    updateFilenamePill();
+  }
+
+  function updateFilenamePill(){
+    $('#fileNamePill').textContent = 'filename: ' + makeFilename();
+  }
+
+  function makeFilename(){
+    const icao = (state.airport.icao||'XXXX').toUpperCase();
+    const h = state.runways.horizontal, v = state.runways.vertical;
+    let pair = 'LEGACY';
+    if (h.visible && h.right && h.left) pair = `${h.right}-${h.left}`;
+    else if (v.visible && v.top && v.bottom) pair = `${v.top}-${v.bottom}`;
+    return `${icao}_${pair}.xml`;
+  }
+
+  function renderStopbarTable(){
+    const tbody = $('#stopbarRows');
+    tbody.innerHTML = '';
+    state.stopbars.forEach((sb, idx)=>{
+      const tr = document.createElement('tr');
+      if (state.selectedStopbar === sb.id) tr.classList.add('row-selected');
+      tr.innerHTML = `
+        <td><input type="checkbox" ${sb.enabled?'checked':''} data-action="toggle-enabled" data-idx="${idx}"></td>
+        <td><span class="pill">${sb.id}</span></td>
+        <td><input type="text" value="${esc(sb.displayName)}" data-action="edit-display" data-idx="${idx}" placeholder="A6"></td>
+        <td><input type="text" value="${esc(sb.barsId)}" data-action="edit-barsid" data-idx="${idx}" placeholder="BARS_XXXXX or number"></td>
+        <td><input type="text" value="${esc(sb.leadOnId||'')}" data-action="edit-leadon" data-idx="${idx}" placeholder="optional"></td>
+        <td><button class="ghost" data-action="select" data-idx="${idx}">Focus</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderCrossbarTable(){
+    const tbody = $('#crossbarRows');
+    tbody.innerHTML = '';
+    state.crossbars.forEach((cb, idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" ${cb.enabled?'checked':''} data-action="cb-toggle" data-idx="${idx}"></td>
+        <td><span class="pill">${cb.id}</span></td>
+        <td><input type="text" value="${esc(cb.displayName)}" data-action="cb-display" data-idx="${idx}" placeholder="07 or 25 etc"></td>
+        <td><input type="text" value="${esc(cb.barsId)}" data-action="cb-barsid" data-idx="${idx}" placeholder="numeric id"></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Board positions (from WinForms designer; base 1067x535)
+  const BASE = { w: 1067, h: 535 };
+  const pos = {
+    runwayH: { x:0, y:237, w:1067, h:60 },
+    runwayV: { x:504, y:0,   w:59,  h:535 },
+    labels: {
+      hLeft:   { x:0,    y:237, w:64, h:60 },
+      hRight:  { x:1003, y:237, w:64, h:60 },
+      vTop:    { x:504,  y:0,   w:59, h:48 },
+      vBottom: { x:504,  y:487, w:59, h:48 },
+    },
+    cross: {
+      T_S: { x:504, y:197, w:59, h:20, type:'T' },
+      B_S: { x:504, y:317, w:59, h:20, type:'B' },
+    },
+    crossSquare: {
+      T_S: { x:464, y:197, w:40, h:40 },
+      B_S: { x:563, y:297, w:40, h:40 },
+    },
+    stopbars: {}
+  };
+  // Explicit coordinates from WinForms layout (ClientSize 1067x535)
+  pos.stopbars = {
+    // Top row (triangles at top)
+    s1:  { x:16,  y:121, w:40, h:119, orient:'T' },
+    s2:  { x:72,  y:121, w:40, h:119, orient:'T' },
+    s3:  { x:128, y:121, w:40, h:119, orient:'T' },
+    s4:  { x:184, y:121, w:40, h:119, orient:'T' },
+    s5:  { x:240, y:121, w:40, h:119, orient:'T' },
+    s6:  { x:296, y:121, w:40, h:119, orient:'T' },
+    s25: { x:352, y:121, w:40, h:119, orient:'T' },
+    s27: { x:408, y:121, w:40, h:119, orient:'T' },
+    s28: { x:619, y:121, w:40, h:119, orient:'T' },
+    s7:  { x:675, y:121, w:40, h:119, orient:'T' },
+    s8:  { x:731, y:121, w:40, h:119, orient:'T' },
+    s9:  { x:787, y:121, w:40, h:119, orient:'T' },
+    s10: { x:843, y:121, w:40, h:119, orient:'T' },
+    s11: { x:899, y:121, w:40, h:119, orient:'T' },
+    s12: { x:955, y:121, w:40, h:119, orient:'T' },
+    s26: { x:1011,y:121, w:40, h:119, orient:'T' },
+
+    // Bottom row (triangles at bottom)
+    s13: { x:16,  y:296, w:40, h:119, orient:'B' },
+    s14: { x:72,  y:296, w:40, h:119, orient:'B' },
+    s15: { x:128, y:296, w:40, h:119, orient:'B' },
+    s16: { x:184, y:296, w:40, h:119, orient:'B' },
+    s17: { x:240, y:296, w:40, h:119, orient:'B' },
+    s18: { x:296, y:296, w:40, h:119, orient:'B' },
+    s29: { x:352, y:296, w:40, h:119, orient:'B' },
+    s31: { x:408, y:296, w:40, h:119, orient:'B' },
+    s32: { x:619, y:296, w:40, h:119, orient:'B' },
+    s19: { x:675, y:296, w:40, h:119, orient:'B' },
+    s20: { x:731, y:296, w:40, h:119, orient:'B' },
+    s21: { x:787, y:296, w:40, h:119, orient:'B' },
+    s22: { x:843, y:296, w:40, h:119, orient:'B' },
+    s23: { x:899, y:296, w:40, h:119, orient:'B' },
+    s24: { x:955, y:296, w:40, h:119, orient:'B' },
+    s30: { x:1011,y:296, w:40, h:119, orient:'B' },
+  };
+
+  function pct(n, base){ return (n / base * 100).toFixed(4) + '%'; }
+
+  function createStopbarEl(sb){
+    const p = pos.stopbars[sb.id];
+    if (!p) return null;
+    const el = document.createElement('div');
+    el.className = 'el stopbar ' + (p.orient==='T'?'top':'bottom') + (sb.enabled?'':' disabled') + (state.selectedStopbar===sb.id?' selected':'');
+    el.style.left = pct(p.x, BASE.w);
+    el.style.top = pct(p.y, BASE.h);
+    el.style.width = pct(p.w, BASE.w);
+    el.style.height = pct(p.h, BASE.h);
+    el.title = `${sb.id}${sb.displayName?': '+sb.displayName:''}`;
+    // children
+    const tri = document.createElement('div'); tri.className = 'tri'; el.appendChild(tri);
+    const name = document.createElement('div'); name.className = 'name'; name.textContent = sb.displayName||''; el.appendChild(name);
+    const idtag = document.createElement('div'); idtag.className = 'idtag'; idtag.textContent = sb.id; el.appendChild(idtag);
+    el.addEventListener('click', ()=>{
+      state.selectedStopbar = sb.id;
+      sb.enabled = !sb.enabled;
+      ensureBarsIds();
+      renderStopbarTable();
+      renderBoard();
+    });
+    return el;
+  }
+
+  function renderBoard(){
+    const board = document.getElementById('legacyBoard');
+    if (!board) return;
+    board.innerHTML = '';
+
+    // Runways
+    const h = state.runways.horizontal, v = state.runways.vertical;
+    if (h.visible){
+      const rh = document.createElement('div'); rh.className = 'el runwayH';
+      rh.style.left = pct(pos.runwayH.x, BASE.w);
+      rh.style.top = pct(pos.runwayH.y, BASE.h);
+      rh.style.width = pct(pos.runwayH.w, BASE.w);
+      rh.style.height = pct(pos.runwayH.h, BASE.h);
+      board.appendChild(rh);
+      // labels
+      const l = document.createElement('div'); l.className='el label'; l.style.left=pct(pos.labels.hLeft.x,BASE.w); l.style.top=pct(pos.labels.hLeft.y,BASE.h); l.style.width=pct(pos.labels.hLeft.w,BASE.w); l.style.height=pct(pos.labels.hLeft.h,BASE.h); l.textContent=h.left||''; board.appendChild(l);
+      const r = document.createElement('div'); r.className='el label'; r.style.left=pct(pos.labels.hRight.x,BASE.w); r.style.top=pct(pos.labels.hRight.y,BASE.h); r.style.width=pct(pos.labels.hRight.w,BASE.w); r.style.height=pct(pos.labels.hRight.h,BASE.h); r.textContent=h.right||''; board.appendChild(r);
+    }
+    if (v.visible){
+      const rv = document.createElement('div'); rv.className = 'el runwayV';
+      rv.style.left = pct(pos.runwayV.x, BASE.w);
+      rv.style.top = pct(pos.runwayV.y, BASE.h);
+      rv.style.width = pct(pos.runwayV.w, BASE.w);
+      rv.style.height = pct(pos.runwayV.h, BASE.h);
+      board.appendChild(rv);
+      // labels
+      const t = document.createElement('div'); t.className='el label'; t.style.left=pct(pos.labels.vTop.x,BASE.w); t.style.top=pct(pos.labels.vTop.y,BASE.h); t.style.width=pct(pos.labels.vTop.w,BASE.w); t.style.height=pct(pos.labels.vTop.h,BASE.h); t.textContent=v.top||''; board.appendChild(t);
+      const b = document.createElement('div'); b.className='el label'; b.style.left=pct(pos.labels.vBottom.x,BASE.w); b.style.top=pct(pos.labels.vBottom.y,BASE.h); b.style.width=pct(pos.labels.vBottom.w,BASE.w); b.style.height=pct(pos.labels.vBottom.h,BASE.h); b.textContent=v.bottom||''; board.appendChild(b);
+    }
+
+    // Crossbar triangles and squares if enabled
+    state.crossbars.forEach(cb=>{
+      if (!cb.enabled) return;
+      const cp = pos.cross[cb.id]; if (!cp) return;
+      const tri = document.createElement('div'); tri.className = 'el ' + (cp.type==='T'?'triT':'triB');
+      tri.style.left = pct(cp.x, BASE.w);
+      tri.style.top = pct(cp.y, BASE.h);
+      board.appendChild(tri);
+      const sqp = pos.crossSquare[cb.id];
+      if (sqp){
+        const sq = document.createElement('div'); sq.className = 'el crossSquare';
+        sq.style.left = pct(sqp.x, BASE.w);
+        sq.style.top = pct(sqp.y, BASE.h);
+        sq.style.width = pct(sqp.w, BASE.w);
+        sq.style.height = pct(sqp.h, BASE.h);
+        sq.textContent = cb.displayName||'';
+        board.appendChild(sq);
+      }
+    });
+
+    // Stopbars
+    state.stopbars.forEach(sb=>{
+      const el = createStopbarEl(sb); if (el) board.appendChild(el);
+    });
+  }
+
+  // Back-compat shim: legacy calls re-route to board renderer
+  function renderVisual(){ renderBoard(); }
+
+  function buildXML(){
+    // Ensure any enabled stopbars have a BARS ID before building
+    ensureBarsIds();
+    const a = state.airport;
+    const h = state.runways.horizontal;
+    const v = state.runways.vertical;
+    const stopbars = state.stopbars.filter(s=>s.enabled);
+    const crossbars = state.crossbars.filter(c=>c.enabled);
+
+    function el(tag, inner, indent){
+      const tabs = '  '.repeat(indent||0);
+      return `${tabs}<${tag}>${inner}</${tag}>\n`;
+    }
+
+  let xml = '<?xml version="1.0" encoding="utf-8"?>\n';
+    xml += '<BARSProfile>\n';
+  xml += '  <AirportInfo>\n';
+  xml += el('ICAO', esc(a.icao), 2);
+  xml += '  </AirportInfo>\n';
+
+    xml += '  <RunwayConfig>\n';
+    xml += '    <HorizontalRunway>\n';
+    xml += el('Visible', h.visible?'true':'false', 3);
+    xml += '      <LeftEnd>\n';
+    xml += el('Name', esc(h.left), 4);
+    xml += '      </LeftEnd>\n';
+    xml += '      <RightEnd>\n';
+    xml += el('Name', esc(h.right), 4);
+    xml += '      </RightEnd>\n';
+    xml += '    </HorizontalRunway>\n';
+
+    xml += '    <VerticalRunway>\n';
+    xml += el('Visible', v.visible?'true':'false', 3);
+    xml += '      <TopEnd>\n';
+    xml += el('Name', esc(v.top), 4);
+    xml += '      </TopEnd>\n';
+    xml += '      <BottomEnd>\n';
+    xml += el('Name', esc(v.bottom), 4);
+    xml += '      </BottomEnd>\n';
+    xml += '    </VerticalRunway>\n';
+    xml += '  </RunwayConfig>\n';
+
+    xml += '  <Stopbars>\n';
+    stopbars.forEach(s=>{
+      xml += '    <Stopbar>\n';
+      xml += el('ID', esc(s.id), 3);
+      xml += el('BARSId', esc(s.barsId), 3);
+      xml += el('DisplayName', esc(s.displayName), 3);
+      if (s.leadOnId && s.leadOnId.trim()) xml += el('LeadOnId', esc(s.leadOnId), 3);
+      xml += '    </Stopbar>\n';
+    });
+    xml += '  </Stopbars>\n';
+
+    xml += '  <CrossbarsConfig>\n';
+    crossbars.forEach(c=>{
+      xml += '    <Crossbar>\n';
+      xml += el('ID', esc(c.id), 3);
+      xml += el('BARSId', esc(c.barsId), 3);
+      xml += el('DisplayName', esc(c.displayName), 3);
+      xml += '    </Crossbar>\n';
+    });
+    xml += '  </CrossbarsConfig>\n';
+
+    xml += '</BARSProfile>';
+    return xml;
+  }
+
+  function previewXML(){
+    ensureBarsIds();
+    const xml = buildXML();
+    const out = document.getElementById('xmlOutput');
+    if (out) out.value = xml;
+  }
+
+  function downloadXML(){
+    ensureBarsIds();
+    const xml = buildXML();
+    const blob = new Blob([xml], {type:'application/xml;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = makeFilename();
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function copyXML(){
+    ensureBarsIds();
+    const xml = buildXML();
+    try { await navigator.clipboard.writeText(xml); btnCopyXml.textContent = 'Copied!'; }
+    catch { btnCopyXml.textContent = 'Copy failed'; }
+    setTimeout(()=>btnCopyXml.textContent='Copy XML', 1200);
+  }
+
+  // Removed sample/default initialization to start with a blank profile
+
+  // Import XML
+  async function importXML(file){
+    const text = await file.text();
+    try{
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'application/xml');
+      if (doc.querySelector('parsererror')) throw new Error('Invalid XML');
+
+      // Airport
+      $('#icao').value = (doc.querySelector('AirportInfo > ICAO')?.textContent||'').trim().toUpperCase();
+  // legacy: ignore airport name if present
+
+      // Runways
+      const h = doc.querySelector('RunwayConfig > HorizontalRunway');
+      const v = doc.querySelector('RunwayConfig > VerticalRunway');
+      if (h) {
+        $('#hVisible').checked = (h.querySelector('Visible')?.textContent||'').trim().toLowerCase()==='true';
+        $('#leftEnd').value = (h.querySelector('LeftEnd > Name')?.textContent||'').trim();
+        $('#rightEnd').value = (h.querySelector('RightEnd > Name')?.textContent||'').trim();
+      }
+      if (v) {
+        $('#vVisible').checked = (v.querySelector('Visible')?.textContent||'').trim().toLowerCase()==='true';
+        $('#topEnd').value = (v.querySelector('TopEnd > Name')?.textContent||'').trim();
+        $('#bottomEnd').value = (v.querySelector('BottomEnd > Name')?.textContent||'').trim();
+      }
+
+      // Stopbars
+      state.stopbars.forEach(s=>{ s.enabled=false; s.displayName=''; s.barsId=''; s.leadOnId=''; });
+      doc.querySelectorAll('Stopbars > Stopbar').forEach(node=>{
+        const id = (node.querySelector('ID')?.textContent||'').trim();
+        const sb = state.stopbars.find(x=>x.id===id);
+        if (sb){
+          sb.enabled = true;
+          sb.barsId = (node.querySelector('BARSId')?.textContent||'').trim();
+          sb.displayName = (node.querySelector('DisplayName')?.textContent||'').trim();
+          sb.leadOnId = (node.querySelector('LeadOnId')?.textContent||'').trim();
+        }
+      });
+
+      // Crossbars
+      state.crossbars = [
+        { id:'T_S', enabled:false, displayName:'', barsId:'' },
+        { id:'B_S', enabled:false, displayName:'', barsId:'' },
+      ];
+      doc.querySelectorAll('CrossbarsConfig > Crossbar').forEach(node=>{
+        const id = (node.querySelector('ID')?.textContent||'').trim();
+        const target = state.crossbars.find(c=>c.id===id);
+        if (target){
+          target.enabled = true;
+          target.barsId = (node.querySelector('BARSId')?.textContent||'').trim();
+          target.displayName = (node.querySelector('DisplayName')?.textContent||'').trim();
+        }
+      });
+
+      renderStopbarTable();
+      renderCrossbarTable();
+      updateFromInputs();
+      previewXML();
+    }catch(err){
+      alert('Failed to import XML: '+err.message);
+    }
+  }
+
+  // Event wiring
+  function wire(){
+    // Inputs
+    ['icao','leftEnd','rightEnd','topEnd','bottomEnd'].forEach(id=>{
+      $('#'+id).addEventListener('input', updateFromInputs);
+    });
+    $('#hVisible').addEventListener('change', updateFromInputs);
+    $('#vVisible').addEventListener('change', updateFromInputs);
+
+    // Buttons
+    $('#btnPreview').addEventListener('click', previewXML);
+    $('#btnDownload').addEventListener('click', ()=>{
+      // simple validation
+      if (!state.airport.icao) { alert('Enter ICAO code'); return; }
+      downloadXML();
+    });
+    const fileInput = $('#xmlFile');
+    $('#btnImport').addEventListener('click', ()=> fileInput.click());
+    fileInput.addEventListener('change', (e)=>{
+      const f = e.target.files?.[0]; if (f) importXML(f);
+      fileInput.value = '';
+    });
+    window.btnCopyXml = $('#btnCopyXml');
+    btnCopyXml.addEventListener('click', copyXML);
+
+  $('#btnEnableAll').addEventListener('click', ()=>{ state.stopbars.forEach(s=>s.enabled=true); ensureBarsIds(); renderStopbarTable(); renderVisual(); });
+    $('#btnDisableAll').addEventListener('click', ()=>{ state.stopbars.forEach(s=>s.enabled=false); renderStopbarTable(); renderVisual(); });
+
+    // Delegate edits in tables
+    $('#stopbarRows').addEventListener('input', (e)=>{
+      const t = e.target; const idx = +t.getAttribute('data-idx'); if (Number.isNaN(idx)) return;
+      const sb = state.stopbars[idx];
+      switch (t.getAttribute('data-action')){
+        case 'edit-display':
+          sb.displayName = t.value;
+          if (sb.enabled && (!sb.barsId || !sb.barsId.trim())) {
+            const before = sb.barsId;
+            const base = sanitizeName(sb.displayName || sb.id);
+            sb.barsId = base + '_' + random3();
+            if (before !== sb.barsId) renderStopbarTable();
+          }
+          break;
+        case 'edit-barsid': sb.barsId = t.value; break;
+        case 'edit-leadon': sb.leadOnId = t.value; break;
+      }
+      renderVisual();
+    });
+    $('#stopbarRows').addEventListener('change', (e)=>{
+      const t = e.target; const idx = +t.getAttribute('data-idx'); if (Number.isNaN(idx)) return;
+      const sb = state.stopbars[idx];
+      const act = t.getAttribute('data-action');
+      if (act==='toggle-enabled'){ sb.enabled = t.checked; ensureBarsIds(); renderVisual(); }
+    });
+    $('#stopbarRows').addEventListener('click', (e)=>{
+      const btn = e.target.closest('button[data-action="select"]'); if (!btn) return;
+      const idx = +btn.getAttribute('data-idx'); state.selectedStopbar = state.stopbars[idx].id; renderStopbarTable(); renderVisual();
+    });
+
+    // Crossbars
+    $('#crossbarRows').addEventListener('change', (e)=>{
+      const t = e.target; const idx = +t.getAttribute('data-idx'); if (Number.isNaN(idx)) return;
+      const act = t.getAttribute('data-action'); const cb = state.crossbars[idx];
+      if (act==='cb-toggle') { cb.enabled = t.checked; renderVisual(); }
+    });
+    $('#crossbarRows').addEventListener('input', (e)=>{
+      const t = e.target; const idx = +t.getAttribute('data-idx'); if (Number.isNaN(idx)) return;
+      const act = t.getAttribute('data-action'); const cb = state.crossbars[idx];
+      if (act==='cb-display') cb.displayName = t.value; else if (act==='cb-barsid') cb.barsId = t.value;
+      renderVisual();
+    });
+  }
+
+  // Boot (blank init)
+  renderStopbarTable();
+  renderCrossbarTable();
+  wire();
+  updateFromInputs();
+  </script>
+</body>
+</html>
