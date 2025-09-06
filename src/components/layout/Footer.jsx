@@ -175,7 +175,7 @@ export const Footer = () => {
               </li>
               <li>
                 <Link to="/terms" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">
-                  Terms Of Use
+                  Terms Of Service
                 </Link>
               </li>
               <li>
