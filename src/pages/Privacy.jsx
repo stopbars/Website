@@ -27,10 +27,6 @@ const Privacy = () => {
               <p className="text-zinc-300">
                 Last updated: September 6, 2025
               </p>
-              <p className="text-zinc-300 mt-4">
-                We store your full name as provided by VATSIM because it is required to support our display name system and
-                certain features of the website (for example, contribution attribution and moderation workflows).
-              </p>
             </Card>
 
             <Card className="p-6">
