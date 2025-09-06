@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useSearchQuery from '../hooks/useSearchQuery';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -17,7 +18,7 @@ const DivisionAirportManager = () => {
   const [filteredAirports, setFilteredAirports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useSearchQuery();
   
   // Fetch division data and airports
   useEffect(() => {

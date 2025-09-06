@@ -67,7 +67,7 @@ const NewDivision = () => {
 
   return (
     <Layout>
-      <div className="pt-32 pb-20">
+      <div className="pt-40 pb-20">
         <div className="container mx-auto px-4">
           <div className="max-w-2xl mx-auto">
             <h1 className="text-3xl font-bold text-white mb-8">Create Division</h1>

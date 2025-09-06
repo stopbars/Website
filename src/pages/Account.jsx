@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../hooks/useAuth';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -8,8 +8,10 @@ import { formatDateAccordingToLocale } from '../utils/dateUtils';
 import { getVatsimToken } from '../utils/cookieUtils';
 
 const Account = () => {
-  const { user, loading, logout, setUser } = useAuth();
+  const { user, loading, logout, setUser, refreshUserData } = useAuth();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [staffRoles, setStaffRoles] = useState(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -17,6 +19,29 @@ const Account = () => {
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [regenerateError, setRegenerateError] = useState(null);
   const [userDivisions, setUserDivisions] = useState([]);
+  const [displayMode, setDisplayMode] = useState(user?.display_mode ?? 0);
+  const [displayModeStatus, setDisplayModeStatus] = useState(null); // {type:'success'|'error', message:string}
+  const [isDisplayModeSaving, setIsDisplayModeSaving] = useState(false);
+  const [pendingDisplayMode, setPendingDisplayMode] = useState(null);
+  const displayModeRequestRef = useRef({ id: 0, controller: null });
+  const refreshDebounceRef = useRef(null);
+
+  // Sync local state when user loads / changes
+  useEffect(() => {
+    // Don't override local selection while a change is pending
+    if (isDisplayModeSaving) return;
+    if (user?.display_mode !== undefined && user.display_mode !== displayMode) {
+      setDisplayMode(user.display_mode);
+    }
+  }, [user?.display_mode, displayMode, isDisplayModeSaving]);
+
+  // When server reflects the pending mode, clear saving state
+  useEffect(() => {
+    if (isDisplayModeSaving && pendingDisplayMode != null && user?.display_mode === pendingDisplayMode) {
+      setIsDisplayModeSaving(false);
+      setPendingDisplayMode(null);
+    }
+  }, [user?.display_mode, isDisplayModeSaving, pendingDisplayMode]);
 
   useEffect(() => {
     const fetchStaffRole = async () => {
@@ -74,6 +99,15 @@ const Account = () => {
     return showApiKey ? key : '•'.repeat(key.length);
   };
 
+  // Format objects like { id: 'APAC', name: 'Asia Pacific' } as "APAC - Asia Pacific"
+  const formatIdName = (obj) => {
+    if (!obj) return '—';
+    const id = obj?.id ?? '';
+    const name = obj?.name ?? '';
+    if (id && name) return `${id} - ${name}`;
+    return id || name || '—';
+  };
+
   const handleCopyApiKey = async () => {
     try {
       await navigator.clipboard.writeText(user?.api_key);
@@ -85,6 +119,7 @@ const Account = () => {
   };
 
   const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
     const token = getVatsimToken();
     try {
       const response = await fetch('https://v2.stopbars.com/auth/delete', {
@@ -94,6 +129,8 @@ const Account = () => {
       if (response.ok) logout();
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
   const handleRegenerateApiKey = async () => {
@@ -127,8 +164,7 @@ const Account = () => {
         api_key: data.apiKey
       }));
 
-      // Show the API key after regenerating
-      setShowApiKey(true);
+      setShowApiKey(false);
       setIsRegenerateDialogOpen(false);
     } catch (error) {
       console.error('Failed to regenerate API key:', error);
@@ -137,6 +173,130 @@ const Account = () => {
       setRegeneratingApiKey(false);
     }
   };
+
+  const displayModeOptions = [
+    { value: 0, label: 'First Name', example: (user?.full_name ? user.full_name.split(' ')[0] : 'John') },
+    { value: 1, label: 'First Name + Last Initial', example: (() => {
+      if (!user?.full_name) return 'John D';
+      const parts = user.full_name.split(' ');
+      if (parts.length === 1) return parts[0];
+      return `${parts[0]} ${parts[parts.length - 1][0]}`;
+    })() },
+    { value: 2, label: 'VATSIM CID', example: user?.vatsim_id || '1234567' }
+  ];
+
+  const computeDisplayName = (fullName, cid, mode) => {
+    if (!fullName && mode !== 2) return cid || '';
+    const parts = (fullName || '').trim().split(/\s+/).filter(Boolean);
+    switch (mode) {
+      case 0:
+        return parts[0] || cid || '';
+      case 1: {
+        if (parts.length === 0) return cid || '';
+        const last = parts[parts.length - 1] || '';
+        return `${parts[0]}${last ? ' ' + last[0] : ''}`.trim();
+      }
+      case 2:
+        return cid || '';
+      default:
+        return fullName || cid || '';
+    }
+  };
+
+  const handleUpdateDisplayMode = (newMode) => {
+    // Avoid redundant updates
+    const sameAsUser = Number(user?.display_mode) === Number(newMode);
+    const sameAsPending = Number(pendingDisplayMode) === Number(newMode);
+    if ((sameAsUser && !isDisplayModeSaving) || (sameAsPending && isDisplayModeSaving)) {
+      return;
+    }
+    const token = getVatsimToken();
+    const prevUser = user ? { ...user } : null;
+    setDisplayMode(newMode);
+
+    // Optimistic update of user in context
+    if (user) {
+      const optimisticName = computeDisplayName(user.full_name, user.vatsim_id, newMode);
+      setUser({ ...user, display_mode: newMode, display_name: optimisticName });
+    }
+    setIsDisplayModeSaving(true);
+    setPendingDisplayMode(newMode);
+    setDisplayModeStatus({ type: 'success', message: 'Updating preference…' });
+
+    // Fire & forget request
+    // Cancel any in-flight request (latest-wins)
+    if (displayModeRequestRef.current.controller) {
+      displayModeRequestRef.current.controller.abort();
+    }
+    const controller = new AbortController();
+    const requestId = (displayModeRequestRef.current.id || 0) + 1;
+    displayModeRequestRef.current = { id: requestId, controller };
+
+    fetch('https://v2.stopbars.com/auth/display-mode', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Vatsim-Token': token
+      },
+      body: JSON.stringify({ mode: newMode }),
+      signal: controller.signal
+    }).then(res => {
+      // Ignore stale responses
+      if (displayModeRequestRef.current.id !== requestId) return;
+      if (!res.ok) throw new Error('Failed');
+      setDisplayModeStatus({ type: 'success', message: 'Preferred Display Name updated.' });
+      setIsDisplayModeSaving(false);
+      setPendingDisplayMode(null);
+      // Debounced background refresh to align with server canonical values
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      refreshDebounceRef.current = setTimeout(() => {
+        // Silent refresh so we don't toggle global loading state
+        refreshUserData({ silent: true }).catch(() => {});
+        refreshDebounceRef.current = null;
+      }, 600);
+    }).catch(err => {
+      // Handle abort errors and stale responses
+      const aborted = err?.name === 'AbortError';
+      if (aborted) {
+        // If the aborted request is still considered the latest, clear pending so user can retry
+        if (displayModeRequestRef.current.id === requestId) {
+          setIsDisplayModeSaving(false);
+          setPendingDisplayMode(null);
+        }
+        return;
+      }
+      if (displayModeRequestRef.current.id !== requestId) return;
+      console.error('Failed to persist display mode:', err);
+      setDisplayModeStatus({ type: 'error', message: 'Failed to save preference. Reverted.' });
+      setIsDisplayModeSaving(false);
+      setPendingDisplayMode(null);
+      if (prevUser) {
+        setUser(prevUser);
+        setDisplayMode(prevUser.display_mode);
+      }
+    });
+  };
+
+  // Cleanup on unmount: abort any in-flight request and clear timers
+  useEffect(() => {
+    return () => {
+      if (displayModeRequestRef.current.controller) {
+        displayModeRequestRef.current.controller.abort();
+      }
+      if (refreshDebounceRef.current) {
+        clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Auto clear success message after a few seconds
+  useEffect(() => {
+    if (displayModeStatus?.type === 'success') {
+      const t = setTimeout(() => setDisplayModeStatus(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [displayModeStatus]);
 
   if (loading) {
     return (
@@ -241,10 +401,75 @@ const Account = () => {
               <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/50">
                 <div className="grid md:grid-cols-3 gap-6 p-6">
                   <div className="space-y-2">
+                    <h3 className="text-zinc-400 text-sm font-medium">Region</h3>
+                    <p className="font-medium">{formatIdName(user?.region)}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-zinc-400 text-sm font-medium">Division</h3>
+                    <p className="font-medium">{formatIdName(user?.division)}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-zinc-400 text-sm font-medium">Subdivision</h3>
+                    <p className="font-medium">{user?.subdivision ? formatIdName(user?.subdivision) : 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Display Name Mode */}
+              <div className="bg-zinc-900/50 p-6 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-lg font-semibold">Preferred Display Name Mode</h3>
+                    <p className="text-sm text-zinc-400">Choose how your name appears publicly across BARS.</p>
+                  </div>
+                  {user?.display_name && (
+                    <div className="flex items-center gap-3">
+                      {isDisplayModeSaving && (
+                        <div className="text-xs text-zinc-400 flex items-center gap-2">
+                          <Loader className="w-3 h-3 animate-spin" />
+                          Saving…
+                        </div>
+                      )}
+                      <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60">
+                        Current: <span className="font-medium">{user.display_name}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {displayModeOptions.map(opt => {
+                    const active = Number(displayMode) === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleUpdateDisplayMode(opt.value)}
+                        className={`text-left group relative rounded-lg border p-4 transition-all ${active ? 'border-blue-500/60 bg-blue-500/10' : 'border-zinc-800/70 hover:border-zinc-600/60 hover:bg-zinc-800/40'}`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">{opt.label}</span>
+                          <span className={`w-3 h-3 rounded-full border ${active ? 'bg-blue-500 border-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'border-zinc-600 group-hover:border-zinc-400'}`}></span>
+                        </div>
+                        <p className="text-xs text-zinc-400">Example: <span className="text-zinc-300 font-mono">{opt.example}</span></p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {displayModeStatus && (
+                  <div className={`mt-4 text-sm rounded-md px-3 py-2 border ${displayModeStatus.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
+                    {displayModeStatus.message}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/50">
+                <div className="grid md:grid-cols-3 gap-6 p-6">
+                  <div className="space-y-2">
                     <h3 className="text-zinc-400 text-sm font-medium">Account ID</h3>
                     <p className="font-medium">{user?.id}</p>
                   </div>
-                  <div className="space-y-2">            <h3 className="text-zinc-400 text-sm font-medium">Created At</h3>
+                  <div className="space-y-2">            
+                    <h3 className="text-zinc-400 text-sm font-medium">Created At</h3>
                     <p className="font-medium">
                       {formatDateAccordingToLocale(user?.created_at)}
                     </p>
@@ -335,29 +560,73 @@ const Account = () => {
         </div>
 
         {isDeleteDialogOpen && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div className="bg-zinc-900 p-8 rounded-lg max-w-md w-full mx-4 border border-red-500/20">
-              <h2 className="text-2xl font-semibold text-red-500 mb-4">
-                Delete Account
-              </h2>
-              <p className="text-zinc-400 mb-6">
-                This action cannot be undone. This will permanently delete your
-                account and remove all associated data.
-              </p>
-              <div className="flex space-x-4">
-                <Button
-                  className="!bg-red-500 hover:!bg-red-600 text-white"
-                  onClick={handleDeleteAccount}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+              <div className="flex items-center space-x-3 mb-6">
+                <AlertOctagon className="w-6 h-6 text-red-500" />
+                <h3 className="text-xl font-bold text-red-500">Delete Account</h3>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-zinc-400">
+                  This action cannot be undone. This will permanently delete your
+                  account and remove all associated data.
+                </p>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (deleteConfirmation === 'DELETE' && !isDeletingAccount) {
+                      handleDeleteAccount();
+                    }
+                  }}
                 >
-                  Delete Account
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDeleteDialogOpen(false)}
-                  className="hover:bg-zinc-800"
-                >
-                  Cancel
-                </Button>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                      Type DELETE to confirm:
+                    </label>
+                    <input
+                      type="text"
+                      value={deleteConfirmation}
+                      onChange={(e) => setDeleteConfirmation(e.target.value)}
+                      onPaste={(e) => e.preventDefault()}
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
+                      disabled={isDeletingAccount}
+                    />
+                  </div>
+                  <div className="flex space-x-4 mt-6">
+                    <Button
+                      type="submit"
+                      className={`${
+                        deleteConfirmation === 'DELETE' && !isDeletingAccount
+                          ? '!bg-red-500 hover:!bg-red-600 text-white'
+                          : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                      }`}
+                      disabled={deleteConfirmation !== 'DELETE' || isDeletingAccount}
+                    >
+                      {isDeletingAccount ? (
+                        <>
+                          <Loader className="w-4 h-4 mr-2 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        'Delete Account'
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setDeleteConfirmation('');
+                        setIsDeleteDialogOpen(false);
+                      }}
+                      className="hover:bg-zinc-800"
+                      disabled={isDeletingAccount}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>

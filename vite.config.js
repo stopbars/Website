@@ -57,7 +57,7 @@ export default defineConfig({
   // Optimize development server
   server: {
     open: false,
-    host: true
+    strictPort: false
   },
   // Pre-bundle dependencies for faster development
   optimizeDeps: {

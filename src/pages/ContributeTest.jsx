@@ -23,16 +23,18 @@ const ContributeTest = () => {
   const fileInputRef = useRef(null);
   
   const [selectedFile, setSelectedFile] = useState(null);
+  const [originalFileName, setOriginalFileName] = useState('');
   const [xmlData, setXmlData] = useState('');
+  const [originalXmlData, setOriginalXmlData] = useState('');
   const [supportsXmlData, setSupportsXmlData] = useState('');
   const [error, setError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [isXmlTested, setIsXmlTested] = useState(false);
   const [showPolyLines, setShowPolyLines] = useState(false);
   const [showRemoveAreas, setShowRemoveAreas] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const processFile = (file) => {
     
     if (!file) {
       setSelectedFile(null);
@@ -48,7 +50,7 @@ const ContributeTest = () => {
       setError('Please select an XML file');
       setSelectedFile(null);
       setXmlData('');
-      e.target.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     
@@ -57,7 +59,7 @@ const ContributeTest = () => {
       setError('File size must be less than 5MB');
       setSelectedFile(null);
       setXmlData('');
-      e.target.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     
@@ -69,11 +71,40 @@ const ContributeTest = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       setXmlData(e.target.result);
+      setOriginalXmlData(e.target.result);
       // Reset visualization toggles when new file is loaded
       setShowPolyLines(false);
       setShowRemoveAreas(false);
     };
     reader.readAsText(file);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    processFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragActive) setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Ensure leaving the container, not children
+    if (e.currentTarget === e.target) {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    processFile(file);
   };
 
   const handleTestXml = async () => {
@@ -89,7 +120,7 @@ const ContributeTest = () => {
       // Create FormData to match the format used in DebugGenerator
       const formData = new FormData();
       const blob = new Blob([xmlData], { type: 'application/xml' });
-      const file = new File([blob], selectedFile.name || 'upload.xml', { type: 'application/xml' });
+  const file = new File([blob], selectedFile?.name || originalFileName || 'upload.xml', { type: 'application/xml' });
       formData.append('xmlFile', file);
       formData.append('icao', icao);
       
@@ -114,9 +145,14 @@ const ContributeTest = () => {
 
       setIsXmlTested(true);
       
-      // Set the XML data for visualization
-      setXmlData(data.barsXml);
+  // Replace visualization XML with the generated BARS XML (keep original stored separately)
+  setXmlData(data.barsXml);
       
+      // Store original file name for passing forward
+      if (selectedFile?.name) {
+        setOriginalFileName(selectedFile.name);
+      }
+
       // Fully reset the file upload
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -155,7 +191,12 @@ const ContributeTest = () => {
   const handleContinue = () => {
     // Only allow navigation if XML has been tested and is valid
     if (isXmlTested && !error) {
-      navigate(`/contribute/details/${icao}`);
+      navigate(`/contribute/details/${icao}` , {
+        state: {
+          originalXml: originalXmlData,
+          fileName: originalFileName || `${icao}.xml`
+        }
+      });
     } else {
       setError('Please test your XML file before continuing');
     }
@@ -237,10 +278,15 @@ const ContributeTest = () => {
               <Card className="p-6">
                 <h2 className="text-xl font-medium mb-4">Upload XML File</h2>
                 <div 
-                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer ${
-                    selectedFile ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    isDragActive ? 'border-blue-400 bg-blue-500/10' : selectedFile ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
                   }`}
                   onClick={() => fileInputRef.current.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  role="button"
+                  aria-label="Upload XML file via click or drag and drop"
                 >
                   {selectedFile ? (
                     <div className="flex flex-col items-center">
@@ -257,7 +303,7 @@ const ContributeTest = () => {
                       <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
                         <FileUp className="w-6 h-6 text-zinc-400" />
                       </div>
-                      <p className="font-medium mb-1">Click to select XML file</p>
+                      <p className="font-medium mb-1">{isDragActive ? 'Drop file to upload' : 'Click to select XML file'}</p>
                       <p className="text-sm text-zinc-400">
                         or drag and drop (max 5MB)
                       </p>

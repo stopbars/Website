@@ -14,7 +14,7 @@ export const FAQ = () => {
   useEffect(() => {
     const fetchFaqs = async () => {
       try {
-        const response = await fetch('https://api.stopbars.com/faqs');
+        const response = await fetch('https://v2.stopbars.com/faqs');
         if (!response.ok) throw new Error('Failed to fetch FAQs');
         const data = await response.json();
         // Sort by order and take first 5
@@ -59,7 +59,7 @@ export const FAQ = () => {
                 >
                   <button
                     onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                    className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-zinc-800/40 transition-colors duration-200"
+                    className="w-full px-6 py-4 text-left flex justify-between cursor-pointer items-center hover:bg-zinc-800/40 transition-colors duration-200"
                   >
                     <span className="font-medium pr-6">{faq.question}</span>
                     {openFaq === index ? 

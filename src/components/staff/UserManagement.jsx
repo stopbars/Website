@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import useSearchQuery from '../../hooks/useSearchQuery';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { 
-  Users, 
+  User, 
   Search, 
   Mail,
   AlertTriangle,
@@ -17,15 +19,63 @@ import {
   Loader,
   IdCard,
   KeyRound,
-  FileUser
+  Shield,
+  ShieldCheck,
+  Globe,
+  Map,
+  MapPin,
 } from 'lucide-react';
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
-const USERS_PER_PAGE = 10;
+const USERS_PER_PAGE = 6;
+
+// Helper to format role strings (e.g. "LEAD_DEVELOPER" -> "Lead Developer")
+const formatRole = (role) => {
+  if (!role) return '';
+  return role
+    .replace(/_/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
+// Helper function to calculate display name based on display mode
+const getDisplayName = (user) => {
+  if (!user.full_name) return 'Not set';
+  
+  const displayMode = user.display_mode ?? 0; // Default to 0 if not provided
+  
+  switch (displayMode) {
+    case 0: // First name only
+      return user.full_name.split(' ')[0];
+    case 1: // First + Last Initial
+      { const nameParts = user.full_name.split(' ');
+      if (nameParts.length > 1) {
+        return `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}`;
+      }
+      return nameParts[0]; }
+    case 2: // CID (VATSIM ID)
+      return user.vatsim_id || 'Not set';
+    default:
+      return user.full_name.split(' ')[0]; // Fallback to first name
+  }
+};
 
 const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -34,9 +84,9 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+  return createPortal(
+    <div className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4" role="dialog" aria-modal="true">
+      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full border border-zinc-800 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center space-x-3 mb-6">
           <AlertOctagon className="w-6 h-6 text-red-500" />
           <h3 className="text-xl font-bold text-red-500">Delete User Account</h3>
@@ -49,15 +99,13 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
             </p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-red-200">
+                <User className="w-4 h-4" />
+                <span>{user.full_name || 'Not set'}</span>
+              </div>
+              <div className="flex items-center space-x-2 text-red-200 mt-1">
                 <Mail className="w-4 h-4" />
                 <span>{user.email}</span>
               </div>
-              {user.vatsim_id && (
-                <div className="flex items-center space-x-2 text-red-200 mt-1">
-                  <IdCard className="w-4 h-4" />
-                  <span>VATSIM ID: {user.vatsim_id}</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -112,13 +160,15 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
 DeleteConfirmationModal.propTypes = {
   user: PropTypes.shape({
     id: PropTypes.number.isRequired,
+    full_name: PropTypes.string,
     email: PropTypes.string.isRequired,
     vatsim_id: PropTypes.string
   }).isRequired,
@@ -129,6 +179,17 @@ DeleteConfirmationModal.propTypes = {
 
 const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerating }) => {
   const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
   
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -137,9 +198,9 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+  return createPortal(
+    <div className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4" role="dialog" aria-modal="true">
+      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full border border-zinc-800 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center space-x-3 mb-6">
           <KeyRound className="w-6 h-6 text-orange-300" />
           <h3 className="text-xl font-bold text-orange-300">Regenerate API Token</h3>
@@ -152,15 +213,13 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
             </p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-orange-200">
+                <User className="w-4 h-4" />
+                <span>{user.full_name || 'Not set'}</span>
+              </div>
+              <div className="flex items-center space-x-2 text-orange-200 mt-1">
                 <Mail className="w-4 h-4" />
                 <span>{user.email}</span>
               </div>
-              {user.vatsim_id && (
-                <div className="flex items-center space-x-2 text-orange-200 mt-1">
-                  <IdCard className="w-4 h-4" />
-                  <span>VATSIM ID: {user.vatsim_id}</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -216,13 +275,15 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
 RegenerateTokenModal.propTypes = {
   user: PropTypes.shape({
     id: PropTypes.number.isRequired,
+    full_name: PropTypes.string,
     email: PropTypes.string.isRequired,
     vatsim_id: PropTypes.string
   }).isRequired,
@@ -235,7 +296,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useSearchQuery();
   const [success, setSuccess] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingUser, setDeletingUser] = useState(null);
@@ -243,12 +304,9 @@ const UserManagement = () => {
   const [regeneratingUser, setRegeneratingUser] = useState(null);
   const [isRegeneratingToken, setIsRegeneratingToken] = useState(false);
   const [totalUsers, setTotalUsers] = useState(0);
+  // Removed list view; only card view is supported now
 
-  useEffect(() => {
-    fetchUsers();
-  }, [currentPage]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const token = getVatsimToken();
@@ -270,7 +328,11 @@ const UserManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [currentPage, fetchUsers]);
   // No edit functionality needed
 
   const handleDeleteUser = async (userId) => {
@@ -350,7 +412,22 @@ const UserManagement = () => {
   const filteredUsers = users.filter(user => 
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (user.vatsim_id && user.vatsim_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (user.id && user.id.toString().includes(searchTerm))
+    (user.id && user.id.toString().includes(searchTerm)) ||
+    (user.full_name && user.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (getDisplayName(user).toLowerCase().includes(searchTerm.toLowerCase())) ||
+    // Also allow searching by region/division/subdivision
+    (user.region && (
+      (user.region.name && user.region.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.region.id && user.region.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    )) ||
+    (user.division && (
+      (user.division.name && user.division.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.division.id && user.division.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    )) ||
+    (user.subdivision && (
+      (user.subdivision.name && user.subdivision.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.subdivision.id && user.subdivision.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    ))
   );
 
   const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
@@ -361,33 +438,39 @@ const UserManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-4 max-w-4xl">
       {/* Header and Search */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <Users className="w-6 h-6 text-zinc-400" />
-          <h2 className="text-xl font-semibold">User Management</h2>
-          {!loading && <span className="text-sm text-zinc-500">({totalUsers} users)</span>}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <div className="flex items-center space-x-3 mb-4 md:mb-0">
+          <h1 className="text-2xl font-bold">User Management</h1>
+          {!loading && (
+            <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs font-medium">
+              {totalUsers} users
+            </span>
+          )}
         </div>
-        <div className="relative">
-          <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={searchTerm}
-            onChange={handleSearch}
-            className="pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 w-64"
-          />
+  <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={handleSearch}
+              className="pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 w-64"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Status Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-          <p className="text-red-500">{error}</p>
-        </div>
-      )}
+      <div className="space-y-6">
+        {/* Status Messages */}
+        {error && (
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <p className="text-red-500">{error}</p>
+          </div>
+        )}
 
       {success && (
         <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
@@ -402,66 +485,82 @@ const UserManagement = () => {
           <Loader className="w-8 h-8 animate-spin text-zinc-400" />
         </div>
       ) : (
-        <>          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredUsers.length === 0 && (
+              <div className="col-span-full p-6 text-center text-zinc-400 border border-dashed border-zinc-700 rounded-lg">
+                No users found.
+              </div>
+            )}
             {filteredUsers.map(user => (
-              <Card key={user.id} className="p-6 hover:border-zinc-700 transition-colors">
+              <Card key={user.id} className="p-4 hover:border-zinc-700 transition-colors">
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-3">
-                      <Users className="w-5 h-5 text-zinc-400" />
-                      <h3 className="font-medium truncate">{user.vatsim_id || 'Not set'}</h3>
+                      <User className="w-6 h-6 text-zinc-400" />
+                      <h3 className="font-medium truncate text-base">{user.full_name || 'Not Set'}</h3>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
                       <Button
                         variant="outline"
                         onClick={() => setRegeneratingUser(user)}
-                        className="px-2 py-2 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                        className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
                       >
-                        <KeyRound className="w-4 h-4" />
+                        <KeyRound className="w-3.5 h-3.5" />
                       </Button>
-                      <Button
+                      <Button 
                         variant="outline"
                         onClick={() => setDeletingUser(user)}
-                        className="px-2 py-2 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                        className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
-                  </div>                  
-                  
-                  <div className="flex items-center space-x-3 mb-2">
-                    <IdCard className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
-                      Account ID: {user.id || 'Not set'}
-                    </span>
                   </div>
-                  
-                  <div className="flex items-center space-x-3 mb-2">
-                    <FileUser className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
-                      Role: {user.is_staff ? `${user.role.replace(/_/g, ' ')}` : 'User'}
-                    </span>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Account ID: {user.id || 'Not set'}</span>
                   </div>
-                  
-                  <div className="flex items-center space-x-3 mb-2">
-                    <Mail className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
-                      Email: {user.email}
-                    </span>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    {user.is_staff && user.role && user.role.toLowerCase() !== 'user' ? (
+                      <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+                    ) : (
+                      <Shield className="w-3.5 h-3.5 text-zinc-400" />
+                    )}
+                    <span className="text-xs text-zinc-300">Role: {user.is_staff ? formatRole(user.role) : 'User'}</span>
                   </div>
-                  
-                  <div className="flex items-center space-x-3 mb-2">
-                    <Calendar className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
-                      Created: {formatLocalDateTime(user.created_at)}
-                    </span>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Mail className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Email: {user.email}</span>
                   </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <Clock className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">
-                      Last Login: {formatLocalDateTime(user.last_login)}
-                    </span>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">VATSIM ID: {user.vatsim_id || 'Not set'}</span>
+                  </div>
+                  {/* Region / Division / Subdivision */}
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Globe className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Region: {user.region?.name || user.region?.id || 'Not set'}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Map className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Division: {user.division?.name || user.division?.id || 'Not set'}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Subdivision: {user.subdivision?.name || user.subdivision?.id || 'None'}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Display Name: {getDisplayName(user)}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 mb-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Created: {formatLocalDateTime(user.created_at)}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                    <span className="text-xs text-zinc-300">Last Login: {formatLocalDateTime(user.last_login)}</span>
                   </div>
                 </div>
               </Card>
@@ -494,9 +593,9 @@ const UserManagement = () => {
               variant="outline"
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-4"
+              className="px-3 py-1.5 text-sm"
             >
-              <ChevronLeft className="w-4 h-4 mr-2" />
+              <ChevronLeft className="w-3.5 h-3.5 mr-1.5" />
               Previous
             </Button>
             <span className="text-sm text-zinc-400">
@@ -506,14 +605,15 @@ const UserManagement = () => {
               variant="outline"
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
-              className="px-4"
+              className="px-3 py-1.5 text-sm"
             >
               Next
-              <ChevronRight className="w-4 h-4 ml-2" />
+              <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
             </Button>
           </div>
         </>
       )}
+      </div>
     </div>
   );
 };

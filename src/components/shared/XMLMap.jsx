@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect} from 'react';
+import { useState, useRef, useEffect, useCallback} from 'react';
 import PropTypes from 'prop-types';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, LayersControl, Polyline, Polygon } from 'react-leaflet';
@@ -13,6 +13,144 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
   const [polylines, setPolylines] = useState([]);
   const [removeAreas, setRemoveAreas] = useState([]);
   const mapRef = useRef(null);
+
+  const calculateRectangleCorners = useCallback((centerLat, centerLng, widthMeters, lengthMeters, heading) => {
+    const center = { latitude: centerLat, longitude: centerLng };
+    const halfWidth = widthMeters / 2;
+    const halfLength = lengthMeters / 2;
+    const distance = Math.sqrt(halfLength * halfLength + halfWidth * halfWidth);
+    const bottomLeft = computeDestinationPoint(center, distance, (heading + 225) % 360);
+    const bottomRight = computeDestinationPoint(center, distance, (heading + 315) % 360);
+    const topRight = computeDestinationPoint(center, distance, (heading + 45) % 360);
+    const topLeft = computeDestinationPoint(center, distance, (heading + 135) % 360);
+    return [
+      [bottomLeft.latitude, bottomLeft.longitude],
+      [bottomRight.latitude, bottomRight.longitude],
+      [topRight.latitude, topRight.longitude],
+      [topLeft.latitude, topLeft.longitude]
+    ];
+  }, []);
+
+  // Parse LightSupport XML (remove areas)
+  const parseRemoveAreasXML = useCallback((xmlString) => {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+    const supports = xmlDoc.getElementsByTagName("LightSupport");
+    const areas = [];
+    let firstPosition = null;
+
+    for (let i = 0; i < supports.length; i++) {
+      const support = supports[i];
+      const lat = parseFloat(support.getAttribute("latitude"));
+      const lng = parseFloat(support.getAttribute("longitude"));
+      const width = parseFloat(support.getAttribute("width")); // Width in meters
+      const length = parseFloat(support.getAttribute("length")); // Length in meters
+      const heading = parseFloat(support.getAttribute("heading"));
+      
+      if (!firstPosition && !isNaN(lat) && !isNaN(lng)) {
+        firstPosition = [lat, lng];
+        setMapCenter(firstPosition);
+      }
+      
+      const polygon = calculateRectangleCorners(lat, lng, width, length, heading);
+      
+      if (polygon.length === 4) {
+        areas.push({
+          id: `support-${i}`,
+          points: polygon
+        });
+      }
+    }
+    
+    return areas;
+  }, [calculateRectangleCorners]);
+
+  // Parse standard BARS XML
+  const parseXML = useCallback((xmlString) => {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+    const objects = xmlDoc.getElementsByTagName("BarsObject");
+    const allLights = [];
+    const objectGroups = {};
+    let firstPosition = null;
+
+    for (let i = 0; i < objects.length; i++) {
+      const obj = objects[i];
+      const objId = obj.getAttribute("id");
+      const objType = obj.getAttribute("type");
+      const propsElement = obj.querySelector("Properties");
+      const color = propsElement?.querySelector("Color")?.textContent || '';
+      const orientation = propsElement?.querySelector("Orientation")?.textContent || '';
+      const elevated = propsElement?.querySelector("Elevated")?.textContent === 'true';
+      const lightElements = obj.getElementsByTagName("Light");
+      
+      objectGroups[objId] = {
+        type: objType,
+        positions: []
+      };
+
+      for (let j = 0; j < lightElements.length; j++) {
+        const light = lightElements[j];
+        const position = light.querySelector("Position")?.textContent.split(",");
+        const heading = parseFloat(light.querySelector("Heading")?.textContent || "0");
+        const lightProps = light.querySelector("Properties");
+        const lightColor = lightProps?.querySelector("Color")?.textContent || color;
+        const lightOrientation = lightProps?.querySelector("Orientation")?.textContent || orientation;
+        const lightIHP = lightProps?.querySelector("IHP")?.textContent === 'true';
+        const lightElevated = lightProps?.querySelector("Elevated")?.textContent === 'true' || elevated;
+
+        if (position && position.length === 2) {
+          const lat = parseFloat(position[0]);
+          const lng = parseFloat(position[1]);
+          if (!firstPosition) {
+            firstPosition = [lat, lng];
+          }
+          
+          if (!lightElevated && !lightIHP) {
+            objectGroups[objId].positions.push([lat, lng]);
+          }
+          
+          allLights.push({
+            id: `${objId}_${j}`,
+            position: [lat, lng],
+            heading: heading,
+            type: objType,
+            color: lightColor,
+            orientation: lightOrientation,
+            elevated: lightElevated,
+            IHP: lightIHP,
+            objectId: objId,
+            properties: lightProps ? {
+              color: lightProps.querySelector("Color")?.textContent || null,
+              orientation: lightProps.querySelector("Orientation")?.textContent || null,
+              IHP: lightProps.querySelector("IHP")?.textContent || null,
+              elevated: lightProps.querySelector("Elevated")?.textContent || null
+            } : null
+          });
+        }
+      }
+    }
+
+    if (firstPosition) {
+      setMapCenter(firstPosition);
+    }
+
+    const lines = Object.keys(objectGroups).map(objId => {
+      const group = objectGroups[objId];
+      let color = '#ef4444';
+      if (group.type === 'taxiway') color = '#4ade80';
+      else if (group.type === 'leadon') color = '#facc15';
+      
+      return {
+        id: objId,
+        positions: group.positions,
+        type: group.type,
+        color: color
+      };
+    });
+
+    return { lights: allLights, lines: lines };
+  }, []);
 
   useEffect(() => {
     delete L.Icon.Default.prototype._getIconUrl;
@@ -89,182 +227,7 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
     return () => {
       document.head.removeChild(style);
     };
-  }, [xmlData]);
-  // Parse LightSupport XML (remove areas)
-  const parseRemoveAreasXML = (xmlString) => {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-    const supports = xmlDoc.getElementsByTagName("LightSupport");
-    const areas = [];
-    let firstPosition = null;
-
-    for (let i = 0; i < supports.length; i++) {
-      const support = supports[i];
-      const lat = parseFloat(support.getAttribute("latitude"));
-      const lng = parseFloat(support.getAttribute("longitude"));
-      const width = parseFloat(support.getAttribute("width")); // Width in meters
-      const length = parseFloat(support.getAttribute("length")); // Length in meters
-      const heading = parseFloat(support.getAttribute("heading"));
-      
-      if (!firstPosition && !isNaN(lat) && !isNaN(lng)) {
-        firstPosition = [lat, lng];
-        setMapCenter(firstPosition);
-      }
-      
-      // Create polygon corners based on center point, width, length and heading
-      const polygon = calculateRectangleCorners(lat, lng, width, length, heading);
-      
-      if (polygon.length === 4) {
-        areas.push({
-          id: `support-${i}`,
-          points: polygon
-        });
-      }
-    }
-    
-    return areas;
-  };
-
-  // Calculate rectangle corners from center, dimensions and heading
-  // using geolib to match backend calculations
-  const calculateRectangleCorners = (centerLat, centerLng, widthMeters, lengthMeters, heading) => {
-    // Define center point
-    const center = { latitude: centerLat, longitude: centerLng };
-    
-    // Calculate half dimensions
-    const halfWidth = widthMeters / 2;
-    const halfLength = lengthMeters / 2;
-    
-    // Calculate corner positions using geolib's computeDestinationPoint
-    // which matches the backend's calculateDestinationPoint function
-    
-    // Bottom left: Move from center by -halfLength and -halfWidth
-    const bottomLeft = computeDestinationPoint(
-      center,
-      Math.sqrt(halfLength * halfLength + halfWidth * halfWidth),
-      (heading + 225) % 360 // 225 degrees counterclockwise from heading
-    );
-    
-    // Bottom right: Move from center by +halfLength and -halfWidth
-    const bottomRight = computeDestinationPoint(
-      center,
-      Math.sqrt(halfLength * halfLength + halfWidth * halfWidth),
-      (heading + 315) % 360 // 315 degrees counterclockwise from heading
-    );
-    
-    // Top right: Move from center by +halfLength and +halfWidth
-    const topRight = computeDestinationPoint(
-      center,
-      Math.sqrt(halfLength * halfLength + halfWidth * halfWidth),
-      (heading + 45) % 360 // 45 degrees counterclockwise from heading
-    );
-    
-    // Top left: Move from center by -halfLength and +halfWidth
-    const topLeft = computeDestinationPoint(
-      center,
-      Math.sqrt(halfLength * halfLength + halfWidth * halfWidth),
-      (heading + 135) % 360 // 135 degrees counterclockwise from heading
-    );
-    
-    return [
-      [bottomLeft.latitude, bottomLeft.longitude],
-      [bottomRight.latitude, bottomRight.longitude],
-      [topRight.latitude, topRight.longitude],
-      [topLeft.latitude, topLeft.longitude]
-    ];
-  };
-  // Parse standard BARS XML
-  const parseXML = (xmlString) => {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-    const objects = xmlDoc.getElementsByTagName("BarsObject");
-    const allLights = [];
-    const objectGroups = {};
-    let firstPosition = null;
-
-    for (let i = 0; i < objects.length; i++) {
-      const obj = objects[i];
-      const objId = obj.getAttribute("id");
-      const objType = obj.getAttribute("type");
-      const propsElement = obj.querySelector("Properties");
-      const color = propsElement?.querySelector("Color")?.textContent || '';
-      const orientation = propsElement?.querySelector("Orientation")?.textContent || '';
-      const elevated = propsElement?.querySelector("Elevated")?.textContent === 'true';
-      const lightElements = obj.getElementsByTagName("Light");
-      
-      // Create an array to store positions for this object (for polylines)
-      objectGroups[objId] = {
-        type: objType,
-        positions: []
-      };
-
-      for (let j = 0; j < lightElements.length; j++) {
-        const light = lightElements[j];
-        const position = light.querySelector("Position")?.textContent.split(",");
-        const heading = parseFloat(light.querySelector("Heading")?.textContent || "0");
-        const lightProps = light.querySelector("Properties");
-        const lightColor = lightProps?.querySelector("Color")?.textContent || color;
-        const lightOrientation = lightProps?.querySelector("Orientation")?.textContent || orientation;
-        const lightIHP = lightProps?.querySelector("IHP")?.textContent === 'true';
-        const lightElevated = lightProps?.querySelector("Elevated")?.textContent === 'true' || elevated;
-
-        if (position && position.length === 2) {
-          const lat = parseFloat(position[0]);
-          const lng = parseFloat(position[1]);
-          if (!firstPosition) {
-            firstPosition = [lat, lng];
-          }
-          
-          // Add position to the object's positions array (for polylines)
-          // Only include lights that are not elevated and not IHP
-          if (!lightElevated && !lightIHP) {
-            objectGroups[objId].positions.push([lat, lng]);
-          }
-          
-          allLights.push({
-            id: `${objId}_${j}`,
-            position: [lat, lng],
-            heading: heading,
-            type: objType,
-            color: lightColor,
-            orientation: lightOrientation,
-            elevated: lightElevated,
-            IHP: lightIHP,
-            objectId: objId,
-            properties: lightProps ? {
-              color: lightProps.querySelector("Color")?.textContent || null,
-              orientation: lightProps.querySelector("Orientation")?.textContent || null,
-              IHP: lightProps.querySelector("IHP")?.textContent || null,
-              elevated: lightProps.querySelector("Elevated")?.textContent || null
-            } : null
-          });
-        }
-      }
-    }
-
-    if (firstPosition) {
-      setMapCenter(firstPosition);
-    }
-
-    // Convert objectGroups to polylines array
-    const lines = Object.keys(objectGroups).map(objId => {
-      const group = objectGroups[objId];
-      let color = '#ef4444'; // Default red
-      
-      // Set color based on object type
-      if (group.type === 'taxiway') color = '#4ade80'; // Green
-      else if (group.type === 'leadon') color = '#facc15'; // Yellow
-      
-      return {
-        id: objId,
-        positions: group.positions,
-        type: group.type,
-        color: color
-      };
-    });
-
-    return { lights: allLights, lines: lines };
-  };
+  }, [xmlData, parseXML, parseRemoveAreasXML]);
   
   const createCustomIcon = (light) => {
     // Make sure we have a heading value, defaulting to 0 if not present

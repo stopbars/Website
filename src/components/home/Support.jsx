@@ -35,10 +35,10 @@ export const Support = () => {
             <Button 
               variant="secondary" 
               className="w-full"
-              onClick={() => window.location.href = '/documentation'}
+              onClick={() => window.open('https://docs.stopbars.com', '_blank')}
               aria-label="View installation and configuration guides"
             >
-              View Guides
+              View Docs
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Card>
@@ -59,7 +59,7 @@ export const Support = () => {
                 </code>
                 <button
                   onClick={handleCopyPath}
-                  className="text-zinc-300 hover:text-white transition-colors p-1 hover:bg-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+                  className="text-zinc-300 hover:text-white transition-colors p-1 cursor-pointer hover:bg-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
                   aria-label={copiedPath ? "Path copied to clipboard" : "Copy log file path to clipboard"}
                 >
                   {copiedPath ? (

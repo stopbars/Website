@@ -5,7 +5,7 @@ import { Button } from '../components/shared/Button';
 import { getVatsimToken } from '../utils/cookieUtils';
 import { Building2, Link, List, LayoutGrid, Loader } from 'lucide-react';
 
-const DivisionsManagement = () => {
+const Divisions = () => {
   const [userDivisions, setUserDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -150,4 +150,4 @@ const DivisionsManagement = () => {
   );
 };
 
-export default DivisionsManagement;
+export default Divisions;

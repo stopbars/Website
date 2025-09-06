@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BARS Intas XML Profile Creator</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+    <style>
+        :root { --controls-bg: #f8f9fa; --border: #dcdcdc; }
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        #controls { padding: 10px; background: var(--controls-bg); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 500; }
+        #controls .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+        #controls .group { display: inline-flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: white; }
+        #controls label { font-size: 12px; color: #333; }
+        #controls input[type="text"], #controls input[type="password"] { padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; min-width: 260px; }
+        button { margin: 0; padding: 6px 10px; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #f0f0f0; }
+        #status { font-size: 12px; color: #555; margin-left: auto; }
+        #map { flex: 1 1 auto; min-height: 300px; }
+        #xmlOutput { width: 100%; height: 160px; margin: 0; border: 0; border-top: 1px solid var(--border); padding: 8px; resize: vertical; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 50%; top: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 1px solid #000; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .modal form { display: flex; flex-direction: column; gap: 8px; }
+        .modal label { margin-bottom: 6px; }
+    /* Only make typical text/number inputs full width, not checkboxes/radios */
+    .modal input[type="text"],
+    .modal input[type="password"],
+    .modal input[type="number"],
+    .modal select { width: 100%; }
+    .modal input[type="checkbox"],
+    .modal input[type="radio"] { width: auto; }
+        /* Small always-visible labels for features */
+        .feature-label {
+            background: rgba(255,255,255,0.9);
+            border: 1px solid var(--border);
+            color: #333;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+            pointer-events: none;
+        }
+        /* Stopbar modal enhancements */
+        #stopbarModal { width: 640px; max-width: 95vw; }
+        .leadon-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .leadon-toolbar input[type="text"] { width: auto; min-width: 180px; flex: 1 1 220px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; }
+        .leadon-toolbar #stopLeadonsCount { margin-left: auto; font-size: 12px; color: #555; }
+        .leadon-list { max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: #fff; }
+    .leadon-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+    .leadon-item input[type="checkbox"] { flex: 0 0 auto; width: auto; }
+    .leadon-item span { flex: 1 1 auto; min-width: 0; }
+        .leadon-item:hover { background: #f7f7f7; }
+        .leadon-empty { color: #777; font-size: 12px; padding: 8px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="row">
+            <div class="group" title="Drawing and data tools">
+                <button onclick="fetchTaxiways()" title="Query OSM Overpass for taxiways in view">Fetch Taxiways</button>
+                <button onclick="addTaxiwayLine()" title="Draw a taxiway line">Taxiway Line</button>
+                <button onclick="addLeadOn()" title="Draw a LeadOn polyline and set IDs">LeadOn</button>
+                <button onclick="addWindsock()" title="Place a windsock marker">Windsock</button>
+                <button onclick="addStopbar()" title="Place a stopbar marker and set properties">Stopbar</button>
+                <button onclick="fitToDrawings()" title="Zoom to all drawn features">Fit</button>
+                <button onclick="clearDrawings()" title="Remove all drawn features">Clear</button>
+            </div>
+
+            <div class="group" title="Airport context">
+                <label for="icaoCode" title="Current airport ICAO code (used for filename)">ICAO</label>
+                <input id="icaoCode" type="text" placeholder="YMML" maxlength="6" oninput="persistICAO()" />
+            </div>
+
+            <span id="status">Ready</span>
+        </div>
+        <div class="row">
+            <button onclick="triggerXMLLoad()" title="Load an existing BARS XML file">Load XML</button>
+            <button onclick="generateXML()" title="Generate and download a BARS XML file from drawn features">Generate and Download XML</button>
+            <input id="xmlFileInput" type="file" accept=".xml,text/xml" style="display:none" onchange="handleXMLFileSelect(event)" />
+        </div>
+    </div>
+    <div id="map"></div>
+    <textarea id="xmlOutput" readonly></textarea>
+
+    <!-- LeadOn Modal -->
+    <div id="leadonModal" class="modal">
+        <form>
+            <label>ID (unique, used for references): <input id="leadonId" type="text" required></label>
+            <label>BARSId (optional, can duplicate): <input id="leadonBarsId" type="text" placeholder="Defaults to ID"></label>
+            <button type="button" onclick="submitLeadOn()">Submit</button>
+            <button type="button" onclick="cancelModal('leadonModal')">Cancel</button>
+        </form>
+    </div>
+
+    <!-- Stopbar Modal -->
+    <div id="stopbarModal" class="modal">
+        <form>
+            <label>BARSId: <input id="stopBarsId" type="text" required></label>
+            <label>DisplayName: <input id="stopDisplay" type="text" required></label>
+            <label>Heading: <input id="stopHeading" type="number" required></label>
+            <label>Associated LeadOns:</label>
+            <div class="leadon-toolbar">
+                <input id="stopLeadonsFilter" type="text" placeholder="Search LeadOns…" />
+                <button type="button" id="stopLeadonsSelectAll" title="Select all visible LeadOns">Select all (visible)</button>
+                <button type="button" id="stopLeadonsClear" title="Clear all visible selections">Clear (visible)</button>
+                <span id="stopLeadonsCount">Selected: 0</span>
+            </div>
+            <div id="stopLeadonsList" class="leadon-list" role="listbox" aria-multiselectable="true"></div>
+            <button type="button" onclick="submitStopbar()">Submit</button>
+            <button type="button" onclick="cancelModal('stopbarModal')">Cancel</button>
+        </form>
+    </div>
+
+    <script>
+        // Map init with deeper zoom and smoother steps
+        var map = L.map('map', {
+            zoomControl: true,
+            zoomDelta: 0.25,
+            zoomSnap: 0,
+            wheelPxPerZoomLevel: 120,
+            maxZoom: 25,
+            // Use Canvas renderer for better performance with many vectors
+            preferCanvas: true
+        }).setView([-37.67, 144.84], 15);
+        // Base layers
+        var osmStreets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxNativeZoom: 19,
+            maxZoom: 25
+        }).addTo(map);
+        // Google Satellite XYZ
+        var googleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            attribution: 'Imagery © Google',
+            maxNativeZoom: 22,
+            maxZoom: 25
+        });
+        // Layer control
+        var baseLayers = { 'OSM Streets': osmStreets, 'Satellite': googleSatellite };
+        var overlays = {};
+
+    var drawnItems = L.featureGroup().addTo(map);
+    // Lightweight default styling for polylines to reduce paint cost
+    var defaultLineOpts = { weight: 2, opacity: 0.9, smoothFactor: 2, lineJoin: 'round', lineCap: 'round' };
+    overlays['Drawings'] = drawnItems;
+    var layersControl = L.control.layers(baseLayers, overlays, { position: 'topleft', collapsed: true }).addTo(map);
+    // Scale bar
+    L.control.scale({ metric: true, imperial: false }).addTo(map);
+
+        // Persist map view (center/zoom) and layer selection to localStorage and restore on load
+        var MAP_VIEW_KEY = 'bars_map_view';
+        var BASE_LAYER_KEY = 'bars_base_layer';
+        var OVERLAYS_KEY = 'bars_overlays_on';
+        function saveMapView() {
+            try {
+                var c = map.getCenter();
+                var z = map.getZoom();
+                var payload = { lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6), zoom: z };
+                localStorage.setItem(MAP_VIEW_KEY, JSON.stringify(payload));
+            } catch (e) { /* ignore */ }
+        }
+        function restoreMapView() {
+            try {
+                var raw = localStorage.getItem(MAP_VIEW_KEY);
+                if (!raw) return;
+                var obj = JSON.parse(raw);
+                if (!obj || typeof obj.lat !== 'number' || typeof obj.lng !== 'number') return;
+                if (obj.lat < -90 || obj.lat > 90 || obj.lng < -180 || obj.lng > 180) return;
+                var maxZ = (typeof map.getMaxZoom === 'function') ? map.getMaxZoom() : 25;
+                var z = typeof obj.zoom === 'number' ? Math.max(0, Math.min(maxZ, obj.zoom)) : map.getZoom();
+                map.setView([obj.lat, obj.lng], z, { animate: false });
+            } catch (e) { /* ignore */ }
+        }
+        function getBaseLayerNameByLayer(layer) {
+            for (var name in baseLayers) { if (baseLayers.hasOwnProperty(name) && baseLayers[name] === layer) return name; }
+            return null;
+        }
+        function saveBaseLayerByName(name) {
+            try { if (name && baseLayers[name]) localStorage.setItem(BASE_LAYER_KEY, name); } catch (e) { /* ignore */ }
+        }
+        function restoreBaseLayer() {
+            try {
+                var name = localStorage.getItem(BASE_LAYER_KEY);
+                if (!name || !baseLayers[name]) return;
+                var target = baseLayers[name];
+                if (!map.hasLayer(target)) { target.addTo(map); }
+                for (var n in baseLayers) {
+                    if (baseLayers.hasOwnProperty(n) && n !== name) {
+                        var l = baseLayers[n];
+                        if (map.hasLayer(l)) map.removeLayer(l);
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        }
+        function saveOverlayState() {
+            try {
+                var on = [];
+                for (var name in overlays) {
+                    if (!overlays.hasOwnProperty(name)) continue;
+                    var layer = overlays[name];
+                    if (map.hasLayer(layer)) on.push(name);
+                }
+                localStorage.setItem(OVERLAYS_KEY, JSON.stringify(on));
+            } catch (e) { /* ignore */ }
+        }
+        function restoreOverlayState() {
+            try {
+                var raw = localStorage.getItem(OVERLAYS_KEY);
+                if (!raw) return;
+                var on = [];
+                try { on = JSON.parse(raw) || []; } catch (e) { on = []; }
+                var onSet = {};
+                on.forEach(function(n){ onSet[n] = true; });
+                for (var name in overlays) {
+                    if (!overlays.hasOwnProperty(name)) continue;
+                    var layer = overlays[name];
+                    if (onSet[name]) {
+                        if (!map.hasLayer(layer)) map.addLayer(layer);
+                    } else {
+                        if (map.hasLayer(layer)) map.removeLayer(layer);
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        }
+        // Save on any map movement (pan or zoom)
+        map.on('moveend', saveMapView);
+        // Save base layer and overlay selections
+        map.on('baselayerchange', function(e){ var n = getBaseLayerNameByLayer(e.layer); if (n) saveBaseLayerByName(n); });
+        map.on('overlayadd', saveOverlayState);
+        map.on('overlayremove', saveOverlayState);
+        // Try to restore a previously saved view
+        restoreMapView();
+        // Try to restore previously selected base layer and overlay visibility
+        restoreBaseLayer();
+        restoreOverlayState();
+        map.pm.addControls({
+            position: 'topleft',
+            // Hide drawing tools we don't want used directly
+            drawMarker: false,
+            drawPolyline: false,
+            drawPolygon: false,
+            drawRectangle: false,
+            drawCircle: false,
+            drawCircleMarker: false,
+            drawText: false,
+            // Keep utility modes as needed
+            cutPolygon: false,
+            splitMode: true
+        });
+
+    var currentMode = '';
+    var tempLayer = null; // used during create flow
+    var leadonIds = [];
+    var modalContext = null; // { type: 'leadon'|'stopbar', mode: 'create'|'edit', layer: L.Layer|null, originalId?: string }
+    // UI state for the Stopbar LeadOn selector
+    var stopLeadonsUIState = { filter: '', selected: new Set() };
+
+        // Track active editing layers to avoid enabling edit globally
+        var editingLayers = new Set();
+        function enableLayerEdit(layer){
+            try {
+                if (!layer || !layer.pm) return;
+                if (layer.pm.setOptions) layer.pm.setOptions({ pmIgnore: false });
+                layer.pm.enable();
+                editingLayers.add(layer);
+            } catch(_) {}
+        }
+        function disableLayerEdit(layer){
+            try {
+                if (!layer || !layer.pm) return;
+                layer.pm.disable();
+                if (layer.pm.setOptions) layer.pm.setOptions({ pmIgnore: true });
+                editingLayers.delete(layer);
+            } catch(_) {}
+        }
+        function disableAllEditing(){
+            try { editingLayers.forEach(function(l){ disableLayerEdit(l); }); } catch(_) {}
+        }
+
+        // Keep LeadOn ID list in sync with what's on the map
+        function refreshLeadonIds() {
+            var ids = [];
+            drawnItems.eachLayer(function(layer) {
+                if (layer && layer.properties && layer.properties.type === 'leadon' && layer instanceof L.Polyline) {
+                    if (layer.properties.id) ids.push(layer.properties.id);
+                }
+            });
+            leadonIds = ids;
+        }
+
+        // Create/update small permanent label tooltips for LeadOns and Stopbars
+        function updateLabel(layer) {
+            if (!layer || !layer.properties) return;
+            var text = '';
+            if (layer.properties.type === 'leadon') {
+                var id = layer.properties.id || '';
+                var barsId = layer.properties.barsId || '';
+                text = id || barsId || '';
+            } else if (layer.properties.type === 'stopbar') {
+                text = layer.properties.barsid || '';
+            } else {
+                return;
+            }
+            var opts = { permanent: true, direction: 'top', className: 'feature-label', offset: [0, -6] };
+            if (layer.getTooltip && layer.getTooltip()) {
+                try { layer.setTooltipContent(text); } catch(_) {}
+            } else if (layer.bindTooltip) {
+                try { layer.bindTooltip(text, opts); } catch(_) {}
+            }
+        }
+
+        map.on('pm:create', function(e) {
+            var layer = e.layer;
+            if (currentMode === 'taxiway') {
+                layer.properties = { type: 'taxiway' };
+                try { layer.setStyle && layer.setStyle(defaultLineOpts); } catch(_) {}
+                drawnItems.addLayer(layer);
+                enableLayerEdit(layer); // allow immediate fine-tuning of new line only
+                attachTaxiwaySplit(layer);
+                attachFeatureHandlers(layer);
+            } else if (currentMode === 'leadon') {
+                tempLayer = layer;
+                openModal('leadonModal', { type: 'leadon', mode: 'create', layer: tempLayer });
+            } else if (currentMode === 'windsock') {
+                layer.properties = { type: 'windsock' };
+                drawnItems.addLayer(layer);
+                enableLayerEdit(layer);
+                attachFeatureHandlers(layer);
+            } else if (currentMode === 'stopbar') {
+                tempLayer = layer;
+                openModal('stopbarModal', { type: 'stopbar', mode: 'create', layer: tempLayer });
+            }
+            map.pm.disableDraw();
+            currentMode = '';
+        });
+
+        // Ensure eraser/removal actually removes from the feature group as well
+        map.on('pm:remove', function(e) {
+            try {
+                if (e && e.layer && drawnItems.hasLayer(e.layer)) {
+                    drawnItems.removeLayer(e.layer);
+                    refreshLeadonIds();
+                }
+                setStatus('Feature removed.');
+            } catch(_) {}
+        });
+        // Fallback: catch any layer removed from map, keep group in sync
+        map.on('layerremove', function(e) {
+            try {
+                if (e && e.layer && drawnItems.hasLayer(e.layer)) {
+                    drawnItems.removeLayer(e.layer);
+                    refreshLeadonIds();
+                }
+            } catch(_) {}
+        });
+
+        function setStatus(msg) { document.getElementById('status').textContent = msg || 'Ready'; }
+
+        function fetchTaxiways() {
+            setStatus('Fetching taxiways…');
+            var bbox = map.getBounds();
+            var south = bbox.getSouth();
+            var west = bbox.getWest();
+            var north = bbox.getNorth();
+            var east = bbox.getEast();
+            var query = `[out:json][timeout:60];\n(\n  way["aeroway"="taxiway"](${south},${west},${north},${east});\n);\n(._;>;);\nout body;`;
+            fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: 'data=' + encodeURIComponent(query)
+            }).then(response => response.json()).then(data => {
+                var elements = data.elements;
+                var nodes = {};
+                elements.forEach(el => {
+                    if (el.type === 'node') {
+                        nodes[el.id] = [el.lat, el.lon];
+                    }
+                });
+                elements.forEach(el => {
+                    if (el.type === 'way') {
+                        var coords = el.nodes.map(id => nodes[id]);
+                        var poly = L.polyline(coords, defaultLineOpts);
+                        poly.properties = { type: 'taxiway' };
+                        drawnItems.addLayer(poly);
+                        try { poly.pm && poly.pm.setOptions({ pmIgnore: true }); } catch(_) {}
+                        attachTaxiwaySplit(poly);
+                        attachFeatureHandlers(poly);
+                    }
+                });
+                var waysCount = elements.filter(function(e){ return e.type === 'way'; }).length;
+                setStatus('Fetched ' + waysCount + ' taxiway segments.');
+            }).catch(error => { console.error('Error fetching OSM data:', error); setStatus('Error fetching taxiways. See console.'); });
+        }
+
+        function addTaxiwayLine() {
+            currentMode = 'taxiway';
+            map.pm.enableDraw('Line');
+        }
+
+        function addLeadOn() {
+            currentMode = 'leadon';
+            map.pm.enableDraw('Line');
+        }
+
+        function addWindsock() {
+            currentMode = 'windsock';
+            map.pm.enableDraw('Marker');
+        }
+
+        function addStopbar() {
+            currentMode = 'stopbar';
+            map.pm.enableDraw('Marker');
+        }
+
+        function submitLeadOn() {
+            var id = document.getElementById('leadonId').value.trim();
+            var barsIdInput = (document.getElementById('leadonBarsId').value || '').trim();
+            if (!id) { setStatus('LeadOn ID is required.'); return; }
+
+            // Check uniqueness of LeadOn ID (excluding the layer being edited)
+            var exists = false;
+            drawnItems.eachLayer(function(l) {
+                if (!l || !l.properties || l.properties.type !== 'leadon' || !(l instanceof L.Polyline)) return;
+                if (modalContext && modalContext.mode === 'edit' && modalContext.layer === l) return; // skip self
+                if (l.properties.id === id) exists = true;
+            });
+            if (exists) { setStatus('LeadOn ID already exists. Choose a different ID.'); return; }
+
+            if (modalContext && modalContext.mode === 'edit' && modalContext.layer) {
+                var layer = modalContext.layer;
+                var oldId = (modalContext.originalId || layer.properties.id || '').trim();
+                layer.properties.id = id;
+                layer.properties.barsId = barsIdInput || id;
+                // Propagate to Stopbars
+                var updatedCount = 0;
+                drawnItems.eachLayer(function(l) {
+                    if (!l || !l.properties || l.properties.type !== 'stopbar') return;
+                    var arr = Array.isArray(l.properties.leadons) ? l.properties.leadons : [];
+                    for (var i = 0; i < arr.length; i++) {
+                        if (arr[i] === oldId) { arr[i] = id; updatedCount++; }
+                    }
+                    l.properties.leadons = arr;
+                });
+                refreshLeadonIds();
+                updateLabel(layer);
+                setStatus('LeadOn updated' + (updatedCount ? (' and references in ' + updatedCount + ' stopbar(s) updated.') : '.'));
+            } else if (tempLayer) {
+                tempLayer.properties = { type: 'leadon', id: id, barsId: (barsIdInput || id) };
+                drawnItems.addLayer(tempLayer);
+                enableLayerEdit(tempLayer);
+                attachFeatureHandlers(tempLayer);
+                updateLabel(tempLayer);
+                refreshLeadonIds();
+                setStatus('LeadOn created.');
+            }
+            closeModal('leadonModal');
+        }
+
+        function submitStopbar() {
+            var barsid = document.getElementById('stopBarsId').value.trim();
+            var displayname = document.getElementById('stopDisplay').value.trim();
+            var heading = parseFloat(document.getElementById('stopHeading').value);
+            var leadons = Array.from(stopLeadonsUIState.selected);
+            if (!(barsid && displayname && !isNaN(heading))) { setStatus('Please fill all Stopbar fields.'); return; }
+
+            // Enforce unique Stopbar BARSId (exclude self in edit mode)
+            var duplicate = false;
+            drawnItems.eachLayer(function(l){
+                if (!l || !l.properties || l.properties.type !== 'stopbar') return;
+                if (modalContext && modalContext.mode === 'edit' && modalContext.layer === l) return;
+                if ((l.properties.barsid || '') === barsid) duplicate = true;
+            });
+            if (duplicate) { setStatus('Stopbar BARSId already exists. Choose a different BARSId.'); return; }
+
+            if (modalContext && modalContext.mode === 'edit' && modalContext.layer) {
+                var layer = modalContext.layer;
+                layer.properties.barsid = barsid;
+                layer.properties.displayname = displayname;
+                layer.properties.heading = heading;
+                layer.properties.leadons = leadons;
+                updateLabel(layer);
+                setStatus('Stopbar updated.');
+            } else if (tempLayer) {
+                tempLayer.properties = { type: 'stopbar', barsid: barsid, displayname: displayname, heading: heading, leadons: leadons };
+                drawnItems.addLayer(tempLayer);
+                enableLayerEdit(tempLayer);
+                attachFeatureHandlers(tempLayer);
+                updateLabel(tempLayer);
+                setStatus('Stopbar created.');
+            }
+            closeModal('stopbarModal');
+        }
+
+        function cancelModal(modalId) {
+            // Only remove temp layer if we were creating a new feature
+            if (modalContext && modalContext.mode === 'create' && tempLayer) {
+                try { map.removeLayer(tempLayer); } catch(_) {}
+                tempLayer = null;
+            }
+            closeModal(modalId);
+        }
+
+        function openModal(modalId, ctx) {
+            modalContext = ctx || modalContext; // keep latest
+            document.getElementById(modalId).style.display = 'block';
+            // Pre-fill fields for edit mode
+            if (modalId === 'leadonModal') {
+                var leadIdInput = document.getElementById('leadonId');
+                var leadBarsInput = document.getElementById('leadonBarsId');
+                if (modalContext && modalContext.mode === 'edit' && modalContext.layer && modalContext.layer.properties) {
+                    leadIdInput.value = modalContext.layer.properties.id || '';
+                    leadBarsInput.value = modalContext.layer.properties.barsId || '';
+                    modalContext.originalId = modalContext.layer.properties.id || '';
+                } else {
+                    leadIdInput.value = '';
+                    leadBarsInput.value = '';
+                }
+            } else if (modalId === 'stopbarModal') {
+                // Initialize fields
+                var filterInput = document.getElementById('stopLeadonsFilter');
+                var selectAllBtn = document.getElementById('stopLeadonsSelectAll');
+                var clearBtn = document.getElementById('stopLeadonsClear');
+                var listEl = document.getElementById('stopLeadonsList');
+                // Reset UI state
+                stopLeadonsUIState.filter = '';
+                stopLeadonsUIState.selected = new Set();
+
+                if (modalContext && modalContext.mode === 'edit' && modalContext.layer && modalContext.layer.properties) {
+                    document.getElementById('stopBarsId').value = modalContext.layer.properties.barsid || '';
+                    document.getElementById('stopDisplay').value = modalContext.layer.properties.displayname || '';
+                    document.getElementById('stopHeading').value = (modalContext.layer.properties.heading != null ? modalContext.layer.properties.heading : '');
+                    var leads = Array.isArray(modalContext.layer.properties.leadons) ? modalContext.layer.properties.leadons : [];
+                    leads.forEach(function(id){ if (id) stopLeadonsUIState.selected.add(id); });
+                } else {
+                    document.getElementById('stopBarsId').value = '';
+                    document.getElementById('stopDisplay').value = '';
+                    document.getElementById('stopHeading').value = '';
+                }
+
+                // Wire events (overwrite to avoid duplicates)
+                filterInput.value = '';
+                filterInput.oninput = function(){ stopLeadonsUIState.filter = (filterInput.value || '').trim(); renderStopLeadonsList(); };
+                selectAllBtn.onclick = function(){
+                    var f = (stopLeadonsUIState.filter || '').toLowerCase();
+                    leadonIds.forEach(function(id){ if (!f || id.toLowerCase().indexOf(f) !== -1) stopLeadonsUIState.selected.add(id); });
+                    renderStopLeadonsList();
+                    computeAndSetAutoHeading(true);
+                };
+                clearBtn.onclick = function(){
+                    var f = (stopLeadonsUIState.filter || '').toLowerCase();
+                    if (!f) {
+                        stopLeadonsUIState.selected.clear();
+                    } else {
+                        leadonIds.forEach(function(id){ if (id.toLowerCase().indexOf(f) !== -1) stopLeadonsUIState.selected.delete(id); });
+                    }
+                    renderStopLeadonsList();
+                    computeAndSetAutoHeading(true);
+                };
+
+                function renderStopLeadonsList(){
+                    listEl.innerHTML = '';
+                    var f = (stopLeadonsUIState.filter || '').toLowerCase();
+                    var shown = 0;
+                    if (!leadonIds || leadonIds.length === 0) {
+                        var empty = document.createElement('div'); empty.className = 'leadon-empty'; empty.textContent = 'No LeadOns available yet.'; listEl.appendChild(empty);
+                    } else {
+                        leadonIds.forEach(function(id){
+                            if (f && id.toLowerCase().indexOf(f) === -1) return;
+                            shown++;
+                            var row = document.createElement('label'); row.className = 'leadon-item';
+                            var cb = document.createElement('input'); cb.type = 'checkbox'; cb.name = 'leadon'; cb.value = id; cb.checked = stopLeadonsUIState.selected.has(id);
+                            cb.addEventListener('change', function(ev){ if (ev.target.checked) stopLeadonsUIState.selected.add(id); else stopLeadonsUIState.selected.delete(id); updateStopLeadonsCount(); computeAndSetAutoHeading(true); });
+                            var txt = document.createElement('span'); txt.textContent = id;
+                            row.appendChild(cb); row.appendChild(txt);
+                            listEl.appendChild(row);
+                        });
+                        if (shown === 0) {
+                            var none = document.createElement('div'); none.className = 'leadon-empty'; none.textContent = 'No LeadOns match the current search.'; listEl.appendChild(none);
+                        }
+                    }
+                    updateStopLeadonsCount();
+                }
+
+                function updateStopLeadonsCount(){
+                    var countEl = document.getElementById('stopLeadonsCount');
+                    var total = leadonIds.length;
+                    var f = (stopLeadonsUIState.filter || '').toLowerCase();
+                    var visible = leadonIds.filter(function(id){ return !f || id.toLowerCase().indexOf(f) !== -1; }).length;
+                    var selected = stopLeadonsUIState.selected.size;
+                    countEl.textContent = 'Selected: ' + selected + ' • Visible: ' + visible + ' / Total: ' + total;
+                }
+
+                // Initial render and focus filter for quick use
+                renderStopLeadonsList();
+                try { filterInput.focus(); filterInput.select(); } catch(_) {}
+
+                // Auto-calc heading on open for create flow if there are preselected leadons
+                computeAndSetAutoHeading(false);
+
+                // --- helpers for heading calculation ---
+                function degNormalize(d){ d = d % 360; if (d < 0) d += 360; return d; }
+                function toRad(d){ return d * Math.PI / 180; }
+                function toDeg(r){ return r * 180 / Math.PI; }
+                function bearingDegrees(fromLL, toLL){
+                    // Initial bearing (forward azimuth) from fromLL to toLL
+                    var φ1 = toRad(fromLL.lat), φ2 = toRad(toLL.lat);
+                    var λ1 = toRad(fromLL.lng), λ2 = toRad(toLL.lng);
+                    var dλ = λ2 - λ1;
+                    var y = Math.sin(dλ) * Math.cos(φ2);
+                    var x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dλ);
+                    var θ = Math.atan2(y, x);
+                    return degNormalize(toDeg(θ));
+                }
+                function circMeanDeg(a, b){
+                    // average of two angles in degrees
+                    var aR = toRad(a), bR = toRad(b);
+                    var x = Math.cos(aR) + Math.cos(bR);
+                    var y = Math.sin(aR) + Math.sin(bR);
+                    if (x === 0 && y === 0) return degNormalize(a); // fallback
+                    return degNormalize(toDeg(Math.atan2(y, x)));
+                }
+                function getLeadonLayerById(id){
+                    var found = null;
+                    drawnItems.eachLayer(function(l){
+                        if (found) return;
+                        if (!l || !l.properties) return;
+                        if (l.properties.type === 'leadon' && (l instanceof L.Polyline)) {
+                            if ((l.properties.id || '') === id) found = l;
+                        }
+                    });
+                    return found;
+                }
+                function flattenLatLngs(latlngs){
+                    if (!latlngs) return [];
+                    if (latlngs.length > 0 && Array.isArray(latlngs[0])) return latlngs[0];
+                    return latlngs;
+                }
+                function computeAndSetAutoHeading(force){
+                    // Only auto-set heading automatically if creating or force=true
+                    var isCreate = modalContext && modalContext.mode === 'create';
+                    if (!isCreate && !force) return;
+                    var selectedIds = Array.from(stopLeadonsUIState.selected || []);
+                    if (!selectedIds.length) return;
+                    var markerLayer = (modalContext && modalContext.mode === 'edit') ? modalContext.layer : tempLayer;
+                    if (!markerLayer || !(markerLayer instanceof L.Marker)) return;
+                    var pos = markerLayer.getLatLng();
+                    // Find closest selected leadon by min distance to its vertices
+                    var closest = null; var minDist = Infinity;
+                    selectedIds.forEach(function(id){
+                        var lead = getLeadonLayerById(id);
+                        if (!lead) return;
+                        var pts = flattenLatLngs(lead.getLatLngs());
+                        for (var i=0; i<pts.length; i++){
+                            try {
+                                var d = pos.distanceTo ? pos.distanceTo(pts[i]) : map.distance(pos, pts[i]);
+                                if (d < minDist) { minDist = d; closest = { id: id, layer: lead, pts: pts }; }
+                            } catch(_) {}
+                        }
+                    });
+                    if (!closest || !closest.pts || closest.pts.length === 0) return;
+                    var p0 = closest.pts[0];
+                    var heading0 = bearingDegrees(pos, p0);
+                    var headingAvg = heading0;
+                    if (closest.pts.length > 1){
+                        var p1 = closest.pts[1];
+                        var heading1 = bearingDegrees(pos, p1);
+                        headingAvg = circMeanDeg(heading0, heading1);
+                    }
+                    var input = document.getElementById('stopHeading');
+                    if (input) input.value = (Math.round(headingAvg * 10) / 10).toString();
+                }
+            }
+            // Pause interactions while modal is open
+            map.dragging.disable();
+            map.scrollWheelZoom.disable();
+            map.doubleClickZoom.disable();
+            setStatus('Fill in the form (ESC to cancel).');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+            // Clear inputs
+            if (modalId === 'leadonModal') {
+                document.getElementById('leadonId').value = '';
+                document.getElementById('leadonBarsId').value = '';
+            } else if (modalId === 'stopbarModal') {
+                document.getElementById('stopBarsId').value = '';
+                document.getElementById('stopDisplay').value = '';
+                document.getElementById('stopHeading').value = '';
+                var list = document.getElementById('stopLeadonsList'); if (list) list.innerHTML = '';
+                var filter = document.getElementById('stopLeadonsFilter'); if (filter) filter.value = '';
+                var count = document.getElementById('stopLeadonsCount'); if (count) count.textContent = 'Selected: 0';
+                stopLeadonsUIState.filter = '';
+                stopLeadonsUIState.selected = new Set();
+            }
+            // Resume interactions
+            map.dragging.enable();
+            map.scrollWheelZoom.enable();
+            map.doubleClickZoom.enable();
+            setStatus('Ready');
+            // reset context after closing
+            modalContext = null;
+        }
+
+        // ESC to cancel drawing or close modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var leadonOpen = document.getElementById('leadonModal').style.display === 'block';
+                var stopbarOpen = document.getElementById('stopbarModal').style.display === 'block';
+                if (leadonOpen) { cancelModal('leadonModal'); return; }
+                if (stopbarOpen) { cancelModal('stopbarModal'); return; }
+                map.pm.disableDraw();
+                currentMode = '';
+                setStatus('Ready');
+            }
+        });
+
+        // Fit and clear helpers
+        function fitToDrawings() {
+            if (drawnItems.getLayers().length === 0) { setStatus('Nothing to fit.'); return; }
+            var b = drawnItems.getBounds();
+            map.fitBounds(b, { padding: [20, 20] });
+            setStatus('Fitted to drawings.');
+        }
+
+        function clearDrawings() {
+            drawnItems.clearLayers();
+            leadonIds = [];
+            document.getElementById('xmlOutput').value = '';
+            setStatus('Cleared all drawings.');
+        }
+
+        // --- XML Load ---
+        function triggerXMLLoad() {
+            var input = document.getElementById('xmlFileInput');
+            if (input) input.click();
+        }
+
+        function handleXMLFileSelect(evt) {
+            var file = evt.target.files && evt.target.files[0];
+            if (!file) { setStatus('No file selected.'); return; }
+            setStatus('Reading XML…');
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    importXMLString(e.target.result);
+                } catch (err) {
+                    console.error('XML import error:', err);
+                    setStatus('Failed to import XML. See console.');
+                } finally {
+                    evt.target.value = '';
+                }
+            };
+            reader.onerror = function() {
+                console.error('File read error');
+                setStatus('Error reading file.');
+                evt.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function importXMLString(xmlText) {
+            var parser = new DOMParser();
+            var doc = parser.parseFromString(xmlText, 'application/xml');
+            // Basic parse error check
+            var parsererror = doc.getElementsByTagName('parsererror')[0];
+            if (parsererror) {
+                console.error(parsererror.textContent || parsererror);
+                throw new Error('Invalid XML');
+            }
+
+            // Clear existing
+            clearDrawings();
+            setStatus('Importing features…');
+
+            var importedBounds = null;
+            function extendBounds(ll) {
+                if (!importedBounds) importedBounds = L.latLngBounds([ll, ll]);
+                else importedBounds.extend(ll);
+            }
+
+            // Taxiways
+            var taxiwaysNode = doc.getElementsByTagName('Taxiways')[0];
+            if (taxiwaysNode) {
+                var lineNodes = taxiwaysNode.getElementsByTagName('Line');
+                for (var i = 0; i < lineNodes.length; i++) {
+                    var pts = lineNodes[i].getElementsByTagName('Point');
+                    var coords = [];
+                    for (var j = 0; j < pts.length; j++) {
+                        var lon = parseFloat(pts[j].getAttribute('lon'));
+                        var lat = parseFloat(pts[j].getAttribute('lat'));
+                        if (!isNaN(lat) && !isNaN(lon)) {
+                            coords.push([lat, lon]);
+                            extendBounds(L.latLng(lat, lon));
+                        }
+                    }
+                    if (coords.length >= 2) {
+                        var poly = L.polyline(coords, defaultLineOpts);
+                        poly.properties = { type: 'taxiway' };
+                        drawnItems.addLayer(poly);
+                        try { poly.pm && poly.pm.setOptions({ pmIgnore: true }); } catch(_) {}
+                        attachTaxiwaySplit(poly);
+                        attachFeatureHandlers(poly);
+                    }
+                }
+            }
+
+            // LeadOns
+            var leadOnNodes = doc.getElementsByTagName('LeadOn');
+            // leadOnNodes also includes refs inside Stopbar; only keep ones with a Line child
+            var newLeadonIds = [];
+            for (var k = 0; k < leadOnNodes.length; k++) {
+                var n = leadOnNodes[k];
+                var hasLine = n.getElementsByTagName('Line').length > 0;
+                if (!hasLine) continue;
+                var idAttr = n.getAttribute('id') || '';
+                var barsIdNode = n.getElementsByTagName('BARSId')[0];
+                var barsId = barsIdNode ? (barsIdNode.textContent || '').trim() : idAttr;
+                var lineNode = n.getElementsByTagName('Line')[0];
+                var pts2 = lineNode ? lineNode.getElementsByTagName('Point') : [];
+                var coords2 = [];
+                for (var j2 = 0; j2 < pts2.length; j2++) {
+                    var lon2 = parseFloat(pts2[j2].getAttribute('lon'));
+                    var lat2 = parseFloat(pts2[j2].getAttribute('lat'));
+                    if (!isNaN(lat2) && !isNaN(lon2)) {
+                        coords2.push([lat2, lon2]);
+                        extendBounds(L.latLng(lat2, lon2));
+                    }
+                }
+                if (coords2.length >= 2) {
+                    var lead = L.polyline(coords2, defaultLineOpts);
+                    lead.properties = { type: 'leadon', id: idAttr || barsId, barsId: barsId || idAttr };
+                    drawnItems.addLayer(lead);
+                    try { lead.pm && lead.pm.setOptions({ pmIgnore: true }); } catch(_) {}
+                    attachFeatureHandlers(lead);
+                    updateLabel(lead);
+                    if (lead.properties.id) newLeadonIds.push(lead.properties.id);
+                }
+            }
+            leadonIds = newLeadonIds;
+            refreshLeadonIds();
+
+            // Windsocks
+            var windsocksNode = doc.getElementsByTagName('Windsocks')[0];
+            if (windsocksNode) {
+                var ws = windsocksNode.getElementsByTagName('Windsock');
+                for (var w = 0; w < ws.length; w++) {
+                    var wlon = parseFloat(ws[w].getAttribute('lon'));
+                    var wlat = parseFloat(ws[w].getAttribute('lat'));
+                    if (!isNaN(wlat) && !isNaN(wlon)) {
+                        var marker = L.marker([wlat, wlon]);
+                        marker.properties = { type: 'windsock' };
+                        drawnItems.addLayer(marker);
+                        try { marker.pm && marker.pm.setOptions({ pmIgnore: true }); } catch(_) {}
+                        extendBounds(L.latLng(wlat, wlon));
+                    }
+                }
+            }
+
+            // Stopbars
+            var stopbarsNode = doc.getElementsByTagName('Stopbars')[0];
+            if (stopbarsNode) {
+                var sbs = stopbarsNode.getElementsByTagName('Stopbar');
+                for (var s = 0; s < sbs.length; s++) {
+                    var sb = sbs[s];
+                    var bidNode = sb.getElementsByTagName('BARSId')[0];
+                    var dNode = sb.getElementsByTagName('DisplayName')[0];
+                    var hNode = sb.getElementsByTagName('Heading')[0];
+                    var posNode = sb.getElementsByTagName('Position')[0];
+                    var barsid = bidNode ? (bidNode.textContent || '').trim() : '';
+                    var displayname = dNode ? (dNode.textContent || '').trim() : '';
+                    var heading = hNode ? parseFloat(hNode.textContent) : NaN;
+                    var slon = posNode ? parseFloat(posNode.getAttribute('lon')) : NaN;
+                    var slat = posNode ? parseFloat(posNode.getAttribute('lat')) : NaN;
+                    var leadRefs = [];
+                    var leadRefsNodes = sb.getElementsByTagName('LeadOn');
+                    for (var lr = 0; lr < leadRefsNodes.length; lr++) {
+                        var refId = leadRefsNodes[lr].getAttribute('id');
+                        if (refId) leadRefs.push(refId);
+                    }
+                    if (!isNaN(slat) && !isNaN(slon)) {
+                        var m = L.marker([slat, slon]);
+                        m.properties = { type: 'stopbar', barsid: barsid, displayname: displayname, heading: heading, leadons: leadRefs };
+                        drawnItems.addLayer(m);
+                        try { m.pm && m.pm.setOptions({ pmIgnore: true }); } catch(_) {}
+                        attachFeatureHandlers(m);
+                        updateLabel(m);
+                        extendBounds(L.latLng(slat, slon));
+                    }
+                }
+            }
+
+            // After import, ensure all layers are ignored by Geoman until explicitly edited
+            try { drawnItems.eachLayer(function(l){ if (l && l.pm) { if (l.pm.disable) l.pm.disable(); if (l.pm.setOptions) l.pm.setOptions({ pmIgnore: true }); } }); } catch(_) {}
+
+            if (importedBounds && importedBounds.isValid()) {
+                map.fitBounds(importedBounds.pad(0.1));
+                setStatus('Imported XML and fitted to features.');
+            } else {
+                setStatus('Imported XML (no features found).');
+            }
+        }
+
+        // --- Taxiway middle-click split ---
+        function attachTaxiwaySplit(layer) {
+            if (!layer || !(layer instanceof L.Polyline)) return;
+            // Ensure we only bind once
+            if (layer._splitBound) return; 
+            layer._splitBound = true;
+            layer.on('mousedown', function(e) {
+                if (!layer.properties || layer.properties.type !== 'taxiway') return;
+                var oe = e.originalEvent;
+                if (oe && oe.button === 1) {
+                    // prevent middle-click autoscroll and map handlers
+                    if (oe.preventDefault) oe.preventDefault();
+                    L.DomEvent.stop(e);
+                    try { splitTaxiwayAt(layer, e.latlng); } catch(err) { console.error(err); setStatus('Cannot split this line.'); }
+                }
+            });
+        }
+
+        // Prevent browser autoscroll on middle-click anywhere over the map
+        (function preventMiddleClickAutoscroll(){
+            try { map.getContainer().addEventListener('mousedown', function(e){ if (e.button === 1) e.preventDefault(); }, true); } catch(e) {}
+        })();
+
+        function splitTaxiwayAt(layer, latlng) {
+            var latlngs = layer.getLatLngs();
+            // handle nested arrays (no multi-part expected, but be safe)
+            if (Array.isArray(latlngs[0])) { latlngs = latlngs[0]; }
+            if (!latlngs || latlngs.length < 2) { setStatus('Line too short to split.'); return; }
+
+            var clickPt = map.latLngToLayerPoint(latlng);
+            var minDist = Infinity, best = { i: -1, t: 0 };
+            for (var i = 0; i < latlngs.length - 1; i++) {
+                var aPt = map.latLngToLayerPoint(latlngs[i]);
+                var bPt = map.latLngToLayerPoint(latlngs[i+1]);
+                var ab = bPt.subtract(aPt);
+                var ap = clickPt.subtract(aPt);
+                var ab2 = ab.x*ab.x + ab.y*ab.y;
+                var t = ab2 === 0 ? 0 : Math.max(0, Math.min(1, (ap.x*ab.x + ap.y*ab.y) / ab2));
+                var proj = L.point(aPt.x + ab.x * t, aPt.y + ab.y * t);
+                var dist = proj.distanceTo(clickPt);
+                if (dist < minDist) { minDist = dist; best = { i: i, t: t, proj: proj }; }
+            }
+
+            if (best.i < 0) { setStatus('No segment found to split.'); return; }
+
+            var epsilon = 1e-3;
+            var splitLL;
+            if (best.t <= epsilon) {
+                splitLL = latlngs[best.i];
+            } else if (best.t >= 1 - epsilon) {
+                splitLL = latlngs[best.i + 1];
+            } else {
+                splitLL = map.layerPointToLatLng(best.proj);
+            }
+
+            var left, right;
+            if (best.t <= epsilon) {
+                left = latlngs.slice(0, best.i + 1);
+                right = latlngs.slice(best.i);
+            } else if (best.t >= 1 - epsilon) {
+                left = latlngs.slice(0, best.i + 2);
+                right = latlngs.slice(best.i + 1);
+            } else {
+                left = latlngs.slice(0, best.i + 1).concat([splitLL]);
+                right = [splitLL].concat(latlngs.slice(best.i + 1));
+            }
+
+            if (!left || !right || left.length < 2 || right.length < 2) { setStatus('Cannot split at the very end point.'); return; }
+
+            // Replace original with two new
+            drawnItems.removeLayer(layer);
+            map.removeLayer(layer);
+
+            var l1 = L.polyline(left, defaultLineOpts); l1.properties = { type: 'taxiway' };
+            var l2 = L.polyline(right, defaultLineOpts); l2.properties = { type: 'taxiway' };
+            drawnItems.addLayer(l1); drawnItems.addLayer(l2);
+            attachTaxiwaySplit(l1); attachTaxiwaySplit(l2);
+            try { l1.pm && l1.pm.setOptions({ pmIgnore: true }); l2.pm && l2.pm.setOptions({ pmIgnore: true }); } catch(_) {}
+            attachFeatureHandlers(l1); attachFeatureHandlers(l2);
+            setStatus('Taxiway split into two lines.');
+        }
+
+        // Attach edit handlers to feature layers
+        function attachFeatureHandlers(layer) {
+            if (!layer || !layer.properties) return;
+            if (layer.properties.type === 'leadon' && layer instanceof L.Polyline) {
+                layer.off('contextmenu');
+                layer.on('contextmenu', function(e) {
+                    L.DomEvent.stop(e);
+                    modalContext = { type: 'leadon', mode: 'edit', layer: layer, originalId: layer.properties.id };
+                    openModal('leadonModal', modalContext);
+                });
+                // Double-click to toggle editing for this layer only
+                layer.off('dblclick');
+                layer.on('dblclick', function(e){ L.DomEvent.stop(e); if (editingLayers.has(layer)) { disableLayerEdit(layer); } else { enableLayerEdit(layer); } });
+                layer.off('pm:editend');
+                layer.on('pm:editend', function(){ disableLayerEdit(layer); });
+            } else if (layer.properties.type === 'stopbar' && layer instanceof L.Marker) {
+                layer.off('contextmenu');
+                layer.on('contextmenu', function(e) {
+                    L.DomEvent.stop(e);
+                    modalContext = { type: 'stopbar', mode: 'edit', layer: layer };
+                    openModal('stopbarModal', modalContext);
+                });
+                layer.off('dblclick');
+                layer.on('dblclick', function(e){ L.DomEvent.stop(e); if (editingLayers.has(layer)) { disableLayerEdit(layer); } else { enableLayerEdit(layer); } });
+                layer.off('pm:dragend');
+                layer.on('pm:dragend', function(){ disableLayerEdit(layer); });
+            } else if (layer.properties.type === 'taxiway' && layer instanceof L.Polyline) {
+                // Allow quick per-line editing for taxiways too
+                layer.off('dblclick');
+                layer.on('dblclick', function(e){ L.DomEvent.stop(e); if (editingLayers.has(layer)) { disableLayerEdit(layer); } else { enableLayerEdit(layer); } });
+                layer.off('pm:editend');
+                layer.on('pm:editend', function(){ disableLayerEdit(layer); });
+            }
+            // Ensure a label exists/updates when handlers are attached
+            updateLabel(layer);
+        }
+
+        // Google Satellite is available via XYZ; no token required.
+
+        // Preload ICAO if available and persist on change
+        (function preloadICAO() {
+            try {
+                var savedICAO = localStorage.getItem('icaoCode');
+                if (savedICAO) {
+                    document.getElementById('icaoCode').value = savedICAO;
+                }
+            } catch (e) { /* ignore */ }
+        })();
+
+        function persistICAO() {
+            var el = document.getElementById('icaoCode');
+            if (!el) return;
+            var v = (el.value || '').trim().toUpperCase();
+            el.value = v; // normalize in UI
+            try { localStorage.setItem('icaoCode', v); } catch (e) { /* ignore */ }
+        }
+
+        function generateXML() {
+            var xml = '<?xml version="1.0"?>' + '<Objects>';
+
+            // Collect current LeadOn IDs for filtering references (keep correctness)
+            var presentLeadonIds = {};
+            drawnItems.eachLayer(function(layer) {
+                if (layer && layer.properties && layer.properties.type === 'leadon' && layer instanceof L.Polyline) {
+                    if (layer.properties.id) presentLeadonIds[layer.properties.id] = true;
+                }
+            });
+
+            // Taxiways
+            var taxiLines = [];
+            drawnItems.eachLayer(function(layer) {
+                if (layer && layer.properties && layer.properties.type === 'taxiway' && layer instanceof L.Polyline) {
+                    var latlngs = layer.getLatLngs();
+                    if (Array.isArray(latlngs[0])) latlngs = latlngs[0];
+                    if (latlngs && latlngs.length >= 2) {
+                        var line = '<Line>';
+                        latlngs.forEach(function(p) { line += '<Point lon="' + p.lng + '" lat="' + p.lat + '"/>'; });
+                        line += '</Line>';
+                        taxiLines.push(line);
+                    }
+                }
+            });
+            if (taxiLines.length > 0) {
+                xml += '<Taxiways id="Taxiways">' + taxiLines.join('') + '</Taxiways>';
+            }
+
+            // LeadOns
+            drawnItems.eachLayer(function(layer) {
+                if (layer && layer.properties && layer.properties.type === 'leadon' && layer instanceof L.Polyline) {
+                    var id = layer.properties.id || '';
+                    var barsId = layer.properties.barsId || id;
+                    var latlngs2 = layer.getLatLngs();
+                    if (Array.isArray(latlngs2[0])) latlngs2 = latlngs2[0];
+                    if (latlngs2 && latlngs2.length >= 2) {
+                        var lead = '<LeadOn' + (id ? ' id="' + id + '"' : '') + '>' + '<BARSId>' + barsId + '</BARSId>' + '<Line>';
+                        latlngs2.forEach(function(p) { lead += '<Point lon="' + p.lng + '" lat="' + p.lat + '"/>'; });
+                        lead += '</Line></LeadOn>';
+                        xml += lead;
+                    }
+                }
+            });
+
+            // Windsocks
+            var winds = [];
+            drawnItems.eachLayer(function(layer) {
+                if (layer && layer.properties && layer.properties.type === 'windsock' && layer instanceof L.Marker) {
+                    var pos = layer.getLatLng();
+                    winds.push('<Windsock lon="' + pos.lng + '" lat="' + pos.lat + '"/>' );
+                }
+            });
+            if (winds.length > 0) {
+                xml += '<Windsocks>' + winds.join('') + '</Windsocks>';
+            }
+
+            // Stopbars
+            var stops = [];
+            drawnItems.eachLayer(function(layer) {
+                if (layer && layer.properties && layer.properties.type === 'stopbar' && layer instanceof L.Marker) {
+                    var pos2 = layer.getLatLng();
+                    var stop = '<Stopbar>' + '<BARSId>' + (layer.properties.barsid || '') + '</BARSId>' + '<DisplayName>' + (layer.properties.displayname || '') + '</DisplayName>' + '<Position lon="' + pos2.lng + '" lat="' + pos2.lat + '"/>' + '<Heading>' + (layer.properties.heading != null ? layer.properties.heading : '') + '</Heading>';
+                    var leads = Array.isArray(layer.properties.leadons) ? layer.properties.leadons : [];
+                    leads.forEach(function(idRef) { if (idRef && presentLeadonIds[idRef]) stop += '<LeadOn id="' + idRef + '"/>'; });
+                    stop += '</Stopbar>';
+                    stops.push(stop);
+                }
+            });
+            if (stops.length > 0) {
+                xml += '<Stopbars>' + stops.join('') + '</Stopbars>';
+            }
+
+            xml += '</Objects>';
+
+            document.getElementById('xmlOutput').value = xml;
+
+            // Download
+            var blob = new Blob([xml], { type: 'text/xml' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            var icao = (document.getElementById('icaoCode')?.value || '').trim().toUpperCase();
+            a.download = (icao ? icao : 'bars_profile') + '.xml';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            setStatus('XML generated and downloaded.');
+        }
+
+        // Keep labels in sync during geometry edits/moves
+    map.on('pm:edit', function(e){ try { updateLabel(e.layer); } catch(_) {} });
+    map.on('pm:dragend', function(e){ try { updateLabel(e.layer); } catch(_) {} });
+    // Click on the map to exit any active single-layer edits
+    map.on('click', function(){ if (editingLayers.size > 0) disableAllEditing(); });
+    </script>
+</body>
+</html>

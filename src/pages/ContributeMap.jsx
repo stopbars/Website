@@ -463,12 +463,11 @@ const ContributeMap = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
+        <div className="min-h-screen pt-32 pb-20 flex items-center">
+          <div className="w-full max-w-7xl mx-auto px-6">
             <div className="flex items-center justify-center h-64">
               <div className="flex flex-col items-center">
-                <Loader className="w-12 h-12 animate-spin text-blue-500 mb-4" />
-                <p className="text-zinc-400">Loading airport data...</p>
+                <Loader className="w-12 h-12 animate-spin text-zinc-400" />
               </div>
             </div>
           </div>
@@ -642,15 +641,7 @@ const ContributeMap = () => {
                 </MapContainer>
               </div>
               
-              {/* Banner for when no points exist */}
-              {points.length === 0 && (
-                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 flex-shrink-0" />
-                  <p className="text-sm text-amber-400">
-                    This airport currently has no points submitted by the owning division. Please check back later.
-                  </p>
-                </div>
-              )}
+              {/* Banner removed from map area; shown in sidebar instead when no points exist */}
             </div>
             
             <div className="space-y-6">
@@ -675,17 +666,28 @@ const ContributeMap = () => {
                 </div>
               </Card>
               
-              <div className="flex items-center mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                <Info className="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" />
-                <p className="text-sm text-blue-400">
-                  These are the existing mapped points for this airport, set by the Division. Your contribution will add support for a specific scenery package.
-                </p>
-              </div>
+              {points.length === 0 ? (
+                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 flex-shrink-0" />
+                  <p className="text-sm text-amber-400">
+                    This airport currently has no lighting points submitted by the owning Division. Please check back later, or contact the owning Division directly for support.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
+                  <Info className="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" />
+                  <p className="text-sm text-blue-400">
+                    These are the existing mapped points for this airport, set by the Division. Your contribution will add support for a specific simulator scenery package.
+                  </p>
+                </div>
+              )}
               
-              {/* Continue button */}
+              {/* Continue button (disabled when no Division points) */}
               <Button 
-                onClick={handleContinue}
-                className="w-full"
+                onClick={points.length === 0 ? undefined : handleContinue}
+                disabled={points.length === 0}
+                aria-disabled={points.length === 0}
+                className={`w-full ${points.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <span>Continue to Next Step</span>
                 <ChevronRight className="w-4 h-4 ml-2" />

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { Button } from '../shared/Button';
-import { Check, X } from 'lucide-react';
+import { Check, X, MapPin } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
-const PendingAirportRequests = () => {
+const PendingAirportRequests = ({ onCountChange }) => {
   const [requests, setRequests] = useState([]);
   const [divisions, setDivisions] = useState({});
   const [loading, setLoading] = useState(true);
@@ -12,6 +13,7 @@ const PendingAirportRequests = () => {
 
   const fetchRequests = useCallback(async () => {
     try {
+      if (!token) return;
       // Fetch all divisions
       const response = await fetch('https://v2.stopbars.com/divisions', {
         headers: { 'X-Vatsim-Token': token }
@@ -50,16 +52,21 @@ const PendingAirportRequests = () => {
       // Combine and flatten all pending airport requests
       const allPendingRequests = airportRequests.flat();
       setRequests(allPendingRequests);
+      
+      // Notify parent component of the count
+      if (onCountChange) {
+        onCountChange(allPendingRequests.length);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, onCountChange]);
 
   useEffect(() => {
-    if (token) fetchRequests();
-  }, [token]);
+    fetchRequests();
+  }, [fetchRequests]);
 
   const handleApprove = async (divisionId, airportId, approved) => {
     try {
@@ -75,7 +82,14 @@ const PendingAirportRequests = () => {
       if (!response.ok) throw new Error('Failed to update airport request');
 
       // Remove the approved/rejected request from the list immediately
-      setRequests(prevRequests => prevRequests.filter(req => req.id !== airportId));
+      setRequests(prevRequests => {
+        const updatedRequests = prevRequests.filter(req => req.id !== airportId);
+        // Notify parent component of the updated count
+        if (onCountChange) {
+          onCountChange(updatedRequests.length);
+        }
+        return updatedRequests;
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -83,14 +97,15 @@ const PendingAirportRequests = () => {
 
   if (loading) return <p className="text-zinc-400">Loading requests...</p>;
   if (error) return <p className="text-red-500">{error}</p>;
-  if (!requests?.length) return <p className="text-zinc-400">No pending airport requests.</p>;
+  if (!requests?.length) return <p className="text-zinc-400">No pending airport requests found.</p>;
 
   return (
     <div className="space-y-4">
       {requests.map(request => (
         <div key={request.id} className="flex items-center justify-between p-4 border border-zinc-800 rounded-lg">
           <div>
-            <h3 className="text-lg font-semibold text-white">
+            <h3 className="text-lg font-semibold text-white flex items-center">
+              <MapPin className="w-5 h-5 mr-2 text-zinc-400" />
               {request.icao} - {divisions[request.division_id]}
             </h3>
             <p className="text-zinc-400">
@@ -103,14 +118,14 @@ const PendingAirportRequests = () => {
           <div className="flex gap-2">
             <Button
               onClick={() => handleApprove(request.division_id, request.id, true)}
-              className="bg-green-600 hover:bg-green-600"
+              className="bg-green-600 hover:bg-green-500 hover:text-white"
             >
               <Check className="w-4 h-4 mr-2" />
               Approve
             </Button>
             <Button
               onClick={() => handleApprove(request.division_id, request.id, false)}
-              className="bg-red-600 hover:bg-red-500"
+              className="bg-red-600 hover:bg-red-500 hover:text-white"
             >
               <X className="w-4 h-4 mr-2" />
               Reject
@@ -120,6 +135,10 @@ const PendingAirportRequests = () => {
       ))}
     </div>
   );
+};
+
+PendingAirportRequests.propTypes = {
+  onCountChange: PropTypes.func
 };
 
 export default PendingAirportRequests;

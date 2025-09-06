@@ -2,7 +2,7 @@ import { useScroll } from '../../hooks/useScroll';
 import { UserCircle, LogOut, ChevronRight, Menu, X } from 'lucide-react';
 import { Button } from '../shared/Button';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 
@@ -34,6 +34,8 @@ export const Navbar = () => {  const scrolled = useScroll();
   const notamRef = useRef(null);
   const [notamFitsOnOneLine, setNotamFitsOnOneLine] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
+  // Track when NOTAM state has been resolved to avoid initial border flash
+  const [notamInitialized, setNotamInitialized] = useState(false);
   
   // Close mobile menu when navigating to a new page or resizing to desktop
   useEffect(() => {
@@ -107,6 +109,9 @@ export const Navbar = () => {  const scrolled = useScroll();
         } else {
           setShowNotam(false);
         }
+      } finally {
+        // Mark NOTAM state as initialized (whether available or not)
+        setNotamInitialized(true);
       }
     };
 
@@ -175,8 +180,11 @@ export const Navbar = () => {  const scrolled = useScroll();
             </div>
           </div>
         </div>
-      )}      <nav className={`fixed bg-zinc-950/95 left-0 w-full z-50 transition-all duration-100 ${
-        scrolled || !showNotam || !notamFitsOnOneLine || !notamContent ? 'bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800 top-0' : 'top-10'
+      )}      <nav className={`fixed bg-zinc-950 left-0 w-full z-50 border-b transition-colors duration-100 ${
+        // Avoid showing the border until NOTAM state is initialized to prevent white flash
+        scrolled || (notamInitialized && (!showNotam || !notamFitsOnOneLine || !notamContent))
+          ? 'backdrop-blur-md border-zinc-800 top-0'
+          : 'border-transparent top-10'
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-20">
@@ -191,7 +199,7 @@ export const Navbar = () => {  const scrolled = useScroll();
             <div className="hidden md:flex items-center space-x-6 lg:space-x-12">
               <div className="flex items-center space-x-6 lg:space-x-12">
                 <Link to="/contribute" className="text-zinc-400 hover:text-white transition-colors">Contribute</Link>
-                <Link to="/documentation" className="text-zinc-400 hover:text-white transition-colors">Documentation</Link>
+                <a href="https://docs.stopbars.com" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors">Documentation</a>
                 <a href="https://opencollective.com/stopbars" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors">Donate</a>
               </div>
               {user ? (
@@ -202,7 +210,7 @@ export const Navbar = () => {  const scrolled = useScroll();
                       className="flex items-center space-x-2 px-4"
                     >
                       <UserCircle className="w-5 h-5" />
-                      <span>{user.vatsim_id}</span>
+                      <span>{user.display_name}</span>
                     </Button>
                   </Link>
                   <Button 
@@ -269,13 +277,15 @@ export const Navbar = () => {  const scrolled = useScroll();
               >
                 <span className="font-medium">Contribute</span>
               </Link>
-              <Link 
-                to="/documentation" 
+              <a 
+                href="https://docs.stopbars.com"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">Documentation</span>
-              </Link>
+              </a>
               <a 
                 href="https://opencollective.com/stopbars"
                 target="_blank"

@@ -108,8 +108,16 @@ Support BARS: https://stopbars.com/donate`,
   // Consent banner effect
   useEffect(() => {
     const consent = localStorage.getItem('analytics-consent');
+    const gpc = typeof navigator !== 'undefined' && navigator.globalPrivacyControl === true;
+    const dnt = typeof navigator !== 'undefined' && (navigator.doNotTrack === '1' || window.doNotTrack === '1');
+
     if (!consent) {
-      setShowConsentBanner(true);
+      if (gpc || dnt) {
+        localStorage.setItem('analytics-consent', 'denied');
+        setShowConsentBanner(false);
+      } else {
+        setShowConsentBanner(true);
+      }
     }
   }, []);
   // Add keydown event listener for the Easter egg
@@ -126,8 +134,8 @@ Support BARS: https://stopbars.com/donate`,
           <Navbar />
         </div>
         <main className="flex-grow container mx-auto px-6 relative">{children}</main>
-        <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
-        <Footer />
+  <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
+  <Footer onOpenConsent={() => setShowConsentBanner(true)} />
       </div>
     </div>
   );

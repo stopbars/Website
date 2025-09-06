@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquareWarning, AlertTriangle, Info, Loader, Plus, Edit, X, ChevronDown, Eye, FileText, Tag, Send, HardDriveDownload, CheckCircle2 } from 'lucide-react';
+import { MessageSquareWarning, AlertTriangle, Info, Loader, Plus, Edit, X, ChevronDown, Eye, FileText, Tag, Send, HardDriveDownload, CheckCircle2, Copy, Check } from 'lucide-react';
 import { Button } from '../shared/Button';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import DOMPurify from 'dompurify';
@@ -35,6 +35,7 @@ const NotamManagement = () => {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [hasEditChanges, setHasEditChanges] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const fetchNotam = async () => {
@@ -76,6 +77,19 @@ const NotamManagement = () => {
       setHasEditChanges(false);
     }
   }, [editContent, editType, isEditing, notamData]);
+
+  // Copy NOTAM markdown content to clipboard
+  const copyNotamToClipboard = async () => {
+    if (!notamData?.notam) return;
+    
+    try {
+      await navigator.clipboard.writeText(notamData.notam);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy NOTAM to clipboard:', err);
+    }
+  };
 
   const getNotamTypeStyles = (type) => {
     switch (type) {
@@ -309,13 +323,10 @@ const NotamManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <MessageSquareWarning className="w-6 h-6 text-zinc-400" />
-          <h2 className="text-xl font-semibold">NOTAM Management</h2>
-        </div>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 className="text-2xl font-bold mb-4 md:mb-0">NOTAM Management</h1>
         <div className="flex items-center space-x-3">
           {!isEditing && !isAdding && (
             <>
@@ -380,6 +391,8 @@ const NotamManagement = () => {
           )}
         </div>
       </div>
+
+      <div className="space-y-6">
 
       {/* Success Message */}
       {saveSuccess && (
@@ -525,10 +538,21 @@ const NotamManagement = () => {
           ) : notamData?.notam ? (
             <div className="space-y-4">
               <div 
-                className={`p-4 rounded-lg border ${getNotamTypeStyles(notamData.type).bg} ${getNotamTypeStyles(notamData.type).border}`}
+                className={`p-4 rounded-lg border ${getNotamTypeStyles(notamData.type).bg} ${getNotamTypeStyles(notamData.type).border} relative`}
               >
+                <button
+                  onClick={copyNotamToClipboard}
+                  className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded cursor-pointer"
+                  title="Copy NOTAM to clipboard"
+                >
+                  {copied ? (
+                    <Check className="w-4.5 h-4.5 text-green-400" />
+                  ) : (
+                    <Copy className="w-4.5 h-4.5" />
+                  )}
+                </button>
                 <div 
-                  className={`${getNotamTypeStyles(notamData.type).text} font-medium`}
+                  className={`${getNotamTypeStyles(notamData.type).text} font-medium pr-8`}
                   dangerouslySetInnerHTML={{ __html: parseNotamLinks(notamData.notam) }}
                 />
               </div>
@@ -543,6 +567,7 @@ const NotamManagement = () => {
           )}
         </div>
       )}
+    </div>
     </div>
   );
 };

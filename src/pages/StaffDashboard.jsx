@@ -2,25 +2,25 @@ import { useState, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { 
-  BarChart2, 
   Users, 
-  ClipboardList,
   Shield,
-  BookOpen,
   FileQuestion,
   Building2,
   Upload,
   Map,
   MessageSquareWarning,
+  MessageSquare,
   Settings,
   AlertTriangle,
   Check,
   RefreshCw,
   Loader,
+  TowerControl,
+  FileUp,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getVatsimToken } from '../utils/cookieUtils';
 
 // Import existing components
@@ -29,6 +29,14 @@ import ContributionManagement from '../components/staff/ContributionManagement';
 import NotamManagement from '../components/staff/notamManagement';
 import DivisionManagement from '../components/staff/DivisionManagement';
 import AirportManagement from '../components/staff/AirportManagement';
+import FAQManagement from '../components/staff/FAQManagement';
+import ReleaseManagement from '../components/staff/ReleaseManagement';
+import StaffManagement from '../components/staff/StaffManagement';
+import ContactMessages from '../components/staff/ContactMessages';
+import PackagesManagement from '../components/staff/PackagesManagement';
+import VatSysProfiles from '../components/staff/VatSysProfiles';
+import CacheManagement from '../components/staff/CacheManagement';
+import BansManagement from '../components/staff/BansManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -47,7 +55,7 @@ const TABS = {
     icon: Shield,
     roles: ['lead_developer'],
     description: 'Manage staff roles and permissions',
-    component: () => <div>Staff Management Component (Coming Soon)</div>
+    component: StaffManagement
   },
   divisionManagement: {
     id: 'divisionManagement',
@@ -63,22 +71,46 @@ const TABS = {
     icon: Upload,
     roles: ['lead_developer'],
     description: 'Manage software releases and changelogs',
-    component: () => <div>Release Management Component (Coming Soon)</div>
+  component: ReleaseManagement
   },
-  systemSettings: {
-    id: 'systemSettings',
-    label: 'System Settings',
+  packagesManagement: {
+    id: 'packagesManagement',
+    label: 'BARS Packages',
+    icon: Upload,
+    roles: ['product_manager', 'lead_developer'],
+    description: 'Upload installer data packages (models & removals)',
+    component: PackagesManagement
+  },
+  vatsysProfiles: {
+    id: 'vatsysProfiles',
+    label: 'vatSys Profiles',
+    icon: FileUp,
+    roles: ['product_manager', 'lead_developer'],
+    description: 'Manage public vatSys profile XMLs',
+    component: VatSysProfiles
+  },
+  cacheManagement: {
+    id: 'cacheManagement',
+    label: 'Cache Management',
     icon: Settings,
     roles: ['lead_developer'],
-    description: 'Configure system parameters',
-    component: () => <div>System Settings Component (Coming Soon)</div>
+    description: 'Purge cache keys and namespaces',
+    component: CacheManagement
+  },
+  bansManagement: {
+    id: 'bansManagement',
+    label: 'Bans Management',
+    icon: AlertTriangle,
+    roles: ['lead_developer'],
+    description: 'List, create, and remove user bans',
+    component: BansManagement
   },
   
   // Product Manager & Lead Developer Tabs
   airportManagement: {
     id: 'airportManagement',
     label: 'Airport Management',
-    icon: Building2,
+    icon: TowerControl,
     roles: ['product_manager', 'lead_developer'],
     description: 'Review and approve airport submissions',
     component: AirportManagement
@@ -86,7 +118,7 @@ const TABS = {
     id: 'contributionManagement',
     label: 'Contribution Management',
     icon: Map,
-    roles: ['product_manager', 'lead_developer', 'MAP_APPROVER'],
+    roles: ['product_manager', 'lead_developer'],
     description: 'Review and manage user contributions',
     component: ContributionManagement
   },  notamManagement: {
@@ -97,40 +129,22 @@ const TABS = {
     description: 'Update and post new website NOTAMs',
     component: NotamManagement
   },
-  docsManagement: {
-    id: 'docsManagement',
-    label: 'Documentation',
-    icon: BookOpen,
-    roles: ['product_manager', 'lead_developer'],
-    description: 'Manage and update documentation',
-    component: () => <div>Documentation Management Component (Coming Soon)</div>
-  },
   faqManagement: {
     id: 'faqManagement',
-    label: 'FAQs',
+    label: 'FAQ Management',
     icon: FileQuestion,
     roles: ['product_manager', 'lead_developer'],
     description: 'Manage and update the FAQ section',
-    component: () => <div>FAQ Management Component (Coming Soon)</div>
+    component: FAQManagement
   },
-  productStats: {
-    id: 'productStats',
-    label: 'Product Stats',
-    icon: BarChart2,
+  contactMessages: {
+    id: 'contactMessages',
+    label: 'Contact Messages',
+    icon: MessageSquare,
     roles: ['product_manager', 'lead_developer'],
-    description: 'View BARS usage statistics',
-    component: () => <div>Product Stats Component (Coming Soon)</div>
+    description: 'View and respond to user contact messages',
+    component: ContactMessages
   },
-  
-  // MAP_APPROVER Tabs
-  mapReview: {
-    id: 'mapReview',
-    label: 'Map Review',
-    icon: ClipboardList,
-    roles: ['MAP_APPROVER', 'product_manager', 'lead_developer'],
-    description: 'Review and approve map submissions',
-    component: () => <div>Map Review Component (Coming Soon)</div>
-  }
 };
 
 const StaffDashboard = () => {
@@ -141,6 +155,8 @@ const StaffDashboard = () => {
   const [success,] = useState(null);
   const [refreshing, setRefreshing] = useState(false); // Add state for refreshing
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Note: active tab is kept in sync with URL ?tool=<tabId> so refresh/back links persist selection
   const { user } = useAuth();
   const token = getVatsimToken();
 
@@ -175,21 +191,33 @@ const StaffDashboard = () => {
         }
         
         setStaffRoles(roles);
-        
-        // Set initial active tab to first accessible tab
-        const accessibleTabs = Object.values(TABS).filter(tab => 
-          tab.roles.some(role => {
-            const normalizedRole = role.toLowerCase();
-            return roles[normalizedRole] === 1;
-          })
+
+        // Determine accessible tabs from the fetched roles
+        const accessibleTabs = Object.values(TABS).filter(tab =>
+          tab.roles.some(role => roles[role.toLowerCase()] === 1)
         );
-        
-        if (accessibleTabs.length > 0) {
-          setActiveTab(accessibleTabs[0].id);
-        } else {
+
+        if (accessibleTabs.length === 0) {
           // No accessible tabs - redirect to account page
           navigate('/account');
           setError('You do not have access to the staff dashboard');
+          return;
+        }
+
+        // Read the desired tool from URL and validate access
+        const urlTool = searchParams.get('tool');
+        const isUrlToolValid = urlTool && accessibleTabs.some(t => t.id === urlTool);
+
+        const initialTab = isUrlToolValid ? urlTool : accessibleTabs[0].id;
+        setActiveTab(initialTab);
+
+        // If URL didn't have a valid tool, update it to reflect the chosen tab
+        if (!isUrlToolValid) {
+          setSearchParams(prev => {
+            const params = new URLSearchParams(prev);
+            params.set('tool', initialTab);
+            return params;
+          }, { replace: true });
         }
       } catch (error) {
         console.error('Error fetching staff roles:', error);
@@ -206,7 +234,21 @@ const StaffDashboard = () => {
       setError('Authentication required');
       navigate('/');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, navigate, user]);  // Function to refresh the current tab data by simulating a tab change
+
+  // Keep activeTab in sync when the URL param changes (back/forward navigation)
+  useEffect(() => {
+    if (!staffRoles) return;
+    const urlTool = searchParams.get('tool');
+    if (!urlTool) return;
+
+    // Validate access for the current roles
+    const hasAccess = Object.values(TABS).some(tab => tab.id === urlTool && tab.roles.some(r => staffRoles[r.toLowerCase()] === 1));
+    if (hasAccess && urlTool !== activeTab) {
+      setActiveTab(urlTool);
+    }
+  }, [searchParams, staffRoles, activeTab]);
   const handleRefresh = async () => {
     if (refreshing) return; // Prevent multiple refreshes
     
@@ -296,10 +338,19 @@ const StaffDashboard = () => {
   return (
     <Layout>
       <div className="pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-6">          <div className="flex items-center justify-between mb-8">
+        <div className="max-w-7xl mx-auto px-6">          
+          <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold mb-2">Staff Dashboard</h1>
-              <p className="text-zinc-400">Welcome back, {user?.email}</p>
+              <p className="text-zinc-400">{(() => {
+                const hour = new Date().getHours();
+                let greeting;
+                if (hour < 12) greeting = 'Good morning';
+                else if (hour < 18) greeting = 'Good afternoon';
+                else greeting = 'Good evening';
+                const firstName = user?.first_name || (user?.full_name || user?.fullName || user?.name || user?.email || '').split(' ')[0] || 'there';
+                return `${greeting}, ${firstName}`;
+              })()}</p>
             </div>
             <div className="flex items-center space-x-1 mt-4">
               <iframe 
@@ -341,7 +392,7 @@ const StaffDashboard = () => {
                         <h4 className="text-xs font-medium text-zinc-500">System Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['userManagement', 'staffManagement', 'divisionManagement', 'systemSettings', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['userManagement', 'staffManagement', 'divisionManagement', 'cacheManagement', 'bansManagement', 'releaseManagement'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;
@@ -349,7 +400,15 @@ const StaffDashboard = () => {
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                // Persist selection in URL (?tool=...)
+                                setSearchParams(prev => {
+                                  const params = new URLSearchParams(prev);
+                                  params.set('tool', tab.id);
+                                  return params;
+                                });
+                              }}
                               className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
@@ -366,14 +425,14 @@ const StaffDashboard = () => {
                   
                   {/* Content Management Group */}
                   {Object.values(TABS).some(tab => 
-                    ['airportManagement', 'contributionManagement', 'notamManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab)
+          ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'contactMessages'].includes(tab.id) && hasTabAccess(tab)
                   ) && (
                     <div className="space-y-1 mb-2">
                       <div className="px-4 py-2">
                         <h4 className="text-xs font-medium text-zinc-500">Content Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['airportManagement', 'contributionManagement', 'notamManagement', 'docsManagement', 'faqManagement'].includes(tab.id) && hasTabAccess(tab))
+            .filter(tab => ['airportManagement', 'contributionManagement', 'notamManagement', 'faqManagement', 'contactMessages'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;
@@ -381,7 +440,14 @@ const StaffDashboard = () => {
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setSearchParams(prev => {
+                                  const params = new URLSearchParams(prev);
+                                  params.set('tool', tab.id);
+                                  return params;
+                                });
+                              }}
                               className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 
@@ -395,25 +461,28 @@ const StaffDashboard = () => {
                         })}
                     </div>
                   )}
-                  
-                  {/* Other Tools */}
-                  {Object.values(TABS).some(tab => 
-                    ['mapReview', 'productStats'].includes(tab.id) && hasTabAccess(tab)
-                  ) && (
-                    <div className="space-y-1">
+                  {/* Data Management Group (packages) */}
+                  {Object.values(TABS).some(tab => ['packagesManagement', 'vatsysProfiles'].includes(tab.id) && hasTabAccess(tab)) && (
+                    <div className="space-y-1 mb-2">
                       <div className="px-4 py-2">
-                        <h4 className="text-xs font-medium text-zinc-500">Analytics & Review</h4>
+                        <h4 className="text-xs font-medium text-zinc-500">Data Management</h4>
                       </div>
                       {Object.values(TABS)
-                        .filter(tab => ['mapReview', 'productStats'].includes(tab.id) && hasTabAccess(tab))
+                        .filter(tab => ['packagesManagement', 'vatsysProfiles'].includes(tab.id) && hasTabAccess(tab))
                         .map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTab === tab.id;
-                          
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setSearchParams(prev => {
+                                  const params = new URLSearchParams(prev);
+                                  params.set('tool', tab.id);
+                                  return params;
+                                });
+                              }}
                               className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                                 isActive 
                                   ? 'bg-blue-500/90 text-white shadow-md shadow-blue-500/20' 

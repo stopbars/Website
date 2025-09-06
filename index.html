@@ -14,6 +14,8 @@
     <meta name="robots" content="noindex, nofollow"> <!-- Prevent indexing by search engines till complete -->
     <meta name="author" content="BARS Development Team">
     <meta name="copyright" content="© 2025 BARS">
+    <meta name="application-name" content="BARS">
+    <meta name="apple-mobile-web-app-title" content="BARS">
 
     <!-- Language Tags -->
     <link rel="canonical" href="https://stopbars.com/">
@@ -32,15 +34,15 @@
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:locale" content="en_US">
+    <meta property="og:image:alt" content="BARS banner showcasing advanced stop bar simulation for flight simulation enthusiasts.">
 
-    <!-- Twitter -->
+
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:site" content="@AussieScorcher">
-    <meta name="twitter:creator" content="@AussieScorcher">
     <meta name="twitter:url" content="https://stopbars.com/">
     <meta name="twitter:title" content="BARS - Advanced Stop Bar Simulation">
     <meta name="twitter:description" content="Transform your VATSIM experience with realistic stopbar operations. Free download, zero performance impact, and perfect compatibility with MSFS 2020 and MSFS 2024.">
     <meta name="twitter:image" content="https://stopbars.com/banner.png">
+    <meta name="twitter:image:alt" content="BARS banner showcasing advanced stop bar simulation for flight sim.">
 
     <!-- Theme -->
     <meta name="theme-color" content="#18181B">
@@ -48,34 +50,14 @@
     
     <!-- Preload Critical Assets -->
     <link rel="preconnect" href="https://api.stopbars.com">
+    <link rel="preconnect" href="https://v2.stopbars.com">
     <link rel="preconnect" href="https://cdn.stopbars.com">
     <link rel="dns-prefetch" href="https://api.stopbars.com">
+    <link rel="dns-prefetch" href="https://v2.stopbars.com">
     <link rel="dns-prefetch" href="https://cdn.stopbars.com">
-    <link rel="dns-prefetch" href="https://www.googletagmanager.com">
-    
+
     <!-- Preload critical fonts if any -->
     <link rel="preload" href="/src/main.jsx" as="script" crossorigin="anonymous">
-
-    <!-- Google tag (gtag.js) -->
-
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V7RB43CHTC"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      
-      // Set default consent to 'denied' first
-      gtag('consent', 'default', {
-      'analytics_storage': 'denied'
-      });
-
-      // Enable URL passthrough for better measurement when cookies are denied
-      gtag('set', 'url_passthrough', true);
-
-      // Initialize analytics after consent settings
-      gtag('js', new Date());
-      gtag('config', 'G-V7RB43CHTC');
-    </script>
-
 
     <!-- Structured Data for Organization -->
     <script type="application/ld+json">
@@ -86,8 +68,6 @@
       "url": "https://stopbars.com",
       "logo": "https://stopbars.com/favicon.png",
       "sameAs": [
-        "https://twitter.com/AussieScorcher",
-        "https://www.youtube.com/@AussieScorcher",
         "https://github.com/BARS",
         "https://discord.gg/7EhmtwKWzs"
       ],
@@ -105,17 +85,7 @@
       "@context": "https://schema.org",
       "@type": "WebSite",
       "name": "BARS",
-      "url": "https://stopbars.com",
-      "potentialAction": [{
-        "@type": "DownloadAction",
-        "target": {
-          "@type": "EntryPoint",
-          "urlTemplate": "https://stopbars.com/",
-          "actionPlatform": ["http://schema.org/DesktopWebPlatform"]
-        },
-        "name": "Download BARS"
-      }
-      ],
+      "url": "https://stopbars.com"
     }
     </script>
 

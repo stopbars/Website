@@ -1,11 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './styles/globals.css'
+
+// PostHog
+import { PostHogProvider } from 'posthog-js/react'
 
 // Pages
 import Home from './pages/Home.jsx'
-import Documentation from './pages/Documentation.jsx'
 import Account from './pages/Account.jsx'
 import Privacy from './pages/Privacy.jsx'
 import Terms from './pages/Terms.jsx'
@@ -16,6 +18,7 @@ import Contact from './pages/Contact.jsx'
 import About from './pages/About.jsx'
 import Credits from './pages/Credits.jsx'
 import NotFound from './pages/NotFound.jsx'
+import Banned from './pages/Banned.jsx'
 import DivisionAirportManager from './pages/DivisionAirportManager.jsx'
 import DebugGenerator from './pages/DebugGenerator.jsx'
 import ContributionDashboard from './pages/ContributionDashboard.jsx'
@@ -24,15 +27,16 @@ import ContributeMap from './pages/ContributeMap.jsx'
 import ContributeDetails from './pages/ContributeDetails.jsx'
 import ContributeTest from './pages/ContributeTest.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
-import { ModalProvider } from './context/ModalContext'
-import DivisionsManagement from './pages/DivisionsManagement'
+import Divisions from './pages/Divisions.jsx'
 import DivisionManagement from './components/divisions/DivisionManagement'
 import NewDivision from './components/divisions/NewDivision'
 import { ProtectedRoute } from './components/shared/ProtectedRoute'
 import { AuthCallback } from './components/auth/AuthCallback'
 import { DiscordRedirect } from './components/shared/DiscordRedirect'
+import { DocsRedirect } from './components/shared/DocsRedirect'
 import StaffDashboard from './pages/StaffDashboard.jsx'
 import { ErrorBoundary, RouteError } from './components/shared/ErrorBoundary'
+import { PostHogConsentBootstrap } from './components/shared/PostHogConsentBootstrap'
 
 const router = createBrowserRouter([
   {
@@ -47,12 +51,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/credits',
-    element: <Credits />,
-    errorElement: <RouteError />
-  },
-  {
-    path: '/documentation',
-    element: <Documentation />,
+    element: <Credits />,  
     errorElement: <RouteError />
   },
   {
@@ -65,89 +64,89 @@ const router = createBrowserRouter([
     errorElement: <RouteError />
   },
   {
-    path: '/docs/:docType',
-    element: <Documentation />,
-    errorElement: <RouteError />
-  },
-  {
-    path: '/docs',
-    element: <Navigate to="/documentation" replace />,
-    errorElement: <RouteError />
-  },
-  {
     path: '/auth/callback',
-    element: <AuthCallback />,
+    element: <AuthCallback />,  
     errorElement: <RouteError />
   },
   {
     path: '/status',
-    element: <GlobalStatus />,
+    element: <GlobalStatus />,  
     errorElement: <RouteError />
   },
   {
     path: '/changelog',
-    element: <Changelog />,
+    element: <Changelog />,  
     errorElement: <RouteError />
   },
   {
     path: '/support',
-    element: <Contact />,
+    element: <Contact />,  
     errorElement: <RouteError />
   },
   {
     path: '/contact',
-    element: <Contact />,
+    element: <Contact />,  
     errorElement: <RouteError />
   },
   {
     path: '/privacy',
-    element: <Privacy />,
+    element: <Privacy />,  
     errorElement: <RouteError />
   },
   {
     path: '/terms',
-    element: <Terms />,
+    element: <Terms />,  
     errorElement: <RouteError />
   },
   {
     path: '/discord',
-    element: <DiscordRedirect />,
+    element: <DiscordRedirect />,  
+    errorElement: <RouteError />
+  },
+  {
+    path: '/docs',
+    element: <DocsRedirect />,  
+    errorElement: <RouteError />
+  },
+  {
+    path: '/documentation',
+    element: <DocsRedirect />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute',
-    element: <ContributionDashboard />,
+    element: <ContributionDashboard />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute/new',
-    element: <ContributeNew />,
+    element: <ContributeNew />,  
     errorElement: <RouteError />
   }, {
     path: '/contribute/map/:icao',
-    element: <ContributeMap />,
+    element: <ContributeMap />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute/test/:icao',
-    element: <ContributeTest />,
+    element: <ContributeTest />,  
     errorElement: <RouteError />
   },
   {
     path: '/contribute/details/:icao',
-    element: <ContributeDetails />,
+    element: <ContributeDetails />,  
     errorElement: <RouteError />
   },
   {
     path: '/faq',
-    element: <FAQPage />,
+    element: <FAQPage />,  
     errorElement: <RouteError />
   },
   {
     path: '/divisions',
     element: (
       <ProtectedRoute>
-        <DivisionsManagement />
+        <Divisions />
       </ProtectedRoute>
     ),
     errorElement: <RouteError />
@@ -187,6 +186,11 @@ const router = createBrowserRouter([
     errorElement: <RouteError />
   },
   {
+    path: '/banned',
+    element: <Banned />,
+    errorElement: <RouteError />
+  },
+  {
     path: '/staff',
     element: (
       <ProtectedRoute>
@@ -197,19 +201,31 @@ const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <NotFound />,
+    element: <NotFound />,  
     errorElement: <RouteError />
   }
 ]);
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AuthProvider>
-      <ModalProvider>
+    <PostHogProvider
+      apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY}
+      options={{
+        api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
+        defaults: '2025-05-24',
+        debug: import.meta.env.MODE === 'development',
+        opt_out_capturing_by_default: true,
+        autocapture: false,
+        capture_exceptions: false,
+        persistence: 'memory',
+      }}
+    >
+      <AuthProvider>
+        <PostHogConsentBootstrap />
         <ErrorBoundary>
           <RouterProvider router={router} />
         </ErrorBoundary>
-      </ModalProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </PostHogProvider>
   </StrictMode>,
-);
+)
