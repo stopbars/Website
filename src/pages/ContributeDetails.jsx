@@ -206,7 +206,6 @@ const ContributeDetails = () => {
         packageName: sceneryName,
         submittedXml: fileContent,
         notes: notes || undefined,
-  // userDisplayName removed
       };
       
       // Send to the API
