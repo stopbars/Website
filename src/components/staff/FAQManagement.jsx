@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
@@ -83,6 +83,7 @@ const DeleteFAQModal = ({ faq, onConfirm, onCancel, isDeleting }) => {
 DeleteFAQModal.propTypes = {
   faq: PropTypes.shape({
     question: PropTypes.string.isRequired,
+    answer: PropTypes.string.isRequired,
   }).isRequired,
   onConfirm: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,

@@ -13,6 +13,7 @@ const PendingAirportRequests = ({ onCountChange }) => {
 
   const fetchRequests = useCallback(async () => {
     try {
+      if (!token) return;
       // Fetch all divisions
       const response = await fetch('https://v2.stopbars.com/divisions', {
         headers: { 'X-Vatsim-Token': token }
@@ -61,11 +62,11 @@ const PendingAirportRequests = ({ onCountChange }) => {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, onCountChange]);
 
   useEffect(() => {
-    if (token) fetchRequests();
-  }, [token]);
+    fetchRequests();
+  }, [fetchRequests]);
 
   const handleApprove = async (divisionId, airportId, approved) => {
     try {
