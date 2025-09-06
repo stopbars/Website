@@ -103,7 +103,10 @@ const VatSysProfiles = () => {
       if (!res.ok) {
         let msg = 'Upload failed';
   let data = null;
-  try { data = await res.json(); } catch { data = null; }
+  try { data = await res.json(); } catch (err) { 
+    console.error('Failed to parse JSON response in doUpload:', err);
+    data = null; 
+  }
         if (data?.error) msg = data.error;
         throw new Error(msg);
       }
