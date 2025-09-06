@@ -68,7 +68,7 @@
 <body>
   <div class="container">
     <h1>BARS Legacy XML Profile Creator</h1>
-    <div class="small">Create and edit legacy XML profiles with a simple visual layout. File naming uses ICAO_Right-Left or ICAO_Top-Bottom.</div>
+  <div class="small">Create and edit legacy XML profiles with a simple visual layout. Filenames use ICAO_small-to-large runway order (e.g., ICAO_7-25 or ICAO_16L-34R).</div>
 
     <div class="row" style="margin-top:10px">
       <div class="col panel" style="flex-basis:100%">
@@ -166,7 +166,7 @@
     </div>
 
     <div class="footer small">
-      Tip: Filename will be ICAO_Right-Left if horizontal is visible; otherwise ICAO_Top-Bottom if vertical is visible. Example: YSSY_16R-34L.xml
+      Tip: Filename uses small-number-first order automatically. Examples: YSSY_7-25.xml or YSSY_16L-34R.xml
     </div>
   </div>
 
@@ -233,12 +233,52 @@
     $('#fileNamePill').textContent = 'filename: ' + makeFilename();
   }
 
+  // Format helpers for runway designators in filenames
+  function parseRunwayDesignator(s){
+    const up = (s||'').trim().toUpperCase();
+    // match 1-2 digits (strip leading zeros) plus optional L/R/C
+    const m = up.match(/^0*([0-9]{1,2})([LRC])?$/);
+    if (m){
+      return { valid:true, num: parseInt(m[1],10), suffix: m[2]||'', raw: up };
+    }
+    // fallback: try to pull leading number only
+    const m2 = up.match(/^0*([0-9]{1,2})/);
+    if (m2){
+      return { valid:true, num: parseInt(m2[1],10), suffix:'', raw: up };
+    }
+    return { valid:false, num: Number.POSITIVE_INFINITY, suffix:'', raw: up };
+  }
+  function formatRunwayForFilename(p){
+    // If parsed, emit number without leading zeros then suffix; else raw
+    return Number.isFinite(p.num) && p.num!==Number.POSITIVE_INFINITY
+      ? String(p.num) + (p.suffix||'')
+      : p.raw;
+  }
+  function orderPairForFilename(aStr, bStr){
+    const a = parseRunwayDesignator(aStr);
+    const b = parseRunwayDesignator(bStr);
+    // Compare by numeric value; smaller first. If tie, L < C < R; then lex.
+    if (a.num !== b.num){
+      return a.num < b.num ? [a,b] : [b,a];
+    }
+    const rank = { 'L': 0, 'C': 1, 'R': 2 };
+    const ar = rank[a.suffix] ?? 99;
+    const br = rank[b.suffix] ?? 99;
+    if (ar !== br) return ar < br ? [a,b] : [b,a];
+    return a.raw <= b.raw ? [a,b] : [b,a];
+  }
+
   function makeFilename(){
     const icao = (state.airport.icao||'XXXX').toUpperCase();
     const h = state.runways.horizontal, v = state.runways.vertical;
     let pair = 'LEGACY';
-    if (h.visible && h.right && h.left) pair = `${h.right}-${h.left}`;
-    else if (v.visible && v.top && v.bottom) pair = `${v.top}-${v.bottom}`;
+    if (h.visible && h.right && h.left){
+      const [p1,p2] = orderPairForFilename(h.left, h.right);
+      pair = `${formatRunwayForFilename(p1)}-${formatRunwayForFilename(p2)}`;
+    } else if (v.visible && v.top && v.bottom){
+      const [p1,p2] = orderPairForFilename(v.top, v.bottom);
+      pair = `${formatRunwayForFilename(p1)}-${formatRunwayForFilename(p2)}`;
+    }
     return `${icao}_${pair}.xml`;
   }
 
