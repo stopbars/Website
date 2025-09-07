@@ -144,6 +144,10 @@ const Contact = () => {
         })
       });
 
+      if (response.status === 429) {
+        throw new Error('You can only submit one contact message every 24 hours. Please try again later.');
+      }
+
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to send message');
