@@ -52,7 +52,8 @@ export default defineConfig({
     },
     // Optimize build performance
     target: 'esnext',
-    sourcemap: 'hidden', // Generate sourcemaps but do not serve them to users
+    // Emit source maps so production bundle has maps available for debugging and Lighthouse
+    sourcemap: true,
   },
   // Optimize development server
   server: {

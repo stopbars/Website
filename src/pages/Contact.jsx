@@ -288,8 +288,8 @@ const Contact = () => {
           {/* Additional Support Options */}
           <div className="grid md:grid-cols-2 gap-6">
             {/* Discord Support */}
-            <Card className="p-6 hover:border-blue-500/30 transition-all cursor-pointer group"
-                  onClick={() => window.open('https://stopbars.com/discord', '_blank')}>
+    <Card className="p-6 hover:border-blue-500/30 transition-all cursor-pointer group"
+      onClick={() => window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')}>
               <div className="flex items-center space-x-3">
                 <MessagesSquare className="w-5 h-5 text-blue-400 group-hover:text-blue-300 transition-colors" />
                 <div>

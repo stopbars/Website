@@ -88,7 +88,7 @@ export const Documentation = () => {
                         </ul>
                         
                         <Button 
-                            onClick={() => window.open('https://github.com/stopbars', '_blank')}
+                            onClick={() => window.open('https://github.com/stopbars', '_blank', 'noopener,noreferrer')}
                             className="group w-full text-sm"
                         >
                             View on GitHub

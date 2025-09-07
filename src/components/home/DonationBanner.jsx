@@ -4,7 +4,7 @@ export const DonationBanner = () => {
   return (
     <section className="py-12">
       <div className="max-w-5xl mx-auto px-6">
-        <div className="relative overflow-hidden rounded-2xl bg-emerald-800 border border-emerald-700">
+  <div className="relative overflow-hidden rounded-2xl bg-emerald-900 border border-emerald-700">
 
           <div className="relative px-8 py-10 text-center">
             <div className="flex items-center justify-center gap-3 mb-4">
@@ -30,7 +30,7 @@ export const DonationBanner = () => {
                 href="https://opencollective.com/stopbars"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group inline-flex items-center justify-center px-7 py-3 text-base font-semibold rounded-md text-white bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-800 transition-transform duration-200 hover:scale-[1.02] shadow-lg shadow-emerald-900/30"
+                className="group inline-flex items-center justify-center px-7 py-3 text-base font-semibold rounded-md text-white bg-emerald-700 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-900 transition-transform duration-200 hover:scale-[1.02] shadow-lg shadow-emerald-900/30"
                 aria-label="Support BARS with a donation on Open Collective"
               >
                 Support BARS

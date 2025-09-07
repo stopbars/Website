@@ -332,7 +332,7 @@ const Credits = () => {
             </p>
             <div className="flex justify-center space-x-4">
               <Button 
-                onClick={() => window.open('https://github.com/stopbars', '_blank')}
+                onClick={() => window.open('https://github.com/stopbars', '_blank', 'noopener,noreferrer')}
                 className="group"
               >
                 <Github className="w-5 h-5 mr-2" />

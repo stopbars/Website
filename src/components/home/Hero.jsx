@@ -30,7 +30,7 @@ const DownloadButton = ({ asset, icon: Icon, label, variant = "primary", version
       await fetch(`https://api.stopbars.com/downloads/${downloadType}`, {
         method: 'POST'
       });
-      window.open(asset.browser_download_url, '_blank');
+  window.open(asset.browser_download_url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       console.error('Error downloading:', err);
     }

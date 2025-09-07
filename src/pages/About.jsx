@@ -192,7 +192,7 @@ const About = () => {
 
               <Card 
                 className="p-6 bg-gradient-to-br from-green-950/30 to-transparent transition-all duration-300 transform hover:scale-105 cursor-pointer"
-                onClick={() => window.open('https://github.com/stopbars/', '_blank')}
+                onClick={() => window.open('https://github.com/stopbars/', '_blank', 'noopener,noreferrer')}
               >
                 <CodeXml className="w-6 h-6 text-green-400 mb-3" />
                 <h3 className="text-lg font-medium mb-2">Open Source</h3>
@@ -277,7 +277,7 @@ const About = () => {
                 </div>
               </div>
               <Button 
-                onClick={() => window.open('https://github.com/stopbars', '_blank')}
+                onClick={() => window.open('https://github.com/stopbars', '_blank', 'noopener,noreferrer')}
                 className="group w-full sm:w-auto"
               >
                 View on GitHub
@@ -299,7 +299,7 @@ const About = () => {
              </div>
              <div className="mt-6">
                 <Button 
-                  onClick={() => window.open('https://docs.stopbars.com', '_blank')}
+                  onClick={() => window.open('https://docs.stopbars.com', '_blank', 'noopener,noreferrer')}
                   className="w-full group"
                 >
                  View Documentation
@@ -340,7 +340,7 @@ const About = () => {
              </p>
              <div className="flex justify-center">
                <Button 
-                 onClick={() => window.open('https://discord.gg/7EhmtwKWzs', '_blank')}
+                 onClick={() => window.open('https://discord.gg/7EhmtwKWzs', '_blank', 'noopener,noreferrer')}
                  className="group text-lg px-6 py-3"
                >
                  <MessagesSquare className="w-5 h-5 mr-2" />

@@ -54,7 +54,7 @@ export const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 lg:gap-16">
           {/* Branding Section */}
           <div className="col-span-1 lg:col-span-1">
-            <h4 className="text-3xl md:text-3xl font-bold mb-4 md:mb-6">BARS</h4>
+            <h2 className="text-3xl md:text-3xl font-bold mb-4 md:mb-6">BARS</h2>
             <div className="text-base md:text-base text-zinc-400 mb-4 md:mb-6">© Copyright {new Date().getFullYear()} BARS</div>
             <div className="flex items-center space-x-5 md:space-x-5">
               <a
@@ -86,7 +86,7 @@ export const Footer = () => {
 
           {/* Resources Section */}
           <div className="col-span-1">
-            <h4 className="text-base md:text-base font-medium mb-4 md:mb-6">Resources</h4>
+            <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Resources</h3>
             <ul className="space-y-3 md:space-y-3">
               <li>
                 <Link to="/about" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">
@@ -113,7 +113,7 @@ export const Footer = () => {
 
           {/* Support Section */}
           <div className="col-span-1">
-            <h4 className="text-base md:text-base font-medium mb-4 md:mb-6">Support</h4>
+            <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Support</h3>
             <ul className="space-y-3 md:space-y-3">
               <li>
                 <a 
@@ -161,7 +161,7 @@ export const Footer = () => {
 
           {/* Organization Section */}
           <div className="col-span-1">
-            <h4 className="text-base md:text-base font-medium mb-4 md:mb-6">Organization</h4>
+            <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Organization</h3>
             <ul className="space-y-3 md:space-y-3">
               <li>
                 <Link to="/divisions" className="text-base md:text-base text-zinc-400 hover:text-white transition-colors">

@@ -35,7 +35,7 @@ export const Support = () => {
             <Button 
               variant="secondary" 
               className="w-full"
-              onClick={() => window.open('https://docs.stopbars.com', '_blank')}
+              onClick={() => window.open('https://docs.stopbars.com', '_blank', 'noopener,noreferrer')}
               aria-label="View installation and configuration guides"
             >
               View Docs
@@ -81,7 +81,7 @@ export const Support = () => {
             <Button 
               variant="secondary" 
               className="w-full"
-              onClick={() => window.open('https://stopbars.com/discord', '_blank')}
+              onClick={() => window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')}
               aria-label="Join BARS Discord community for support and updates"
             >
               Join Discord Server
