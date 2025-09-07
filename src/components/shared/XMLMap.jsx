@@ -80,6 +80,8 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       const objType = obj.getAttribute("type");
       const propsElement = obj.querySelector("Properties");
       const color = propsElement?.querySelector("Color")?.textContent || '';
+      // New: capture Directionality if present on the object
+      const directionality = propsElement?.querySelector("Directionality")?.textContent?.toLowerCase() || '';
       const orientation = propsElement?.querySelector("Orientation")?.textContent || '';
       const elevated = propsElement?.querySelector("Elevated")?.textContent === 'true';
       const lightElements = obj.getElementsByTagName("Light");
@@ -95,7 +97,9 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
         const heading = parseFloat(light.querySelector("Heading")?.textContent || "0");
         const lightProps = light.querySelector("Properties");
         const lightColor = lightProps?.querySelector("Color")?.textContent || color;
-        const lightOrientation = lightProps?.querySelector("Orientation")?.textContent || orientation;
+  const lightOrientation = lightProps?.querySelector("Orientation")?.textContent || orientation;
+  // Directionality can be on object or light; light overrides if specified
+  const lightDirectionality = lightProps?.querySelector("Directionality")?.textContent?.toLowerCase() || directionality;
         const lightIHP = lightProps?.querySelector("IHP")?.textContent === 'true';
         const lightElevated = lightProps?.querySelector("Elevated")?.textContent === 'true' || elevated;
 
@@ -117,12 +121,14 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
             type: objType,
             color: lightColor,
             orientation: lightOrientation,
+            directionality: lightDirectionality, // 'uni-directional' | 'bi-directional' | ''
             elevated: lightElevated,
             IHP: lightIHP,
             objectId: objId,
             properties: lightProps ? {
               color: lightProps.querySelector("Color")?.textContent || null,
               orientation: lightProps.querySelector("Orientation")?.textContent || null,
+              directionality: lightProps.querySelector("Directionality")?.textContent || null,
               IHP: lightProps.querySelector("IHP")?.textContent || null,
               elevated: lightProps.querySelector("Elevated")?.textContent || null
             } : null
@@ -243,9 +249,10 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       const isIHP = light.properties?.IHP === 'true' || (typeof light.IHP === 'boolean' && light.IHP);
       // Determine color based on IHP status
       const stopbarColor = isIHP ? 'rgb(250, 204, 21)' : 'rgb(238, 49, 49)'; // Yellow for IHP, red for regular stopbar
-      
-      if (light.orientation === 'both' || !light.orientation) {
-        // Regular stopbar - solid color (either red or yellow)
+      // Use Directionality if present: 'bi-directional' => solid, else (uni or missing) => top half colored
+      const rawDirectionality = (light.properties?.directionality || light.directionality || '').toLowerCase();
+      const isBi = rawDirectionality === 'bi-directional' || rawDirectionality === 'bi';
+      if (isBi) {
         html = `
           <div class="marker-container" style="${headingStyle}">
             <div class="marker-circle stopbar-marker" style="background-color: ${stopbarColor};">
@@ -254,7 +261,7 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
           </div>
         `;
       } else {
-        // Unidirectional stopbar - half colored, half gray
+        // Unidirectional: color the TOP half (relative to heading), bottom half gray
         html = `
           <div class="marker-container" style="${headingStyle}">
             <div class="marker-circle split-stopbar" style="--left-color:${stopbarColor}; --right-color:rgb(77, 77, 77);">

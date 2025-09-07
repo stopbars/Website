@@ -41,24 +41,44 @@ const getPointColor = (point) => {
   }
 };
 
+const getFirstLatLng = (coords) => {
+  if (!coords) return null;
+  if (Array.isArray(coords)) {
+    const first = coords[0];
+    if (first && typeof first.lat === 'number' && typeof first.lng === 'number') return first;
+    return null;
+  }
+  if (typeof coords === 'object' && typeof coords.lat === 'number' && typeof coords.lng === 'number') {
+    return coords;
+  }
+  return null;
+};
+
+const toLatLngPair = (coords) => {
+  const c = getFirstLatLng(coords);
+  return c ? [c.lat, c.lng] : null;
+};
+
 // Create custom markers based on point type
 const createCustomIcon = (point) => {
   const color = getPointColor(point);
   let html = '';
 
   if (point.type === 'stopbar') {
-    html = `
-      <div class="marker-container">
-        <div class="marker-circle stopbar-marker ${point.orientation || 'left'}">
-          ${point.directionality === 'uni-directional' ? 
-            (point.orientation === 'left' ? 
-              '<div class="marker-quarter marker-quarter-4"></div>' : 
-              '<div class="marker-quarter marker-quarter-1"></div>'
-            ) : ''
-          }
+    if (point.directionality === 'bi-directional') {
+      html = `
+        <div class="marker-container">
+          <div class="marker-circle stopbar-marker"></div>
         </div>
-      </div>
-    `;
+      `;
+    } else {
+      // Uni-directional: top half colored, bottom half gray
+      html = `
+        <div class="marker-container">
+          <div class="marker-circle split-stopbar" style="--left-color: rgb(77, 77, 77); --right-color: #ef4444;"></div>
+        </div>
+      `;
+    }
   } else if (point.type === 'lead_on') {
     html = `
       <div class="marker-container">
@@ -71,7 +91,8 @@ const createCustomIcon = (point) => {
       </div>
     `;
   } else if (point.type === 'taxiway') {
-    if (point.directionality === 'bi-directional') {
+    // Render same visuals for uni and bi, no orientation dependency
+    if (point.directionality === 'bi-directional' || point.directionality === 'uni-directional') {
       if (point.color === 'green') {
         html = `
         <div class="marker-container">
@@ -112,83 +133,6 @@ const createCustomIcon = (point) => {
             <div class="marker-quarter taxiway-orange-quarter-2"></div>
             <div class="marker-quarter taxiway-orange-quarter-3"></div>
             <div class="marker-quarter taxiway-orange-quarter-4"></div>
-          </div>
-        </div>
-      `;
-      }
-    }
-    else if (point.directionality === 'uni-directional') {
-      if (point.color === 'green') {
-        html = `
-        <div class="marker-container">
-          <div class="marker-circle taxiway-green ${point.orientation || 'left'}">
-            ${point.directionality === 'uni-directional' ? 
-              (point.orientation === 'left' ? 
-                `<div class="marker-quarter taxiway-quarter-L"></div>` : 
-                `<div class="marker-quarter taxiway-quarter-R"></div>`
-              ) : ''
-            }
-          </div>
-        </div>
-      `;
-      }
-      else if (point.color === 'green-yellow') {
-          html = `
-            <div class="marker-container">
-              <div class="marker-circle ${point.orientation || 'left'}">
-                ${point.directionality === 'uni-directional' ? 
-                  (point.orientation === 'left' ? 
-                    `
-                    <div class="marker-quarter taxiway-yellow-quarter-1"></div>
-                    <div class="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div class="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div class="marker-quarter taxiway-quarter-L"></div>` : 
-                    `<div class="marker-quarter taxiway-quarter-R"></div>
-                    <div class="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div class="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div class="marker-quarter taxiway-yellow-quarter-4"></div>`
-                  ) : ''
-                }
-              </div>
-            </div>
-          `;
-          }
-      else if (point.color === 'green-blue') {
-        html = `
-        <div class="marker-container">
-          <div class="marker-circle ${point.orientation || 'left'}">
-            ${point.directionality === 'uni-directional' ? 
-              (point.orientation === 'left' ? 
-                `<div class="marker-quarter taxiway-blue-quarter-1"></div>
-                <div class="marker-quarter taxiway-blue-quarter-2"></div>
-                <div class="marker-quarter taxiway-blue-quarter-3"></div>
-                <div class="marker-quarter taxiway-quarter-L"></div>` : 
-                `<div class="marker-quarter taxiway-quarter-R"></div>
-                <div class="marker-quarter taxiway-blue-quarter-2"></div>
-                <div class="marker-quarter taxiway-blue-quarter-3"></div>
-                <div class="marker-quarter taxiway-blue-quarter-4"></div>`
-              ) : ''
-            }
-          </div>
-        </div>
-      `;    
-      }
-      else if (point.color === 'green-orange') {
-        html = `
-        <div class="marker-container">
-          <div class="marker-circle ${point.orientation || 'left'}">
-            ${point.directionality === 'uni-directional' ? 
-              (point.orientation === 'left' ? 
-                `<div class="marker-quarter taxiway-orange-quarter-1"></div>
-                <div class="marker-quarter taxiway-orange-quarter-2"></div>
-                <div class="marker-quarter taxiway-orange-quarter-3"></div>
-                <div class="marker-quarter taxiway-quarter-L"></div>` : 
-                `<div class="marker-quarter taxiway-quarter-R"></div>
-                <div class="marker-quarter taxiway-orange-quarter-2"></div>
-                <div class="marker-quarter taxiway-orange-quarter-3"></div>
-                <div class="marker-quarter taxiway-orange-quarter-4"></div>`
-              ) : ''
-            }
           </div>
         </div>
       `;
@@ -311,6 +255,13 @@ style.textContent = `
   .lead-on-marker {
     position: relative;
   }
+  .split-stopbar {
+    background: linear-gradient(
+      0deg,
+      var(--left-color, rgb(77, 77, 77)) 50%,
+      var(--right-color, #ef4444) 50%
+    );
+  }
   .marker-quarter {
     position: absolute;
     width: 50%;
@@ -389,7 +340,6 @@ const AirportPointEditor = () => {
     name: '',
     coordinates: null,
     directionality: 'uni-directional',
-    orientation: 'left',
     color: 'green',
     elevated: false,
     ihp: false
@@ -404,22 +354,18 @@ const AirportPointEditor = () => {
         switch (value) {
           case 'stopbar':
             updatedPoint.directionality = 'uni-directional';
-            updatedPoint.orientation = 'left';
             delete updatedPoint.color; // Remove color for stopbars
             break;
           case 'lead_on':
             delete updatedPoint.directionality;
-            delete updatedPoint.orientation;
             delete updatedPoint.color; // Remove color for lead-on lights
             break;
           case 'taxiway':
             updatedPoint.directionality = 'bi-directional';
-            delete updatedPoint.orientation; // Remove orientation for taxiways
             updatedPoint.color = 'green'; // Set default color for taxiway
             break;
           case 'stand':
             delete updatedPoint.directionality;
-            delete updatedPoint.orientation;
             delete updatedPoint.color; // Remove color for stand lights
             break;
         }
@@ -429,11 +375,6 @@ const AirportPointEditor = () => {
       if (field === 'directionality') {
         if (updatedPoint.type === 'stopbar' && value === 'bi-directional') {
           updatedPoint.elevated = false;
-          delete updatedPoint.orientation;
-        }
-        // Always remove orientation for taxiway when changing directionality (for both uni and bi)
-        if (updatedPoint.type === 'taxiway') {
-          delete updatedPoint.orientation;
         }
       }
 
@@ -450,22 +391,18 @@ const AirportPointEditor = () => {
         switch (value) {
           case 'stopbar':
             updatedForm.directionality = 'uni-directional';
-            updatedForm.orientation = 'left';
             delete updatedForm.color; // Remove color for stopbars
             break;
           case 'lead_on':
             delete updatedForm.directionality;
-            delete updatedForm.orientation;
             delete updatedForm.color; // Remove color for lead-on lights
             break;
           case 'taxiway':
             updatedForm.directionality = 'bi-directional';
-            delete updatedForm.orientation; // Remove orientation for taxiways
             updatedForm.color = 'green'; // Set default color for taxiway
             break;
           case 'stand':
             delete updatedForm.directionality;
-            delete updatedForm.orientation;
             delete updatedForm.color; // Remove color for stand lights
             break;
         }
@@ -475,11 +412,6 @@ const AirportPointEditor = () => {
       if (field === 'directionality') {
         if (updatedForm.type === 'stopbar' && value === 'bi-directional') {
           updatedForm.elevated = false;
-          delete updatedForm.orientation;
-        }
-        // Always remove orientation for taxiway when changing directionality (for both uni and bi)
-        if (updatedForm.type === 'taxiway') {
-          delete updatedForm.orientation;
         }
       }
 
@@ -542,17 +474,10 @@ const AirportPointEditor = () => {
   // Adjust the payload to exclude unnecessary fields based on type
   const preparePointPayload = (point) => {
     const payload = { ...point };
-
+    // Remove orientation entirely; no longer used or sent
+    delete payload.orientation;
     if (point.type === 'stopbar') {
-      if (point.directionality !== 'uni-directional') {
-        delete payload.orientation; // Remove orientation if not uni-directional
-      }
       delete payload.color; // Remove color for stopbar
-    }
-    if (point.type === 'taxiway') {
-      if (point.directionality === 'uni-directional') {
-        delete payload.orientation; // Remove orientation for uni-directional taxiway
-      }
     }
     if (point.type === 'lead_on') {
       delete payload.color; // Remove color for lead-on light
@@ -597,8 +522,8 @@ const AirportPointEditor = () => {
         name: '',
         coordinates: null,
         directionality: 'uni-directional',
-        orientation: 'left',
-        color: 'red'
+        elevated: false,
+        ihp: false
       });
 
       setTimeout(() => setSuccess(null), 3000);
@@ -680,8 +605,8 @@ const AirportPointEditor = () => {
       name: '',
       coordinates: null,
       directionality: 'uni-directional',
-      orientation: 'left',
-      color: 'red'
+      elevated: false,
+      ihp: false
     });
   };
 
@@ -720,15 +645,19 @@ const AirportPointEditor = () => {
   // Function to start editing a point
   const startEditing = (point) => {
     // First set editing point and form
+    const coord = getFirstLatLng(point.coordinates);
     setEditingPoint(point);
-    setEditForm({ ...point });
+    setEditForm({ ...point, coordinates: coord || null });
     
     // Center map on the point's current location
     if (mapRef.current) {
-      mapRef.current.setView(
-        [point.coordinates.lat, point.coordinates.lng],
-        mapRef.current.getZoom()
-      );
+      const pair = toLatLngPair(point.coordinates);
+      if (pair) {
+        mapRef.current.setView(
+          pair,
+          mapRef.current.getZoom()
+        );
+      }
     }
     
     // Prevent any click events for 100ms to avoid position snap
@@ -835,25 +764,29 @@ const AirportPointEditor = () => {
             {points
             .filter(point => !editingPoint || point.id !== editingPoint.id)
             .map(point => (
-              <Marker
-                key={point.id}
-                position={[point.coordinates.lat, point.coordinates.lng]}
-                icon={createCustomIcon(point)}
-                eventHandlers={{
-                  click: () => {
-                    setActivePointId(point.id === activePointId ? null : point.id);
-                    if (mapRef.current) {
-                      mapRef.current.setView(
-                        [point.coordinates.lat, point.coordinates.lng],
-                        mapRef.current.getZoom()
-                      );
-                    }
-                  },
-                  popupclose: () => {
-                    setActivePointId(null);
-                  }
-                }}
-              >
+              (() => {
+                const pos = toLatLngPair(point.coordinates);
+                if (!pos) return null;
+                return (
+                  <Marker
+                    key={point.id}
+                    position={pos}
+                    icon={createCustomIcon(point)}
+                    eventHandlers={{
+                      click: () => {
+                        setActivePointId(point.id === activePointId ? null : point.id);
+                        if (mapRef.current) {
+                          mapRef.current.setView(
+                            pos,
+                            mapRef.current.getZoom()
+                          );
+                        }
+                      },
+                      popupclose: () => {
+                        setActivePointId(null);
+                      }
+                    }}
+                  >
                 <Popup 
                   className="custom-popup"
                   onClose={() => setActivePointId(null)}
@@ -863,15 +796,7 @@ const AirportPointEditor = () => {
                     <div className="space-y-0 mb-3">
                       <p className="text-sm text-zinc-400">Type: {formatType(point.type)}</p>
                       <p className="text-sm text-zinc-400">BARS ID: {point.id}</p>
-                      {point.type === 'stopbar' && (
-                        <>
-                          {point.directionality === 'uni-directional' && (
-                            <p className="text-sm text-zinc-400">
-                              Orientation: {point.orientation === 'left' ? 'Left' : 'Right'}
-                            </p>
-                          )}
-                        </>
-                      )}
+                      {/* Orientation removed from UI for stopbars */}
                     </div>
                     <div className="flex justify-end space-x-2">
                       <Button
@@ -900,19 +825,22 @@ const AirportPointEditor = () => {
                     </div>
                   </div>
                 </Popup>
-              </Marker>
+                  </Marker>
+                );
+              })()
             ))}
             
             {/* Display temporary marker for new point or edit */}
-            {((addingPoint && newPoint.coordinates) || (editingPoint && editForm?.coordinates)) && (
-              <Marker 
-                position={[
-                  editForm?.coordinates?.lat || newPoint.coordinates.lat,
-                  editForm?.coordinates?.lng || newPoint.coordinates.lng
-                ]}
-                icon={createCustomIcon(editForm || newPoint)}
-              />
-            )}
+            {(() => {
+              const activeCoords = (editingPoint && editForm?.coordinates) ? editForm.coordinates : newPoint.coordinates;
+              if (!activeCoords) return null;
+              return (
+                <Marker 
+                  position={[activeCoords.lat, activeCoords.lng]}
+                  icon={createCustomIcon(editForm || newPoint)}
+                />
+              );
+            })()}
           </MapContainer>
         </div>
 
@@ -968,34 +896,20 @@ const AirportPointEditor = () => {
                         </select>
                       </div>
                       
-                      {/* Only show orientation for uni-directional */}
+                      {/* Elevated toggle only relevant for uni-directional stopbars */}
                       {editForm.directionality === 'uni-directional' && (
-                        <>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Orientation</label>
-                            <select
-                              value={editForm.orientation}
-                              onChange={e => handleEditFieldChange('orientation', e.target.value)}
-                              className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                            >
-                              <option value="left">Left</option>
-                              <option value="right">Right</option>
-                            </select>
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id="edit-elevated"
-                              checked={editForm.elevated || false}
-                              onChange={e => handleEditFieldChange('elevated', e.target.checked)}
-                              className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
-                            />
-                            <label htmlFor="edit-elevated" className="text-sm font-medium">
-                              Has Elevated Bar?
-                            </label>
-                          </div>
-                        </>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="edit-elevated"
+                            checked={editForm.elevated || false}
+                            onChange={e => handleEditFieldChange('elevated', e.target.checked)}
+                            className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
+                          />
+                          <label htmlFor="edit-elevated" className="text-sm font-medium">
+                            Has Elevated Bar?
+                          </label>
+                        </div>
                       )}
 
                       <div className="flex items-center space-x-2">
@@ -1124,34 +1038,20 @@ const AirportPointEditor = () => {
                         </select>
                       </div>
                       
-                      {/* Only show orientation and elevated for uni-directional */}
+                      {/* Elevated toggle only for uni-directional stopbars */}
                       {newPoint.directionality === 'uni-directional' && (
-                        <>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Orientation</label>
-                            <select
-                              value={newPoint.orientation}
-                              onChange={e => setNewPoint({...newPoint, orientation: e.target.value})}
-                              className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                            >
-                              <option value="left">Left</option>
-                              <option value="right">Right</option>
-                            </select>
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id="new-elevated"
-                              checked={newPoint.elevated || false}
-                              onChange={e => handleNewPointFieldChange('elevated', e.target.checked)}
-                              className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
-                            />
-                            <label htmlFor="new-elevated" className="text-sm font-medium">
-                              Has Elevated Bar?
-                            </label>
-                          </div>
-                        </>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="new-elevated"
+                            checked={newPoint.elevated || false}
+                            onChange={e => handleNewPointFieldChange('elevated', e.target.checked)}
+                            className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
+                          />
+                          <label htmlFor="new-elevated" className="text-sm font-medium">
+                            Has Elevated Bar?
+                          </label>
+                        </div>
                       )}
 
                       <div className="flex items-center space-x-2">
@@ -1270,10 +1170,13 @@ const AirportPointEditor = () => {
                                   setActivePointId(point.id);
                                   // Center map on this point
                                   if (mapRef.current) {
-                                    mapRef.current.setView(
-                                      [point.coordinates.lat, point.coordinates.lng],
-                                      17
-                                    );
+                                    const pos = toLatLngPair(point.coordinates);
+                                    if (pos) {
+                                      mapRef.current.setView(
+                                        pos,
+                                        17
+                                      );
+                                    }
                                   }
                                 }}
                               >
@@ -1315,12 +1218,6 @@ const AirportPointEditor = () => {
                                     <p className="text-zinc-400">Directionality:</p>
                                     <p>{point.directionality === 'uni-directional' ? 'Uni-directional' : 'Bi-directional'}</p>
                                   </div>
-                                  {point.directionality === 'uni-directional' && (
-                                    <div>
-                                      <p className="text-zinc-400">Orientation:</p>
-                                      <p>{point.orientation === 'left' ? 'Left' : 'Right'}</p>
-                                    </div>
-                                  )}
                                 </>
                               )}
                               {point.type === 'stopbar' && (
@@ -1348,9 +1245,14 @@ const AirportPointEditor = () => {
                             {/* Coordinates */}
                             <div>
                               <p className="text-zinc-400 text-sm">Position:</p>
-                              <p className="text-sm">
-                                [{point.coordinates.lat.toFixed(6)}, {point.coordinates.lng.toFixed(6)}]
-                              </p>
+                              {(() => {
+                                const c = getFirstLatLng(point.coordinates);
+                                return (
+                                  <p className="text-sm">
+                                    {c ? `[${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}]` : '—'}
+                                  </p>
+                                );
+                              })()}
                             </div>
 
                             {/* Actions */}
