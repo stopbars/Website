@@ -36,7 +36,7 @@ const ContributionDashboard = () => {
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [currentTab, setCurrentTab] = useState('all');
   const [viewingRejection, setViewingRejection] = useState(null); // { airport, scenery, reason }
-  const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery, status }
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery }
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null); // { type: 'success' | 'error', message }
   useEffect(() => {
@@ -362,7 +362,8 @@ const ContributionDashboard = () => {
                             <h3 className="font-semibold text-xl">{airport.airport}</h3>
                           </div>
                         </div>
-                      </div>                      {/* Scenery Packages */}
+                      </div>                      
+                      {/* Scenery Packages */}
                       <div className="space-y-3">
                         {airport.contributions
                           .filter(contribution => currentTab === 'all' ? contribution.status === 'approved' : true)
@@ -394,82 +395,75 @@ const ContributionDashboard = () => {
                               </div>
                             </div>
                             {contribution.status === 'approved' && (
-                              <Button 
-                                variant="outline"
-                                size="sm"
+                              <button
                                 onClick={() => handleDownload(airport.airport, contribution.id)}
-                                className="flex items-center space-x-2 text-xs"
+                                className="px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2"
+                                title="Download XML"
                               >
-                                <FileDown className="w-3 h-3" />
-                                <span>Download XML</span>
-                              </Button>
+                                <FileDown className="w-4 h-4" />
+                                Download XML
+                              </button>
                             )}
                             {contribution.status === 'pending' && (
                               <div className="flex items-center gap-2">
-                                <div className="text-xs text-amber-400 font-medium">Awaiting Review</div>
                                 <Button
-                                  variant="outline"
-                                  size="sm"
+                                  className="!px-4 !py-2 text-sm !bg-amber-600 hover:!bg-amber-700 !text-white"
                                   onClick={() => setConfirmDelete({
                                     id: contribution.id,
                                     airport: airport.airport,
                                     scenery: contribution.scenery,
                                     status: contribution.status
                                   })}
-                                  className="flex items-center space-x-2 text-xs text-red-500 border-red-500/20 hover:bg-red-500/10"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>Delete</span>
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete
                                 </Button>
                               </div>
                             )}
                             {contribution.status === 'rejected' && (
                               contribution.rejectionReason ? (
                                 <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
+                                  <button
                                     onClick={() => setViewingRejection({
                                       airport: airport.airport,
                                       scenery: contribution.scenery,
                                       reason: contribution.rejectionReason
                                     })}
-                                    className="flex items-center space-x-2 text-xs text-red-500 border-red-500/20 hover:bg-red-500/10"
+                                    className="px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2"
+                                    title="View Reason"
                                   >
-                                    <AlertOctagon className="w-3.5 h-3.5" />
-                                    <span>View Reason</span>
-                                  </Button>
+                                    <AlertOctagon className="w-4 h-4" />
+                                    View Reason
+                                  </button>
                                   <Button
-                                    variant="outline"
-                                    size="sm"
+                                    variant="destructive"
+                                    className="!px-4 !py-2 text-sm"
                                     onClick={() => setConfirmDelete({
                                       id: contribution.id,
                                       airport: airport.airport,
                                       scenery: contribution.scenery,
                                       status: contribution.status
                                     })}
-                                    className="flex items-center space-x-2 text-xs text-red-500 border-red-500/20 hover:bg-red-500/10"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Delete</span>
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
                                   </Button>
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-2">
                                   <div className="text-xs text-zinc-400">No reason provided</div>
                                   <Button
-                                    variant="outline"
-                                    size="sm"
+                                    variant="destructive"
+                                    className="!px-4 !py-2 text-sm"
                                     onClick={() => setConfirmDelete({
                                       id: contribution.id,
                                       airport: airport.airport,
                                       scenery: contribution.scenery,
                                       status: contribution.status
                                     })}
-                                    className="flex items-center space-x-2 text-xs text-red-500 border-red-500/20 hover:bg-red-500/10"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Delete</span>
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
                                   </Button>
                                 </div>
                               )
@@ -504,18 +498,20 @@ const ContributionDashboard = () => {
               </button>
             </div>
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
-                  <TowerControl className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                  {viewingRejection.airport}
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
-                  <Box className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                  {viewingRejection.scenery}
-                </span>
-              </div>
-              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-red-200">
-                {viewingRejection.reason}
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg max-h-64 overflow-y-auto">
+                <div className="flex flex-wrap items-center gap-2 text-sm mb-3">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
+                    <TowerControl className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
+                    {viewingRejection.airport}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
+                    <Box className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
+                    {viewingRejection.scenery}
+                  </span>
+                </div>
+                <div className="whitespace-pre-wrap break-words text-red-200">
+                  {viewingRejection.reason}
+                </div>
               </div>
             </div>
           </div>
@@ -526,28 +522,27 @@ const ContributionDashboard = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in zoom-in-95">
           <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
             <div className="flex items-center space-x-3 mb-6">
-              <AlertCircle className="w-6 h-6 text-red-500" />
-              <h3 className="text-xl font-bold text-red-500">Confirm Contribution Deletion</h3>
+              <AlertCircle className={`w-6 h-6 ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`} />
+              <h3 className={`text-xl font-bold ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}>Confirm Contribution Deletion</h3>
             </div>
             <div className="space-y-4">
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <div className={`p-4 rounded-lg ${confirmDelete.status === 'pending' ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
                 <p className="text-zinc-200 mb-3">
                   You are about to delete the following contribution:
                 </p>
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
+                    <TowerControl className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
                     {confirmDelete.airport}
                   </span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
+                    <Box className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
                     {confirmDelete.scenery}
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200 capitalize">
-                    {confirmDelete.status}
                   </span>
                 </div>
               </div>
               <p className="text-zinc-300">
-                This action cannot be undone.
+                All contribution and scenery data will be permanently deleted and will no longer be available for approval. This action cannot be undone.
               </p>
             </div>
             <div className="flex justify-end space-x-3 mt-6">
@@ -559,7 +554,7 @@ const ContributionDashboard = () => {
                 Cancel
               </Button>
               <Button
-                className="!bg-red-500 hover:!bg-red-600 text-white"
+                className={confirmDelete.status === 'pending' ? "!bg-amber-600 hover:!bg-amber-700 text-white" : "!bg-red-500 hover:!bg-red-600 text-white"}
                 onClick={async () => {
                   if (!confirmDelete) return;
                   try {
@@ -597,7 +592,7 @@ const ContributionDashboard = () => {
                 disabled={deleting}
               >
                 {deleting ? <Loader className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                Delete Contribution
+                Delete
               </Button>
             </div>
           </div>
