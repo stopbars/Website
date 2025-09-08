@@ -38,6 +38,7 @@ const ContributionDashboard = () => {
   const [viewingRejection, setViewingRejection] = useState(null); // { airport, scenery, reason }
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery }
   const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [toast, setToast] = useState(null); // { type: 'success' | 'error', message }
   useEffect(() => {
     const fetchData = async () => {
@@ -429,7 +430,7 @@ const ContributionDashboard = () => {
                                       scenery: contribution.scenery,
                                       reason: contribution.rejectionReason
                                     })}
-                                    className="px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2"
+                                    className="px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2 cursor-pointer"
                                     title="View Reason"
                                   >
                                     <AlertOctagon className="w-4 h-4" />
@@ -499,15 +500,15 @@ const ContributionDashboard = () => {
             </div>
             <div className="space-y-4">
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg max-h-64 overflow-y-auto">
-                <div className="flex flex-wrap items-center gap-2 text-sm mb-3">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
-                    <TowerControl className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                    {viewingRejection.airport}
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
-                    <Box className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                    {viewingRejection.scenery}
-                  </span>
+                <div className="space-y-2 mb-3">
+                  <div className="flex items-center space-x-2 text-red-200">
+                    <TowerControl className="w-4 h-4" />
+                    <span>ICAO: {viewingRejection.airport}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-red-200">
+                    <Box className="w-4 h-4" />
+                    <span>Scenery: {viewingRejection.scenery}</span>
+                  </div>
                 </div>
                 <div className="whitespace-pre-wrap break-words text-red-200">
                   {viewingRejection.reason}
@@ -530,70 +531,111 @@ const ContributionDashboard = () => {
                 <p className="text-zinc-200 mb-3">
                   You are about to delete the following contribution:
                 </p>
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
-                    <TowerControl className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                    {confirmDelete.airport}
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700 text-zinc-200">
-                    <Box className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                    {confirmDelete.scenery}
-                  </span>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2 text-zinc-200">
+                    <TowerControl className="w-4 h-4" />
+                    <span>ICAO: {confirmDelete.airport}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-zinc-200">
+                    <Box className="w-4 h-4" />
+                    <span>Scenery: {confirmDelete.scenery}</span>
+                  </div>
                 </div>
               </div>
               <p className="text-zinc-300">
                 All contribution and scenery data will be permanently deleted and will no longer be available for approval. This action cannot be undone.
               </p>
-            </div>
-            <div className="flex justify-end space-x-3 mt-6">
-              <Button
-                variant="outline"
-                onClick={() => setConfirmDelete(null)}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
-              <Button
-                className={confirmDelete.status === 'pending' ? "!bg-amber-600 hover:!bg-amber-700 text-white" : "!bg-red-500 hover:!bg-red-600 text-white"}
-                onClick={async () => {
-                  if (!confirmDelete) return;
-                  try {
-                    setDeleting(true);
-                    const response = await fetch(`https://v2.stopbars.com/contributions/${confirmDelete.id}`, {
-                      method: 'DELETE',
-                      headers: {
-                        'X-Vatsim-Token': vatsimToken
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const expectedConfirmation = `${confirmDelete.airport}-DELETE`;
+                if (deleteConfirmation === expectedConfirmation) {
+                  (async () => {
+                    if (!confirmDelete) return;
+                    try {
+                      setDeleting(true);
+                      const response = await fetch(`https://v2.stopbars.com/contributions/${confirmDelete.id}`, {
+                        method: 'DELETE',
+                        headers: {
+                          'X-Vatsim-Token': vatsimToken
+                        }
+                      });
+                      if (!response.ok) {
+                        throw new Error('Delete failed');
                       }
-                    });
-                    if (!response.ok) {
-                      throw new Error('Delete failed');
+
+                      setUserContributions(prev =>
+                        prev
+                          .map(group =>
+                            group.airport === confirmDelete.airport
+                              ? { ...group, contributions: group.contributions.filter(c => c.id !== confirmDelete.id) }
+                              : group
+                          )
+                          .filter(group => group.contributions.length > 0)
+                      );
+
+                      setConfirmDelete(null);
+                      setDeleteConfirmation('');
+                      setToast({ type: 'success', message: 'Contribution successfully deleted' });
+                    } catch (e) {
+                      console.error(e);
+                      setToast({ type: 'error', message: 'Failed to delete contribution, try again later' });
+                    } finally {
+                      setDeleting(false);
+                      setTimeout(() => setToast(null), 3000);
                     }
-
-                    setUserContributions(prev =>
-                      prev
-                        .map(group =>
-                          group.airport === confirmDelete.airport
-                            ? { ...group, contributions: group.contributions.filter(c => c.id !== confirmDelete.id) }
-                            : group
-                        )
-                        .filter(group => group.contributions.length > 0)
-                    );
-
-                    setConfirmDelete(null);
-                    setToast({ type: 'success', message: 'Contribution successfully deleted' });
-                  } catch (e) {
-                    console.error(e);
-                    setToast({ type: 'error', message: 'Failed to delete contribution, try again later' });
-                  } finally {
-                    setDeleting(false);
-                    setTimeout(() => setToast(null), 3000);
-                  }
-                }}
-                disabled={deleting}
-              >
-                {deleting ? <Loader className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                Delete
-              </Button>
+                  })();
+                }
+              }}>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">
+                    Type {confirmDelete.airport}-DELETE to confirm:
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmation}
+                    onChange={(e) => setDeleteConfirmation(e.target.value)}
+                    onPaste={(e) => e.preventDefault()}
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
+                    disabled={deleting}
+                  />
+                </div>
+                <div className="flex space-x-3 mt-6">
+                  <Button
+                    type="submit"
+                    className={`${
+                      deleteConfirmation === `${confirmDelete.airport}-DELETE` && !deleting
+                        ? confirmDelete.status === 'pending' 
+                          ? '!bg-amber-600 hover:!bg-amber-700 text-white' 
+                          : '!bg-red-500 hover:!bg-red-600 text-white'
+                        : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                    }`}
+                    disabled={deleteConfirmation !== `${confirmDelete.airport}-DELETE` || deleting}
+                  >
+                    {deleting ? (
+                      <>
+                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Contribution
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setConfirmDelete(null);
+                      setDeleteConfirmation('');
+                    }}
+                    disabled={deleting}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
