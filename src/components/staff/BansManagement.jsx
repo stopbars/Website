@@ -233,7 +233,7 @@ export default function BansManagement() {
               {loading ? (
                 <tr>
                   <td colSpan="6" className="px-3 py-6 text-center text-zinc-400">
-                    <Loader className="w-5 h-5 animate-spin inline-block mr-2 mt-3" />
+                    <Loader className="w-5 h-5 animate-spin inline-block mr-2 mt-1" />
                   </td>
                 </tr>
               ) : bans.length === 0 ? (

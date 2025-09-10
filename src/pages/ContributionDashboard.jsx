@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
@@ -40,6 +40,38 @@ const ContributionDashboard = () => {
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [toast, setToast] = useState(null); // { type: 'success' | 'error', message }
+
+  // Tab underline animation refs/state
+  const allTabRef = useRef(null);
+  const userTabRef = useRef(null);
+  const tabsContainerRef = useRef(null);
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
+
+  useLayoutEffect(() => {
+    const activeEl = currentTab === 'all' ? allTabRef.current : userTabRef.current;
+    const container = tabsContainerRef.current;
+    if (activeEl && container) {
+      const rect = activeEl.getBoundingClientRect();
+      const parentRect = container.getBoundingClientRect();
+      const left = rect.left - parentRect.left;
+      const width = rect.width;
+      setTabIndicator({ left, width, ready: true });
+    }
+  }, [currentTab, user]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const activeEl = currentTab === 'all' ? allTabRef.current : userTabRef.current;
+      const container = tabsContainerRef.current;
+      if (activeEl && container) {
+        const rect = activeEl.getBoundingClientRect();
+        const parentRect = container.getBoundingClientRect();
+        setTabIndicator(t => ({ ...t, left: rect.left - parentRect.left, width: rect.width }));
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [currentTab]);
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -267,11 +299,22 @@ const ContributionDashboard = () => {
             </div>
 
             {/* Right column - Contributions list & tabs */}
-            <div className="lg:col-span-2">              {/* Tabs */}
-              <div className="flex mb-6 border-b border-zinc-800">
+            <div className="lg:col-span-2">              
+              {/* Tabs */}
+              <div ref={tabsContainerRef} className="relative flex mb-6 border-b border-zinc-800 select-none">
+                {/* Animated underline */}
+                {tabIndicator.ready && (
+                  <span
+                    className="absolute bottom-0 h-[2px] bg-blue-500 transition-all duration-300 ease-out"
+                    style={{ left: tabIndicator.left, width: tabIndicator.width }}
+                  />
+                )}
                 <button
-                  className={`px-4 py-2 border-b-2 cursor-pointer ${
-                    currentTab === 'all' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                  ref={allTabRef}
+                  className={`px-4 py-2 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                    currentTab === 'all'
+                      ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
+                      : 'text-zinc-400 hover:text-zinc-200 border-transparent'
                   }`}
                   onClick={() => setCurrentTab('all')}
                 >
@@ -280,12 +323,14 @@ const ContributionDashboard = () => {
                     <span>All Contributions</span>
                   </div>
                 </button>
-                
                 <button
-                  className={`px-4 py-2 border-b-2 ml-4 cursor-pointer ${
-                    currentTab === 'user' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
-                  }`}
-                  onClick={() => setCurrentTab('user')}
+                  ref={userTabRef}
+                  className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                    currentTab === 'user'
+                      ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
+                      : 'text-zinc-400 hover:text-zinc-200 border-transparent'
+                  } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  onClick={() => user && setCurrentTab('user')}
                   disabled={!user}
                 >
                   <div className="flex items-center space-x-2">
