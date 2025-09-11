@@ -99,7 +99,7 @@ const Account = () => {
     return showApiKey ? key : '•'.repeat(key.length);
   };
 
-  // Format objects like { id: 'APAC', name: 'Asia Pacific' } as "APAC - Asia Pacific"
+  // Format objects like { name: 'Asia Pacific', id: 'APAC' } as "Asia Pacific - APAC"
   const formatIdName = (obj) => {
     if (!obj) return '—';
     const id = obj?.id ?? '';
