@@ -104,8 +104,8 @@ const Account = () => {
     if (!obj) return '—';
     const id = obj?.id ?? '';
     const name = obj?.name ?? '';
-    if (id && name) return `${id} - ${name}`;
-    return id || name || '—';
+    if (id && name) return `${name} - ${id}`;
+    return name || id || '—';
   };
 
   const handleCopyApiKey = async () => {
