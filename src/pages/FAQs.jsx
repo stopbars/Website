@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
-import { Search, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Loader, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
 import { Button } from '../components/shared/Button';
 
 const ITEMS_PER_PAGE = 5;
@@ -108,11 +108,25 @@ const FAQPage = () => {
               </div>
             </Card>
           ) : filteredFaqs.length === 0 ? (
-            <Card className="p-8 text-center">
-              <p className="text-zinc-400">
-                No FAQs found matching &quot;{searchTerm}&quot;.
-              </p>
-            </Card>
+              <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
+                {faqs.length === 0 ? (
+                  <>
+                    <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
+                    <p className="text-zinc-500 mb-2">
+                      No FAQs were found, please try again later or contact support.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
+                    <p className="text-zinc-500 mb-2">
+                      No FAQs found matching <span className="font-semibold text-zinc-400">&quot;{searchTerm}&quot;</span>.
+                    </p>
+                  </>
+                )}
+              </Card>
           ) : (
             <>
               <div className="space-y-6">
