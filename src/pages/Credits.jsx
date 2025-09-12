@@ -130,31 +130,44 @@ const Credits = () => {
   return (
     <Layout>
       {/* Page Header */}
-      <section className="relative pt-40 pb-8">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-5xl font-bold mb-6 flex items-center">
-                <Github className="w-10 h-10 mr-4" />
+      <section className="relative pt-39 pb-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 md:gap-0">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 flex items-center">
+                <Github className="w-8 h-8 sm:w-10 sm:h-10 mr-3 sm:mr-4" />
                 GitHub Contributors
               </h1>
-              <p className="text-xl text-zinc-300 max-w-2xl">
+              <p className="text-base sm:text-lg md:text-xl text-zinc-300 max-w-2xl">
                 Celebrating the amazing dedicated developers who volunteer their time and expertise to help contribute to BARS across all our GitHub repositories
               </p>
+              {/* Status text just below description on mobile, hidden on md+ */}
+              <div
+                ref={statusRef}
+                className="mt-2 mb-2 text-sm text-zinc-500 md:hidden"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {loading && 'Loading contributors…'}
+                {!loading && !error && lastUpdated && `Loaded ${contributors.length} contributor${contributors.length === 1 ? '' : 's'} • Updated at ${lastUpdated.toLocaleString()}`}
+                {!loading && error && 'Encountered an error while loading contributors.'}
+              </div>
             </div>
-            <Button
-              onClick={fetchContributors}
-              disabled={loading}
-              aria-label={loading ? 'Refreshing contributor list' : 'Refresh contributor list'}
-              className="flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 hover:scale-105 transition-transform duration-200 group"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : 'group-hover:rotate-12'} transition-transform duration-200`} />
-              <span>Refresh</span>
-            </Button>
+            <div className="flex flex-col w-full md:w-auto md:block md:justify-end flex-shrink-0">
+              <Button
+                onClick={fetchContributors}
+                disabled={loading}
+                aria-label={loading ? 'Refreshing contributor list' : 'Refresh contributor list'}
+                className="flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 hover:scale-105 transition-transform duration-200 group w-full md:w-auto"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : 'group-hover:rotate-12'} transition-transform duration-200`} />
+                <span>Refresh</span>
+              </Button>
+            </div>
           </div>
+          {/* Status text below header on md+ only */}
           <div
-            ref={statusRef}
-            className="mt-4 text-sm text-zinc-500"
+            className="mt-4 text-sm text-zinc-500 hidden md:block"
             aria-live="polite"
             aria-atomic="true"
           >
