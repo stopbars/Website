@@ -47,7 +47,28 @@ const ContributionDashboard = () => {
   const tabsContainerRef = useRef(null);
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
 
-  useLayoutEffect(() => {
+  // On mount, set tab indicator if refs are available (fixes first click animation issue)
+  useEffect(() => {
+    let rafId;
+    function pollForRefs() {
+      const activeEl = allTabRef.current;
+      const container = tabsContainerRef.current;
+      if (activeEl && container) {
+        const rect = activeEl.getBoundingClientRect();
+        const parentRect = container.getBoundingClientRect();
+        const left = rect.left - parentRect.left;
+        const width = rect.width;
+        setTabIndicator({ left, width, ready: true });
+      } else {
+        rafId = requestAnimationFrame(pollForRefs);
+      }
+    }
+    pollForRefs();
+    return () => rafId && cancelAnimationFrame(rafId);
+  }, []);
+
+  // Helper to update tab indicator
+  const updateTabIndicator = () => {
     const activeEl = currentTab === 'all' ? allTabRef.current : userTabRef.current;
     const container = tabsContainerRef.current;
     if (activeEl && container) {
@@ -57,6 +78,11 @@ const ContributionDashboard = () => {
       const width = rect.width;
       setTabIndicator({ left, width, ready: true });
     }
+  };
+
+  useLayoutEffect(() => {
+    updateTabIndicator();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTab, user]);
 
   useEffect(() => {
@@ -231,7 +257,7 @@ const ContributionDashboard = () => {
           <div className="w-full max-w-7xl mx-auto px-6">
             <div className="flex items-center justify-center h-64">
               <div className="flex flex-col items-center">
-                <Loader className="w-12 h-12 animate-spin text-zinc-400" />
+                <Loader className="w-9 h-9 animate-spin text-zinc-400" />
               </div>
             </div>
           </div>
@@ -242,7 +268,7 @@ const ContributionDashboard = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20">
+      <div className="min-h-screen pt-39 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-12">
