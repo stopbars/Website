@@ -297,17 +297,13 @@ const Changelog = () => {
             </div>
           ) : filteredReleases.length === 0 ? (
             <div className="flex items-center justify-center py-20">
-              <div className="text-center">
+              <div className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center max-w-2xl mx-auto">
+                <AlertTriangle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-zinc-300 mb-2">No Releases Found</h3>
                 {activeFilters.length > 0 ? (
-                  <>
-                    <h3 className="text-lg font-medium text-white mb-2">No releases found</h3>
-                    <p className="text-zinc-400">No releases match the selected filters</p>
-                  </>
+                  <p className="text-zinc-500 mb-2">No releases match the selected filters.</p>
                 ) : (
-                  <>
-                    <h3 className="text-lg font-medium text-white mb-2">No releases found</h3>
-                    <p className="text-zinc-400">Check back later for updates</p>
-                  </>
+                  <p className="text-zinc-500 mb-2">No releases were found, please try again later or contact support.</p>
                 )}
               </div>
             </div>
