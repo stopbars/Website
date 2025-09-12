@@ -301,7 +301,10 @@ const Changelog = () => {
                 <AlertTriangle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-zinc-300 mb-2">No Releases Found</h3>
                 {activeFilters.length > 0 ? (
-                  <p className="text-zinc-500 mb-2">No releases match the selected filters.</p>
+                  <p className="text-zinc-500 mb-2">
+                    No releases match the selected filter
+                    {activeFilters.length === 1 ? ` "${currentFilterLabel()}"` : ''}.
+                  </p>
                 ) : (
                   <p className="text-zinc-500 mb-2">No releases were found, please try again later or contact support.</p>
                 )}
