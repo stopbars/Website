@@ -500,7 +500,7 @@ const ContributeMap = () => {
       try {
         setLoading(true);
         
-        // Fetch airport data from Stopbars API
+        // Fetch airport data from API
         const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
         if (!airportResponse.ok) {
           throw new Error('Failed to fetch airport data');
@@ -573,7 +573,7 @@ const ContributeMap = () => {
           <div className="w-full max-w-7xl mx-auto px-6">
             <div className="flex items-center justify-center h-64">
               <div className="flex flex-col items-center">
-                <Loader className="w-12 h-12 animate-spin text-zinc-400" />
+                <Loader className="w-8 h-8 animate-spin text-zinc-400" />
               </div>
             </div>
           </div>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { AlertCircle, Search, Loader, BookOpen } from 'lucide-react';
+import { AlertCircle, Search, Loader, BookOpen, ChevronRight } from 'lucide-react';
 
 const ContributeNew = () => {
   const navigate = useNavigate();
@@ -69,7 +69,7 @@ const ContributeNew = () => {
                       setIcao(e.target.value.toUpperCase());
                       setError('');
                     }}
-                    placeholder="e.g. YSSY, EGLL, KLAX"
+                    placeholder="e.g. YSSY, EGLL, OMDB"
                     maxLength={4}
                     className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-lg uppercase"
                   />
@@ -93,7 +93,12 @@ const ContributeNew = () => {
                       <Loader className="w-4 h-4 mr-2 animate-spin" />
                       <span>Searching...</span>
                     </div>
-                  ) : 'Continue to Mapping'}
+                  ) : (
+                    <>
+                      Continue to Next Step
+                      <ChevronRight className="w-4 h-4 ml-2" />
+                    </>
+                  )}
                 </Button>
               </div>
             </form>
