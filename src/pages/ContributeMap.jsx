@@ -5,10 +5,21 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { AlertCircle, ChevronLeft, ChevronRight, CopyIcon, Info, Loader, Check } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, LayersControl, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, LayersControl, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
+// Color palette used across markers and polylines
+const COLORS = {
+  green: '#4ade80',
+  yellow: '#fbbf24',
+  blue: 'rgb(63, 63, 255)',
+  orange: 'rgb(255, 141, 35)',
+  red: '#ef4444',
+  white: '#ffffff',
+  gray: '#999999',
+};
 
 // Helper: support coordinates as object {lat,lng} or array of such; return [lat, lng] or null
 const toLatLngPair = (coords) => {
@@ -26,6 +37,8 @@ function SegmentedDefs({ segments = [], topColor = '#ef4444', bottomColor = '#99
   useEffect(() => {
     if (!map || !segments || segments.length === 0) return;
 
+    const ownerId = segments[0]?.baseId || 'unknown';
+
     const svg = map.getPanes().overlayPane.querySelector('svg');
     if (!svg) return;
 
@@ -36,8 +49,7 @@ function SegmentedDefs({ segments = [], topColor = '#ef4444', bottomColor = '#99
     }
 
     const build = () => {
-      // remove previous generated gradients
-      [...defs.querySelectorAll('linearGradient[data-generated="seg"]')].forEach(n => n.remove());
+      [...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`)].forEach(n => n.remove());
 
       segments.forEach(seg => {
         const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
@@ -75,6 +87,7 @@ function SegmentedDefs({ segments = [], topColor = '#ef4444', bottomColor = '#99
         lg.setAttribute('x2', x2);
         lg.setAttribute('y2', y2);
         lg.setAttribute('data-generated', 'seg');
+        lg.setAttribute('data-owner', ownerId);
 
         // exactly 50% stops gives a hard split across the stroke width
         lg.innerHTML = `
@@ -91,7 +104,7 @@ function SegmentedDefs({ segments = [], topColor = '#ef4444', bottomColor = '#99
 
     return () => {
       map.off('zoom viewreset move', onChange);
-      [...defs.querySelectorAll('linearGradient[data-generated="seg"]')].forEach(n => n.remove());
+      [...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`)].forEach(n => n.remove());
     };
   }, [map, segments, topColor, bottomColor, strokeWidth]);
 
@@ -450,6 +463,64 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png'
 });
 
+// Determine polyline gradient colors to mirror single-point styles
+const getPolylineColors = (point) => {
+  // Default to stopbar behavior if unspecified type
+  let topColor = COLORS.gray;
+  let bottomColor = COLORS.red;
+
+  if (!point || !point.type) {
+    return { topColor, bottomColor };
+  }
+
+  switch (point.type) {
+    case 'taxiway': {
+      const style = point.color || 'green';
+      if (style === 'green') {
+        topColor = COLORS.green;
+        bottomColor = COLORS.green;
+      } else if (style === 'green-yellow') {
+        topColor = COLORS.green;
+        bottomColor = COLORS.yellow;
+      } else if (style === 'green-blue') {
+        topColor = COLORS.green;
+        bottomColor = COLORS.blue;
+      } else if (style === 'green-orange') {
+        topColor = COLORS.green;
+        bottomColor = COLORS.orange;
+      } else {
+        // Fallback to solid green
+        topColor = COLORS.green;
+        bottomColor = COLORS.green;
+      }
+      // NOTE: If later we want to honor orientation (left/right) for uni-directional
+      // segments, we can flip top/bottom here based on point.orientation.
+      break;
+    }
+    case 'lead_on': {
+      // Lead-on lights mix green/yellow
+      topColor = COLORS.green;
+      bottomColor = COLORS.yellow;
+      break;
+    }
+    case 'stand': {
+      // Stand lead-in: orange
+      topColor = COLORS.orange;
+      bottomColor = COLORS.orange;
+      break;
+    }
+    case 'stopbar':
+    default: {
+      // Keep existing stopbar styling: gray/RED split across stroke width
+      topColor = COLORS.gray;
+      bottomColor = COLORS.red;
+      break;
+    }
+  }
+
+  return { topColor, bottomColor };
+};
+
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -463,6 +534,18 @@ const ContributeMap = () => {
   const [mapCenter, setMapCenter] = useState([0, 0]);
   const [mapZoom] = useState(13);
   const [copiedId, setCopiedId] = useState(null);
+
+  // Clear active selection when clicking the map background
+  const ClearSelectionOnMapClick = ({ onClear }) => {
+    useMapEvents({
+      click: () => onClear && onClear(),
+    });
+    return null;
+  };
+
+  ClearSelectionOnMapClick.propTypes = {
+    onClear: PropTypes.func,
+  };
 
   // Format type for display
   const formatType = (type) => {
@@ -629,21 +712,27 @@ const ContributeMap = () => {
               <div className="h-[600px] rounded-lg overflow-hidden border border-zinc-800">
                 <MapContainer 
                   center={mapCenter} 
-                  zoom={mapZoom} 
+                  zoom={mapZoom}
+                  maxZoom={22}
                   style={{ height: '100%', width: '100%' }}
                   ref={mapRef}
                 >
+                  {/* Clear selection when clicking anywhere on the map */}
+                  <ClearSelectionOnMapClick onClear={() => setActivePointId(null)} />
                   <LayersControl position="topright">
                     <LayersControl.BaseLayer checked name="Street Map">
                       <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        maxZoom={22}
+                        maxNativeZoom={19}
                       />
                     </LayersControl.BaseLayer>
                     <LayersControl.BaseLayer name="Satellite">
                       <TileLayer
                         attribution='Imagery &copy; <a href="https://www.mapbox.com/">Mapbox</a>'
                         url={`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`}
+                        maxZoom={22}
                       />
                     </LayersControl.BaseLayer>
                   </LayersControl>
@@ -676,7 +765,7 @@ const ContributeMap = () => {
                         >
                           <Popup 
                             className="custom-popup"
-                            onClose={() => setActivePointId(null)}
+                            eventHandlers={{ close: () => setActivePointId(null), remove: () => setActivePointId(null) }}
                           >
                             <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
                               <h3 className="font-bold text-white mb-1">{point.name}</h3>
@@ -749,7 +838,7 @@ const ContributeMap = () => {
                     const renderPopup = (
                       <Popup 
                         className="custom-popup"
-                        onClose={() => setActivePointId(null)}
+                        eventHandlers={{ close: () => setActivePointId(null), remove: () => setActivePointId(null) }}
                       >
                         <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
                           <h3 className="font-bold text-white mb-1">{point.name}</h3>
@@ -810,18 +899,20 @@ const ContributeMap = () => {
                         p2: safe[i + 1]
                       });
                     }
+                    const { topColor, bottomColor } = getPolylineColors(point);
+                    const isActive = activePointId === point.id;
                     
                     return (
                       <React.Fragment key={point.id}>
                         <Polyline
                           key={`${point.id}-outline`}
                           positions={positions}
-                          pathOptions={{ color: '#ffffff', weight: 15, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                          pathOptions={{ color: isActive ? '#f00' : '#ffffff', weight: 15, opacity: isActive ? 0.7 : 1, lineCap: 'round', lineJoin: 'round' }}
                           interactive={false}
                         />
 
                         {/* inject per-segment gradients into the map SVG */}
-                        <SegmentedDefs segments={segments} topColor="#999999" bottomColor="#ef4444" strokeWidth={10} />
+                        <SegmentedDefs segments={segments} topColor={topColor} bottomColor={bottomColor} strokeWidth={10} />
 
                         {/* render each segment as its own polyline, each referencing its gradient */}
                         {segments.map(seg => {
