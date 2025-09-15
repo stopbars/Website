@@ -145,7 +145,7 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       const group = objectGroups[objId];
       let color = '#ef4444';
       if (group.type === 'taxiway') color = '#4ade80';
-      else if (group.type === 'leadon') color = '#facc15';
+      else if (group.type === 'lead_on') color = '#facc15';
       
       return {
         id: objId,
@@ -185,16 +185,16 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       .marker-circle.split-stopbar {
         background: linear-gradient(0deg, var(--left-color) 50%, var(--right-color) 50%);
       }
-      .marker-circle.split-leadon {
+      .marker-circle.split-lead_on {
         background: linear-gradient(0deg, var(--left-color) 50%, var(--right-color) 50%);
       }
       .stopbar-marker {
         background-color: #ef4444;
       }
-      .leadon-marker {
+      .lead_on-marker {
         background-color: #facc15;
       }
-      .leadon-green-marker {
+      .lead_on-green-marker {
         background-color: #4ade80;
       }
       .stand-marker {
@@ -270,40 +270,40 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
           </div>
         `;
       }
-    } else if (light.type === 'leadon') {
+    } else if (light.type === 'lead_on') {
       // Check if color property exists
       if (!light.color) {
         // No color property - make it fully green
         html = `
           <div class="marker-container" style="${headingStyle}">
-            <div class="marker-circle leadon-green-marker">
+            <div class="marker-circle lead_on-green-marker">
               <div class="marker-heading-indicator"></div>
             </div>
           </div>
         `;
       } else if (light.color === 'yellow-green-uni') {
-        // Yellow-green-uni leadon - half yellow, half green
+        // Yellow-green-uni lead_on - half yellow, half green
         html = `
           <div class="marker-container" style="${headingStyle}">
-            <div class="marker-circle split-leadon" style="--left-color:rgb(255, 212, 41); --right-color:rgb(65, 230, 125);">
+            <div class="marker-circle split-lead_on" style="--left-color:rgb(255, 212, 41); --right-color:rgb(65, 230, 125);">
               <div class="marker-heading-indicator"></div>
             </div>
           </div>
         `;
       } else if (light.color?.includes('green')) {
-        // Green leadon - both halves green
+        // Green lead_on - both halves green
         html = `
           <div class="marker-container" style="${headingStyle}">
-            <div class="marker-circle leadon-green-marker">
+            <div class="marker-circle lead_on-green-marker">
               <div class="marker-heading-indicator"></div>
             </div>
           </div>
         `;
       } else {
-        // Regular leadon - yellow
+        // Regular lead_on - yellow
         html = `
           <div class="marker-container" style="${headingStyle}">
-            <div class="marker-circle leadon-marker">
+            <div class="marker-circle lead_on-marker">
               <div class="marker-heading-indicator"></div>
             </div>
           </div>
