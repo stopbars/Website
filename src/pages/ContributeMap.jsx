@@ -511,9 +511,14 @@ const getPolylineColors = (point) => {
     }
     case 'stopbar':
     default: {
-      // Keep existing stopbar styling: gray/RED split across stroke width
-      topColor = COLORS.gray;
-      bottomColor = COLORS.red;
+      // Render bi-directional stopbars as solid red, otherwise keep gray/red split
+      if (point.directionality === 'bi-directional') {
+        topColor = COLORS.red;
+        bottomColor = COLORS.red;
+      } else {
+        topColor = COLORS.gray;
+        bottomColor = COLORS.red;
+      }
       break;
     }
   }
