@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { AlertCircle, ChevronLeft, ChevronRight, CopyIcon, Info, Loader, Check } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, CopyIcon, Info, Loader, Check, RefreshCw } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, LayersControl, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -638,6 +638,10 @@ const ContributeMap = () => {
   const handleBack = () => {
     navigate('/contribute/new');
   };
+
+  const handleRetry = () => {
+    window.location.reload();
+  };
   const handleContinue = () => {
     navigate(`/contribute/test/${icao}`);
   };
@@ -673,22 +677,24 @@ const ContributeMap = () => {
   if (error) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-center h-64">
-              <Card className="p-6 max-w-lg w-full">
-                <div className="flex items-center space-x-3 text-red-500 mb-4">
-                  <AlertCircle className="w-6 h-6" />
-                  <h2 className="text-xl font-medium">Error Loading Airport</h2>
-                </div>
-                <p className="text-zinc-300 mb-6">{error}</p>
-                <Button onClick={handleBack}>
-                  <ChevronLeft className="w-4 h-4 mr-2" />
-                  Go Back
-                </Button>
-              </Card>
+        <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 pt-24">
+          <Card className="p-8 max-w-lg w-full">
+            <div className="flex items-center space-x-3 text-red-500 mb-4">
+              <AlertCircle className="w-6 h-6" />
+              <h2 className="text-xl font-medium">Error Loading Airport</h2>
             </div>
-          </div>
+            <p className="text-zinc-300 mb-6">{error}</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button onClick={handleBack} variant="secondary" className="w-full sm:w-auto">
+                <ChevronLeft className="w-4 h-4 mr-2" />
+                Go Back
+              </Button>
+              <Button onClick={handleRetry} className="w-full sm:w-auto">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          </Card>
         </div>
       </Layout>
     );

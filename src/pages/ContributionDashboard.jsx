@@ -137,7 +137,8 @@ const ContributionDashboard = () => {
             scenery: contribution.packageName,
             status: contribution.status,
             lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
-            rejectionReason: contribution.rejectionReason
+            rejectionReason: contribution.rejectionReason,
+            userDisplayName: contribution.userDisplayName
           });
                 AlertCircle,
                 TowerControl,
@@ -175,7 +176,8 @@ const ContributionDashboard = () => {
                 scenery: contribution.packageName,
                 status: contribution.status,
                 lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
-                rejectionReason: contribution.rejectionReason
+                rejectionReason: contribution.rejectionReason,
+                userDisplayName: contribution.userDisplayName
               });
               
               return acc;
@@ -464,6 +466,9 @@ const ContributionDashboard = () => {
                                     {contribution.status.charAt(0).toUpperCase() + contribution.status.slice(1)}
                                   </span>
                                 )}
+                              </div>
+                              <div className="text-xs text-zinc-400">
+                                Last contributor: {contribution.userDisplayName}
                               </div>
                             </div>
                             {contribution.status === 'approved' && (
