@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback} from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, LayersControl, Polyline, Polygon } from 'react-leaflet';
@@ -9,99 +9,109 @@ import { computeDestinationPoint } from 'geolib';
 const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAreas = false }) => {
   const [parsedLights, setParsedLights] = useState([]);
   const [mapCenter, setMapCenter] = useState([0, 0]);
-  const [mapZoom,] = useState(15);
+  const [mapZoom] = useState(15);
   const [polylines, setPolylines] = useState([]);
   const [removeAreas, setRemoveAreas] = useState([]);
   const mapRef = useRef(null);
 
-  const calculateRectangleCorners = useCallback((centerLat, centerLng, widthMeters, lengthMeters, heading) => {
-    const center = { latitude: centerLat, longitude: centerLng };
-    const halfWidth = widthMeters / 2;
-    const halfLength = lengthMeters / 2;
-    const distance = Math.sqrt(halfLength * halfLength + halfWidth * halfWidth);
-    const bottomLeft = computeDestinationPoint(center, distance, (heading + 225) % 360);
-    const bottomRight = computeDestinationPoint(center, distance, (heading + 315) % 360);
-    const topRight = computeDestinationPoint(center, distance, (heading + 45) % 360);
-    const topLeft = computeDestinationPoint(center, distance, (heading + 135) % 360);
-    return [
-      [bottomLeft.latitude, bottomLeft.longitude],
-      [bottomRight.latitude, bottomRight.longitude],
-      [topRight.latitude, topRight.longitude],
-      [topLeft.latitude, topLeft.longitude]
-    ];
-  }, []);
+  const calculateRectangleCorners = useCallback(
+    (centerLat, centerLng, widthMeters, lengthMeters, heading) => {
+      const center = { latitude: centerLat, longitude: centerLng };
+      const halfWidth = widthMeters / 2;
+      const halfLength = lengthMeters / 2;
+      const distance = Math.sqrt(halfLength * halfLength + halfWidth * halfWidth);
+      const bottomLeft = computeDestinationPoint(center, distance, (heading + 225) % 360);
+      const bottomRight = computeDestinationPoint(center, distance, (heading + 315) % 360);
+      const topRight = computeDestinationPoint(center, distance, (heading + 45) % 360);
+      const topLeft = computeDestinationPoint(center, distance, (heading + 135) % 360);
+      return [
+        [bottomLeft.latitude, bottomLeft.longitude],
+        [bottomRight.latitude, bottomRight.longitude],
+        [topRight.latitude, topRight.longitude],
+        [topLeft.latitude, topLeft.longitude],
+      ];
+    },
+    []
+  );
 
   // Parse LightSupport XML (remove areas)
-  const parseRemoveAreasXML = useCallback((xmlString) => {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-    const supports = xmlDoc.getElementsByTagName("LightSupport");
-    const areas = [];
-    let firstPosition = null;
+  const parseRemoveAreasXML = useCallback(
+    (xmlString) => {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
+      const supports = xmlDoc.getElementsByTagName('LightSupport');
+      const areas = [];
+      let firstPosition = null;
 
-    for (let i = 0; i < supports.length; i++) {
-      const support = supports[i];
-      const lat = parseFloat(support.getAttribute("latitude"));
-      const lng = parseFloat(support.getAttribute("longitude"));
-      const width = parseFloat(support.getAttribute("width")); // Width in meters
-      const length = parseFloat(support.getAttribute("length")); // Length in meters
-      const heading = parseFloat(support.getAttribute("heading"));
-      
-      if (!firstPosition && !isNaN(lat) && !isNaN(lng)) {
-        firstPosition = [lat, lng];
-        setMapCenter(firstPosition);
+      for (let i = 0; i < supports.length; i++) {
+        const support = supports[i];
+        const lat = parseFloat(support.getAttribute('latitude'));
+        const lng = parseFloat(support.getAttribute('longitude'));
+        const width = parseFloat(support.getAttribute('width')); // Width in meters
+        const length = parseFloat(support.getAttribute('length')); // Length in meters
+        const heading = parseFloat(support.getAttribute('heading'));
+
+        if (!firstPosition && !isNaN(lat) && !isNaN(lng)) {
+          firstPosition = [lat, lng];
+          setMapCenter(firstPosition);
+        }
+
+        const polygon = calculateRectangleCorners(lat, lng, width, length, heading);
+
+        if (polygon.length === 4) {
+          areas.push({
+            id: `support-${i}`,
+            points: polygon,
+          });
+        }
       }
-      
-      const polygon = calculateRectangleCorners(lat, lng, width, length, heading);
-      
-      if (polygon.length === 4) {
-        areas.push({
-          id: `support-${i}`,
-          points: polygon
-        });
-      }
-    }
-    
-    return areas;
-  }, [calculateRectangleCorners]);
+
+      return areas;
+    },
+    [calculateRectangleCorners]
+  );
 
   // Parse standard BARS XML
   const parseXML = useCallback((xmlString) => {
     const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-    const objects = xmlDoc.getElementsByTagName("BarsObject");
+    const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
+    const objects = xmlDoc.getElementsByTagName('BarsObject');
     const allLights = [];
     const objectGroups = {};
     let firstPosition = null;
 
     for (let i = 0; i < objects.length; i++) {
       const obj = objects[i];
-      const objId = obj.getAttribute("id");
-      const objType = obj.getAttribute("type");
-      const propsElement = obj.querySelector("Properties");
-      const color = propsElement?.querySelector("Color")?.textContent || '';
+      const objId = obj.getAttribute('id');
+      const objType = obj.getAttribute('type');
+      const propsElement = obj.querySelector('Properties');
+      const color = propsElement?.querySelector('Color')?.textContent || '';
       // New: capture Directionality if present on the object
-      const directionality = propsElement?.querySelector("Directionality")?.textContent?.toLowerCase() || '';
-      const orientation = propsElement?.querySelector("Orientation")?.textContent || '';
-      const elevated = propsElement?.querySelector("Elevated")?.textContent === 'true';
-      const lightElements = obj.getElementsByTagName("Light");
-      
+      const directionality =
+        propsElement?.querySelector('Directionality')?.textContent?.toLowerCase() || '';
+      const orientation = propsElement?.querySelector('Orientation')?.textContent || '';
+      const elevated = propsElement?.querySelector('Elevated')?.textContent === 'true';
+      const lightElements = obj.getElementsByTagName('Light');
+
       objectGroups[objId] = {
         type: objType,
-        positions: []
+        positions: [],
       };
 
       for (let j = 0; j < lightElements.length; j++) {
         const light = lightElements[j];
-        const position = light.querySelector("Position")?.textContent.split(",");
-        const heading = parseFloat(light.querySelector("Heading")?.textContent || "0");
-        const lightProps = light.querySelector("Properties");
-        const lightColor = lightProps?.querySelector("Color")?.textContent || color;
-  const lightOrientation = lightProps?.querySelector("Orientation")?.textContent || orientation;
-  // Directionality can be on object or light; light overrides if specified
-  const lightDirectionality = lightProps?.querySelector("Directionality")?.textContent?.toLowerCase() || directionality;
-        const lightIHP = lightProps?.querySelector("IHP")?.textContent === 'true';
-        const lightElevated = lightProps?.querySelector("Elevated")?.textContent === 'true' || elevated;
+        const position = light.querySelector('Position')?.textContent.split(',');
+        const heading = parseFloat(light.querySelector('Heading')?.textContent || '0');
+        const lightProps = light.querySelector('Properties');
+        const lightColor = lightProps?.querySelector('Color')?.textContent || color;
+        const lightOrientation =
+          lightProps?.querySelector('Orientation')?.textContent || orientation;
+        // Directionality can be on object or light; light overrides if specified
+        const lightDirectionality =
+          lightProps?.querySelector('Directionality')?.textContent?.toLowerCase() || directionality;
+        const lightIHP = lightProps?.querySelector('IHP')?.textContent === 'true';
+        const lightElevated =
+          lightProps?.querySelector('Elevated')?.textContent === 'true' || elevated;
 
         if (position && position.length === 2) {
           const lat = parseFloat(position[0]);
@@ -109,11 +119,11 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
           if (!firstPosition) {
             firstPosition = [lat, lng];
           }
-          
+
           if (!lightElevated && !lightIHP) {
             objectGroups[objId].positions.push([lat, lng]);
           }
-          
+
           allLights.push({
             id: `${objId}_${j}`,
             position: [lat, lng],
@@ -125,13 +135,15 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
             elevated: lightElevated,
             IHP: lightIHP,
             objectId: objId,
-            properties: lightProps ? {
-              color: lightProps.querySelector("Color")?.textContent || null,
-              orientation: lightProps.querySelector("Orientation")?.textContent || null,
-              directionality: lightProps.querySelector("Directionality")?.textContent || null,
-              IHP: lightProps.querySelector("IHP")?.textContent || null,
-              elevated: lightProps.querySelector("Elevated")?.textContent || null
-            } : null
+            properties: lightProps
+              ? {
+                  color: lightProps.querySelector('Color')?.textContent || null,
+                  orientation: lightProps.querySelector('Orientation')?.textContent || null,
+                  directionality: lightProps.querySelector('Directionality')?.textContent || null,
+                  IHP: lightProps.querySelector('IHP')?.textContent || null,
+                  elevated: lightProps.querySelector('Elevated')?.textContent || null,
+                }
+              : null,
           });
         }
       }
@@ -141,17 +153,17 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       setMapCenter(firstPosition);
     }
 
-    const lines = Object.keys(objectGroups).map(objId => {
+    const lines = Object.keys(objectGroups).map((objId) => {
       const group = objectGroups[objId];
       let color = '#ef4444';
       if (group.type === 'taxiway') color = '#4ade80';
       else if (group.type === 'lead_on') color = '#facc15';
-      
+
       return {
         id: objId,
         positions: group.positions,
         type: group.type,
-        color: color
+        color: color,
       };
     });
 
@@ -161,9 +173,10 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
   useEffect(() => {
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconRetinaUrl:
+        'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
       iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png'
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
     });
 
     const style = document.createElement('style');
@@ -234,23 +247,28 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       document.head.removeChild(style);
     };
   }, [xmlData, parseXML, parseRemoveAreasXML]);
-  
+
   const createCustomIcon = (light) => {
     // Make sure we have a heading value, defaulting to 0 if not present
     const heading = typeof light.heading === 'number' ? light.heading : 0;
     // Apply rotation to the entire marker container
     const headingStyle = `transform: rotate(${heading}deg);`;
-    
+
     let html = '';
-    
+
     // Different display based on light type and properties
     if (light.type === 'stopbar') {
       // Check if this is an IHP (Intermediate Holding Position)
-      const isIHP = light.properties?.IHP === 'true' || (typeof light.IHP === 'boolean' && light.IHP);
+      const isIHP =
+        light.properties?.IHP === 'true' || (typeof light.IHP === 'boolean' && light.IHP);
       // Determine color based on IHP status
       const stopbarColor = isIHP ? 'rgb(250, 204, 21)' : 'rgb(238, 49, 49)'; // Yellow for IHP, red for regular stopbar
       // Use Directionality if present: 'bi-directional' => solid, else (uni or missing) => top half colored
-      const rawDirectionality = (light.properties?.directionality || light.directionality || '').toLowerCase();
+      const rawDirectionality = (
+        light.properties?.directionality ||
+        light.directionality ||
+        ''
+      ).toLowerCase();
       const isBi = rawDirectionality === 'bi-directional' || rawDirectionality === 'bi';
       if (isBi) {
         html = `
@@ -317,29 +335,29 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
             <div class="marker-heading-indicator"></div>
           </div>
         </div>
-      `;    
+      `;
     } else if (light.type === 'taxiway') {
       // Get properties from light object
       const lightProps = light.properties;
       const lightOrientation = lightProps?.orientation || light.orientation || 'both';
-      
+
       // First check if this light has its own color in Properties
       const lightColor = (lightProps?.color || light.color || 'green').toLowerCase();
-      
+
       // Color mappings for taxiway lights
       const colorMap = {
-        'green': '#4ade80',
-        'yellow': '#facc15',
-        'blue': '#3b82f6',
-        'orange': '#f97316'
+        green: '#4ade80',
+        yellow: '#facc15',
+        blue: '#3b82f6',
+        orange: '#f97316',
       };
-      
+
       // Check for uni-directional colors first
       if (lightColor.includes('-uni')) {
         // Extract the base color (before "-uni")
         const baseColor = lightColor.split('-uni')[0];
         const bgColor = colorMap[baseColor] || colorMap['green']; // Default to green if color not recognized
-        
+
         // Unidirectional taxiway - half colored, half gray
         html = `
           <div class="marker-container" style="${headingStyle}">
@@ -348,22 +366,22 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
             </div>
           </div>
         `;
-        
+
         return L.divIcon({
           className: 'custom-div-icon',
           html: html,
           iconSize: [24, 24],
-          iconAnchor: [12, 12]
+          iconAnchor: [12, 12],
         });
       }
-      
+
       // Handle special split colors for taxiway lights
       if (lightColor.includes('-') && (lightOrientation === 'both' || !lightOrientation)) {
         const colors = lightColor.split('-');
         if (colors.length === 2) {
           const leftColor = colorMap[colors[0]] || colorMap['green'];
           const rightColor = colorMap[colors[1]] || colorMap['green'];
-          
+
           html = `
             <div class="marker-container" style="${headingStyle}">
               <div class="marker-circle split-stopbar" style="--left-color:${leftColor}; --right-color:${rightColor};">
@@ -371,19 +389,19 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
             </div>
           </div>
         `;
-          
+
           return L.divIcon({
             className: 'custom-div-icon',
             html: html,
             iconSize: [24, 24],
-            iconAnchor: [12, 12]
+            iconAnchor: [12, 12],
           });
         }
       }
-      
+
       // Handle single color taxiway lights
       const bgColor = colorMap[lightColor] || colorMap['green'];
-      
+
       if (lightOrientation === 'both' || !lightOrientation) {
         // Regular taxiway - use the specific color
         html = `
@@ -409,13 +427,13 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       className: 'custom-div-icon',
       html: html,
       iconSize: [24, 24],
-      iconAnchor: [12, 12]
+      iconAnchor: [12, 12],
     });
   };
 
   return (
     <div className="h-[600px] rounded-lg overflow-hidden" style={{ height }}>
-      {(parsedLights.length > 0 || removeAreas.length > 0) ? (
+      {parsedLights.length > 0 || removeAreas.length > 0 ? (
         <MapContainer
           center={mapCenter}
           zoom={mapZoom}
@@ -438,49 +456,46 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
               />
             </LayersControl.BaseLayer>
           </LayersControl>
-          
+
           {/* Render remove areas if showing remove areas view */}
-          {showRemoveAreas && removeAreas.map(area => (
-            <Polygon
-              key={area.id}
-              positions={area.points}
-              pathOptions={{ 
-                fillColor: '#ef4444', 
-                fillOpacity: 0.2, 
-                weight: 1, 
-                color: '#ef4444',
-                opacity: 0.7
-              }}
-            />
-          ))}
-          
+          {showRemoveAreas &&
+            removeAreas.map((area) => (
+              <Polygon
+                key={area.id}
+                positions={area.points}
+                pathOptions={{
+                  fillColor: '#ef4444',
+                  fillOpacity: 0.2,
+                  weight: 1,
+                  color: '#ef4444',
+                  opacity: 0.7,
+                }}
+              />
+            ))}
+
           {/* Render polylines if showing polylines view */}
-          {showPolyLines && polylines.map(line => (
-            <Polyline
-              key={line.id}
-              positions={line.positions}
-              pathOptions={{
-                color: line.color,
-                weight: 2,
-                opacity: 0.8
-              }}
-            />
-          ))}
-          
+          {showPolyLines &&
+            polylines.map((line) => (
+              <Polyline
+                key={line.id}
+                positions={line.positions}
+                pathOptions={{
+                  color: line.color,
+                  weight: 2,
+                  opacity: 0.8,
+                }}
+              />
+            ))}
+
           {/* Always render the light markers in normal mode */}
-          {!showRemoveAreas && parsedLights.map(light => (
-            <Marker
-              key={light.id}
-              position={light.position}
-              icon={createCustomIcon(light)}
-            />
-          ))}
+          {!showRemoveAreas &&
+            parsedLights.map((light) => (
+              <Marker key={light.id} position={light.position} icon={createCustomIcon(light)} />
+            ))}
         </MapContainer>
       ) : (
         <div className="flex items-center justify-center h-full bg-zinc-800/30">
-          <p className="text-zinc-400">
-            No XML data provided or no lights found in the XML
-          </p>
+          <p className="text-zinc-400">No XML data provided or no lights found in the XML</p>
         </div>
       )}
     </div>
@@ -491,7 +506,7 @@ XMLMap.propTypes = {
   xmlData: PropTypes.string,
   height: PropTypes.string,
   showPolyLines: PropTypes.bool,
-  showRemoveAreas: PropTypes.bool
+  showRemoveAreas: PropTypes.bool,
 };
 
 export default XMLMap;

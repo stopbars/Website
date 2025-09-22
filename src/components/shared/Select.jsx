@@ -21,7 +21,7 @@ const Select = ({ value, onValueChange, placeholder, disabled, error, children }
         <span className={`block truncate ${!value ? 'text-zinc-500' : 'text-zinc-200'}`}>
           {value || placeholder}
         </span>
-        <ChevronDown 
+        <ChevronDown
           className={`h-4 w-4 text-zinc-400 transition-transform duration-200 
           ${open ? 'transform rotate-180' : ''}`}
         />
@@ -29,20 +29,19 @@ const Select = ({ value, onValueChange, placeholder, disabled, error, children }
 
       {open && (
         <>
-          <div 
-            className="fixed inset-0 z-30" 
-            onClick={() => setOpen(false)}
-          />
-          <div className={`
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div
+            className={`
             absolute z-40 w-full mt-1 rounded-md border border-zinc-700 
             bg-zinc-900 shadow-lg max-h-60 overflow-auto
-          `}>
+          `}
+          >
             {children({
               active: value,
               onSelect: (val) => {
                 onValueChange(val);
                 setOpen(false);
-              }
+              },
             })}
           </div>
         </>
@@ -72,16 +71,12 @@ const SelectValue = React.forwardRef(({ children, placeholder }, ref) => {
 SelectValue.displayName = 'SelectValue';
 
 const SelectContent = ({ children }) => {
-  return (
-    <div className="py-1">
-      {children}
-    </div>
-  );
+  return <div className="py-1">{children}</div>;
 };
 
 const SelectItem = React.forwardRef(({ value, children, disabled }, ref) => {
   const itemRef = React.useRef(null);
-  
+
   return (
     <button
       ref={ref || itemRef}
@@ -107,7 +102,7 @@ Select.propTypes = {
   placeholder: PropTypes.string,
   disabled: PropTypes.bool,
   error: PropTypes.bool,
-  children: PropTypes.func.isRequired
+  children: PropTypes.func.isRequired,
 };
 
 SelectTrigger.propTypes = {
@@ -129,10 +124,4 @@ SelectItem.propTypes = {
   disabled: PropTypes.bool,
 };
 
-export {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem
-};
+export { Select, SelectTrigger, SelectValue, SelectContent, SelectItem };

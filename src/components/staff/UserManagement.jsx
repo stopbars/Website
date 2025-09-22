@@ -4,9 +4,9 @@ import useSearchQuery from '../../hooks/useSearchQuery';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
-import { 
-  User, 
-  Search, 
+import {
+  User,
+  Search,
   Mail,
   AlertTriangle,
   Check,
@@ -37,25 +37,26 @@ const formatRole = (role) => {
     .replace(/_/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 };
 
 // Helper function to calculate display name based on display mode
 const getDisplayName = (user) => {
   if (!user.full_name) return 'Not set';
-  
+
   const displayMode = user.display_mode ?? 0; // Default to 0 if not provided
-  
+
   switch (displayMode) {
     case 0: // First name only
       return user.full_name.split(' ')[0];
-    case 1: // First + Last Initial
-      { const nameParts = user.full_name.split(' ');
+    case 1: { // First + Last Initial
+      const nameParts = user.full_name.split(' ');
       if (nameParts.length > 1) {
         return `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}`;
       }
-      return nameParts[0]; }
+      return nameParts[0];
+    }
     case 2: // CID (VATSIM ID)
       return user.vatsim_id || 'Not set';
     default:
@@ -76,7 +77,7 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, []);
-  
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (deleteConfirmation === 'DELETE') {
@@ -85,18 +86,20 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
   };
 
   return createPortal(
-    <div className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full border border-zinc-800 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center space-x-3 mb-6">
           <AlertOctagon className="w-6 h-6 text-red-500" />
           <h3 className="text-xl font-bold text-red-500">Delete User Account</h3>
         </div>
-        
+
         <div className="space-y-4">
           <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-zinc-200">
-              You are about to delete the account for:
-            </p>
+            <p className="text-zinc-200">You are about to delete the account for:</p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-red-200">
                 <User className="w-4 h-4" />
@@ -110,7 +113,8 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
           </div>
 
           <p className="text-zinc-300">
-            This action cannot be undone. All associated data including API tokens, division memberships, and staff roles will be permanently deleted.
+            This action cannot be undone. All associated data including API tokens, division
+            memberships, and staff roles will be permanently deleted.
           </p>
 
           <form onSubmit={handleSubmit}>
@@ -126,12 +130,13 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
                 className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
                 disabled={isDeleting}
               />
-            </div>            <div className="flex space-x-3 mt-6">
+            </div>{' '}
+            <div className="flex space-x-3 mt-6">
               <Button
                 type="submit"
                 className={`${
                   deleteConfirmation === 'DELETE' && !isDeleting
-                    ? '!bg-red-500 hover:!bg-red-600 text-white' 
+                    ? '!bg-red-500 hover:!bg-red-600 text-white'
                     : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
                 }`}
                 disabled={deleteConfirmation !== 'DELETE' || isDeleting}
@@ -148,12 +153,7 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
                   </>
                 )}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={isDeleting}
-              >
+              <Button type="button" variant="outline" onClick={onCancel} disabled={isDeleting}>
                 Cancel
               </Button>
             </div>
@@ -170,11 +170,11 @@ DeleteConfirmationModal.propTypes = {
     id: PropTypes.number.isRequired,
     full_name: PropTypes.string,
     email: PropTypes.string.isRequired,
-    vatsim_id: PropTypes.string
+    vatsim_id: PropTypes.string,
   }).isRequired,
   onCancel: PropTypes.func.isRequired,
   onConfirmDelete: PropTypes.func.isRequired,
-  isDeleting: PropTypes.bool.isRequired
+  isDeleting: PropTypes.bool.isRequired,
 };
 
 const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerating }) => {
@@ -190,7 +190,7 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, []);
-  
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (regenerateConfirmation === 'REGENERATE') {
@@ -199,18 +199,20 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
   };
 
   return createPortal(
-    <div className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 w-screen h-screen bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 overflow-x-hidden overflow-y-auto p-4"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full border border-zinc-800 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center space-x-3 mb-6">
           <KeyRound className="w-6 h-6 text-orange-300" />
           <h3 className="text-xl font-bold text-orange-300">Regenerate API Token</h3>
         </div>
-        
+
         <div className="space-y-4">
           <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-            <p className="text-zinc-200">
-              You are about to regenerate the API Token for:
-            </p>
+            <p className="text-zinc-200">You are about to regenerate the API Token for:</p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-orange-200">
                 <User className="w-4 h-4" />
@@ -224,7 +226,8 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
           </div>
 
           <p className="text-zinc-300">
-            This action cannot be undone. The API token will be regenerated and the old token will stop working.
+            This action cannot be undone. The API token will be regenerated and the old token will
+            stop working.
           </p>
 
           <form onSubmit={handleSubmit}>
@@ -246,7 +249,7 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
                 type="submit"
                 className={`${
                   regenerateConfirmation === 'REGENERATE' && !isRegenerating
-                    ? '!bg-orange-500 hover:!bg-orange-600 text-white' 
+                    ? '!bg-orange-500 hover:!bg-orange-600 text-white'
                     : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
                 }`}
                 disabled={regenerateConfirmation !== 'REGENERATE' || isRegenerating}
@@ -263,12 +266,7 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
                   </>
                 )}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={isRegenerating}
-              >
+              <Button type="button" variant="outline" onClick={onCancel} disabled={isRegenerating}>
                 Cancel
               </Button>
             </div>
@@ -285,11 +283,11 @@ RegenerateTokenModal.propTypes = {
     id: PropTypes.number.isRequired,
     full_name: PropTypes.string,
     email: PropTypes.string.isRequired,
-    vatsim_id: PropTypes.string
+    vatsim_id: PropTypes.string,
   }).isRequired,
   onCancel: PropTypes.func.isRequired,
   onConfirmRegenerate: PropTypes.func.isRequired,
-  isRegenerating: PropTypes.bool.isRequired
+  isRegenerating: PropTypes.bool.isRequired,
 };
 
 const UserManagement = () => {
@@ -310,9 +308,12 @@ const UserManagement = () => {
     try {
       setLoading(true);
       const token = getVatsimToken();
-      const response = await fetch(`https://v2.stopbars.com/staff/users?page=${currentPage}&limit=${USERS_PER_PAGE}`, {
-        headers: { 'X-Vatsim-Token': token }
-      });
+      const response = await fetch(
+        `https://v2.stopbars.com/staff/users?page=${currentPage}&limit=${USERS_PER_PAGE}`,
+        {
+          headers: { 'X-Vatsim-Token': token },
+        }
+      );
 
       if (!response.ok) {
         throw new Error('Failed to fetch users');
@@ -338,20 +339,20 @@ const UserManagement = () => {
   const handleDeleteUser = async (userId) => {
     setIsDeletingUser(true);
     setError('');
-  
+
     try {
       const token = getVatsimToken();
       const response = await fetch(`https://v2.stopbars.com/staff/users/${userId}`, {
         method: 'DELETE',
-        headers: { 'X-Vatsim-Token': token }
+        headers: { 'X-Vatsim-Token': token },
       });
 
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to delete user');
       }
-  
-      setUsers(users.filter(user => user.id !== userId));
+
+      setUsers(users.filter((user) => user.id !== userId));
       setSuccess('User deleted successfully');
       setDeletingUser(null);
       setTimeout(() => setSuccess(''), 3000);
@@ -370,31 +371,31 @@ const UserManagement = () => {
   const handleRegenerateToken = async (userId) => {
     setIsRegeneratingToken(true);
     setError('');
-  
+
     try {
       const token = getVatsimToken();
-      const user = users.find(u => u.id === userId);
-      
+      const user = users.find((u) => u.id === userId);
+
       if (!user || !user.vatsim_id) {
         throw new Error('User VATSIM ID not found');
       }
 
       const response = await fetch(`https://v2.stopbars.com/staff/users/refresh-api-token`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'X-Vatsim-Token': token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          vatsimId: user.vatsim_id
-        })
+          vatsimId: user.vatsim_id,
+        }),
       });
 
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to regenerate token');
       }
-  
+
       setSuccess('API token has been successfully refreshed');
       setRegeneratingUser(null);
       setTimeout(() => setSuccess(''), 3000);
@@ -409,25 +410,27 @@ const UserManagement = () => {
     setRegeneratingUser(null);
     setError('');
   };
-  const filteredUsers = users.filter(user => 
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.vatsim_id && user.vatsim_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (user.id && user.id.toString().includes(searchTerm)) ||
-    (user.full_name && user.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (getDisplayName(user).toLowerCase().includes(searchTerm.toLowerCase())) ||
-    // Also allow searching by region/division/subdivision
-    (user.region && (
-      (user.region.name && user.region.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (user.region.id && user.region.id.toLowerCase().includes(searchTerm.toLowerCase()))
-    )) ||
-    (user.division && (
-      (user.division.name && user.division.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (user.division.id && user.division.id.toLowerCase().includes(searchTerm.toLowerCase()))
-    )) ||
-    (user.subdivision && (
-      (user.subdivision.name && user.subdivision.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (user.subdivision.id && user.subdivision.id.toLowerCase().includes(searchTerm.toLowerCase()))
-    ))
+  const filteredUsers = users.filter(
+    (user) =>
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.vatsim_id && user.vatsim_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.id && user.id.toString().includes(searchTerm)) ||
+      (user.full_name && user.full_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      getDisplayName(user).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      // Also allow searching by region/division/subdivision
+      (user.region &&
+        ((user.region.name && user.region.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (user.region.id && user.region.id.toLowerCase().includes(searchTerm.toLowerCase())))) ||
+      (user.division &&
+        ((user.division.name &&
+          user.division.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (user.division.id &&
+            user.division.id.toLowerCase().includes(searchTerm.toLowerCase())))) ||
+      (user.subdivision &&
+        ((user.subdivision.name &&
+          user.subdivision.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (user.subdivision.id &&
+            user.subdivision.id.toLowerCase().includes(searchTerm.toLowerCase()))))
   );
 
   const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
@@ -449,7 +452,7 @@ const UserManagement = () => {
             </span>
           )}
         </div>
-  <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4">
           <div className="relative">
             <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
             <input
@@ -472,147 +475,167 @@ const UserManagement = () => {
           </div>
         )}
 
-      {success && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
-          <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-          <p className="text-emerald-500">{success}</p>
-        </div>
-      )}
+        {success && (
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
+            <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+            <p className="text-emerald-500">{success}</p>
+          </div>
+        )}
 
-      {/* Users List */}
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader className="w-8 h-8 animate-spin text-zinc-400" />
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredUsers.length === 0 && (
-              <div className="col-span-full p-6 text-center text-zinc-400 border border-dashed border-zinc-700 rounded-lg">
-                No users found.
-              </div>
-            )}
-            {filteredUsers.map(user => (
-              <Card key={user.id} className="p-4 hover:border-zinc-700 transition-colors">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-3">
-                      <User className="w-6 h-6 text-zinc-400" />
-                      <h3 className="font-medium truncate text-base">{user.full_name || 'Not Set'}</h3>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Button
-                        variant="outline"
-                        onClick={() => setRegeneratingUser(user)}
-                        className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={() => setDeletingUser(user)}
-                        className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Account ID: {user.id || 'Not set'}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    {user.is_staff && user.role && user.role.toLowerCase() !== 'user' ? (
-                      <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
-                    ) : (
-                      <Shield className="w-3.5 h-3.5 text-zinc-400" />
-                    )}
-                    <span className="text-xs text-zinc-300">Role: {user.is_staff ? formatRole(user.role) : 'User'}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <Mail className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Email: {user.email}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">VATSIM ID: {user.vatsim_id || 'Not set'}</span>
-                  </div>
-                  {/* Region / Division / Subdivision */}
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <Globe className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Region: {user.region?.name || user.region?.id || 'Not set'}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <Map className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Division: {user.division?.name || user.division?.id || 'Not set'}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Subdivision: {user.subdivision?.name || user.subdivision?.id || 'None'}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Display Name: {getDisplayName(user)}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Created: {formatLocalDateTime(user.created_at)}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs text-zinc-300">Last Login: {formatLocalDateTime(user.last_login)}</span>
-                  </div>
+        {/* Users List */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <Loader className="w-8 h-8 animate-spin text-zinc-400" />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredUsers.length === 0 && (
+                <div className="col-span-full p-6 text-center text-zinc-400 border border-dashed border-zinc-700 rounded-lg">
+                  No users found.
                 </div>
-              </Card>
-            ))}
-          </div>
+              )}
+              {filteredUsers.map((user) => (
+                <Card key={user.id} className="p-4 hover:border-zinc-700 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-3">
+                        <User className="w-6 h-6 text-zinc-400" />
+                        <h3 className="font-medium truncate text-base">
+                          {user.full_name || 'Not Set'}
+                        </h3>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Button
+                          variant="outline"
+                          onClick={() => setRegeneratingUser(user)}
+                          className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setDeletingUser(user)}
+                          className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        Account ID: {user.id || 'Not set'}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      {user.is_staff && user.role && user.role.toLowerCase() !== 'user' ? (
+                        <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+                      ) : (
+                        <Shield className="w-3.5 h-3.5 text-zinc-400" />
+                      )}
+                      <span className="text-xs text-zinc-300">
+                        Role: {user.is_staff ? formatRole(user.role) : 'User'}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <Mail className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">Email: {user.email}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        VATSIM ID: {user.vatsim_id || 'Not set'}
+                      </span>
+                    </div>
+                    {/* Region / Division / Subdivision */}
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <Globe className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        Region: {user.region?.name || user.region?.id || 'Not set'}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <Map className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        Division: {user.division?.name || user.division?.id || 'Not set'}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        Subdivision: {user.subdivision?.name || user.subdivision?.id || 'None'}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <IdCard className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        Display Name: {getDisplayName(user)}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        Created: {formatLocalDateTime(user.created_at)}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs text-zinc-300">
+                        Last Login: {formatLocalDateTime(user.last_login)}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
 
-          {/* Delete Confirmation Modal */}
-          {deletingUser && (
-            <DeleteConfirmationModal
-              user={deletingUser}
-              onCancel={cancelDelete}
-              onConfirmDelete={() => handleDeleteUser(deletingUser.id)}
-              isDeleting={isDeletingUser}
-            />
-          )}
+            {/* Delete Confirmation Modal */}
+            {deletingUser && (
+              <DeleteConfirmationModal
+                user={deletingUser}
+                onCancel={cancelDelete}
+                onConfirmDelete={() => handleDeleteUser(deletingUser.id)}
+                isDeleting={isDeletingUser}
+              />
+            )}
 
-          {/* Regenerate Token Modal */}
-          {regeneratingUser && (
-            <RegenerateTokenModal
-              user={regeneratingUser}
-              onCancel={cancelRegenerate}
-              onConfirmRegenerate={() => handleRegenerateToken(regeneratingUser.id)}
-              isRegenerating={isRegeneratingToken}
-            />
-          )}
+            {/* Regenerate Token Modal */}
+            {regeneratingUser && (
+              <RegenerateTokenModal
+                user={regeneratingUser}
+                onCancel={cancelRegenerate}
+                onConfirmRegenerate={() => handleRegenerateToken(regeneratingUser.id)}
+                isRegenerating={isRegeneratingToken}
+              />
+            )}
 
-          {/* Pagination Controls */}
-          <div className="flex items-center justify-between mt-6">
-            <Button
-              variant="outline"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 text-sm"
-            >
-              <ChevronLeft className="w-3.5 h-3.5 mr-1.5" />
-              Previous
-            </Button>
-            <span className="text-sm text-zinc-400">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1.5 text-sm"
-            >
-              Next
-              <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
-            </Button>
-          </div>
-        </>
-      )}
+            {/* Pagination Controls */}
+            <div className="flex items-center justify-between mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-sm"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 mr-1.5" />
+                Previous
+              </Button>
+              <span className="text-sm text-zinc-400">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1.5 text-sm"
+              >
+                Next
+                <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -5,16 +5,16 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import ReactConfetti from 'react-confetti';
 import { useWindowSize } from '../hooks/useWindowSize';
-import { 
-  AlertCircle, 
-  ChevronLeft, 
+import {
+  AlertCircle,
+  ChevronLeft,
   ArrowRight,
-  FileUp, 
+  FileUp,
   Upload,
   Check,
   Loader,
   Info,
-  Search
+  Search,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -26,7 +26,7 @@ const ContributeDetails = () => {
   const { user } = useAuth();
   const fileInputRef = useRef(null);
   const vatsimToken = getVatsimToken();
-  
+
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [preloaded, setPreloaded] = useState(false);
@@ -47,12 +47,14 @@ const ContributeDetails = () => {
 
   // Preload file from navigation state if provided
   useEffect(() => {
-  // Only preload if we have the raw original XML passed from previous step
-  if (!preloaded && location.state?.originalXml) {
+    // Only preload if we have the raw original XML passed from previous step
+    if (!preloaded && location.state?.originalXml) {
       try {
-    const { originalXml, fileName } = location.state;
-    const blob = new Blob([originalXml], { type: 'application/xml' });
-        const syntheticFile = new File([blob], fileName || `${icao}.xml`, { type: 'application/xml' });
+        const { originalXml, fileName } = location.state;
+        const blob = new Blob([originalXml], { type: 'application/xml' });
+        const syntheticFile = new File([blob], fileName || `${icao}.xml`, {
+          type: 'application/xml',
+        });
         setSelectedFile(syntheticFile);
         setTestedOriginalXml(originalXml);
         setPreloaded(true);
@@ -69,14 +71,14 @@ const ContributeDetails = () => {
       try {
         const response = await fetch('https://v2.stopbars.com/contributions/top-packages', {
           headers: {
-            'X-Vatsim-Token': vatsimToken
-          }
+            'X-Vatsim-Token': vatsimToken,
+          },
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           setTopPackages(data.slice(0, 6)); // Get top 6 packages
-          setAllPackages(data.map(pkg => pkg.packageName));
+          setAllPackages(data.map((pkg) => pkg.packageName));
         }
       } catch (error) {
         console.error('Error fetching top packages:', error);
@@ -94,12 +96,12 @@ const ContributeDetails = () => {
   const handleSceneryNameChange = (e) => {
     const value = e.target.value;
     setSceneryName(value);
-    
+
     if (value.length > 1) {
-      const filteredSuggestions = allPackages.filter(
-        pkg => pkg.toLowerCase().includes(value.toLowerCase())
-      ).slice(0, 6);
-      
+      const filteredSuggestions = allPackages
+        .filter((pkg) => pkg.toLowerCase().includes(value.toLowerCase()))
+        .slice(0, 6);
+
       setSuggestions(filteredSuggestions);
       setShowSuggestions(filteredSuggestions.length > 0);
     } else {
@@ -151,7 +153,9 @@ const ContributeDetails = () => {
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    validateAndSetFile(file, () => { e.target.value = ''; });
+    validateAndSetFile(file, () => {
+      e.target.value = '';
+    });
   };
 
   const handleDragOver = (e) => {
@@ -174,25 +178,25 @@ const ContributeDetails = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!user) {
       setError('You must be logged in to submit a contribution');
       return;
     }
-    
+
     if (!sceneryName) {
       setError('Please select or enter a scenery name');
       return;
     }
-    
+
     if (!selectedFile) {
       setError('Please upload an XML file');
       return;
     }
-    
+
     setError('');
     setIsSubmitting(true);
-    
+
     try {
       // Read the file content
       const fileContent = await new Promise((resolve) => {
@@ -200,29 +204,29 @@ const ContributeDetails = () => {
         reader.onload = (e) => resolve(e.target.result);
         reader.readAsText(selectedFile);
       });
-        // Prepare the payload
+      // Prepare the payload
       const payload = {
         airportIcao: icao,
         packageName: sceneryName,
         submittedXml: fileContent,
         notes: notes || undefined,
       };
-      
+
       // Send to the API
       const response = await fetch('https://v2.stopbars.com/contributions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Vatsim-Token': vatsimToken
+          'X-Vatsim-Token': vatsimToken,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to submit contribution');
       }
-      
+
       setSubmissionSuccess(true);
     } catch (err) {
       setError(err.message || 'Failed to submit contribution');
@@ -240,14 +244,22 @@ const ContributeDetails = () => {
     return (
       <Layout>
         <ReactConfetti
-        width={width}
-        height={height}
-        numberOfPieces={700}
-        recycle={false}
-        run={confettiRun}
-        tweenDuration={2000}
-        onConfettiComplete={() => setConfettiRun(false)}
-        style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 60, pointerEvents: 'none' }}
+          width={width}
+          height={height}
+          numberOfPieces={700}
+          recycle={false}
+          run={confettiRun}
+          tweenDuration={2000}
+          onConfettiComplete={() => setConfettiRun(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 60,
+            pointerEvents: 'none',
+          }}
         />
         <div className="min-h-screen pt-32 pb-20 flex items-center">
           <div className="w-full max-w-3xl mx-auto px-6">
@@ -257,7 +269,8 @@ const ContributeDetails = () => {
               </div>
               <h1 className="text-2xl font-bold mb-2">Submission Successful</h1>
               <p className="text-zinc-400 mb-6">
-                Thank you for contributing to BARS! Your submission for {icao} will be reviewed by our team.
+                Thank you for contributing to BARS! Your submission for {icao} will be reviewed by
+                our team.
               </p>
               <div className="flex justify-center">
                 <Button onClick={() => navigate('/contribute')}>
@@ -283,26 +296,27 @@ const ContributeDetails = () => {
                 Back
               </Button>
               <h1 className="text-3xl font-bold">{icao} Contribution</h1>
-            </div>            <p className="text-zinc-400">
-              Step 4: Submit scenery details and XML data
-            </p>
+            </div>{' '}
+            <p className="text-zinc-400">Step 4: Submit scenery details and XML data</p>
           </div>
 
           <Card className="p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Scenery package selection */}
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Scenery Package
-                </label>
+                <label className="block text-sm font-medium mb-2">Scenery Package</label>
                 {isLoadingPackages ? (
                   <div className="flex items-center space-x-2 py-4">
                     <Loader className="w-4 h-4 animate-spin text-blue-400" />
                     <span className="text-zinc-400">Loading popular scenery packages...</span>
                   </div>
                 ) : (
-                  <>                    {topPackages.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">                        {topPackages.map(pkg => (
+                  <>
+                    {' '}
+                    {topPackages.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                        {' '}
+                        {topPackages.map((pkg) => (
                           <Button
                             key={pkg.packageName}
                             type="button"
@@ -325,9 +339,17 @@ const ContributeDetails = () => {
                           type="text"
                           value={sceneryName}
                           onChange={handleSceneryNameChange}
-                          onFocus={() => sceneryName.length > 1 && setSuggestions(
-                            allPackages.filter(pkg => pkg.toLowerCase().includes(sceneryName.toLowerCase())).slice(0, 6)
-                          ) && setShowSuggestions(true)}
+                          onFocus={() =>
+                            sceneryName.length > 1 &&
+                            setSuggestions(
+                              allPackages
+                                .filter((pkg) =>
+                                  pkg.toLowerCase().includes(sceneryName.toLowerCase())
+                                )
+                                .slice(0, 6)
+                            ) &&
+                            setShowSuggestions(true)
+                          }
                           onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                           placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
                           className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
@@ -346,9 +368,11 @@ const ContributeDetails = () => {
                             </li>
                           ))}
                         </ul>
-                      )}                      <p className="mt-1 text-xs text-zinc-400">
-                        {showSuggestions ? 'Click a suggestion or continue typing' : 
-                        'Type to search existing packages or enter a new package name (examples: FlyTampa, iniBuilds)'}
+                      )}{' '}
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {showSuggestions
+                          ? 'Click a suggestion or continue typing'
+                          : 'Type to search existing packages or enter a new package name (examples: FlyTampa, iniBuilds)'}
                       </p>
                       <p className="mt-1 text-xs text-blue-400">
                         <Info className="inline-block w-3 h-3 mr-1" />
@@ -361,12 +385,14 @@ const ContributeDetails = () => {
 
               {/* File upload */}
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Upload XML File
-                </label>
-                <div 
+                <label className="block text-sm font-medium mb-2">Upload XML File</label>
+                <div
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                    isDragActive ? 'border-blue-400 bg-blue-500/10' : selectedFile ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                    isDragActive
+                      ? 'border-blue-400 bg-blue-500/10'
+                      : selectedFile
+                        ? 'border-emerald-500/50 bg-emerald-500/5'
+                        : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
                   }`}
                   onClick={() => fileInputRef.current.click()}
                   onDragOver={handleDragOver}
@@ -390,10 +416,10 @@ const ContributeDetails = () => {
                       <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
                         <FileUp className="w-6 h-6 text-zinc-400" />
                       </div>
-                      <p className="font-medium mb-1">{isDragActive ? 'Drop file to upload' : 'Click to select XML file'}</p>
-                      <p className="text-sm text-zinc-400">
-                        or drag and drop (max 5MB)
+                      <p className="font-medium mb-1">
+                        {isDragActive ? 'Drop file to upload' : 'Click to select XML file'}
                       </p>
+                      <p className="text-sm text-zinc-400">or drag and drop (max 5MB)</p>
                     </div>
                   )}
                   <input
@@ -408,14 +434,16 @@ const ContributeDetails = () => {
                   <div className="flex items-center p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm">
                     <Info className="w-5 h-5 text-blue-400 mr-2 flex-shrink-0" />
                     <p className="text-blue-400">
-                      The XML file should contain the necessary stopbar and taxiway light definitions for the scenery package.
+                      The XML file should contain the necessary stopbar and taxiway light
+                      definitions for the scenery package.
                     </p>
                   </div>
                   {isFileDifferent && (
                     <div className="flex items-center p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm">
                       <AlertCircle className="w-5 h-5 text-amber-400 mr-2 flex-shrink-0" />
                       <p className="text-amber-400">
-                        This file&apos;s contents differ from the XML you tested on the previous step. Please go back and retest if you intended to make changes.
+                        This file&apos;s contents differ from the XML you tested on the previous
+                        step. Please go back and retest if you intended to make changes.
                       </p>
                     </div>
                   )}
@@ -431,7 +459,7 @@ const ContributeDetails = () => {
                 </label>
                 <textarea
                   value={notes}
-                  onChange={e => setNotes(e.target.value)}
+                  onChange={(e) => setNotes(e.target.value)}
                   placeholder="Any additional notes for the approval team."
                   className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-[100px]"
                 ></textarea>

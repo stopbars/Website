@@ -10,7 +10,7 @@ export const useBeforeUnload = (hasUnsavedChanges) => {
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };

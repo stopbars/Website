@@ -2,15 +2,32 @@ import { useState, useEffect } from 'react';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { 
-  Upload, Image as ImageIcon, RefreshCw, Check, AlertTriangle, History, X, Plus, Edit, Loader,
-  Package, Hash, FileText, Eye, ChevronDown, Send, HardDriveDownload, ALargeSmall, Info,
+import {
+  Upload,
+  Image as ImageIcon,
+  RefreshCw,
+  Check,
+  AlertTriangle,
+  History,
+  X,
+  Plus,
+  Edit,
+  Loader,
+  Package,
+  Hash,
+  FileText,
+  Eye,
+  ChevronDown,
+  Send,
+  HardDriveDownload,
+  ALargeSmall,
+  Info,
 } from 'lucide-react';
 import { marked } from 'marked';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
 marked.setOptions({
   breaks: true, // so a single newline becomes a line break
-  gfm: true
+  gfm: true,
 });
 import DOMPurify from 'dompurify';
 
@@ -19,13 +36,14 @@ const PRODUCT_OPTIONS = [
   { value: 'vatSys-Plugin', label: 'vatSys Plugin' },
   { value: 'EuroScope-Plugin', label: 'EuroScope Plugin' },
   { value: 'Installer', label: 'Installer (.exe)' },
-  { value: 'SimConnect.NET', label: 'SimConnect.NET (NuGet)' }
+  { value: 'SimConnect.NET', label: 'SimConnect.NET (NuGet)' },
 ];
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB per spec
 const MAX_ZIP_BYTES = 90 * 1024 * 1024; // 90MB
 // Semantic versioning regex: major.minor.patch with optional pre-release and build metadata
-const SEMVER_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+const SEMVER_REGEX =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 const ReleaseManagement = () => {
   // Mode state
@@ -78,7 +96,7 @@ const ReleaseManagement = () => {
       if (!res.ok) throw new Error('Failed to fetch releases');
       const data = await res.json();
       // Assume data.releases or array; fallback to data
-      const list = Array.isArray(data) ? data : (data.releases || data.items || []);
+      const list = Array.isArray(data) ? data : data.releases || data.items || [];
       setReleases(list);
     } catch (e) {
       setReleasesError(e.message);
@@ -87,7 +105,9 @@ const ReleaseManagement = () => {
     }
   };
 
-  useEffect(() => { fetchReleases(productFilter); }, [productFilter]);
+  useEffect(() => {
+    fetchReleases(productFilter);
+  }, [productFilter]);
 
   // Fetch all releases once for hinting current version irrespective of UI filters
   useEffect(() => {
@@ -96,7 +116,7 @@ const ReleaseManagement = () => {
         const res = await fetch('https://v2.stopbars.com/releases');
         if (!res.ok) throw new Error('Failed to fetch releases for hint');
         const data = await res.json();
-        const list = Array.isArray(data) ? data : (data.releases || data.items || []);
+        const list = Array.isArray(data) ? data : data.releases || data.items || [];
         setAllReleases(list);
       } catch (e) {
         // Keep failure silent in UI; optional console for debugging
@@ -109,10 +129,10 @@ const ReleaseManagement = () => {
   // Determine latest version for a product from allReleases
   const getLatestVersionForProduct = (prod) => {
     if (!prod || !Array.isArray(allReleases) || allReleases.length === 0) return null;
-    const list = allReleases.filter(r => r && r.product === prod);
+    const list = allReleases.filter((r) => r && r.product === prod);
     if (list.length === 0) return null;
     // Prefer created_at ordering if available
-    const withDate = list.filter(r => r.created_at);
+    const withDate = list.filter((r) => r.created_at);
     if (withDate.length) {
       const latestByDate = withDate.sort((a, b) => {
         const ta = new Date(a.created_at).getTime() || 0;
@@ -126,10 +146,16 @@ const ReleaseManagement = () => {
       const s = (v || '').toString().trim().replace(/^v/i, '');
       const m = s.match(SEMVER_REGEX);
       if (!m) return { M: -1, m: -1, p: -1, pre: '' };
-      return { M: parseInt(m[1], 10), m: parseInt(m[2], 10), p: parseInt(m[3], 10), pre: m[4] || '' };
+      return {
+        M: parseInt(m[1], 10),
+        m: parseInt(m[2], 10),
+        p: parseInt(m[3], 10),
+        pre: m[4] || '',
+      };
     };
     const cmp = (va, vb) => {
-      const a = parse(va), b = parse(vb);
+      const a = parse(va),
+        b = parse(vb);
       if (a.M !== b.M) return a.M - b.M;
       if (a.m !== b.m) return a.m - b.m;
       if (a.p !== b.p) return a.p - b.p;
@@ -147,7 +173,8 @@ const ReleaseManagement = () => {
   const validateUpload = () => {
     const trimmedVersion = version.trim();
     if (!trimmedVersion) return 'Version is required';
-    if (!SEMVER_REGEX.test(trimmedVersion)) return 'Version must follow semantic versioning (e.g. 1.2.3, 2.0.0-beta.1)';
+    if (!SEMVER_REGEX.test(trimmedVersion))
+      return 'Version must follow semantic versioning (e.g. 1.2.3, 2.0.0-beta.1)';
 
     const isSimConnect = product === 'SimConnect.NET';
     const isInstaller = product === 'Installer';
@@ -156,20 +183,23 @@ const ReleaseManagement = () => {
       // External product: must NOT have a file
       if (file) return 'SimConnect.NET releases do not accept a file upload';
     } else {
-      if (!file) return isInstaller ? 'Installer .exe file is required' : 'Release ZIP file is required';
+      if (!file)
+        return isInstaller ? 'Installer .exe file is required' : 'Release ZIP file is required';
       if (file) {
         const lower = file.name.toLowerCase();
         if (isInstaller) {
           if (!lower.endsWith('.exe')) return 'Installer product must be a .exe file';
         } else {
-          if (file.type !== 'application/zip' && !lower.endsWith('.zip')) return 'Release file must be a .zip';
+          if (file.type !== 'application/zip' && !lower.endsWith('.zip'))
+            return 'Release file must be a .zip';
         }
         if (file.size > MAX_ZIP_BYTES) return `${isInstaller ? 'File' : 'ZIP'} exceeds 90MB limit`;
       }
     }
 
     if (image) {
-      const isValidType = ['image/png', 'image/jpeg'].includes(image.type) || /\.(png|jpe?g)$/i.test(image.name);
+      const isValidType =
+        ['image/png', 'image/jpeg'].includes(image.type) || /\.(png|jpe?g)$/i.test(image.name);
       if (!isValidType) return 'Image must be PNG or JPG';
       if (image.size > MAX_IMAGE_BYTES) return 'Image exceeds 5MB limit';
     }
@@ -188,11 +218,20 @@ const ReleaseManagement = () => {
     }
     const lower = selected.name.toLowerCase();
     if (product === 'Installer') {
-      if (!lower.endsWith('.exe')) { setUploadError('Installer product must be a .exe file'); return; }
+      if (!lower.endsWith('.exe')) {
+        setUploadError('Installer product must be a .exe file');
+        return;
+      }
     } else {
-      if (selected.type !== 'application/zip' && !lower.endsWith('.zip')) { setUploadError('Release file must be a .zip'); return; }
+      if (selected.type !== 'application/zip' && !lower.endsWith('.zip')) {
+        setUploadError('Release file must be a .zip');
+        return;
+      }
     }
-    if (selected.size > MAX_ZIP_BYTES) { setUploadError('File exceeds 90MB limit'); return; }
+    if (selected.size > MAX_ZIP_BYTES) {
+      setUploadError('File exceeds 90MB limit');
+      return;
+    }
     setFile(selected);
     setUploadError('');
   };
@@ -226,7 +265,7 @@ const ReleaseManagement = () => {
     e.stopPropagation();
     setIsDragActiveFile(false);
     const droppedFile = e.dataTransfer.files && e.dataTransfer.files[0];
-    
+
     if (droppedFile) {
       const lower = droppedFile.name.toLowerCase();
       if (product === 'SimConnect.NET') {
@@ -279,23 +318,25 @@ const ReleaseManagement = () => {
     e.stopPropagation();
     setIsDragActiveImage(false);
     const droppedFile = e.dataTransfer.files && e.dataTransfer.files[0];
-    
+
     if (droppedFile) {
       // Validate file type
-      const isValidType = ['image/png', 'image/jpeg'].includes(droppedFile.type) || /\.(png|jpe?g)$/i.test(droppedFile.name);
+      const isValidType =
+        ['image/png', 'image/jpeg'].includes(droppedFile.type) ||
+        /\.(png|jpe?g)$/i.test(droppedFile.name);
       if (!isValidType) {
         setDragErrorImage('Please upload a PNG or JPG file');
         setTimeout(() => setDragErrorImage(''), 3000);
         return;
       }
-      
+
       // Validate file size
       if (droppedFile.size > MAX_IMAGE_BYTES) {
         setDragErrorImage('File exceeds 5MB limit');
         setTimeout(() => setDragErrorImage(''), 3000);
         return;
       }
-      
+
       setDragErrorImage('');
       setImage(droppedFile);
       setUploadError(''); // Clear validation errors when changing image
@@ -363,7 +404,13 @@ const ReleaseManagement = () => {
       setUploadError(validation);
       return;
     }
-    setPendingUploadData({ product, version: version.trim(), changelog: changelog.trim(), file, image });
+    setPendingUploadData({
+      product,
+      version: version.trim(),
+      changelog: changelog.trim(),
+      file,
+      image,
+    });
     setConfirmOpen(true);
   };
 
@@ -376,20 +423,25 @@ const ReleaseManagement = () => {
       setUploading(true);
       const token = getVatsimToken();
       const formData = new FormData();
-  formData.append('product', pendingUploadData.product);
-  formData.append('version', pendingUploadData.version);
-  if (pendingUploadData.changelog) formData.append('changelog', pendingUploadData.changelog);
-  // Only append file if present (SimConnect.NET should not send a file field)
-  if (pendingUploadData.file) formData.append('file', pendingUploadData.file);
+      formData.append('product', pendingUploadData.product);
+      formData.append('version', pendingUploadData.version);
+      if (pendingUploadData.changelog) formData.append('changelog', pendingUploadData.changelog);
+      // Only append file if present (SimConnect.NET should not send a file field)
+      if (pendingUploadData.file) formData.append('file', pendingUploadData.file);
       if (pendingUploadData.image) formData.append('image', pendingUploadData.image);
       const response = await fetch('https://v2.stopbars.com/releases/upload', {
         method: 'POST',
         headers: { 'X-Vatsim-Token': token },
-        body: formData
+        body: formData,
       });
       if (!response.ok) {
         let message = 'Failed to create release';
-  try { const data = await response.json(); if (data.error) message = data.error; } catch { /* ignore json parse */ }
+        try {
+          const data = await response.json();
+          if (data.error) message = data.error;
+        } catch {
+          /* ignore json parse */
+        }
         throw new Error(message);
       }
       setUploadSuccess('Release created successfully');
@@ -460,14 +512,19 @@ const ReleaseManagement = () => {
         method: 'PUT',
         headers: {
           'X-Vatsim-Token': token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ changelog: newChangelog })
+        body: JSON.stringify({ changelog: newChangelog }),
       });
 
       if (!response.ok) {
         let message = 'Failed to edit changelog';
-  try { const data = await response.json(); if (data.error) message = data.error; } catch { /* ignore json parse */ }
+        try {
+          const data = await response.json();
+          if (data.error) message = data.error;
+        } catch {
+          /* ignore json parse */
+        }
         throw new Error(message);
       }
 
@@ -478,7 +535,9 @@ const ReleaseManagement = () => {
       setUpdateError(err.message);
     } finally {
       setUpdating(false);
-      setTimeout(() => { setUpdateSuccess(''); }, 4000);
+      setTimeout(() => {
+        setUpdateSuccess('');
+      }, 4000);
     }
   };
 
@@ -489,8 +548,8 @@ const ReleaseManagement = () => {
 
   // Render custom product dropdown
   const renderProductDropdown = (currentProduct, setProduct, isOpen, setIsOpen) => {
-    const currentOption = PRODUCT_OPTIONS.find(opt => opt.value === currentProduct);
-    
+    const currentOption = PRODUCT_OPTIONS.find((opt) => opt.value === currentProduct);
+
     return (
       <div className="relative">
         <button
@@ -502,10 +561,14 @@ const ReleaseManagement = () => {
           }}
           className="flex items-center justify-between w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
         >
-          <span className="transition-colors duration-200">{currentOption?.label || currentProduct}</span>
-          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <span className="transition-colors duration-200">
+            {currentOption?.label || currentProduct}
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          />
         </button>
-        
+
         {isOpen && (
           <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
             {PRODUCT_OPTIONS.map((option, index) => (
@@ -524,11 +587,13 @@ const ReleaseManagement = () => {
                   setUploadError(''); // Clear any validation errors when changing product
                 }}
                 className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
-                  currentProduct === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                  currentProduct === option.value
+                    ? 'bg-zinc-700 text-blue-400'
+                    : 'text-white hover:text-zinc-100'
                 }`}
                 style={{
                   animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both'
+                  animationFillMode: 'both',
                 }}
               >
                 {option.label}
@@ -542,12 +607,9 @@ const ReleaseManagement = () => {
 
   // Render custom filter dropdown for existing releases
   const renderFilterDropdown = (currentFilter, setFilter, isOpen, setIsOpen) => {
-    const filterOptions = [
-      { value: '', label: 'All Products' },
-      ...PRODUCT_OPTIONS
-    ];
-    const currentOption = filterOptions.find(opt => opt.value === currentFilter);
-    
+    const filterOptions = [{ value: '', label: 'All Products' }, ...PRODUCT_OPTIONS];
+    const currentOption = filterOptions.find((opt) => opt.value === currentFilter);
+
     return (
       <div className="relative">
         <button
@@ -559,10 +621,14 @@ const ReleaseManagement = () => {
           }}
           className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750 text-sm min-w-[180px]"
         >
-          <span className="transition-colors duration-200">{currentOption?.label || 'All Products'}</span>
-          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <span className="transition-colors duration-200">
+            {currentOption?.label || 'All Products'}
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          />
         </button>
-        
+
         {isOpen && (
           <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
             {filterOptions.map((option, index) => (
@@ -576,11 +642,13 @@ const ReleaseManagement = () => {
                   setIsOpen(false);
                 }}
                 className={`w-full px-3 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 text-sm ${
-                  currentFilter === option.value ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                  currentFilter === option.value
+                    ? 'bg-zinc-700 text-blue-400'
+                    : 'text-white hover:text-zinc-100'
                 }`}
                 style={{
                   animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both'
+                  animationFillMode: 'both',
                 }}
               >
                 {option.label}
@@ -625,12 +693,21 @@ const ReleaseManagement = () => {
                 variant="outline"
                 className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${(() => {
                   const needsFile = product !== 'SimConnect.NET';
-                  return (isAdding && (!version.trim() || (needsFile && !file))) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating
-                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent' : '';
+                  return (isAdding && (!version.trim() || (needsFile && !file))) ||
+                    (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) ||
+                    uploading ||
+                    updating
+                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent'
+                    : '';
                 })()}`}
                 disabled={(() => {
                   const needsFile = product !== 'SimConnect.NET';
-                  return (isAdding && (!version.trim() || (needsFile && !file))) || (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) || uploading || updating;
+                  return (
+                    (isAdding && (!version.trim() || (needsFile && !file))) ||
+                    (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) ||
+                    uploading ||
+                    updating
+                  );
                 })()}
               >
                 {uploading || updating ? (
@@ -708,29 +785,41 @@ const ReleaseManagement = () => {
             <div className="mb-4">
               <h3 className="text-lg font-medium text-white">Create New Release</h3>
             </div>
-            
-            <form onSubmit={(e) => { e.preventDefault(); openConfirm(); }} className="space-y-6">
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                openConfirm();
+              }}
+              className="space-y-6"
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
                     <Package className="w-4 h-4" />
                     <span>Product</span>
                   </label>
-                  {renderProductDropdown(product, setProduct, showProductDropdown, setShowProductDropdown)}
+                  {renderProductDropdown(
+                    product,
+                    setProduct,
+                    showProductDropdown,
+                    setShowProductDropdown
+                  )}
                 </div>
                 <div>
                   <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
                     <Hash className="w-4 h-4" />
                     <span>Version</span>
-                  <div className="flex items-center gap-2 text-xs text-zinc-400 mb-1">
-                    <span>
-                      Current published: {(() => {
-                        const lv = getLatestVersionForProduct(product);
-                        if (!lv) return 'no releases yet';
-                        return `v${lv.replace(/^v/i, '')}`;
-                      })()}
-                    </span>
-                  </div>
+                    <div className="flex items-center gap-2 text-xs text-zinc-400 mb-1">
+                      <span>
+                        Current published:{' '}
+                        {(() => {
+                          const lv = getLatestVersionForProduct(product);
+                          if (!lv) return 'no releases yet';
+                          return `v${lv.replace(/^v/i, '')}`;
+                        })()}
+                      </span>
+                    </div>
                   </label>
                   <input
                     type="text"
@@ -786,14 +875,18 @@ const ReleaseManagement = () => {
                 {product !== 'SimConnect.NET' ? (
                   <div>
                     <label className="block text-sm font-medium mb-2 text-zinc-300">
-                      {product === 'Installer' ? 'Installer File' : 'Release File'}<span className="text-red-400 ml-1">*</span>
+                      {product === 'Installer' ? 'Installer File' : 'Release File'}
+                      <span className="text-red-400 ml-1">*</span>
                     </label>
                     <div
                       className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                        dragErrorFile ? 'border-red-400 bg-red-500/10' :
-                        isDragActiveFile ? 'border-blue-400 bg-blue-500/10' :
-                        file ? 'border-emerald-500/50 bg-emerald-500/5' :
-                        'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                        dragErrorFile
+                          ? 'border-red-400 bg-red-500/10'
+                          : isDragActiveFile
+                            ? 'border-blue-400 bg-blue-500/10'
+                            : file
+                              ? 'border-emerald-500/50 bg-emerald-500/5'
+                              : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
                       }`}
                       onClick={() => document.getElementById('release-file-input').click()}
                       onDragOver={handleFileDragOver}
@@ -808,7 +901,9 @@ const ReleaseManagement = () => {
                             <X className="w-6 h-6 text-red-500" />
                           </div>
                           <p className="font-medium mb-1 text-red-400">{dragErrorFile}</p>
-                          <p className="text-sm text-zinc-400">Please try again with a valid file</p>
+                          <p className="text-sm text-zinc-400">
+                            Please try again with a valid file
+                          </p>
                         </div>
                       ) : file ? (
                         <div className="flex flex-col items-center">
@@ -816,15 +911,25 @@ const ReleaseManagement = () => {
                             <Check className="w-6 h-6 text-emerald-500" />
                           </div>
                           <p className="font-medium mb-1">{file.name}</p>
-                          <p className="text-sm text-zinc-400">{(file.size / (1024*1024)).toFixed(2)} MB / 90 MB  •  Click to change</p>
+                          <p className="text-sm text-zinc-400">
+                            {(file.size / (1024 * 1024)).toFixed(2)} MB / 90 MB • Click to change
+                          </p>
                         </div>
                       ) : (
                         <div className="flex flex-col items-center">
                           <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
                             <Upload className="w-6 h-6 text-zinc-400" />
                           </div>
-                          <p className="font-medium mb-1">{isDragActiveFile ? 'Drop to upload file' : 'Click to upload or drag and drop'}</p>
-                          <p className="text-sm text-zinc-400">{product === 'Installer' ? '.exe required, max 90MB' : '.zip required, max 90MB'}</p>
+                          <p className="font-medium mb-1">
+                            {isDragActiveFile
+                              ? 'Drop to upload file'
+                              : 'Click to upload or drag and drop'}
+                          </p>
+                          <p className="text-sm text-zinc-400">
+                            {product === 'Installer'
+                              ? '.exe required, max 90MB'
+                              : '.zip required, max 90MB'}
+                          </p>
                         </div>
                       )}
                       <input
@@ -838,25 +943,36 @@ const ReleaseManagement = () => {
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-zinc-300">{product === 'Installer' ? 'Installer File' : 'Release File'}<span className="text-red-400 ml-1">*</span></label>
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                      {product === 'Installer' ? 'Installer File' : 'Release File'}
+                      <span className="text-red-400 ml-1">*</span>
+                    </label>
                     <div className="border-2 rounded-lg p-6 text-center transition-colors border-zinc-600 bg-zinc-800/50 text-sm min-h-[140px] flex flex-col items-center justify-center max-w-[420px] mx-auto">
                       <div className="flex items-center gap-2 text-amber-400 mb-2">
                         <Info className="w-6 h-6" />
                         <span className="font-medium">SimConnect.NET (External)</span>
                       </div>
-                      <p className="text-zinc-300 leading-relaxed mb-2">No file upload required. The version you publish will link users directly to the matching NuGet package on publication.</p>
+                      <p className="text-zinc-300 leading-relaxed mb-2">
+                        No file upload required. The version you publish will link users directly to
+                        the matching NuGet package on publication.
+                      </p>
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">Promo Image</label>
-                  <div 
+                  <label className="block text-sm font-medium mb-2 text-zinc-300">
+                    Promo Image
+                  </label>
+                  <div
                     className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                      dragErrorImage ? 'border-red-400 bg-red-500/10' : 
-                      isDragActiveImage ? 'border-blue-400 bg-blue-500/10' : 
-                      image ? 'border-emerald-500/50 bg-emerald-500/5' : 
-                      'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                      dragErrorImage
+                        ? 'border-red-400 bg-red-500/10'
+                        : isDragActiveImage
+                          ? 'border-blue-400 bg-blue-500/10'
+                          : image
+                            ? 'border-emerald-500/50 bg-emerald-500/5'
+                            : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
                     }`}
                     onClick={() => document.getElementById('release-image-input').click()}
                     onDragOver={handleImageDragOver}
@@ -871,9 +987,7 @@ const ReleaseManagement = () => {
                           <X className="w-6 h-6 text-red-500" />
                         </div>
                         <p className="font-medium mb-1 text-red-400">{dragErrorImage}</p>
-                        <p className="text-sm text-zinc-400">
-                          Please try again with a valid file
-                        </p>
+                        <p className="text-sm text-zinc-400">Please try again with a valid file</p>
                       </div>
                     ) : image ? (
                       <div className="flex flex-col items-center">
@@ -882,7 +996,7 @@ const ReleaseManagement = () => {
                         </div>
                         <p className="font-medium mb-1">{image.name}</p>
                         <p className="text-sm text-zinc-400">
-                          {(image.size / (1024*1024)).toFixed(2)} MB / 5 MB  •  Click to change
+                          {(image.size / (1024 * 1024)).toFixed(2)} MB / 5 MB • Click to change
                         </p>
                       </div>
                     ) : (
@@ -891,11 +1005,11 @@ const ReleaseManagement = () => {
                           <ImageIcon className="w-6 h-6 text-zinc-400" />
                         </div>
                         <p className="font-medium mb-1">
-                          {isDragActiveImage ? 'Drop to upload promo image' : 'Click to upload or drag and drop'}
+                          {isDragActiveImage
+                            ? 'Drop to upload promo image'
+                            : 'Click to upload or drag and drop'}
                         </p>
-                        <p className="text-sm text-zinc-400">
-                          PNG or JPG, max 5MB file size
-                        </p>
+                        <p className="text-sm text-zinc-400">PNG or JPG, max 5MB file size</p>
                       </div>
                     )}
                     <input
@@ -943,8 +1057,11 @@ const ReleaseManagement = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!editReleaseId.trim()) { setUpdateError('Enter an ID to autofill'); return; }
-                      const match = releases.find(r => r.id?.toString() === editReleaseId.trim());
+                      if (!editReleaseId.trim()) {
+                        setUpdateError('Enter an ID to autofill');
+                        return;
+                      }
+                      const match = releases.find((r) => r.id?.toString() === editReleaseId.trim());
                       if (match) {
                         setNewChangelog(match.changelog || '');
                         setUpdateError('');
@@ -1016,11 +1133,15 @@ const ReleaseManagement = () => {
                 <h3 className="text-lg font-medium text-zinc-300">Existing Releases</h3>
               </div>
               <div className="flex items-center space-x-3">
-                {renderFilterDropdown(productFilter, setProductFilter, showFilterDropdown, setShowFilterDropdown)}
+                {renderFilterDropdown(
+                  productFilter,
+                  setProductFilter,
+                  showFilterDropdown,
+                  setShowFilterDropdown
+                )}
               </div>
             </div>
             <Card className="p-6 bg-zinc-900/40 border-zinc-800 space-y-4">
-
               {releasesError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
                   <AlertTriangle className="w-4 h-4 mt-0.5" />
@@ -1042,20 +1163,42 @@ const ReleaseManagement = () => {
                   </thead>
                   <tbody>
                     {releasesLoading ? (
-                      <tr><td colSpan={6} className="py-8 text-center text-zinc-500">Loading...</td></tr>
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-zinc-500">
+                          Loading...
+                        </td>
+                      </tr>
                     ) : releases.length === 0 ? (
-                      <tr><td colSpan={6} className="py-8 text-center text-zinc-500">No releases found.</td></tr>
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-zinc-500">
+                          No releases found.
+                        </td>
+                      </tr>
                     ) : (
-                      releases.slice(0, 50).map(rel => (
-                        <tr key={rel.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/40">
+                      releases.slice(0, 50).map((rel) => (
+                        <tr
+                          key={rel.id}
+                          className="border-b border-zinc-800/50 hover:bg-zinc-800/40"
+                        >
                           <td className="py-2 px-2 text-zinc-300">{rel.id}</td>
                           <td className="py-2 px-2 text-zinc-300">{rel.product}</td>
                           <td className="py-2 px-2 text-zinc-300">{rel.version}</td>
-                          <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">{rel.created_at ? new Date(rel.created_at).toLocaleDateString() : '-'}</td>
-                          <td className="py-2 px-2 text-zinc-400 truncate max-w-[180px]">{rel.changelog ? rel.changelog.slice(0, 60) : <span className="italic text-zinc-600">(none)</span>}</td>
+                          <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">
+                            {rel.created_at ? new Date(rel.created_at).toLocaleDateString() : '-'}
+                          </td>
+                          <td className="py-2 px-2 text-zinc-400 truncate max-w-[180px]">
+                            {rel.changelog ? (
+                              rel.changelog.slice(0, 60)
+                            ) : (
+                              <span className="italic text-zinc-600">(none)</span>
+                            )}
+                          </td>
                           <td className="py-2 px-2">
                             <button
-                              onClick={() => { handleStartUpdate(); handleSelectRelease(rel); }}
+                              onClick={() => {
+                                handleStartUpdate();
+                                handleSelectRelease(rel);
+                              }}
                               className="p-1.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:text-blue-200 transition w-8 h-8 flex items-center justify-center"
                               title="Edit changelog"
                               aria-label={`Edit changelog for release ${rel.id}`}
@@ -1069,7 +1212,9 @@ const ReleaseManagement = () => {
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-zinc-500">Showing up to 50 results, apply a filter for narrower view.</p>
+              <p className="text-[11px] text-zinc-500">
+                Showing up to 50 results, apply a filter for narrower view.
+              </p>
             </Card>
           </div>
         )}
@@ -1085,7 +1230,7 @@ const ReleaseManagement = () => {
                 <h3 className="text-lg font-semibold mb-1">Confirm Release Publication</h3>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left side - Release Details */}
               <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 flex flex-col justify-center">
@@ -1094,21 +1239,64 @@ const ReleaseManagement = () => {
                   <h4 className="font-medium text-zinc-200">Release Details</h4>
                 </div>
                 <div className="space-y-2">
-                  <div className="flex justify-between"><span className="text-zinc-400">Product:</span><span className="font-medium">{product}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-400">Version:</span><span className="font-medium">{version || '—'}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Product:</span>
+                    <span className="font-medium">{product}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Version:</span>
+                    <span className="font-medium">{version || '—'}</span>
+                  </div>
                   {product === 'SimConnect.NET' ? (
-                    <div className="flex justify-between"><span className="text-zinc-400">File:</span><span className="font-medium">External (NuGet)</span></div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">File:</span>
+                      <span className="font-medium">External (NuGet)</span>
+                    </div>
                   ) : (
                     <>
-                      <div className="flex justify-between"><span className="text-zinc-400">{product === 'Installer' ? 'Installer File:' : 'ZIP File:'}</span><span className="font-medium truncate max-w-[200px]" title={file?.name}>{file?.name}</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-400">{product === 'Installer' ? 'File Size:' : 'ZIP Size:'}</span><span className="font-medium">{file ? (file.size / (1024*1024)).toFixed(2) + ' MB' : '—'}</span></div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">
+                          {product === 'Installer' ? 'Installer File:' : 'ZIP File:'}
+                        </span>
+                        <span className="font-medium truncate max-w-[200px]" title={file?.name}>
+                          {file?.name}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">
+                          {product === 'Installer' ? 'File Size:' : 'ZIP Size:'}
+                        </span>
+                        <span className="font-medium">
+                          {file ? (file.size / (1024 * 1024)).toFixed(2) + ' MB' : '—'}
+                        </span>
+                      </div>
                     </>
                   )}
-                  <div className="flex justify-between"><span className="text-zinc-400">Promo Image:</span><span className="font-medium truncate max-w-[200px]" title={image?.name}>{image ? image.name : '(none)'}</span></div>
-                  {image && <div className="flex justify-between"><span className="text-zinc-400">Image Size:</span><span className="font-medium">{(image.size / (1024*1024)).toFixed(2)} MB</span></div>}
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Promo Image:</span>
+                    <span className="font-medium truncate max-w-[200px]" title={image?.name}>
+                      {image ? image.name : '(none)'}
+                    </span>
+                  </div>
+                  {image && (
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Image Size:</span>
+                      <span className="font-medium">
+                        {(image.size / (1024 * 1024)).toFixed(2)} MB
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed mt-4 mb-2">
-                  Releases cannot be deleted once created. Please review all details carefully before confirming. Double-check you selected the correct build file ({product === 'Installer' ? '.exe' : product === 'SimConnect.NET' ? 'external NuGet version' : '.zip'}) and optional image. Mistakes require publishing a new release; this one will remain immutable.
+                  Releases cannot be deleted once created. Please review all details carefully
+                  before confirming. Double-check you selected the correct build file (
+                  {product === 'Installer'
+                    ? '.exe'
+                    : product === 'SimConnect.NET'
+                      ? 'external NuGet version'
+                      : '.zip'}
+                  ) and optional image. Mistakes require publishing a new release; this one will
+                  remain immutable.
                 </div>
               </div>
 
@@ -1120,21 +1308,48 @@ const ReleaseManagement = () => {
                 </div>
                 <div className="max-h-64 overflow-y-auto border border-zinc-700 rounded p-3 bg-zinc-900/60 text-xs">
                   <article className="markdown-preview prose-invert prose-xs max-w-none">
-                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(changelog || '*No changelog provided*') }} />
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: renderMarkdown(changelog || '*No changelog provided*'),
+                      }}
+                    />
                   </article>
                 </div>
               </div>
             </div>
 
             {uploadError && (
-              <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">{uploadError}</div>
+              <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
+                {uploadError}
+              </div>
             )}
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => { setConfirmOpen(false); setPendingUploadData(null); }} disabled={uploading}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  setPendingUploadData(null);
+                }}
+                disabled={uploading}
+              >
                 <X className="w-4 h-4 mr-1" /> Cancel
               </Button>
-              <Button onClick={executeUpload} disabled={uploading} className="bg-amber-600 hover:bg-amber-500">
-                {uploading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Publishing...</> : <><Send className="w-4 h-4 mr-2" />Publish</>}
+              <Button
+                onClick={executeUpload}
+                disabled={uploading}
+                className="bg-amber-600 hover:bg-amber-500"
+              >
+                {uploading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Publish
+                  </>
+                )}
               </Button>
             </div>
           </div>

@@ -31,10 +31,7 @@ const Alert = ({ children, variant = 'default', className = '', onClose, ...prop
 
 const AlertTitle = ({ children, className = '', ...props }) => {
   return (
-    <h5
-      className={`mb-1 font-medium leading-none tracking-tight ${className}`}
-      {...props}
-    >
+    <h5 className={`mb-1 font-medium leading-none tracking-tight ${className}`} {...props}>
       {children}
     </h5>
   );
@@ -42,10 +39,7 @@ const AlertTitle = ({ children, className = '', ...props }) => {
 
 const AlertDescription = ({ children, className = '', ...props }) => {
   return (
-    <div
-      className={`text-sm opacity-90 ${className}`}
-      {...props}
-    >
+    <div className={`text-sm opacity-90 ${className}`} {...props}>
       {children}
     </div>
   );
@@ -56,30 +50,30 @@ Alert.propTypes = {
   children: PropTypes.node,
   variant: PropTypes.oneOf(['default', 'destructive', 'warning', 'info', 'success']),
   className: PropTypes.string,
-  onClose: PropTypes.func
+  onClose: PropTypes.func,
 };
 
 AlertTitle.propTypes = {
   children: PropTypes.node,
-  className: PropTypes.string
+  className: PropTypes.string,
 };
 
 AlertDescription.propTypes = {
   children: PropTypes.node,
-  className: PropTypes.string
+  className: PropTypes.string,
 };
 
 // Default Props
 Alert.defaultProps = {
   variant: 'default',
-  className: ''
+  className: '',
 };
 
 AlertTitle.defaultProps = {
-  className: ''
+  className: '',
 };
 
 AlertDescription.defaultProps = {
-  className: ''
+  className: '',
 };
 export { Alert, AlertTitle, AlertDescription };

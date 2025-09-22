@@ -41,9 +41,10 @@ const FAQPage = () => {
   }, []);
 
   useEffect(() => {
-    const filtered = faqs.filter(faq => 
-      faq.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(searchTerm.toLowerCase())
+    const filtered = faqs.filter(
+      (faq) =>
+        faq.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        faq.answer.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredFaqs(filtered);
     setCurrentPage(1); // Reset to first page when search changes
@@ -72,8 +73,9 @@ const FAQPage = () => {
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
             <p className="text-zinc-400 max-w-2xl mx-auto">
-              Find answers to common questions about BARS. Our team is always happy to help! 
-              Can&apos;t find what you&apos;re looking for? Feel free to reach out or join our Discord community for support.
+              Find answers to common questions about BARS. Our team is always happy to help!
+              Can&apos;t find what you&apos;re looking for? Feel free to reach out or join our
+              Discord community for support.
             </p>
           </div>
 
@@ -108,40 +110,34 @@ const FAQPage = () => {
               </div>
             </Card>
           ) : filteredFaqs.length === 0 ? (
-              <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-                {faqs.length === 0 ? (
-                  <>
-                    <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
-                    <p className="text-zinc-500 mb-2">
-                      No FAQs were found, please try again later or contact support.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
-                    <p className="text-zinc-500 mb-2">
-                      No FAQs found matching <span className="font-semibold text-zinc-400">&quot;{searchTerm}&quot;</span>.
-                    </p>
-                  </>
-                )}
-              </Card>
+            <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
+              {faqs.length === 0 ? (
+                <>
+                  <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
+                  <p className="text-zinc-500 mb-2">
+                    No FAQs were found, please try again later or contact support.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
+                  <p className="text-zinc-500 mb-2">
+                    No FAQs found matching{' '}
+                    <span className="font-semibold text-zinc-400">&quot;{searchTerm}&quot;</span>.
+                  </p>
+                </>
+              )}
+            </Card>
           ) : (
             <>
               <div className="space-y-6">
                 {currentFaqs.map((faq) => (
-                  <Card 
-                    key={faq.id}
-                    className="transition-all duration-200 hover:shadow-lg"
-                  >
+                  <Card key={faq.id} className="transition-all duration-200 hover:shadow-lg">
                     <div className="p-6">
-                      <h3 className="text-lg font-medium text-white mb-4">
-                        {faq.question}
-                      </h3>
-                      <div className="text-zinc-400 text-sm">
-                        {faq.answer}
-                      </div>
+                      <h3 className="text-lg font-medium text-white mb-4">{faq.question}</h3>
+                      <div className="text-zinc-400 text-sm">{faq.answer}</div>
                     </div>
                   </Card>
                 ))}
@@ -158,12 +154,12 @@ const FAQPage = () => {
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </Button>
-                  
+
                   <div className="flex items-center space-x-2">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                       <Button
                         key={page}
-                        variant={currentPage === page ? "primary" : "secondary"}
+                        variant={currentPage === page ? 'primary' : 'secondary'}
                         className="w-10 h-10"
                         onClick={() => handlePageChange(page)}
                       >

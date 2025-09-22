@@ -4,11 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { 
-  Trophy, 
-  Users, 
-  User, 
-  Map, 
+import {
+  Trophy,
+  Users,
+  User,
+  Map,
   Search,
   FileDown,
   Plus,
@@ -17,8 +17,8 @@ import {
   X,
   Trash2,
   AlertCircle,
-  TowerControl, 
-  Box
+  TowerControl,
+  Box,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -27,9 +27,10 @@ const ContributionDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const vatsimToken = getVatsimToken();
-  
+
   const [loading, setLoading] = useState(true);
-  const [, setError] = useState(null);  const [leaderboard, setLeaderboard] = useState([]);
+  const [, setError] = useState(null);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [allContributions, setAllContributions] = useState([]);
   const [userContributions, setUserContributions] = useState([]);
   const [userContributionSummary, setUserContributionSummary] = useState(null);
@@ -92,7 +93,7 @@ const ContributionDashboard = () => {
       if (activeEl && container) {
         const rect = activeEl.getBoundingClientRect();
         const parentRect = container.getBoundingClientRect();
-        setTabIndicator(t => ({ ...t, left: rect.left - parentRect.left, width: rect.width }));
+        setTabIndicator((t) => ({ ...t, left: rect.left - parentRect.left, width: rect.width }));
       }
     };
     window.addEventListener('resize', handleResize);
@@ -102,88 +103,90 @@ const ContributionDashboard = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch leaderboard data
-        const leaderboardResponse = await fetch('https://v2.stopbars.com/contributions/leaderboard');
+        const leaderboardResponse = await fetch(
+          'https://v2.stopbars.com/contributions/leaderboard'
+        );
         if (!leaderboardResponse.ok) {
           throw new Error('Failed to fetch leaderboard data');
         }
         const leaderboardData = await leaderboardResponse.json();
-          // Format leaderboard data
-        const formattedLeaderboard = leaderboardData.map(item => ({
+        // Format leaderboard data
+        const formattedLeaderboard = leaderboardData.map((item) => ({
           name: item.name,
-          contributions: item.count
+          contributions: item.count,
         }));
-        
+
         // Fetch all approved contributions
-        const contributionsResponse = await fetch('https://v2.stopbars.com/contributions?status=approved&limit=100');
+        const contributionsResponse = await fetch(
+          'https://v2.stopbars.com/contributions?status=approved&limit=100'
+        );
         if (!contributionsResponse.ok) {
           throw new Error('Failed to fetch contributions');
         }
         const contributionsData = await contributionsResponse.json();
-          // Group contributions by airport
+        // Group contributions by airport
         const groupedContributions = contributionsData.contributions.reduce((acc, contribution) => {
           const airport = contribution.airportIcao;
-          
+
           if (!acc[airport]) {
             acc[airport] = {
               airport,
-              contributions: []
+              contributions: [],
             };
           }
-          
+
           acc[airport].contributions.push({
             id: contribution.id,
             scenery: contribution.packageName,
             status: contribution.status,
             lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
             rejectionReason: contribution.rejectionReason,
-            userDisplayName: contribution.userDisplayName
+            userDisplayName: contribution.userDisplayName,
           });
-                AlertCircle,
-                TowerControl,
-                Box
+          (AlertCircle, TowerControl, Box);
           return acc;
         }, {});
-        
+
         // Convert the grouped object to an array
         const allContribsArray = Object.values(groupedContributions);
-        
+
         // User contributions (if user is logged in)
         let userContribsArray = [];
         if (user) {
           const userResponse = await fetch('https://v2.stopbars.com/contributions/user', {
             headers: {
-              'X-Vatsim-Token': vatsimToken
-            }
+              'X-Vatsim-Token': vatsimToken,
+            },
           });
-          
+
           if (userResponse.ok) {
             const userData = await userResponse.json();
-              // Group user contributions by airport
+            // Group user contributions by airport
             const groupedUserContributions = userData.contributions.reduce((acc, contribution) => {
               const airport = contribution.airportIcao;
-              
+
               if (!acc[airport]) {
                 acc[airport] = {
                   airport,
-                  contributions: []
+                  contributions: [],
                 };
               }
-              
+
               acc[airport].contributions.push({
                 id: contribution.id,
                 scenery: contribution.packageName,
                 status: contribution.status,
                 lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
                 rejectionReason: contribution.rejectionReason,
-                userDisplayName: contribution.userDisplayName
+                userDisplayName: contribution.userDisplayName,
               });
-              
+
               return acc;
             }, {});
-              userContribsArray = Object.values(groupedUserContributions);
-            
+            userContribsArray = Object.values(groupedUserContributions);
+
             // Store the summary data if available
             if (userData.summary) {
               setUserContributionSummary(userData.summary);
@@ -194,7 +197,6 @@ const ContributionDashboard = () => {
         setLeaderboard(formattedLeaderboard);
         setAllContributions(allContribsArray);
         setUserContributions(userContribsArray);
-        
       } catch (err) {
         setError('Failed to load contribution data');
         console.error(err);
@@ -209,16 +211,16 @@ const ContributionDashboard = () => {
     try {
       // Fetch the specific contribution
       const response = await fetch(`https://v2.stopbars.com/contributions/${sceneryId}`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch contribution data');
       }
-      
+
       const contribution = await response.json();
-      
+
       // Create a blob with the XML content
       const blob = new Blob([contribution.submittedXml], { type: 'application/xml' });
-      
+
       // Create a download link and trigger it
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -226,13 +228,12 @@ const ContributionDashboard = () => {
       a.download = `${airportCode}-${contribution.packageName.replace(/\s+/g, '-')}.xml`;
       document.body.appendChild(a);
       a.click();
-      
+
       // Clean up
       setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }, 100);
-      
     } catch (error) {
       console.error('Download error:', error);
       alert(`Error downloading XML: ${error.message}`);
@@ -244,13 +245,13 @@ const ContributionDashboard = () => {
   };
   // For "all" tab, only show approved contributions
   // For "user" tab, show all contributions with their statuses
-  const filteredContributions = (currentTab === 'all' ? allContributions : userContributions)
-    .filter(airport => 
+  const filteredContributions = (
+    currentTab === 'all' ? allContributions : userContributions
+  ).filter(
+    (airport) =>
       airport.airport.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      airport.contributions.some(c => 
-        c.scenery.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
+      airport.contributions.some((c) => c.scenery.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   if (loading) {
     return (
@@ -276,12 +277,11 @@ const ContributionDashboard = () => {
           <div className="flex items-center justify-between mb-12">
             <div>
               <h1 className="text-3xl font-bold mb-2">Community Contributions</h1>
-              <p className="text-zinc-400">Help expand the BARS network by contributing your own airport mappings</p>
+              <p className="text-zinc-400">
+                Help expand the BARS network by contributing your own airport mappings
+              </p>
             </div>
-            <Button 
-              onClick={handleContributeClick}
-              className="flex items-center space-x-2"
-            >
+            <Button onClick={handleContributeClick} className="flex items-center space-x-2">
               <Plus className="w-4 h-4" />
               <span>Contribute New Airport</span>
             </Button>
@@ -296,20 +296,28 @@ const ContributionDashboard = () => {
                   <Trophy className="w-5 h-5 text-amber-400" />
                   <h2 className="text-xl font-semibold">Top Contributors</h2>
                 </div>
-                
-                <div className="space-y-4">                  
+
+                <div className="space-y-4">
                   {leaderboard.map((contributor, index) => (
-                    <div 
+                    <div
                       key={index}
                       className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50"
                     >
                       <div className="flex items-center space-x-3">
-                        <div className={`
+                        <div
+                          className={`
                           w-7 h-7 rounded-full flex items-center justify-center text-sm
-                          ${index === 0 ? 'bg-amber-400 text-amber-950' : 
-                            index === 1 ? 'bg-zinc-300 text-zinc-800' : 
-                            index === 2 ? 'bg-amber-700 text-amber-100' : 'bg-zinc-700'}
-                        `}>
+                          ${
+                            index === 0
+                              ? 'bg-amber-400 text-amber-950'
+                              : index === 1
+                                ? 'bg-zinc-300 text-zinc-800'
+                                : index === 2
+                                  ? 'bg-amber-700 text-amber-100'
+                                  : 'bg-zinc-700'
+                          }
+                        `}
+                        >
                           {index + 1}
                         </div>
                         <div>
@@ -327,9 +335,12 @@ const ContributionDashboard = () => {
             </div>
 
             {/* Right column - Contributions list & tabs */}
-            <div className="lg:col-span-2">              
+            <div className="lg:col-span-2">
               {/* Tabs */}
-              <div ref={tabsContainerRef} className="relative flex mb-6 border-b border-zinc-800 select-none">
+              <div
+                ref={tabsContainerRef}
+                className="relative flex mb-6 border-b border-zinc-800 select-none"
+              >
                 {/* Animated underline */}
                 {tabIndicator.ready && (
                   <span
@@ -367,7 +378,7 @@ const ContributionDashboard = () => {
                   </div>
                 </button>
               </div>
-              
+
               {/* User Contribution Summary */}
               {currentTab === 'user' && userContributionSummary && (
                 <div className="mb-6 p-4 bg-zinc-800/50 rounded-lg">
@@ -400,7 +411,7 @@ const ContributionDashboard = () => {
                   type="text"
                   placeholder="Search by airport or scenery..."
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full px-10 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -426,8 +437,11 @@ const ContributionDashboard = () => {
                   </div>
                 )}
 
-                {filteredContributions.map(airport => (
-                  <Card key={airport.airport} className="p-6 hover:border-zinc-700 transition-colors">
+                {filteredContributions.map((airport) => (
+                  <Card
+                    key={airport.airport}
+                    className="p-6 hover:border-zinc-700 transition-colors"
+                  >
                     <div className="space-y-4">
                       {/* Airport Header */}
                       <div className="flex items-center justify-between border-b border-zinc-700 pb-4">
@@ -436,117 +450,134 @@ const ContributionDashboard = () => {
                             <h3 className="font-semibold text-xl">{airport.airport}</h3>
                           </div>
                         </div>
-                      </div>                      
+                      </div>
                       {/* Scenery Packages */}
                       <div className="space-y-3">
                         {airport.contributions
-                          .filter(contribution => currentTab === 'all' ? contribution.status === 'approved' : true)
-                          .map(contribution => (
-                          <div 
-                            key={contribution.id}
-                            className={`flex items-center justify-between p-3 rounded-lg ${
-                              contribution.status === 'approved' ? 'bg-zinc-800/50' : 
-                              contribution.status === 'pending' ? 'bg-amber-900/20 border border-amber-900/40' :
-                              contribution.status === 'rejected' ? 'bg-red-900/20 border border-red-900/40' : 
-                              'bg-zinc-800/50'
-                            }`}
-                          >
-                            <div className="space-y-1">
-                              <div className="font-medium">{contribution.scenery}</div>
-                              <div className="flex items-center space-x-2">
+                          .filter((contribution) =>
+                            currentTab === 'all' ? contribution.status === 'approved' : true
+                          )
+                          .map((contribution) => (
+                            <div
+                              key={contribution.id}
+                              className={`flex items-center justify-between p-3 rounded-lg ${
+                                contribution.status === 'approved'
+                                  ? 'bg-zinc-800/50'
+                                  : contribution.status === 'pending'
+                                    ? 'bg-amber-900/20 border border-amber-900/40'
+                                    : contribution.status === 'rejected'
+                                      ? 'bg-red-900/20 border border-red-900/40'
+                                      : 'bg-zinc-800/50'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <div className="font-medium">{contribution.scenery}</div>
+                                <div className="flex items-center space-x-2">
+                                  <div className="text-xs text-zinc-400">
+                                    Last updated: {contribution.lastUpdated}
+                                  </div>
+                                  {currentTab === 'user' && (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full ${
+                                        contribution.status === 'approved'
+                                          ? 'bg-green-900/40 text-green-300'
+                                          : contribution.status === 'pending'
+                                            ? 'bg-amber-900/40 text-amber-300'
+                                            : 'bg-red-900/40 text-red-300'
+                                      }`}
+                                    >
+                                      {contribution.status.charAt(0).toUpperCase() +
+                                        contribution.status.slice(1)}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-xs text-zinc-400">
-                                  Last updated: {contribution.lastUpdated}
+                                  Last contributor: {contribution.userDisplayName}
                                 </div>
-                                {currentTab === 'user' && (
-                                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                    contribution.status === 'approved' ? 'bg-green-900/40 text-green-300' : 
-                                    contribution.status === 'pending' ? 'bg-amber-900/40 text-amber-300' : 
-                                    'bg-red-900/40 text-red-300'
-                                  }`}>
-                                    {contribution.status.charAt(0).toUpperCase() + contribution.status.slice(1)}
-                                  </span>
-                                )}
                               </div>
-                              <div className="text-xs text-zinc-400">
-                                Last contributor: {contribution.userDisplayName}
-                              </div>
-                            </div>
-                            {contribution.status === 'approved' && (
-                              <button
-                                onClick={() => handleDownload(airport.airport, contribution.id)}
-                                className="px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2"
-                                title="Download XML"
-                              >
-                                <FileDown className="w-4 h-4" />
-                                Download XML
-                              </button>
-                            )}
-                            {contribution.status === 'pending' && (
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  className="!px-4 !py-2 text-sm !bg-amber-600 hover:!bg-amber-700 !text-white"
-                                  onClick={() => setConfirmDelete({
-                                    id: contribution.id,
-                                    airport: airport.airport,
-                                    scenery: contribution.scenery,
-                                    status: contribution.status
-                                  })}
+                              {contribution.status === 'approved' && (
+                                <button
+                                  onClick={() => handleDownload(airport.airport, contribution.id)}
+                                  className="px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2"
+                                  title="Download XML"
                                 >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Delete
-                                </Button>
-                              </div>
-                            )}
-                            {contribution.status === 'rejected' && (
-                              contribution.rejectionReason ? (
+                                  <FileDown className="w-4 h-4" />
+                                  Download XML
+                                </button>
+                              )}
+                              {contribution.status === 'pending' && (
                                 <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => setViewingRejection({
-                                      airport: airport.airport,
-                                      scenery: contribution.scenery,
-                                      reason: contribution.rejectionReason
-                                    })}
-                                    className="px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2 cursor-pointer"
-                                    title="View Reason"
-                                  >
-                                    <AlertOctagon className="w-4 h-4" />
-                                    View Reason
-                                  </button>
                                   <Button
-                                    variant="destructive"
-                                    className="!px-4 !py-2 text-sm"
-                                    onClick={() => setConfirmDelete({
-                                      id: contribution.id,
-                                      airport: airport.airport,
-                                      scenery: contribution.scenery,
-                                      status: contribution.status
-                                    })}
+                                    className="!px-4 !py-2 text-sm !bg-amber-600 hover:!bg-amber-700 !text-white"
+                                    onClick={() =>
+                                      setConfirmDelete({
+                                        id: contribution.id,
+                                        airport: airport.airport,
+                                        scenery: contribution.scenery,
+                                        status: contribution.status,
+                                      })
+                                    }
                                   >
                                     <Trash2 className="w-4 h-4 mr-2" />
                                     Delete
                                   </Button>
                                 </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <div className="text-xs text-zinc-400">No reason provided</div>
-                                  <Button
-                                    variant="destructive"
-                                    className="!px-4 !py-2 text-sm"
-                                    onClick={() => setConfirmDelete({
-                                      id: contribution.id,
-                                      airport: airport.airport,
-                                      scenery: contribution.scenery,
-                                      status: contribution.status
-                                    })}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete
-                                  </Button>
-                                </div>
-                              )
-                            )}
-                          </div>
-                        ))}
+                              )}
+                              {contribution.status === 'rejected' &&
+                                (contribution.rejectionReason ? (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() =>
+                                        setViewingRejection({
+                                          airport: airport.airport,
+                                          scenery: contribution.scenery,
+                                          reason: contribution.rejectionReason,
+                                        })
+                                      }
+                                      className="px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2 cursor-pointer"
+                                      title="View Reason"
+                                    >
+                                      <AlertOctagon className="w-4 h-4" />
+                                      View Reason
+                                    </button>
+                                    <Button
+                                      variant="destructive"
+                                      className="!px-4 !py-2 text-sm"
+                                      onClick={() =>
+                                        setConfirmDelete({
+                                          id: contribution.id,
+                                          airport: airport.airport,
+                                          scenery: contribution.scenery,
+                                          status: contribution.status,
+                                        })
+                                      }
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-xs text-zinc-400">No reason provided</div>
+                                    <Button
+                                      variant="destructive"
+                                      className="!px-4 !py-2 text-sm"
+                                      onClick={() =>
+                                        setConfirmDelete({
+                                          id: contribution.id,
+                                          airport: airport.airport,
+                                          scenery: contribution.scenery,
+                                          status: contribution.status,
+                                        })
+                                      }
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete
+                                    </Button>
+                                  </div>
+                                ))}
+                            </div>
+                          ))}
                       </div>
                     </div>
                   </Card>
@@ -599,11 +630,19 @@ const ContributionDashboard = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in zoom-in-95">
           <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
             <div className="flex items-center space-x-3 mb-6">
-              <AlertCircle className={`w-6 h-6 ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`} />
-              <h3 className={`text-xl font-bold ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}>Confirm Contribution Deletion</h3>
+              <AlertCircle
+                className={`w-6 h-6 ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}
+              />
+              <h3
+                className={`text-xl font-bold ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}
+              >
+                Confirm Contribution Deletion
+              </h3>
             </div>
             <div className="space-y-4">
-              <div className={`p-4 rounded-lg ${confirmDelete.status === 'pending' ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+              <div
+                className={`p-4 rounded-lg ${confirmDelete.status === 'pending' ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-red-500/10 border border-red-500/20'}`}
+              >
                 <p className="text-zinc-200 mb-3">
                   You are about to delete the following contribution:
                 </p>
@@ -619,49 +658,63 @@ const ContributionDashboard = () => {
                 </div>
               </div>
               <p className="text-zinc-300">
-                All contribution and scenery data will be permanently deleted and will no longer be available for approval. This action cannot be undone.
+                All contribution and scenery data will be permanently deleted and will no longer be
+                available for approval. This action cannot be undone.
               </p>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                const expectedConfirmation = `${confirmDelete.airport}-DELETE`;
-                if (deleteConfirmation === expectedConfirmation) {
-                  (async () => {
-                    if (!confirmDelete) return;
-                    try {
-                      setDeleting(true);
-                      const response = await fetch(`https://v2.stopbars.com/contributions/${confirmDelete.id}`, {
-                        method: 'DELETE',
-                        headers: {
-                          'X-Vatsim-Token': vatsimToken
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const expectedConfirmation = `${confirmDelete.airport}-DELETE`;
+                  if (deleteConfirmation === expectedConfirmation) {
+                    (async () => {
+                      if (!confirmDelete) return;
+                      try {
+                        setDeleting(true);
+                        const response = await fetch(
+                          `https://v2.stopbars.com/contributions/${confirmDelete.id}`,
+                          {
+                            method: 'DELETE',
+                            headers: {
+                              'X-Vatsim-Token': vatsimToken,
+                            },
+                          }
+                        );
+                        if (!response.ok) {
+                          throw new Error('Delete failed');
                         }
-                      });
-                      if (!response.ok) {
-                        throw new Error('Delete failed');
+
+                        setUserContributions((prev) =>
+                          prev
+                            .map((group) =>
+                              group.airport === confirmDelete.airport
+                                ? {
+                                    ...group,
+                                    contributions: group.contributions.filter(
+                                      (c) => c.id !== confirmDelete.id
+                                    ),
+                                  }
+                                : group
+                            )
+                            .filter((group) => group.contributions.length > 0)
+                        );
+
+                        setConfirmDelete(null);
+                        setDeleteConfirmation('');
+                        setToast({ type: 'success', message: 'Contribution successfully deleted' });
+                      } catch (e) {
+                        console.error(e);
+                        setToast({
+                          type: 'error',
+                          message: 'Failed to delete contribution, try again later',
+                        });
+                      } finally {
+                        setDeleting(false);
+                        setTimeout(() => setToast(null), 3000);
                       }
-
-                      setUserContributions(prev =>
-                        prev
-                          .map(group =>
-                            group.airport === confirmDelete.airport
-                              ? { ...group, contributions: group.contributions.filter(c => c.id !== confirmDelete.id) }
-                              : group
-                          )
-                          .filter(group => group.contributions.length > 0)
-                      );
-
-                      setConfirmDelete(null);
-                      setDeleteConfirmation('');
-                      setToast({ type: 'success', message: 'Contribution successfully deleted' });
-                    } catch (e) {
-                      console.error(e);
-                      setToast({ type: 'error', message: 'Failed to delete contribution, try again later' });
-                    } finally {
-                      setDeleting(false);
-                      setTimeout(() => setToast(null), 3000);
-                    }
-                  })();
-                }
-              }}>
+                    })();
+                  }
+                }}
+              >
                 <div>
                   <label className="block text-sm font-medium mb-2 text-zinc-300">
                     Type {confirmDelete.airport}-DELETE to confirm:
@@ -680,8 +733,8 @@ const ContributionDashboard = () => {
                     type="submit"
                     className={`${
                       deleteConfirmation === `${confirmDelete.airport}-DELETE` && !deleting
-                        ? confirmDelete.status === 'pending' 
-                          ? '!bg-amber-600 hover:!bg-amber-700 text-white' 
+                        ? confirmDelete.status === 'pending'
+                          ? '!bg-amber-600 hover:!bg-amber-700 text-white'
                           : '!bg-red-500 hover:!bg-red-600 text-white'
                         : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
                     }`}

@@ -1,5 +1,5 @@
 /* src/styles/globals.css */
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   color-scheme: dark;
@@ -42,10 +42,13 @@ body {
   margin-top: 0.8rem;
   margin-bottom: 0.4rem;
 }
-.markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
   color: rgb(244 244 245); /* zinc-100 */
 }
-.markdown-preview p, .markdown-preview li {
+.markdown-preview p,
+.markdown-preview li {
   color: rgb(212 212 216); /* zinc-300 */
 }
 .markdown-preview strong {
@@ -68,10 +71,21 @@ body {
   padding: 0;
   border-radius: 0;
 }
-.markdown-preview ul { list-style: disc; padding-left: 1.25rem; }
-.markdown-preview ol { list-style: decimal; padding-left: 1.25rem; }
-.markdown-preview li { margin: 0.25rem 0; }
-.markdown-preview a { color: rgb(96 165 250); text-decoration: underline; }
+.markdown-preview ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.markdown-preview ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.markdown-preview li {
+  margin: 0.25rem 0;
+}
+.markdown-preview a {
+  color: rgb(96 165 250);
+  text-decoration: underline;
+}
 
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {

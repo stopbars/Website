@@ -12,34 +12,37 @@ const DivisionAirportManager = () => {
   const { divisionId, airportId } = useParams();
   const navigate = useNavigate();
   const token = getVatsimToken();
-  
+
   const [division, setDivision] = useState(null);
   const [airports, setAirports] = useState([]);
   const [filteredAirports, setFilteredAirports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useSearchQuery();
-  
+
   // Fetch division data and airports
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch division info
         const divisionResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
-          headers: { 'X-Vatsim-Token': token }
+          headers: { 'X-Vatsim-Token': token },
         });
-        
+
         if (!divisionResponse.ok) throw new Error('Failed to fetch division data');
         const divisionData = await divisionResponse.json();
         setDivision(divisionData);
-        
+
         // Fetch division airports
-        const airportsResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/airports`, {
-          headers: { 'X-Vatsim-Token': token }
-        });
-        
+        const airportsResponse = await fetch(
+          `https://v2.stopbars.com/divisions/${divisionId}/airports`,
+          {
+            headers: { 'X-Vatsim-Token': token },
+          }
+        );
+
         if (!airportsResponse.ok) throw new Error('Failed to fetch airports');
         const airportsData = await airportsResponse.json();
         setAirports(airportsData.airports || []);
@@ -50,31 +53,32 @@ const DivisionAirportManager = () => {
         setLoading(false);
       }
     };
-    
+
     if (divisionId && token) {
       fetchData();
     }
   }, [divisionId, token]);
-  
+
   // Filter airports based on search term
   useEffect(() => {
     if (!searchTerm.trim()) {
       setFilteredAirports(airports);
       return;
     }
-    
-    const filtered = airports.filter(airport => 
-      airport.icao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      airport.name?.toLowerCase().includes(searchTerm.toLowerCase())
+
+    const filtered = airports.filter(
+      (airport) =>
+        airport.icao.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        airport.name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
+
     setFilteredAirports(filtered);
   }, [searchTerm, airports]);
-  
+
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
   };
-  
+
   if (loading && !division) {
     return (
       <Layout>
@@ -88,7 +92,7 @@ const DivisionAirportManager = () => {
       </Layout>
     );
   }
-  
+
   if (error) {
     return (
       <Layout>
@@ -102,7 +106,7 @@ const DivisionAirportManager = () => {
       </Layout>
     );
   }
-  
+
   // If we have an airportId, show the point editor for that specific airport
   if (airportId) {
     return (
@@ -110,14 +114,14 @@ const DivisionAirportManager = () => {
         <div className="pt-20 pb-20">
           <div className="container mx-auto px-0">
             <div>
-              <AirportPointEditor/>
+              <AirportPointEditor />
             </div>
           </div>
         </div>
       </Layout>
     );
   }
-  
+
   return (
     <Layout>
       <div className="pt-32 pb-20">
@@ -132,15 +136,12 @@ const DivisionAirportManager = () => {
                 Manage airport points for the BARS system in your division&apos;s FIR
               </p>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => navigate(`/divisions/${divisionId}/manage`)}
-            >
+            <Button variant="outline" onClick={() => navigate(`/divisions/${divisionId}/manage`)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Division
             </Button>
           </div>
-          
+
           {/* Search and filter */}
           <Card className="mb-6 p-6">
             <div className="relative">
@@ -154,10 +155,10 @@ const DivisionAirportManager = () => {
               />
             </div>
           </Card>
-          
+
           {/* Airports grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAirports.map(airport => (
+            {filteredAirports.map((airport) => (
               <Card
                 key={airport.id}
                 className="p-6 hover:border-zinc-700 transition-all duration-200 cursor-pointer"
@@ -180,7 +181,11 @@ const DivisionAirportManager = () => {
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-zinc-400">Last Updated:</span>
-                    <span className="font-medium">{airport.lastUpdated ? new Date(airport.lastUpdated).toLocaleDateString() : 'Never'}</span>
+                    <span className="font-medium">
+                      {airport.lastUpdated
+                        ? new Date(airport.lastUpdated).toLocaleDateString()
+                        : 'Never'}
+                    </span>
                   </div>
                 </div>
 
@@ -199,9 +204,9 @@ const DivisionAirportManager = () => {
                 </div>
               </Card>
             ))}
-            
+
             {/* Add new airport card */}
-            <Card 
+            <Card
               className="p-6 border border-dashed border-zinc-800 hover:border-zinc-700 transition-all duration-200 flex flex-col justify-center items-center cursor-pointer h-full"
               onClick={() => navigate(`/divisions/${divisionId}/airports/add`)}
             >
@@ -213,7 +218,7 @@ const DivisionAirportManager = () => {
                 Request to add a new airport to your division
               </p>
             </Card>
-            
+
             {filteredAirports.length === 0 && searchTerm && (
               <div className="col-span-full p-8 text-center">
                 <p className="text-zinc-400">No airports found matching &quot;{searchTerm}&quot;</p>

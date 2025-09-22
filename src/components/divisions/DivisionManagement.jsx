@@ -47,7 +47,7 @@ const DivisionManagement = () => {
       try {
         // Fetch current user account info (only once)
         const accountResponse = await fetch('https://v2.stopbars.com/auth/account', {
-          headers: { 'X-Vatsim-Token': token }
+          headers: { 'X-Vatsim-Token': token },
         });
         if (accountResponse.ok) {
           const accountData = await accountResponse.json();
@@ -55,22 +55,28 @@ const DivisionManagement = () => {
         }
         // Fetch division details
         const divisionResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
-          headers: { 'X-Vatsim-Token': token }
+          headers: { 'X-Vatsim-Token': token },
         });
         if (!divisionResponse.ok) throw new Error('Failed to fetch division');
         const divisionData = await divisionResponse.json();
         setDivision(divisionData);
         // Fetch members
-        const membersResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/members`, {
-          headers: { 'X-Vatsim-Token': token }
-        });
+        const membersResponse = await fetch(
+          `https://v2.stopbars.com/divisions/${divisionId}/members`,
+          {
+            headers: { 'X-Vatsim-Token': token },
+          }
+        );
         if (!membersResponse.ok) throw new Error('Failed to fetch members');
         const membersData = await membersResponse.json();
         setMembers(membersData);
         // Fetch airports
-        const airportsResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/airports`, {
-          headers: { 'X-Vatsim-Token': token }
-        });
+        const airportsResponse = await fetch(
+          `https://v2.stopbars.com/divisions/${divisionId}/airports`,
+          {
+            headers: { 'X-Vatsim-Token': token },
+          }
+        );
         if (!airportsResponse.ok) throw new Error('Failed to fetch airports');
         const airportsData = await airportsResponse.json();
         setAirports(airportsData);
@@ -91,12 +97,12 @@ const DivisionManagement = () => {
         method: 'POST',
         headers: {
           'X-Vatsim-Token': token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           vatsimId: newMemberCid,
-          role: newMemberRole
-        })
+          role: newMemberRole,
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to add member');
@@ -115,14 +121,17 @@ const DivisionManagement = () => {
   const handleRemoveMember = async (memberId) => {
     setRemovingMember(true);
     try {
-      const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/members/${memberId}`, {
-        method: 'DELETE',
-        headers: { 'X-Vatsim-Token': token }
-      });
+      const response = await fetch(
+        `https://v2.stopbars.com/divisions/${divisionId}/members/${memberId}`,
+        {
+          method: 'DELETE',
+          headers: { 'X-Vatsim-Token': token },
+        }
+      );
 
       if (!response.ok) throw new Error('Failed to remove member');
 
-      setMembers(members.filter(m => m.vatsim_id !== memberId));
+      setMembers(members.filter((m) => m.vatsim_id !== memberId));
       setShowRemoveConfirm(false);
       setMemberToRemove(null);
     } catch (err) {
@@ -148,9 +157,12 @@ const DivisionManagement = () => {
     setAddingAirport(true);
     try {
       // First validate the airport exists
-      const validateResponse = await fetch(`https://v2.stopbars.com/airports?icao=${newAirportIcao.toUpperCase()}`, {
-        headers: { 'X-Vatsim-Token': token }
-      });
+      const validateResponse = await fetch(
+        `https://v2.stopbars.com/airports?icao=${newAirportIcao.toUpperCase()}`,
+        {
+          headers: { 'X-Vatsim-Token': token },
+        }
+      );
 
       if (!validateResponse.ok) {
         if (validateResponse.status === 404) {
@@ -164,9 +176,9 @@ const DivisionManagement = () => {
         method: 'POST',
         headers: {
           'X-Vatsim-Token': token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ icao: newAirportIcao.toUpperCase() })
+        body: JSON.stringify({ icao: newAirportIcao.toUpperCase() }),
       });
 
       if (!response.ok) throw new Error('Failed to request airport');
@@ -182,13 +194,14 @@ const DivisionManagement = () => {
     }
   };
 
-  if (loading) return (
-    <Layout>
-      <div className="pt-40 pb-20 min-h-screen flex items-center justify-center">
-        <Loader className="w-8 h-8 animate-spin text-zinc-400" />
-      </div>
-    </Layout>
-  );
+  if (loading)
+    return (
+      <Layout>
+        <div className="pt-40 pb-20 min-h-screen flex items-center justify-center">
+          <Loader className="w-8 h-8 animate-spin text-zinc-400" />
+        </div>
+      </Layout>
+    );
 
   return (
     <Layout>
@@ -199,14 +212,12 @@ const DivisionManagement = () => {
               {error}
             </Alert>
           )}
-          
+
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-white">{division?.name}</h1>
             <p className="text-zinc-400">Division Management</p>
             <div className="mt-2 text-sm text-zinc-500 space-y-1">
-              {division?.id && (
-                <div>Division ID: {division.id}</div>
-              )}
+              {division?.id && <div>Division ID: {division.id}</div>}
               {division?.created_at && (
                 <div>Created: {new Date(division.created_at).toLocaleString()}</div>
               )}
@@ -230,7 +241,10 @@ const DivisionManagement = () => {
               <Card>
                 <div className="p-4">
                   {showAddMember && (
-                    <form onSubmit={handleAddMember} className="mb-4 p-4 border border-zinc-800 rounded-lg">
+                    <form
+                      onSubmit={handleAddMember}
+                      className="mb-4 p-4 border border-zinc-800 rounded-lg"
+                    >
                       <div className="mb-4">
                         <label className="block text-zinc-400 mb-2">VATSIM CID</label>
                         <input
@@ -246,9 +260,11 @@ const DivisionManagement = () => {
                           onPaste={(e) => {
                             // Sanitize pasted content to digits only
                             e.preventDefault();
-                            const paste = (e.clipboardData || window.clipboardData).getData('text') || '';
+                            const paste =
+                              (e.clipboardData || window.clipboardData).getData('text') || '';
                             const digits = paste.replace(/\D/g, '');
-                            if (digits) setNewMemberCid(prev => (prev + digits).replace(/\D/g, ''));
+                            if (digits)
+                              setNewMemberCid((prev) => (prev + digits).replace(/\D/g, ''));
                           }}
                           className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
                           required
@@ -266,15 +282,19 @@ const DivisionManagement = () => {
                         </select>
                       </div>
                       <div className="flex gap-2">
-                        <Button 
-                          type="submit" 
+                        <Button
+                          type="submit"
                           disabled={addingMember}
                           className="active:scale-95 transition-transform duration-75"
                         >
                           {addingMember && <Loader className="w-4 h-4 animate-spin mr-2" />}
                           Add Member
                         </Button>
-                        <Button type="button" onClick={() => setShowAddMember(false)} variant="secondary">
+                        <Button
+                          type="button"
+                          onClick={() => setShowAddMember(false)}
+                          variant="secondary"
+                        >
                           Cancel
                         </Button>
                       </div>
@@ -282,20 +302,34 @@ const DivisionManagement = () => {
                   )}
 
                   <div className="space-y-4">
-                    {members.map(member => (
-                      <div key={member.id} className="flex items-center justify-between p-4 border border-zinc-800 rounded-lg">
+                    {members.map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between p-4 border border-zinc-800 rounded-lg"
+                      >
                         <div>
                           <p className="text-white">{member.display_name}</p>
-                          {member.vatsim_id && String(member.display_name) !== String(member.vatsim_id) && (
-                            <p className="text-zinc-400 text-sm font-mono">{member.vatsim_id}</p>
-                          )}
-                          <p className="text-zinc-400 text-sm">Role: {member.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
+                          {member.vatsim_id &&
+                            String(member.display_name) !== String(member.vatsim_id) && (
+                              <p className="text-zinc-400 text-sm font-mono">{member.vatsim_id}</p>
+                            )}
+                          <p className="text-zinc-400 text-sm">
+                            Role:{' '}
+                            {member.role
+                              .split('_')
+                              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                              .join(' ')}
+                          </p>
                         </div>
                         <Button
                           onClick={() => confirmRemoveMember(member)}
                           className={`bg-red-600 hover:bg-red-600/90 hover:text-white transition-all duration-200 ease-in-out${currentUserId === member.vatsim_id ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                           disabled={currentUserId === member.vatsim_id}
-                          title={currentUserId === member.vatsim_id ? 'You cannot remove yourself from the division.' : undefined}
+                          title={
+                            currentUserId === member.vatsim_id
+                              ? 'You cannot remove yourself from the division.'
+                              : undefined
+                          }
                         >
                           <UserX className="w-4 h-4 mr-2" />
                           Remove
@@ -325,7 +359,10 @@ const DivisionManagement = () => {
               <Card>
                 <div className="p-4">
                   {showAddAirport && (
-                    <form onSubmit={handleAddAirport} className="mb-4 p-4 border border-zinc-800 rounded-lg">
+                    <form
+                      onSubmit={handleAddAirport}
+                      className="mb-4 p-4 border border-zinc-800 rounded-lg"
+                    >
                       <div className="mb-4">
                         <label className="block text-zinc-400 mb-2">Airport ICAO</label>
                         <input
@@ -339,15 +376,19 @@ const DivisionManagement = () => {
                         />
                       </div>
                       <div className="flex gap-2">
-                        <Button 
-                          type="submit" 
+                        <Button
+                          type="submit"
                           disabled={addingAirport}
                           className="active:scale-95 transition-transform duration-75"
                         >
                           {addingAirport && <Loader className="w-4 h-4 animate-spin mr-2" />}
                           Request Airport
                         </Button>
-                        <Button type="button" onClick={() => setShowAddAirport(false)} variant="secondary">
+                        <Button
+                          type="button"
+                          onClick={() => setShowAddAirport(false)}
+                          variant="secondary"
+                        >
                           Cancel
                         </Button>
                       </div>
@@ -355,40 +396,49 @@ const DivisionManagement = () => {
                   )}
 
                   <div className="space-y-4">
-                    {airports.sort((a, b) => a.icao.localeCompare(b.icao)).map(airport => (
-                      <div key={airport.id} className="p-4 border border-zinc-800 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-white">{airport.icao}</p>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-zinc-400 text-sm">Status: {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}</span>
-                              <div className="relative">
-                                <div className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-300 shadow-lg`}></div>
-                                <div 
-                                  className={`absolute inset-0 w-2 h-2 rounded-full ${getStatusColor(airport.status)} animate-pulse opacity-50`}
-                                  style={{ animationDuration: '3s' }}
-                                ></div>
+                    {airports
+                      .sort((a, b) => a.icao.localeCompare(b.icao))
+                      .map((airport) => (
+                        <div key={airport.id} className="p-4 border border-zinc-800 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-white">{airport.icao}</p>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-zinc-400 text-sm">
+                                  Status:{' '}
+                                  {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}
+                                </span>
+                                <div className="relative">
+                                  <div
+                                    className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-300 shadow-lg`}
+                                  ></div>
+                                  <div
+                                    className={`absolute inset-0 w-2 h-2 rounded-full ${getStatusColor(airport.status)} animate-pulse opacity-50`}
+                                    style={{ animationDuration: '3s' }}
+                                  ></div>
+                                </div>
                               </div>
+                              <p className="text-zinc-400 text-sm">
+                                Requested by: {airport.requested_by}
+                              </p>
                             </div>
-                            <p className="text-zinc-400 text-sm">
-                              Requested by: {airport.requested_by}
-                            </p>
-                          </div>
-                          <div className="flex space-x-2">
-                            {airport.status === 'approved' && (
-                              <Button
-                                onClick={() => navigate(`/divisions/${divisionId}/airports/${airport.icao}`)}
-                                variant="secondary"
-                                className="text-emerald-500 hover:text-emerald-400"
-                              >
-                                <MapPin className="w-4 h-4 mr-2" />
-                                Manage Points
-                              </Button>
-                            )}
+                            <div className="flex space-x-2">
+                              {airport.status === 'approved' && (
+                                <Button
+                                  onClick={() =>
+                                    navigate(`/divisions/${divisionId}/airports/${airport.icao}`)
+                                  }
+                                  variant="secondary"
+                                  className="text-emerald-500 hover:text-emerald-400"
+                                >
+                                  <MapPin className="w-4 h-4 mr-2" />
+                                  Manage Points
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               </Card>
@@ -407,32 +457,35 @@ const DivisionManagement = () => {
             </div>
             <div className="space-y-4">
               <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-zinc-200 mb-3">
-                  You are about to remove the following member:
-                </p>
+                <p className="text-zinc-200 mb-3">You are about to remove the following member:</p>
                 <div className="flex items-start space-x-3">
                   <UserX className="w-4 h-4 mt-1 text-red-400" />
                   <div className="flex-1">
-                    <span className="font-medium text-red-200 block">{memberToRemove.vatsim_id}</span>
+                    <span className="font-medium text-red-200 block">
+                      {memberToRemove.vatsim_id}
+                    </span>
                     <div className="text-sm text-red-200/80 space-y-1 mt-1">
-                      <p>Role: {memberToRemove.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
+                      <p>
+                        Role:{' '}
+                        {memberToRemove.role
+                          .split('_')
+                          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                          .join(' ')}
+                      </p>
                       <p>Division: {division?.name}</p>
                     </div>
                   </div>
                 </div>
               </div>
-              
+
               <p className="text-zinc-300">
-                This action cannot be undone. The user will immediately lose all access to the division and must be manually added at a later date if needed.
+                This action cannot be undone. The user will immediately lose all access to the
+                division and must be manually added at a later date if needed.
               </p>
             </div>
-            
+
             <div className="flex justify-end space-x-3 mt-6">
-              <Button
-                variant="outline"
-                onClick={cancelRemoveMember}
-                disabled={removingMember}
-              >
+              <Button variant="outline" onClick={cancelRemoveMember} disabled={removingMember}>
                 Cancel
               </Button>
               <Button

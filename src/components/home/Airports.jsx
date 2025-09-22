@@ -1,7 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
-import { ActivitySquare, CircleDot, ChevronLeft, ChevronRight, Users, Radio, MapPin } from 'lucide-react';
+import {
+  ActivitySquare,
+  CircleDot,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  Radio,
+  MapPin,
+} from 'lucide-react';
 import { Card } from '../shared/Card';
 
 const ITEMS_PER_PAGE = 6;
@@ -20,7 +28,7 @@ export const Airports = () => {
       try {
         const [contribRes, stateRes] = await Promise.all([
           fetch('https://v2.stopbars.com/contributions?status=approved'),
-          fetch('https://v2.stopbars.com/state?airport=all')
+          fetch('https://v2.stopbars.com/state?airport=all'),
         ]);
 
         const contribData = await contribRes.json();
@@ -28,7 +36,7 @@ export const Airports = () => {
 
         // Build airport -> packages map
         const byAirport = {};
-        (contribData.contributions || []).forEach(c => {
+        (contribData.contributions || []).forEach((c) => {
           const icao = (c.airportIcao || '').toUpperCase();
           if (!icao) return;
           if (!byAirport[icao]) byAirport[icao] = { packages: new Set() };
@@ -38,21 +46,21 @@ export const Airports = () => {
         const airportsObj = Object.fromEntries(
           Object.entries(byAirport).map(([icao, v]) => [
             icao,
-            { packages: Array.from(v.packages).sort() }
+            { packages: Array.from(v.packages).sort() },
           ])
         );
         setAirports(airportsObj);
 
         // Build live map: states array of airports active right now
         const map = {};
-        (stateData.states || []).forEach(s => {
+        (stateData.states || []).forEach((s) => {
           const icao = (s.airport || '').toUpperCase();
           if (!icao) return;
-          const lightsOn = (s.objects || []).filter(o => o.state === true).length;
+          const lightsOn = (s.objects || []).filter((o) => o.state === true).length;
           map[icao] = {
             controllers: (s.controllers || []).length,
             pilots: (s.pilots || []).length,
-            lightsOn
+            lightsOn,
           };
         });
         setLiveMap(map);
@@ -71,25 +79,42 @@ export const Airports = () => {
   const getAirportContinent = (icao) => {
     const prefix = icao.charAt(0);
     switch (prefix) {
-      case 'K': case 'C': case 'M': return 'North America';
-      case 'S': return 'South America';
-      case 'E': case 'L': return 'Europe';
-      case 'R': case 'Z': case 'V': case 'O': case 'U': return 'Asia';
-      case 'Y': case 'N': return 'Oceania';
-      case 'F': case 'D': case 'G': case 'H': return 'Africa';
-      default: return 'Other';
+      case 'K':
+      case 'C':
+      case 'M':
+        return 'North America';
+      case 'S':
+        return 'South America';
+      case 'E':
+      case 'L':
+        return 'Europe';
+      case 'R':
+      case 'Z':
+      case 'V':
+      case 'O':
+      case 'U':
+        return 'Asia';
+      case 'Y':
+      case 'N':
+        return 'Oceania';
+      case 'F':
+      case 'D':
+      case 'G':
+      case 'H':
+        return 'Africa';
+      default:
+        return 'Other';
     }
   };
 
   const sortedAirports = useMemo(() => {
-    return Object.entries(airports)
-      .sort(([icaoA], [icaoB]) => {
-        const aActive = !!liveMap[icaoA];
-        const bActive = !!liveMap[icaoB];
-        if (aActive && !bActive) return -1;
-        if (!aActive && bActive) return 1;
-        return icaoA.localeCompare(icaoB);
-      });
+    return Object.entries(airports).sort(([icaoA], [icaoB]) => {
+      const aActive = !!liveMap[icaoA];
+      const bActive = !!liveMap[icaoB];
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return icaoA.localeCompare(icaoB);
+    });
   }, [airports, liveMap]);
 
   const totalPages = Math.ceil(sortedAirports.length / ITEMS_PER_PAGE);
@@ -112,7 +137,7 @@ export const Airports = () => {
               </div>
             </div>
           </div>
-          <Button 
+          <Button
             onClick={() => navigate('/status')}
             className="flex items-center self-start sm:self-center"
           >
@@ -127,14 +152,19 @@ export const Airports = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedAirports.map(([icao, data]) => (
-                <Card key={icao} className="p-4 sm:p-6 hover:border-zinc-700 transition-all duration-200">
+                <Card
+                  key={icao}
+                  className="p-4 sm:p-6 hover:border-zinc-700 transition-all duration-200"
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
                       <MapPin className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                       <div>
                         <div className="flex items-center space-x-2">
                           <h3 className="text-lg font-medium">{icao}</h3>
-                          <span className={`flex h-2 w-2 rounded-full ${liveMap[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+                          <span
+                            className={`flex h-2 w-2 rounded-full ${liveMap[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`}
+                          />
                         </div>
                         <div className="text-xs text-zinc-300">{getAirportContinent(icao)}</div>
                       </div>
@@ -143,16 +173,25 @@ export const Airports = () => {
 
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-2 text-sm text-zinc-300">
-                      <div className="flex items-center gap-2"><Users className="w-4 h-4 text-zinc-400" />{liveMap[icao]?.controllers || 0} Controllers</div>
-                      <div className="flex items-center gap-2"><Radio className="w-4 h-4 text-zinc-400" />{liveMap[icao]?.pilots || 0} Pilots</div>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-zinc-400" />
+                        {liveMap[icao]?.controllers || 0} Controllers
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Radio className="w-4 h-4 text-zinc-400" />
+                        {liveMap[icao]?.pilots || 0} Pilots
+                      </div>
                     </div>
 
                     {data.packages?.length > 0 && (
                       <div>
                         <h4 className="text-sm font-medium text-zinc-300 mb-2">Packages</h4>
                         <div className="flex flex-wrap gap-2">
-                          {data.packages.map(pkg => (
-                            <span key={pkg} className={`px-2 py-1 rounded text-xs ${liveMap[icao] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800'}`}>
+                          {data.packages.map((pkg) => (
+                            <span
+                              key={pkg}
+                              className={`px-2 py-1 rounded text-xs ${liveMap[icao] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800'}`}
+                            >
                               {pkg}
                             </span>
                           ))}
@@ -169,10 +208,10 @@ export const Airports = () => {
                 <div className="flex space-x-2">
                   <Button
                     variant="outline"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
                   >
-                    <ChevronLeft className="w-4 h-4" aria-label='Previous Page' />
+                    <ChevronLeft className="w-4 h-4" aria-label="Previous Page" />
                   </Button>
                   <div className="flex items-center px-4 py-2 bg-zinc-800 rounded-lg">
                     <span className="text-zinc-400">
@@ -181,10 +220,10 @@ export const Airports = () => {
                   </div>
                   <Button
                     variant="outline"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
                   >
-                    <ChevronRight className="w-4 h-4" aria-label='Next Page' />
+                    <ChevronRight className="w-4 h-4" aria-label="Next Page" />
                   </Button>
                 </div>
               </div>

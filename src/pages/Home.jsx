@@ -9,17 +9,12 @@ import { CTA } from '../components/home/CTA';
 import { useEffect } from 'react';
 
 const Home = () => {
-
   useEffect(() => {
-
     if (window.location.hash) {
-
       const element = document.querySelector(window.location.hash);
 
       if (element) element.scrollIntoView({ behavior: 'smooth' });
-
     }
-
   }, []);
   return (
     <Layout>

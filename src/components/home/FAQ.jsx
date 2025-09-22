@@ -18,9 +18,7 @@ export const FAQ = () => {
         if (!response.ok) throw new Error('Failed to fetch FAQs');
         const data = await response.json();
         // Sort by order and take first 5
-        const sortedFaqs = data.faqs
-          .sort((a, b) => a.order - b.order)
-          .slice(0, 5);
+        const sortedFaqs = data.faqs.sort((a, b) => a.order - b.order).slice(0, 5);
         setFaqs(sortedFaqs);
       } catch (err) {
         console.error('Error fetching FAQs:', err);
@@ -53,8 +51,8 @@ export const FAQ = () => {
           <>
             <div className="space-y-4 mb-12">
               {faqs.map((faq, index) => (
-                <div 
-                  key={faq.id} 
+                <div
+                  key={faq.id}
                   className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden"
                 >
                   <button
@@ -62,22 +60,19 @@ export const FAQ = () => {
                     className="w-full px-6 py-4 text-left flex justify-between cursor-pointer items-center hover:bg-zinc-800/40 transition-colors duration-200"
                   >
                     <span className="font-medium pr-6">{faq.question}</span>
-                    {openFaq === index ? 
-                      <MinusCircle className="h-5 w-5 text-zinc-400 flex-shrink-0" /> : 
+                    {openFaq === index ? (
+                      <MinusCircle className="h-5 w-5 text-zinc-400 flex-shrink-0" />
+                    ) : (
                       <Plus className="h-5 w-5 text-zinc-400 flex-shrink-0" />
-                    }
+                    )}
                   </button>
-                  <div 
+                  <div
                     className={`transition-all duration-400 ease-out overflow-hidden ${
-                      openFaq === index 
-                        ? 'max-h-80 opacity-100' 
-                        : 'max-h-0 opacity-0'
+                      openFaq === index ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
                     }`}
                   >
                     <div className="px-6 pb-4 text-zinc-400 border-t border-zinc-800">
-                      <div className="pt-4">
-                        {faq.answer}
-                      </div>
+                      <div className="pt-4">{faq.answer}</div>
                     </div>
                   </div>
                 </div>
@@ -85,11 +80,7 @@ export const FAQ = () => {
             </div>
 
             <div className="text-center">
-              <Button 
-                variant="secondary"
-                onClick={() => navigate('/faq')}
-                className="group"
-              >
+              <Button variant="secondary" onClick={() => navigate('/faq')} className="group">
                 View All FAQs
                 <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
               </Button>

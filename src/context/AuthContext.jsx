@@ -20,12 +20,12 @@ export function AuthProvider({ children }) {
     setBannedInfo(null);
     window.location.href = '/';
   }, []);
-  
+
   // Check if cached user data is still valid
   const isCacheValid = () => {
     const cachedData = sessionStorage.getItem('userData');
     if (!cachedData) return false;
-    
+
     try {
       const { timestamp } = JSON.parse(cachedData);
       return Date.now() - timestamp < CACHE_DURATION;
@@ -34,12 +34,12 @@ export function AuthProvider({ children }) {
       return false;
     }
   };
-  
+
   // Load user from cache
   const loadUserFromCache = () => {
     const cachedData = sessionStorage.getItem('userData');
     if (!cachedData) return null;
-    
+
     try {
       const { user } = JSON.parse(cachedData);
       return user;
@@ -92,128 +92,141 @@ export function AuthProvider({ children }) {
       console.warn('Failed clearing banned cache', e);
     }
   };
-  
+
   // Save user to cache
   const saveUserToCache = (userData) => {
     try {
-      sessionStorage.setItem('userData', JSON.stringify({
-        user: userData,
-        timestamp: Date.now()
-      }));
+      sessionStorage.setItem(
+        'userData',
+        JSON.stringify({
+          user: userData,
+          timestamp: Date.now(),
+        })
+      );
     } catch (error) {
       console.error('Error saving user to cache:', error);
     }
   };
-  
-  const fetchUserData = useCallback(async (token, forceRefresh = false, options = {}) => {
-    const { silent = false } = options;
-    // Ensure routes wait for fresh validation to avoid stale banned redirects unless silent
-    if (!silent) setLoading(true);
-    // If we have a cached ban, show it to avoid flicker, but DO NOT return early; revalidate with the API.
-    if (!forceRefresh && isBannedCacheValid()) {
-      const cachedBan = loadBannedFromCache();
-      if (cachedBan?.banned) {
-        setBannedInfo(cachedBan);
-        setUser(null);
+
+  const fetchUserData = useCallback(
+    async (token, forceRefresh = false, options = {}) => {
+      const { silent = false } = options;
+      // Ensure routes wait for fresh validation to avoid stale banned redirects unless silent
+      if (!silent) setLoading(true);
+      // If we have a cached ban, show it to avoid flicker, but DO NOT return early; revalidate with the API.
+      if (!forceRefresh && isBannedCacheValid()) {
+        const cachedBan = loadBannedFromCache();
+        if (cachedBan?.banned) {
+          setBannedInfo(cachedBan);
+          setUser(null);
+        }
+      } else if (!forceRefresh && isCacheValid()) {
+        // Otherwise prefer cached user (we'll skip fetch below)
+        const cachedUser = loadUserFromCache();
+        if (cachedUser) {
+          setUser(cachedUser);
+          if (!silent) setLoading(false);
+          return { status: 'ok' };
+        }
       }
-    } else if (!forceRefresh && isCacheValid()) {
-      // Otherwise prefer cached user (we'll skip fetch below)
-      const cachedUser = loadUserFromCache();
-      if (cachedUser) {
-        setUser(cachedUser);
+
+      // Always fetch account to confirm current status (ban can be lifted or added)
+      try {
+        const accountResponse = await fetch(`${apiUrl}/auth/account`, {
+          headers: { 'X-Vatsim-Token': token },
+        });
+        if (!accountResponse.ok) {
+          // If forbidden, check if it's a banned response
+          if (accountResponse.status === 403) {
+            let bannedPayload = null;
+            try {
+              bannedPayload = await accountResponse.json();
+            } catch {
+              console.warn('Failed to parse banned payload');
+            }
+            if (bannedPayload?.banned) {
+              const ban = {
+                banned: true,
+                reason: bannedPayload.reason || 'You are banned from BARS.',
+                expires_at: bannedPayload.expires_at ?? null,
+              };
+              setBannedInfo(ban);
+              saveBannedToCache(ban);
+              sessionStorage.removeItem('userData');
+              setUser(null);
+              if (!silent) setLoading(false);
+              return { status: 'banned', info: ban };
+            }
+          }
+          throw new Error('Failed to fetch account');
+        }
+        const accountData = await accountResponse.json();
+
+        if (accountData?.banned) {
+          const ban = {
+            banned: true,
+            reason: accountData.reason || 'You are banned from BARS.',
+            expires_at: accountData.expires_at ?? null,
+          };
+          setBannedInfo(ban);
+          saveBannedToCache(ban);
+          // Clear any cached user data
+          sessionStorage.removeItem('userData');
+          setUser(null);
+          if (!silent) setLoading(false);
+          return { status: 'banned', info: ban };
+        }
+
+        // Not banned anymore: clear any stale banned cache
+        clearBannedCache();
+        setBannedInfo(null);
+
+        // Fetch staff + division in parallel
+        const [staffResponse, divisionResponse] = await Promise.all([
+          fetch(`${apiUrl}/auth/is-staff`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${apiUrl}/divisions/user`, {
+            headers: { 'X-Vatsim-Token': token },
+          }),
+        ]);
+        if (!staffResponse.ok || !divisionResponse.ok) {
+          throw new Error('Failed to fetch user data');
+        }
+        const staffData = await staffResponse.json();
+        const divisionData = await divisionResponse.json();
+
+        // Convert division data into roles
+        const divisionRoles = (Array.isArray(divisionData) ? divisionData : []).reduce(
+          (acc, { role }) => ({
+            ...acc,
+            [role]: 1,
+          }),
+          {}
+        );
+
+        const userData = {
+          ...accountData,
+          roles: {
+            ...(staffData?.role ? { [staffData.role]: 1 } : {}),
+            ...divisionRoles,
+          },
+        };
+
+        // Update state and cache
+        setUser(userData);
+        saveUserToCache(userData);
         if (!silent) setLoading(false);
         return { status: 'ok' };
-      }
-    }
-
-    // Always fetch account to confirm current status (ban can be lifted or added)
-    try {
-      const accountResponse = await fetch(`${apiUrl}/auth/account`, {
-        headers: { 'X-Vatsim-Token': token }
-      });
-      if (!accountResponse.ok) {
-        // If forbidden, check if it's a banned response
-        if (accountResponse.status === 403) {
-          let bannedPayload = null;
-          try { bannedPayload = await accountResponse.json(); } catch { console.warn('Failed to parse banned payload'); }
-          if (bannedPayload?.banned) {
-            const ban = {
-              banned: true,
-              reason: bannedPayload.reason || 'You are banned from BARS.',
-              expires_at: bannedPayload.expires_at ?? null
-            };
-            setBannedInfo(ban);
-            saveBannedToCache(ban);
-            sessionStorage.removeItem('userData');
-            setUser(null);
-            if (!silent) setLoading(false);
-            return { status: 'banned', info: ban };
-          }
-        }
-        throw new Error('Failed to fetch account');
-      }
-      const accountData = await accountResponse.json();
-
-      if (accountData?.banned) {
-        const ban = {
-          banned: true,
-          reason: accountData.reason || 'You are banned from BARS.',
-          expires_at: accountData.expires_at ?? null
-        };
-        setBannedInfo(ban);
-        saveBannedToCache(ban);
-        // Clear any cached user data
-        sessionStorage.removeItem('userData');
-        setUser(null);
+      } catch (error) {
+        console.error('Fetch error:', error);
         if (!silent) setLoading(false);
-        return { status: 'banned', info: ban };
+        logout(); // Call the new logout function
+        throw error;
       }
-
-      // Not banned anymore: clear any stale banned cache
-      clearBannedCache();
-      setBannedInfo(null);
-
-      // Fetch staff + division in parallel
-      const [staffResponse, divisionResponse] = await Promise.all([
-        fetch(`${apiUrl}/auth/is-staff`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${apiUrl}/divisions/user`, {
-          headers: { 'X-Vatsim-Token': token }
-        })
-      ]);
-      if (!staffResponse.ok || !divisionResponse.ok) {
-        throw new Error('Failed to fetch user data');
-      }
-      const staffData = await staffResponse.json();
-      const divisionData = await divisionResponse.json();
-
-      // Convert division data into roles
-      const divisionRoles = (Array.isArray(divisionData) ? divisionData : []).reduce((acc, { role }) => ({
-        ...acc,
-        [role]: 1
-      }), {});
-
-      const userData = {
-        ...accountData,
-        roles: {
-          ...(staffData?.role ? { [staffData.role]: 1 } : {}),
-          ...divisionRoles
-        }
-      };
-
-      // Update state and cache
-      setUser(userData);
-      saveUserToCache(userData);
-      if (!silent) setLoading(false);
-      return { status: 'ok' };
-    } catch (error) {
-      console.error('Fetch error:', error);
-      if (!silent) setLoading(false);
-      logout(); // Call the new logout function
-      throw error;
-    }
-  }, [logout]);
+    },
+    [logout]
+  );
   const initiateVatsimAuth = (RedirectPage) => {
     // Store the redirect page in localStorage before redirecting
     if (RedirectPage) {
@@ -224,21 +237,23 @@ export function AuthProvider({ children }) {
       client_id: import.meta.env.VITE_VATSIM_CLIENT_ID,
       redirect_uri: `${apiUrl}/auth/vatsim/callback`,
       response_type: 'code',
-      scope: 'vatsim_details email full_name'
+      scope: 'vatsim_details email full_name',
     });
     window.location.href = `https://auth.vatsim.net/oauth/authorize?${params}`;
   };
-  
-  
+
   // Function to force refresh user data
-  const refreshUserData = useCallback(async (options = {}) => {
-    const token = getVatsimToken();
-    if (token) {
-      return fetchUserData(token, true, options); // Force refresh from API
-    }
-    return false;
-  }, [fetchUserData]);
-  
+  const refreshUserData = useCallback(
+    async (options = {}) => {
+      const token = getVatsimToken();
+      if (token) {
+        return fetchUserData(token, true, options); // Force refresh from API
+      }
+      return false;
+    },
+    [fetchUserData]
+  );
+
   useEffect(() => {
     const token = getVatsimToken();
     if (token) {
@@ -265,21 +280,23 @@ export function AuthProvider({ children }) {
     }
   }, [fetchUserData]);
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      loading, 
-      logout, 
-      initiateVatsimAuth, 
-      fetchUserData,
-      refreshUserData,
-      setUser,
-      bannedInfo,
-      setBannedInfo
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        logout,
+        initiateVatsimAuth,
+        fetchUserData,
+        refreshUserData,
+        setUser,
+        bannedInfo,
+        setBannedInfo,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 AuthProvider.propTypes = {
-  children: PropTypes.node.isRequired
+  children: PropTypes.node.isRequired,
 };

@@ -4,11 +4,11 @@ import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { 
-  Plus, 
-  Users, 
-  TowerControl, 
-  Edit, 
+import {
+  Plus,
+  Users,
+  TowerControl,
+  Edit,
   Trash2,
   AlertTriangle,
   ChevronDown,
@@ -17,12 +17,12 @@ import {
   Building2,
   AlertOctagon,
   Check,
-  IdCard
+  IdCard,
 } from 'lucide-react';
 
 const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleting }) => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (deleteConfirmation === 'DELETE') {
@@ -37,12 +37,10 @@ const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleti
           <AlertOctagon className="w-6 h-6 text-red-500" />
           <h3 className="text-xl font-bold text-red-500">Delete Division</h3>
         </div>
-        
+
         <div className="space-y-4">
           <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-zinc-200">
-              You are about to delete the division:
-            </p>
+            <p className="text-zinc-200">You are about to delete the division:</p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-red-200">
                 <Building2 className="w-4 h-4" />
@@ -56,7 +54,8 @@ const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleti
           </div>
 
           <p className="text-zinc-300">
-            This action cannot be undone. All associated data including managed points, requested airports, division members, will be permanently deleted.
+            This action cannot be undone. All associated data including managed points, requested
+            airports, division members, will be permanently deleted.
           </p>
 
           <form onSubmit={handleSubmit}>
@@ -78,7 +77,7 @@ const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleti
                 type="submit"
                 className={`${
                   deleteConfirmation === 'DELETE' && !isDeleting
-                    ? '!bg-red-500 hover:!bg-red-600 text-white' 
+                    ? '!bg-red-500 hover:!bg-red-600 text-white'
                     : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
                 }`}
                 disabled={deleteConfirmation !== 'DELETE' || isDeleting}
@@ -95,12 +94,7 @@ const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleti
                   </>
                 )}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={isDeleting}
-              >
+              <Button type="button" variant="outline" onClick={onCancel} disabled={isDeleting}>
                 Cancel
               </Button>
             </div>
@@ -114,16 +108,16 @@ const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleti
 DeleteConfirmationModal.propTypes = {
   division: PropTypes.shape({
     id: PropTypes.number.isRequired,
-    name: PropTypes.string.isRequired
+    name: PropTypes.string.isRequired,
   }).isRequired,
   onCancel: PropTypes.func.isRequired,
   onConfirmDelete: PropTypes.func.isRequired,
-  isDeleting: PropTypes.bool.isRequired
+  isDeleting: PropTypes.bool.isRequired,
 };
 
 const EditDivisionModal = ({ division, onCancel, onConfirmEdit, isEditing }) => {
   const [newDivisionName, setNewDivisionName] = useState('');
-  
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (newDivisionName.trim() && newDivisionName.trim() !== division.name) {
@@ -140,12 +134,10 @@ const EditDivisionModal = ({ division, onCancel, onConfirmEdit, isEditing }) => 
           <Edit className="w-6 h-6 text-orange-300" />
           <h3 className="text-xl font-bold text-orange-300">Edit Division Name</h3>
         </div>
-        
+
         <div className="space-y-4">
           <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-            <p className="text-zinc-200">
-              You are about to edit the division name for:
-            </p>
+            <p className="text-zinc-200">You are about to edit the division name for:</p>
             <div className="mt-2">
               <div className="flex items-center space-x-2 text-orange-200">
                 <Building2 className="w-4 h-4" />
@@ -177,7 +169,7 @@ const EditDivisionModal = ({ division, onCancel, onConfirmEdit, isEditing }) => 
                 type="submit"
                 className={`${
                   isValidName && !isEditing
-                    ? '!bg-orange-500 hover:!bg-orange-600 text-white' 
+                    ? '!bg-orange-500 hover:!bg-orange-600 text-white'
                     : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
                 }`}
                 disabled={!isValidName || isEditing}
@@ -194,12 +186,7 @@ const EditDivisionModal = ({ division, onCancel, onConfirmEdit, isEditing }) => 
                   </>
                 )}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={isEditing}
-              >
+              <Button type="button" variant="outline" onClick={onCancel} disabled={isEditing}>
                 Cancel
               </Button>
             </div>
@@ -213,11 +200,11 @@ const EditDivisionModal = ({ division, onCancel, onConfirmEdit, isEditing }) => 
 EditDivisionModal.propTypes = {
   division: PropTypes.shape({
     id: PropTypes.number.isRequired,
-    name: PropTypes.string.isRequired
+    name: PropTypes.string.isRequired,
   }).isRequired,
   onCancel: PropTypes.func.isRequired,
   onConfirmEdit: PropTypes.func.isRequired,
-  isEditing: PropTypes.bool.isRequired
+  isEditing: PropTypes.bool.isRequired,
 };
 
 const DivisionManagement = () => {
@@ -240,7 +227,7 @@ const DivisionManagement = () => {
     const fetchDivisions = async () => {
       try {
         const response = await fetch('https://v2.stopbars.com/divisions', {
-          headers: { 'X-Vatsim-Token': token }
+          headers: { 'X-Vatsim-Token': token },
         });
 
         if (!response.ok) throw new Error('Failed to fetch divisions');
@@ -260,7 +247,7 @@ const DivisionManagement = () => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
@@ -280,41 +267,41 @@ const DivisionManagement = () => {
 
   const toggleDivisionExpansion = async (divisionId) => {
     const isExpanded = expandedDivisions[divisionId];
-    
+
     if (isExpanded) {
       // Collapse the division
-      setExpandedDivisions(prev => ({ ...prev, [divisionId]: false }));
+      setExpandedDivisions((prev) => ({ ...prev, [divisionId]: false }));
     } else {
       // Expand and fetch details
-      setExpandedDivisions(prev => ({ ...prev, [divisionId]: true }));
-      
+      setExpandedDivisions((prev) => ({ ...prev, [divisionId]: true }));
+
       if (!divisionMembers[divisionId] || !divisionAirports[divisionId]) {
-        setLoadingDetails(prev => ({ ...prev, [divisionId]: true }));
-        
+        setLoadingDetails((prev) => ({ ...prev, [divisionId]: true }));
+
         try {
           // Fetch members and airports in parallel
           const [membersResponse, airportsResponse] = await Promise.all([
             fetch(`https://v2.stopbars.com/divisions/${divisionId}/members`, {
-              headers: { 'X-Vatsim-Token': token }
+              headers: { 'X-Vatsim-Token': token },
             }),
             fetch(`https://v2.stopbars.com/divisions/${divisionId}/airports`, {
-              headers: { 'X-Vatsim-Token': token }
-            })
+              headers: { 'X-Vatsim-Token': token },
+            }),
           ]);
 
           if (membersResponse.ok) {
             const membersData = await membersResponse.json();
-            setDivisionMembers(prev => ({ ...prev, [divisionId]: membersData }));
+            setDivisionMembers((prev) => ({ ...prev, [divisionId]: membersData }));
           }
 
           if (airportsResponse.ok) {
             const airportsData = await airportsResponse.json();
-            setDivisionAirports(prev => ({ ...prev, [divisionId]: airportsData }));
+            setDivisionAirports((prev) => ({ ...prev, [divisionId]: airportsData }));
           }
         } catch (err) {
           console.error(`Failed to fetch details for division ${divisionId}:`, err);
         } finally {
-          setLoadingDetails(prev => ({ ...prev, [divisionId]: false }));
+          setLoadingDetails((prev) => ({ ...prev, [divisionId]: false }));
         }
       }
     }
@@ -323,19 +310,19 @@ const DivisionManagement = () => {
   const handleDeleteDivision = async (divisionId) => {
     setIsDeletingDivision(true);
     setError('');
-  
+
     try {
       const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
         method: 'DELETE',
-        headers: { 'X-Vatsim-Token': token }
+        headers: { 'X-Vatsim-Token': token },
       });
 
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to delete division');
       }
-  
-      setDivisions(divisions.filter(division => division.id !== divisionId));
+
+      setDivisions(divisions.filter((division) => division.id !== divisionId));
       setSuccess('Division deleted successfully');
       setDeletingDivision(null);
       setTimeout(() => setSuccess(''), 3000);
@@ -354,33 +341,31 @@ const DivisionManagement = () => {
   const handleEditDivision = async (divisionId, newName) => {
     setIsEditingDivision(true);
     setError('');
-  
+
     try {
       const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
         method: 'PUT',
-        headers: { 
+        headers: {
           'X-Vatsim-Token': token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: newName
-        })
+          name: newName,
+        }),
       });
 
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to update division name');
       }
-  
+
       // Update the division in the local state
-      setDivisions(prevDivisions => 
-        prevDivisions.map(division => 
-          division.id === divisionId 
-            ? { ...division, name: newName }
-            : division
+      setDivisions((prevDivisions) =>
+        prevDivisions.map((division) =>
+          division.id === divisionId ? { ...division, name: newName } : division
         )
       );
-      
+
       setSuccess('Division name updated successfully');
       setEditingDivision(null);
       setTimeout(() => setSuccess(''), 3000);
@@ -404,7 +389,7 @@ const DivisionManagement = () => {
           <div className="animate-pulse bg-zinc-700 h-9 w-32 rounded-lg"></div>
         </div>
         <div className="space-y-4">
-          {[1, 2, 3].map(i => (
+          {[1, 2, 3].map((i) => (
             <Card key={i} className="p-6">
               <div className="animate-pulse">
                 <div className="flex items-center justify-between mb-4">
@@ -470,7 +455,7 @@ const DivisionManagement = () => {
 
         {divisions.length > 0 ? (
           <div className="space-y-4">
-            {divisions.map(division => {
+            {divisions.map((division) => {
               const isExpanded = expandedDivisions[division.id];
               const isLoadingDetails = loadingDetails[division.id];
               const members = divisionMembers[division.id] || [];
@@ -494,7 +479,11 @@ const DivisionManagement = () => {
                             variant="secondary"
                             className="px-2 py-2"
                           >
-                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
                           </Button>
                           <Button
                             onClick={() => setEditingDivision(division)}
@@ -537,15 +526,30 @@ const DivisionManagement = () => {
                                 </h5>
                                 {members.length > 0 ? (
                                   <div className="space-y-2">
-                                    {members.map(member => (
-                                      <div key={member.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
+                                    {members.map((member) => (
+                                      <div
+                                        key={member.id}
+                                        className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg"
+                                      >
                                         <div>
-                                          <p className="text-white font-medium">{member.display_name}</p>
-                                          {member.vatsim_id && String(member.display_name) !== String(member.vatsim_id) && (
-                                            <p className="text-zinc-400 text-sm font-mono">{member.vatsim_id}</p>
-                                          )}
+                                          <p className="text-white font-medium">
+                                            {member.display_name}
+                                          </p>
+                                          {member.vatsim_id &&
+                                            String(member.display_name) !==
+                                              String(member.vatsim_id) && (
+                                              <p className="text-zinc-400 text-sm font-mono">
+                                                {member.vatsim_id}
+                                              </p>
+                                            )}
                                           <p className="text-zinc-400 text-sm">
-                                            {member.role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                            {member.role
+                                              .split('_')
+                                              .map(
+                                                (word) =>
+                                                  word.charAt(0).toUpperCase() + word.slice(1)
+                                              )
+                                              .join(' ')}
                                           </p>
                                         </div>
                                       </div>
@@ -564,15 +568,24 @@ const DivisionManagement = () => {
                                 </h5>
                                 {airports.length > 0 ? (
                                   <div className="space-y-2">
-                                    {airports.map(airport => (
-                                      <div key={airport.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
+                                    {airports.map((airport) => (
+                                      <div
+                                        key={airport.id}
+                                        className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg"
+                                      >
                                         <div>
                                           <p className="text-white font-medium">{airport.icao}</p>
                                           <div className="flex items-center space-x-2">
-                                            <span className="text-zinc-400 text-sm">Status: {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}</span>
+                                            <span className="text-zinc-400 text-sm">
+                                              Status:{' '}
+                                              {airport.status.charAt(0).toUpperCase() +
+                                                airport.status.slice(1)}
+                                            </span>
                                             <div className="relative">
-                                              <div className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-300 shadow-lg`}></div>
-                                              <div 
+                                              <div
+                                                className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-300 shadow-lg`}
+                                              ></div>
+                                              <div
                                                 className={`absolute inset-0 w-2 h-2 rounded-full ${getStatusColor(airport.status)} animate-pulse opacity-50`}
                                                 style={{ animationDuration: '3s' }}
                                               ></div>

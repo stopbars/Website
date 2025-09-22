@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { AlertOctagon, LogOut, Mail, Clock} from 'lucide-react';
+import { AlertOctagon, LogOut, Mail, Clock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { formatLocalDateTime } from '../utils/dateUtils';
 
@@ -36,7 +36,10 @@ const Banned = () => {
             <div className="rounded-lg border border-zinc-800 overflow-hidden mb-5">
               <div className="h-1 w-full bg-red-500/40" />
               <div className="p-4 bg-zinc-900/50">
-                <p className="text-zinc-300"><span className="text-zinc-400">Reason:</span> <span className="text-zinc-200">{bannedInfo.reason}</span></p>
+                <p className="text-zinc-300">
+                  <span className="text-zinc-400">Reason:</span>{' '}
+                  <span className="text-zinc-200">{bannedInfo.reason}</span>
+                </p>
               </div>
             </div>
           )}

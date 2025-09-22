@@ -3,9 +3,15 @@ import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import {
-  Search, MapPin, Loader,
-  CircleDot, ArrowUpDown, MenuIcon, Square,
-  Users, Radio
+  Search,
+  MapPin,
+  Loader,
+  CircleDot,
+  ArrowUpDown,
+  MenuIcon,
+  Square,
+  Users,
+  Radio,
 } from 'lucide-react';
 import { Button } from '../components/shared/Button';
 
@@ -31,7 +37,7 @@ const GlobalStatus = () => {
         setError('');
         const [contribRes, stateRes] = await Promise.all([
           fetch('https://v2.stopbars.com/contributions?status=approved'),
-          fetch('https://v2.stopbars.com/state?airport=all')
+          fetch('https://v2.stopbars.com/state?airport=all'),
         ]);
 
         const contribData = await contribRes.json();
@@ -39,27 +45,30 @@ const GlobalStatus = () => {
 
         // Build airports map
         const byAirport = {};
-        (contribData.contributions || []).forEach(c => {
+        (contribData.contributions || []).forEach((c) => {
           const icao = (c.airportIcao || '').toUpperCase();
           if (!icao) return;
           if (!byAirport[icao]) byAirport[icao] = { packages: new Set() };
           if (c.packageName) byAirport[icao].packages.add(c.packageName);
         });
         const airportsObj = Object.fromEntries(
-          Object.entries(byAirport).map(([icao, v]) => [icao, { packages: Array.from(v.packages).sort() }])
+          Object.entries(byAirport).map(([icao, v]) => [
+            icao,
+            { packages: Array.from(v.packages).sort() },
+          ])
         );
         setAirports(airportsObj);
 
         // Build live map
         const liveMap = {};
-        (stateData.states || []).forEach(s => {
+        (stateData.states || []).forEach((s) => {
           const icao = (s.airport || '').toUpperCase();
           if (!icao) return;
-          const lightsOn = (s.objects || []).filter(o => o.state === true).length;
+          const lightsOn = (s.objects || []).filter((o) => o.state === true).length;
           liveMap[icao] = {
             controllers: (s.controllers || []).length,
             pilots: (s.pilots || []).length,
-            lightsOn
+            lightsOn,
           };
         });
         setLive(liveMap);
@@ -78,13 +87,31 @@ const GlobalStatus = () => {
   const getAirportContinent = (icao) => {
     const prefix = icao.charAt(0);
     switch (prefix) {
-      case 'K': case 'C': case 'M': return 'North America';
-      case 'S': return 'South America';
-      case 'E': case 'L': return 'Europe';
-      case 'R': case 'Z': case 'V': case 'O': case 'U': return 'Asia';
-      case 'Y': case 'N': return 'Oceania';
-      case 'F': case 'D': case 'G': case 'H': return 'Africa';
-      default: return 'Other';
+      case 'K':
+      case 'C':
+      case 'M':
+        return 'North America';
+      case 'S':
+        return 'South America';
+      case 'E':
+      case 'L':
+        return 'Europe';
+      case 'R':
+      case 'Z':
+      case 'V':
+      case 'O':
+      case 'U':
+        return 'Asia';
+      case 'Y':
+      case 'N':
+        return 'Oceania';
+      case 'F':
+      case 'D':
+      case 'G':
+      case 'H':
+        return 'Africa';
+      default:
+        return 'Other';
     }
   };
 
@@ -94,20 +121,26 @@ const GlobalStatus = () => {
     return airportsList
       .filter(([icao, data]) => {
         const term = searchTerm.trim().toLowerCase();
-        const matchesSearch = term === ''
-          ? true
-          : icao.toLowerCase().includes(term) || (data.packages || []).some(p => p.toLowerCase().includes(term));
+        const matchesSearch =
+          term === ''
+            ? true
+            : icao.toLowerCase().includes(term) ||
+              (data.packages || []).some((p) => p.toLowerCase().includes(term));
 
-        const matchesContinent = continentFilter === 'all' ? true : getAirportContinent(icao) === continentFilter;
+        const matchesContinent =
+          continentFilter === 'all' ? true : getAirportContinent(icao) === continentFilter;
 
         const isActive = !!live[icao];
-        const matchesActivity = activityFilter === 'all' ? true : activityFilter === 'active' ? isActive : !isActive;
+        const matchesActivity =
+          activityFilter === 'all' ? true : activityFilter === 'active' ? isActive : !isActive;
 
         return matchesSearch && matchesContinent && matchesActivity;
       })
       .sort((a, b) => {
         if (sortConfig.key === 'icao') {
-          return sortConfig.direction === 'asc' ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0]);
+          return sortConfig.direction === 'asc'
+            ? a[0].localeCompare(b[0])
+            : b[0].localeCompare(a[0]);
         }
         return 0;
       });
@@ -136,7 +169,9 @@ const GlobalStatus = () => {
                   </span>
                 </div>
               </div>
-              <p className="text-zinc-400">Real-time BARS connection status across {totalAirports} airports!</p>
+              <p className="text-zinc-400">
+                Real-time BARS connection status across {totalAirports} airports!
+              </p>
             </div>
             <div className="flex items-center space-x-4 self-start">
               <Button
@@ -163,8 +198,13 @@ const GlobalStatus = () => {
           <div className="space-y-4 mb-8">
             <div className="w-full">
               <div className="relative">
-                <label htmlFor="global-status-search" className="sr-only">Search airports</label>
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" aria-hidden="true" />
+                <label htmlFor="global-status-search" className="sr-only">
+                  Search airports
+                </label>
+                <Search
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5"
+                  aria-hidden="true"
+                />
                 <input
                   id="global-status-search"
                   type="text"
@@ -178,7 +218,9 @@ const GlobalStatus = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <label htmlFor="activity-filter" className="sr-only">Filter by activity</label>
+                <label htmlFor="activity-filter" className="sr-only">
+                  Filter by activity
+                </label>
                 <select
                   id="activity-filter"
                   value={activityFilter}
@@ -192,7 +234,9 @@ const GlobalStatus = () => {
               </div>
 
               <div>
-                <label htmlFor="continent-filter" className="sr-only">Filter by continent</label>
+                <label htmlFor="continent-filter" className="sr-only">
+                  Filter by continent
+                </label>
                 <select
                   id="continent-filter"
                   value={continentFilter}
@@ -213,10 +257,12 @@ const GlobalStatus = () => {
 
               <Button
                 variant="outline"
-                onClick={() => setSortConfig(prev => ({
-                  key: 'icao',
-                  direction: prev.direction === 'asc' ? 'desc' : 'asc'
-                }))}
+                onClick={() =>
+                  setSortConfig((prev) => ({
+                    key: 'icao',
+                    direction: prev.direction === 'asc' ? 'desc' : 'asc',
+                  }))
+                }
                 className="w-full flex justify-center items-center"
                 aria-label="Sort by ICAO"
               >
@@ -232,20 +278,31 @@ const GlobalStatus = () => {
               <span className="sr-only">Loading global status…</span>
             </div>
           ) : error ? (
-            <Card className="p-6 text-red-400" role="alert">{error}</Card>
+            <Card className="p-6 text-red-400" role="alert">
+              {error}
+            </Card>
           ) : (
             <>
               {view === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {paginatedAirports.map(([icao, data]) => (
-                    <Card key={icao} className="p-4 sm:p-6 hover:border-zinc-700 transition-all duration-200">
+                    <Card
+                      key={icao}
+                      className="p-4 sm:p-6 hover:border-zinc-700 transition-all duration-200"
+                    >
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-3">
-                          <MapPin className="w-5 h-5 text-zinc-400 flex-shrink-0" aria-hidden="true" />
+                          <MapPin
+                            className="w-5 h-5 text-zinc-400 flex-shrink-0"
+                            aria-hidden="true"
+                          />
                           <div>
                             <div className="flex items-center space-x-2">
                               <h2 className="text-lg font-medium">{icao}</h2>
-                              <span className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} aria-hidden="true" />
+                              <span
+                                className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`}
+                                aria-hidden="true"
+                              />
                             </div>
                             <div className="text-xs text-zinc-400">{getAirportContinent(icao)}</div>
                           </div>
@@ -254,16 +311,25 @@ const GlobalStatus = () => {
 
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-2 text-sm text-zinc-300">
-                          <div className="flex items-center gap-2"><Users className="w-4 h-4 text-zinc-400" aria-hidden="true" />{live[icao]?.controllers || 0} Controllers</div>
-                          <div className="flex items-center gap-2"><Radio className="w-4 h-4 text-zinc-400" aria-hidden="true" />{live[icao]?.pilots || 0} Pilots</div>
+                          <div className="flex items-center gap-2">
+                            <Users className="w-4 h-4 text-zinc-400" aria-hidden="true" />
+                            {live[icao]?.controllers || 0} Controllers
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Radio className="w-4 h-4 text-zinc-400" aria-hidden="true" />
+                            {live[icao]?.pilots || 0} Pilots
+                          </div>
                         </div>
 
                         {data.packages?.length > 0 && (
                           <div>
                             <h3 className="text-sm font-medium text-zinc-300 mb-2">Packages</h3>
                             <div className="flex flex-wrap gap-2">
-                              {data.packages.map(pkg => (
-                                <span key={pkg} className={`px-2 py-1 rounded text-xs ${live[icao] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800'}`}>
+                              {data.packages.map((pkg) => (
+                                <span
+                                  key={pkg}
+                                  className={`px-2 py-1 rounded text-xs ${live[icao] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800'}`}
+                                >
                                   {pkg}
                                 </span>
                               ))}
@@ -281,10 +347,18 @@ const GlobalStatus = () => {
                       <table className="w-full">
                         <thead className="border-b border-zinc-800">
                           <tr>
-                            <th scope="col" className="text-left py-3 px-4 font-medium">ICAO</th>
-                            <th scope="col" className="text-left py-3 px-4 font-medium">Continent</th>
-                            <th scope="col" className="text-center py-3 px-4 font-medium">Connections</th>
-                            <th scope="col" className="text-left py-3 px-4 font-medium">Packages</th>
+                            <th scope="col" className="text-left py-3 px-4 font-medium">
+                              ICAO
+                            </th>
+                            <th scope="col" className="text-left py-3 px-4 font-medium">
+                              Continent
+                            </th>
+                            <th scope="col" className="text-center py-3 px-4 font-medium">
+                              Connections
+                            </th>
+                            <th scope="col" className="text-left py-3 px-4 font-medium">
+                              Packages
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800">
@@ -293,17 +367,27 @@ const GlobalStatus = () => {
                               <td className="py-4 px-4">
                                 <div className="flex items-center space-x-2">
                                   <span className="font-medium">{icao}</span>
-                                  <span className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} aria-hidden="true" />
+                                  <span
+                                    className={`flex h-2 w-2 rounded-full ${live[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`}
+                                    aria-hidden="true"
+                                  />
                                 </div>
                               </td>
-                              <td className="py-4 px-4 text-zinc-400">{getAirportContinent(icao)}</td>
+                              <td className="py-4 px-4 text-zinc-400">
+                                {getAirportContinent(icao)}
+                              </td>
                               <td className="py-4 px-4 text-center text-zinc-300">
                                 {(live[icao]?.controllers || 0) + (live[icao]?.pilots || 0)}
                               </td>
                               <td className="py-4 px-4">
                                 <div className="flex flex-wrap gap-2">
-                                  {data.packages?.map(pkg => (
-                                    <span key={pkg} className="px-2 py-1 rounded text-xs bg-zinc-800 text-zinc-300">{pkg}</span>
+                                  {data.packages?.map((pkg) => (
+                                    <span
+                                      key={pkg}
+                                      className="px-2 py-1 rounded text-xs bg-zinc-800 text-zinc-300"
+                                    >
+                                      {pkg}
+                                    </span>
                                   ))}
                                 </div>
                               </td>
@@ -321,17 +405,19 @@ const GlobalStatus = () => {
                   <div className="flex space-x-2">
                     <Button
                       variant="outline"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
                     >
                       Previous
                     </Button>
                     <div className="flex items-center px-4 py-2 bg-zinc-800 rounded-lg">
-                      <span className="text-zinc-400">Page {currentPage} of {totalPages}</span>
+                      <span className="text-zinc-400">
+                        Page {currentPage} of {totalPages}
+                      </span>
                     </div>
                     <Button
                       variant="outline"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                       disabled={currentPage === totalPages}
                     >
                       Next

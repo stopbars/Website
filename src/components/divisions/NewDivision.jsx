@@ -43,12 +43,12 @@ const NewDivision = () => {
         method: 'POST',
         headers: {
           'X-Vatsim-Token': token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           name: formattedName,
-          headVatsimId: headCid
-        })
+          headVatsimId: headCid,
+        }),
       });
 
       if (!response.ok) {
@@ -116,11 +116,7 @@ const NewDivision = () => {
                 </div>
 
                 <div className="flex justify-end gap-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => navigate('/divisions')}
-                  >
+                  <Button type="button" variant="secondary" onClick={() => navigate('/divisions')}>
                     Cancel
                   </Button>
                   <Button

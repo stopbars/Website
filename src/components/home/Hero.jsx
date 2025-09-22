@@ -15,7 +15,14 @@ const Feature = ({ icon: Icon, title, description }) => (
   </div>
 );
 
-const DownloadButton = ({ asset, icon: Icon, label, variant = "primary", version, downloadCount }) => {
+const DownloadButton = ({
+  asset,
+  icon: Icon,
+  label,
+  variant = 'primary',
+  version,
+  downloadCount,
+}) => {
   const handleDownload = async () => {
     if (!asset?.browser_download_url) return;
 
@@ -28,9 +35,9 @@ const DownloadButton = ({ asset, icon: Icon, label, variant = "primary", version
       }
 
       await fetch(`https://api.stopbars.com/downloads/${downloadType}`, {
-        method: 'POST'
+        method: 'POST',
       });
-  window.open(asset.browser_download_url, '_blank', 'noopener,noreferrer');
+      window.open(asset.browser_download_url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       console.error('Error downloading:', err);
     }
@@ -46,7 +53,9 @@ const DownloadButton = ({ asset, icon: Icon, label, variant = "primary", version
       <div className="absolute left-0 inset-y-0 flex items-center justify-center w-12 border-r border-black/10">
         <Icon className="h-5 w-5" />
       </div>
-      <div className="flex flex-col items-center ml-10"> {/* Changed items-start to items-center */}
+      <div className="flex flex-col items-center ml-10">
+        {' '}
+        {/* Changed items-start to items-center */}
         <span className="font-medium">{label}</span>
         {asset && (
           <div className="flex items-center gap-1.5 text-xs opacity-80">
@@ -83,7 +92,7 @@ export const Hero = () => {
         }
 
         // Wait before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+        await new Promise((resolve) => setTimeout(resolve, delay * attempt));
       }
     }
   };
@@ -98,7 +107,7 @@ export const Hero = () => {
         setVersionInfo({
           pluginVersion: xmlDoc.querySelector('PluginVersion').textContent,
           clientVersion: xmlDoc.querySelector('ClientVersion').textContent,
-          eueroscopeVersion: xmlDoc.querySelector('ESPluginVersion').textContent
+          eueroscopeVersion: xmlDoc.querySelector('ESPluginVersion').textContent,
         });
 
         // Clear error if this succeeds
@@ -161,7 +170,7 @@ export const Hero = () => {
         setVersionInfo({
           pluginVersion: xmlDoc.querySelector('PluginVersion').textContent,
           clientVersion: xmlDoc.querySelector('ClientVersion').textContent,
-          eueroscopeVersion: xmlDoc.querySelector('ESPluginVersion').textContent
+          eueroscopeVersion: xmlDoc.querySelector('ESPluginVersion').textContent,
         });
       } catch (err) {
         console.error('Error fetching version info during manual retry:', err);
@@ -178,7 +187,8 @@ export const Hero = () => {
         console.error('Error fetching release info during manual retry:', err);
         throw err;
       }
-    }; try {
+    };
+    try {
       await Promise.all([fetchVersionInfo(), fetchReleaseInfo()]);
     } catch {
       setError('Failed to load download information. Please try again later.');
@@ -187,7 +197,7 @@ export const Hero = () => {
 
   const getAssetInfo = (type) => {
     if (!releaseInfo) return null;
-    const release = releaseInfo.find(r => r.type === type);
+    const release = releaseInfo.find((r) => r.type === type);
     if (!release) return null;
 
     // Replace spaces with underscores in the file path
@@ -195,7 +205,7 @@ export const Hero = () => {
 
     return {
       browser_download_url: `https://cdn.stopbars.com/${normalizedFilePath}`,
-      version: release.version
+      version: release.version,
     };
   };
 
@@ -216,10 +226,11 @@ export const Hero = () => {
               </span>
             </h1>
             <p className="text-xl text-zinc-300 mb-8 leading-relaxed">
-              BARS revolutionizes your VATSIM experience with realistic stopbar operations.
-              Fully compatible with Microsoft Flight Simulator and seamlessly integrated
-              with both default and major third-party sceneries.
-            </p>            {error ? (
+              BARS revolutionizes your VATSIM experience with realistic stopbar operations. Fully
+              compatible with Microsoft Flight Simulator and seamlessly integrated with both default
+              and major third-party sceneries.
+            </p>{' '}
+            {error ? (
               <div className="space-y-4">
                 <div className="text-red-500 text-sm">
                   Failed to load download information. Please try again later.
@@ -235,10 +246,16 @@ export const Hero = () => {
                 </Button>
               </div>
             ) : releaseInfo && versionInfo ? (
-              <div className="space-y-4"> {/* Reduced space-y from 6 to 4 */}
+              <div className="space-y-4">
+                {' '}
+                {/* Reduced space-y from 6 to 4 */}
                 {/* First Row: Two Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-center"> {/* Added justify-center and reduced gap */}
-                  <div className="sm:w-5/12"> {/* Set specific width for button container */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  {' '}
+                  {/* Added justify-center and reduced gap */}
+                  <div className="sm:w-5/12">
+                    {' '}
+                    {/* Set specific width for button container */}
                     <DownloadButton
                       asset={clientAsset}
                       icon={Plane}
@@ -247,7 +264,9 @@ export const Hero = () => {
                       downloadCount={downloadStats.client}
                     />
                   </div>
-                  <div className="sm:w-5/12"> {/* Set specific width for button container */}
+                  <div className="sm:w-5/12">
+                    {' '}
+                    {/* Set specific width for button container */}
                     <DownloadButton
                       asset={euroscopeAsset}
                       icon={Monitor}
@@ -260,7 +279,9 @@ export const Hero = () => {
                 </div>
                 {/* Second Row: Single Button */}
                 <div className="flex justify-center">
-                  <div className="w-5/12"> {/* Match width with above buttons */}
+                  <div className="w-5/12">
+                    {' '}
+                    {/* Match width with above buttons */}
                     <DownloadButton
                       asset={pluginAsset}
                       icon={Monitor}
@@ -323,19 +344,19 @@ export const Hero = () => {
 Feature.propTypes = {
   icon: PropTypes.elementType.isRequired,
   title: PropTypes.string.isRequired,
-  description: PropTypes.string.isRequired
+  description: PropTypes.string.isRequired,
 };
 
 DownloadButton.propTypes = {
   asset: PropTypes.shape({
     browser_download_url: PropTypes.string,
-    download_count: PropTypes.number
+    download_count: PropTypes.number,
   }),
   icon: PropTypes.elementType.isRequired,
   label: PropTypes.string.isRequired,
   variant: PropTypes.string,
   version: PropTypes.string,
-  downloadCount: PropTypes.number
+  downloadCount: PropTypes.number,
 };
 
 export default Hero;

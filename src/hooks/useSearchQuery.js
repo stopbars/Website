@@ -49,7 +49,8 @@ export default function useSearchQuery(options = {}) {
       if (current === trimmed) return; // avoid redundant updates
 
       const next = new URLSearchParams(searchParams);
-      if (trimmed) next.set(paramName, trimmed); else next.delete(paramName);
+      if (trimmed) next.set(paramName, trimmed);
+      else next.delete(paramName);
       setSearchParams(next, { replace: true });
     }, debounceMs);
 

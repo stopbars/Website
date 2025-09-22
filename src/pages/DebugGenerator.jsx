@@ -7,7 +7,8 @@ const DebugGenerator = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
-  const [generatedFiles, setGeneratedFiles] = useState(null);  const [airportIcao, setAirportIcao] = useState('');
+  const [generatedFiles, setGeneratedFiles] = useState(null);
+  const [airportIcao, setAirportIcao] = useState('');
   const fileInputRef = useRef(null);
   const [generatedXml, setGeneratedXml] = useState(null);
   const formatXML = (xml) => {
@@ -15,7 +16,7 @@ const DebugGenerator = () => {
     const reg = /(>)(<)(\/*)/g;
     xml = xml.replace(reg, '$1\r\n$2$3');
     let pad = 0;
-    xml.split('\r\n').forEach(node => {
+    xml.split('\r\n').forEach((node) => {
       let indent = 0;
       if (node.match(/.+<\/\w[^>]*>$/)) {
         indent = 0;
@@ -79,7 +80,10 @@ const DebugGenerator = () => {
               processFile(file, icao);
             } else {
               // Make a best guess based on first 4 characters of filename that are letters
-              const bestGuess = file.name.replace(/[^A-Z]/gi, '').substring(0, 4).toUpperCase();
+              const bestGuess = file.name
+                .replace(/[^A-Z]/gi, '')
+                .substring(0, 4)
+                .toUpperCase();
               icao = bestGuess || 'XXXX';
               processFile(file, icao);
             }
@@ -106,7 +110,7 @@ const DebugGenerator = () => {
 
       const response = await fetch('https://v2.stopbars.com/supports/generate', {
         method: 'POST',
-        body: formData
+        body: formData,
       });
 
       if (!response.ok) {
@@ -117,9 +121,9 @@ const DebugGenerator = () => {
       const data = await response.json();
       setGeneratedFiles({
         supportsXml: data.supportsXml,
-        barsXml: data.barsXml
+        barsXml: data.barsXml,
       });
-      
+
       // Set the XML data for the XMLMap component
       setGeneratedXml(data.barsXml);
 
@@ -140,8 +144,10 @@ const DebugGenerator = () => {
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           <h1 className="text-3xl font-bold mb-4">BARS Contribution Tester</h1>
-          <p className="text-zinc-400 mb-8">Upload an MSFS XML file to test and visualize stopbar and lead-on light positions</p>
-          
+          <p className="text-zinc-400 mb-8">
+            Upload an MSFS XML file to test and visualize stopbar and lead-on light positions
+          </p>
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1">
               <Card className="p-6">
@@ -203,9 +209,10 @@ const DebugGenerator = () => {
                       type="submit"
                       disabled={isLoading}
                       className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-                        ${isLoading 
-                          ? 'bg-zinc-600 cursor-not-allowed' 
-                          : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+                        ${
+                          isLoading
+                            ? 'bg-zinc-600 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
                         }`}
                     >
                       {isLoading ? 'Generating...' : 'Generate Support Files'}
@@ -215,14 +222,18 @@ const DebugGenerator = () => {
                       <div className="flex flex-col space-y-2">
                         <button
                           type="button"
-                          onClick={() => downloadXML(generatedFiles.supportsXml, `light_supports.xml`)}
+                          onClick={() =>
+                            downloadXML(generatedFiles.supportsXml, `light_supports.xml`)
+                          }
                           className="w-full py-2 px-4 border border-blue-500/30 rounded-md shadow-sm text-sm font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                         >
                           Download Light Supports XML
                         </button>
                         <button
                           type="button"
-                          onClick={() => downloadXML(generatedFiles.barsXml, `bars_contribution.xml`)}
+                          onClick={() =>
+                            downloadXML(generatedFiles.barsXml, `bars_contribution.xml`)
+                          }
                           className="w-full py-2 px-4 border border-green-500/30 rounded-md shadow-sm text-sm font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
                         >
                           Download BARS Contribution XML
@@ -230,18 +241,17 @@ const DebugGenerator = () => {
                       </div>
                     )}
                   </div>
-                </form>                {generatedXml && (
+                </form>{' '}
+                {generatedXml && (
                   <div className="pt-6 mt-6 border-t border-zinc-800">
                     <div className="p-3 bg-zinc-800/50 border border-zinc-700 rounded-md">
-                      <p className="text-zinc-300 text-sm">
-                        XML generated successfully
-                      </p>
+                      <p className="text-zinc-300 text-sm">XML generated successfully</p>
                     </div>
                   </div>
                 )}
               </Card>
             </div>
-            
+
             <div className="lg:col-span-2">
               <Card className="p-0 overflow-hidden">
                 <XMLMap xmlData={generatedXml} />

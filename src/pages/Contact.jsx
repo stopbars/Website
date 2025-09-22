@@ -2,9 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { 
-  Mail, 
-  AlertTriangle, 
+import {
+  Mail,
+  AlertTriangle,
   Check,
   Loader,
   MessagesSquare,
@@ -15,19 +15,19 @@ import {
 } from 'lucide-react';
 
 const teamMembers = [
-    {
-      name: 'Edward M',
-      role: 'Lead Developer',
-      email: 'edward@stopbars.com',
-      image: '/EdwardPFP.png'
-    },
-    {
-      name: 'Charlie H',
-      role: 'Product Manager',
-      email: 'charlie@stopbars.com',
-      image: '/CharliePFP.png'
-    }
-  ];
+  {
+    name: 'Edward M',
+    role: 'Lead Developer',
+    email: 'edward@stopbars.com',
+    image: '/EdwardPFP.png',
+  },
+  {
+    name: 'Charlie H',
+    role: 'Product Manager',
+    email: 'charlie@stopbars.com',
+    image: '/CharliePFP.png',
+  },
+];
 
 const Contact = () => {
   const [selectedTopic, setSelectedTopic] = useState('');
@@ -49,7 +49,7 @@ const Contact = () => {
     'Partnership Inquiry',
     'Legal Inquiry',
     'Media Request',
-    'Other'
+    'Other',
   ];
 
   // Handle click outside to close dropdown
@@ -88,9 +88,11 @@ const Contact = () => {
           <span className={selectedTopic ? 'text-white' : 'text-zinc-500'}>
             {selectedTopic || 'Select a topic'}
           </span>
-          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showTopicDropdown ? 'rotate-180' : ''}`} />
+          <ChevronDown
+            className={`w-4 h-4 transition-transform duration-200 ${showTopicDropdown ? 'rotate-180' : ''}`}
+          />
         </button>
-        
+
         {showTopicDropdown && (
           <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
             {topicOptions.map((topic, index) => (
@@ -102,11 +104,13 @@ const Contact = () => {
                   setShowTopicDropdown(false);
                 }}
                 className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
-                  selectedTopic === topic ? 'bg-zinc-700 text-blue-400' : 'text-white hover:text-zinc-100'
+                  selectedTopic === topic
+                    ? 'bg-zinc-700 text-blue-400'
+                    : 'text-white hover:text-zinc-100'
                 }`}
                 style={{
                   animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both'
+                  animationFillMode: 'both',
                 }}
               >
                 {topic}
@@ -135,17 +139,19 @@ const Contact = () => {
       const response = await fetch('https://v2.stopbars.com/contact', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           email,
           topic: selectedTopic,
-          message
-        })
+          message,
+        }),
       });
 
       if (response.status === 429) {
-        throw new Error('You can only submit one contact message every 24 hours. Please try again later.');
+        throw new Error(
+          'You can only submit one contact message every 24 hours. Please try again later.'
+        );
       }
 
       if (!response.ok) {
@@ -172,9 +178,7 @@ const Contact = () => {
           {/* Header */}
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold mb-4">We&apos;re Here to Help</h1>
-            <p className="text-xl text-zinc-400">
-              Get in touch with our team
-            </p>
+            <p className="text-xl text-zinc-400">Get in touch with our team</p>
           </div>
 
           {/* Contact Form */}
@@ -204,9 +208,7 @@ const Contact = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Your Email Address
-                </label>
+                <label className="block text-sm font-medium mb-2">Your Email Address</label>
                 <input
                   type="email"
                   value={email}
@@ -218,9 +220,7 @@ const Contact = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Message
-                </label>
+                <label className="block text-sm font-medium mb-2">Message</label>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
@@ -230,11 +230,7 @@ const Contact = () => {
                 />
               </div>
 
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full"
-              >
+              <Button type="submit" disabled={isSubmitting} className="w-full">
                 {isSubmitting ? (
                   <>
                     <Loader className="w-4 h-4 mr-2 animate-spin" />
@@ -247,59 +243,67 @@ const Contact = () => {
             </form>
           </Card>
 
-            {/* Team Members */}
-            <Card className="p-8 mb-12">
+          {/* Team Members */}
+          <Card className="p-8 mb-12">
             <div className="flex items-center space-x-3 mb-8">
-                <Users className="w-6 h-6 text-zinc-400" />
-                <h2 className="text-2xl font-semibold">Meet the Team</h2>
+              <Users className="w-6 h-6 text-zinc-400" />
+              <h2 className="text-2xl font-semibold">Meet the Team</h2>
             </div>
-            
+
             <div className="grid md:grid-cols-2 gap-8">
-                {teamMembers.map((member) => (
-                <div 
-                    key={member.email}
-                    className="p-6 bg-gradient-to-br from-zinc-800/50 to-transparent rounded-lg border border-zinc-700/50 hover:border-zinc-600 transition-all duration-200"
+              {teamMembers.map((member) => (
+                <div
+                  key={member.email}
+                  className="p-6 bg-gradient-to-br from-zinc-800/50 to-transparent rounded-lg border border-zinc-700/50 hover:border-zinc-600 transition-all duration-200"
                 >
-                    <div className="flex items-center space-x-6 mb-6">
-                    <img 
-                        src={member.image} 
-                        alt={member.name}
-                        className="w-16 h-16 rounded-full border-2 border-zinc-700"
+                  <div className="flex items-center space-x-6 mb-6">
+                    <img
+                      src={member.image}
+                      alt={member.name}
+                      className="w-16 h-16 rounded-full border-2 border-zinc-700"
                     />
                     <div>
-                        <h3 className="font-medium text-xl text-white">{member.name}</h3>
-                        <p className="text-zinc-400">{member.role}</p>
+                      <h3 className="font-medium text-xl text-white">{member.name}</h3>
+                      <p className="text-zinc-400">{member.role}</p>
                     </div>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-zinc-900/80 rounded-lg hover:bg-zinc-900 transition-colors">
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-zinc-900/80 rounded-lg hover:bg-zinc-900 transition-colors">
                     <span className="text-zinc-300 font-mono text-sm">{member.email}</span>
                     <button
-                        onClick={() => handleCopyEmail(member.email)}
-                        className="text-zinc-400 hover:text-white transition-colors p-2 hover:bg-zinc-800 rounded-lg"
+                      onClick={() => handleCopyEmail(member.email)}
+                      className="text-zinc-400 hover:text-white transition-colors p-2 hover:bg-zinc-800 rounded-lg"
                     >
-                        {copiedEmail === member.email ? (
+                      {copiedEmail === member.email ? (
                         <Check className="w-4 h-4 text-emerald-400" />
-                        ) : (
+                      ) : (
                         <Copy className="w-4 h-4" />
-                        )}
+                      )}
                     </button>
-                    </div>
+                  </div>
                 </div>
-                ))}
+              ))}
             </div>
-            </Card>
+          </Card>
 
           {/* Additional Support Options */}
           <div className="grid md:grid-cols-2 gap-6">
             {/* Discord Support */}
-    <Card className="p-6 hover:border-blue-500/30 transition-all cursor-pointer group"
-      onClick={() => window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')}>
+            <Card
+              className="p-6 hover:border-blue-500/30 transition-all cursor-pointer group"
+              onClick={() =>
+                window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')
+              }
+            >
               <div className="flex items-center space-x-3">
                 <MessagesSquare className="w-5 h-5 text-blue-400 group-hover:text-blue-300 transition-colors" />
                 <div>
-                  <h3 className="font-medium group-hover:text-blue-100 transition-colors">Discord Community</h3>
+                  <h3 className="font-medium group-hover:text-blue-100 transition-colors">
+                    Discord Community
+                  </h3>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm text-zinc-400">Get instant help from our community</span>
+                    <span className="text-sm text-zinc-400">
+                      Get instant help from our community
+                    </span>
                     <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-blue-400 transition-all" />
                   </div>
                 </div>
@@ -311,7 +315,9 @@ const Contact = () => {
               <div className="flex items-center space-x-3">
                 <Mail className="w-5 h-5 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
                 <div>
-                  <h3 className="font-medium group-hover:text-emerald-100 transition-colors">Support Email</h3>
+                  <h3 className="font-medium group-hover:text-emerald-100 transition-colors">
+                    Support Email
+                  </h3>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-zinc-400">support@stopbars.com</span>
                     <button

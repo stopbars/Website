@@ -13,7 +13,7 @@ const ContributeNew = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!icao) {
       setError('Please enter an airport ICAO code');
       return;
@@ -29,8 +29,8 @@ const ContributeNew = () => {
 
     try {
       // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       // Navigate to the map view with the ICAO code
       navigate(`/contribute/map/${icao.toUpperCase()}`);
     } catch (err) {
@@ -47,13 +47,12 @@ const ContributeNew = () => {
         <div className="w-full max-w-3xl mx-auto px-6">
           <div className="mb-12 text-center">
             <h1 className="text-3xl font-bold mb-4">Contribute to BARS</h1>
-            <p className="text-zinc-400 max-w-xl mx-auto">
-            </p>
+            <p className="text-zinc-400 max-w-xl mx-auto"></p>
           </div>
 
           <Card className="p-8 max-w-lg mx-auto">
             <h2 className="text-xl font-medium mb-6">Step 1: Select Airport</h2>
-            
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="icao" className="block text-sm font-medium mb-2">
@@ -83,11 +82,7 @@ const ContributeNew = () => {
               </div>
 
               <div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isSearching}
-                >
+                <Button type="submit" className="w-full" disabled={isSearching}>
                   {isSearching ? (
                     <div className="flex items-center justify-center">
                       <Loader className="w-4 h-4 mr-2 animate-spin" />

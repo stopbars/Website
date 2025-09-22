@@ -19,10 +19,10 @@ const Divisions = () => {
         // Fetch user's divisions
         const userDivisionsResponse = await fetch('https://v2.stopbars.com/divisions/user', {
           headers: {
-            'X-Vatsim-Token': token
-          }
+            'X-Vatsim-Token': token,
+          },
         });
-        
+
         if (!userDivisionsResponse.ok) throw new Error('Failed to fetch user divisions');
         const userDivisionsData = await userDivisionsResponse.json();
         setUserDivisions(userDivisionsData);
@@ -39,29 +39,31 @@ const Divisions = () => {
   const formatRole = (role) => {
     return role
       .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   };
 
-  if (loading) return (
-    <Layout>
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader className="w-8 h-8 animate-spin text-zinc-300" />
-      </div>
-    </Layout>
-  );
+  if (loading)
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-screen">
+          <Loader className="w-8 h-8 animate-spin text-zinc-300" />
+        </div>
+      </Layout>
+    );
 
-  if (error) return (
-    <Layout>
-      <div className="min-h-screen pt-40 pb-20 bg-950">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-lg mb-8">
-            <p className="text-red-500">{error}</p>
+  if (error)
+    return (
+      <Layout>
+        <div className="min-h-screen pt-40 pb-20 bg-950">
+          <div className="max-w-5xl mx-auto px-6">
+            <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-lg mb-8">
+              <p className="text-red-500">{error}</p>
+            </div>
           </div>
         </div>
-      </div>
-    </Layout>
-  );
+      </Layout>
+    );
 
   return (
     <Layout>
@@ -96,20 +98,30 @@ const Divisions = () => {
                   {userDivisions.map((userDiv) => {
                     const division = userDiv.division ?? userDiv;
                     const role = userDiv.role;
-                    return division && (
-                      <div key={division.id} className="flex flex-col md:flex-row md:items-center justify-between bg-zinc-800/40 rounded-lg border border-zinc-800/50 hover:border-zinc-700 transition-colors duration-200 p-6 w-full">
-                        <div className="mb-4 md:mb-0">
-                          <h2 className="text-2xl font-semibold text-white mb-1 truncate">{division.name}</h2>
-                          <p className="text-zinc-400">Your Role: {formatRole(role)}</p>
-                        </div>
-                        <Button
-                          variant="primary"
-                          onClick={() => navigate(`/divisions/${division.id}/manage`)}
-                          className="bg-white text-zinc-900 hover:bg-zinc-100 w-full md:w-auto border border-zinc-300 font-semibold shadow-sm"
+                    return (
+                      division && (
+                        <div
+                          key={division.id}
+                          className="flex flex-col md:flex-row md:items-center justify-between bg-zinc-800/40 rounded-lg border border-zinc-800/50 hover:border-zinc-700 transition-colors duration-200 p-6 w-full"
                         >
-                          <span className="flex items-center justify-center"><Link className="w-4 h-4 mr-2" />Manage Division</span>
-                        </Button>
-                      </div>
+                          <div className="mb-4 md:mb-0">
+                            <h2 className="text-2xl font-semibold text-white mb-1 truncate">
+                              {division.name}
+                            </h2>
+                            <p className="text-zinc-400">Your Role: {formatRole(role)}</p>
+                          </div>
+                          <Button
+                            variant="primary"
+                            onClick={() => navigate(`/divisions/${division.id}/manage`)}
+                            className="bg-white text-zinc-900 hover:bg-zinc-100 w-full md:w-auto border border-zinc-300 font-semibold shadow-sm"
+                          >
+                            <span className="flex items-center justify-center">
+                              <Link className="w-4 h-4 mr-2" />
+                              Manage Division
+                            </span>
+                          </Button>
+                        </div>
+                      )
                     );
                   })}
                 </div>
@@ -118,24 +130,31 @@ const Divisions = () => {
                   {userDivisions.map((userDiv) => {
                     const division = userDiv.division ?? userDiv;
                     const role = userDiv.role;
-                    return division && (
-                      <div
-                        key={division.id}
-                        className="flex flex-col justify-between h-full bg-zinc-800/40 rounded-lg border border-zinc-800/50 hover:border-zinc-700 transition-colors duration-200 p-8 group cursor-pointer"
-                        style={{ minHeight: '200px' }}
-                      >
-                        <div>
-                          <h2 className="text-2xl font-semibold text-white mb-2 truncate">{division.name}</h2>
-                          <p className="text-zinc-400 mb-6">Your Role: {formatRole(role)}</p>
-                        </div>
-                        <Button
-                          variant="primary"
-                          onClick={() => navigate(`/divisions/${division.id}/manage`)}
-                          className="bg-white text-zinc-900 hover:bg-zinc-100 w-full mt-auto border border-zinc-300 font-semibold shadow-sm"
+                    return (
+                      division && (
+                        <div
+                          key={division.id}
+                          className="flex flex-col justify-between h-full bg-zinc-800/40 rounded-lg border border-zinc-800/50 hover:border-zinc-700 transition-colors duration-200 p-8 group cursor-pointer"
+                          style={{ minHeight: '200px' }}
                         >
-                          <span className="flex items-center justify-center"><Link className="w-4 h-4 mr-2" />Manage Division</span>
-                        </Button>
-                      </div>
+                          <div>
+                            <h2 className="text-2xl font-semibold text-white mb-2 truncate">
+                              {division.name}
+                            </h2>
+                            <p className="text-zinc-400 mb-6">Your Role: {formatRole(role)}</p>
+                          </div>
+                          <Button
+                            variant="primary"
+                            onClick={() => navigate(`/divisions/${division.id}/manage`)}
+                            className="bg-white text-zinc-900 hover:bg-zinc-100 w-full mt-auto border border-zinc-300 font-semibold shadow-sm"
+                          >
+                            <span className="flex items-center justify-center">
+                              <Link className="w-4 h-4 mr-2" />
+                              Manage Division
+                            </span>
+                          </Button>
+                        </div>
+                      )
                     );
                   })}
                 </div>

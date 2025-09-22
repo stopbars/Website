@@ -8,7 +8,9 @@ export const ConsentBanner = ({ show, setShow }) => {
   useEffect(() => {
     const consent = localStorage.getItem('analytics-consent');
     const gpc = typeof navigator !== 'undefined' && navigator.globalPrivacyControl === true;
-    const dnt = typeof navigator !== 'undefined' && (navigator.doNotTrack === '1' || window.doNotTrack === '1');
+    const dnt =
+      typeof navigator !== 'undefined' &&
+      (navigator.doNotTrack === '1' || window.doNotTrack === '1');
 
     // Respect Global Privacy Control / Do Not Track
     if (!consent && (gpc || dnt)) {
@@ -40,7 +42,10 @@ export const ConsentBanner = ({ show, setShow }) => {
         autocapture: false,
         capture_exceptions: false,
         persistence: 'memory',
-        session_recording: { maskAllInputs: true, maskInputOptions: { password: true, email: true } },
+        session_recording: {
+          maskAllInputs: true,
+          maskInputOptions: { password: true, email: true },
+        },
       });
       posthog.opt_out_capturing();
       if (posthog.stopSessionRecording) {
@@ -106,14 +111,15 @@ export const ConsentBanner = ({ show, setShow }) => {
           <h3 className="text-base font-medium">We’d like to use analytics</h3>
         </div>
         <p className="text-zinc-400 text-xs mb-4 leading-relaxed">
-          We use PostHog Cloud EU to understand usage and improve BARS. No tracking occurs until you accept.
-          See our <a href="/privacy" className="underline hover:text-white">Privacy Policy</a>.
+          We use PostHog Cloud EU to understand usage and improve BARS. No tracking occurs until you
+          accept. See our{' '}
+          <a href="/privacy" className="underline hover:text-white">
+            Privacy Policy
+          </a>
+          .
         </p>
         <div className="flex items-center justify-end gap-3">
-          <Button
-            onClick={handleAccept}
-            className="text-xs py-2 px-4 h-8"
-          >
+          <Button onClick={handleAccept} className="text-xs py-2 px-4 h-8">
             Accept All
           </Button>
           <Button
@@ -131,5 +137,5 @@ export const ConsentBanner = ({ show, setShow }) => {
 
 ConsentBanner.propTypes = {
   show: PropTypes.bool.isRequired,
-  setShow: PropTypes.func.isRequired
+  setShow: PropTypes.func.isRequired,
 };

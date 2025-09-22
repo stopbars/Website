@@ -9,7 +9,7 @@ import DOMPurify from 'dompurify';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
 marked.setOptions({
   breaks: true, // so a single newline becomes a line break
-  gfm: true
+  gfm: true,
 });
 
 const Changelog = () => {
@@ -33,7 +33,7 @@ const Changelog = () => {
     { id: 'vatsys-plugin', label: 'vatSys Plugin' },
     { id: 'euroscope-plugin', label: 'EuroScope Plugin' },
     { id: 'simconnect.net', label: 'SimConnect.NET' },
-    { id: 'installer', label: 'Installer' }
+    { id: 'installer', label: 'Installer' },
   ];
 
   const normalizeProduct = (p) => (p || '').toLowerCase().replace(/\s+/g, '-');
@@ -49,17 +49,18 @@ const Changelog = () => {
 
   const currentFilterLabel = () => {
     if (activeFilters.length === 0) return 'All Products';
-    const f = filterOptions.find(o => o.id === activeFilters[0]);
+    const f = filterOptions.find((o) => o.id === activeFilters[0]);
     return f ? f.label : 'All Products';
   };
 
   // Filter releases based on active filter
-  const filteredReleases = activeFilters.length === 0
-    ? releases
-    : releases.filter(release => {
-        const releaseProduct = normalizeProduct(release.product);
-        return activeFilters.some(filterId => releaseProduct === filterId);
-      });
+  const filteredReleases =
+    activeFilters.length === 0
+      ? releases
+      : releases.filter((release) => {
+          const releaseProduct = normalizeProduct(release.product);
+          return activeFilters.some((filterId) => releaseProduct === filterId);
+        });
 
   // Fetch releases from API
   useEffect(() => {
@@ -67,20 +68,20 @@ const Changelog = () => {
       try {
         setLoading(true);
         setError('');
-        
+
         const response = await fetch('https://v2.stopbars.com/releases');
-        
+
         if (!response.ok) {
           throw new Error('Failed to fetch releases');
         }
-        
+
         const data = await response.json();
-        
+
         // Sort releases by creation date (newest first)
-        const sortedReleases = (data.releases || []).sort((a, b) => 
-          new Date(b.created_at) - new Date(a.created_at)
+        const sortedReleases = (data.releases || []).sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
         );
-        
+
         setReleases(sortedReleases);
       } catch (err) {
         console.error('Error fetching releases:', err);
@@ -180,9 +181,9 @@ const Changelog = () => {
     const productMap = {
       'Pilot-Client': 'Pilot Client',
       'vatSys-Plugin': 'vatSys Plugin',
-  'EuroScope-Plugin': 'EuroScope Plugin',
-  'SimConnect.net': 'SimConnect.net',
-  'Installer': 'Installer'
+      'EuroScope-Plugin': 'EuroScope Plugin',
+      'SimConnect.net': 'SimConnect.net',
+      Installer: 'Installer',
     };
     return productMap[product] || product;
   };
@@ -191,7 +192,7 @@ const Changelog = () => {
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     }).format(new Date(dateString));
   };
 
@@ -242,12 +243,14 @@ const Changelog = () => {
           {/* Header Section */}
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-4xl font-semibold">Changelog</h1>
-            
+
             {/* Filter Dropdown */}
             <div className="w-56 mt-1">
               <Select
                 value={currentFilterLabel()}
-                onValueChange={(val) => handleSelectFilter(val === currentFilterLabel() ? '__all__' : val)}
+                onValueChange={(val) =>
+                  handleSelectFilter(val === currentFilterLabel() ? '__all__' : val)
+                }
                 placeholder="All Products"
               >
                 {({ active, onSelect }) => (
@@ -261,7 +264,7 @@ const Changelog = () => {
                         All Products
                       </button>
                     </li>
-                    {filterOptions.map(opt => (
+                    {filterOptions.map((opt) => (
                       <li key={opt.id}>
                         <button
                           type="button"
@@ -306,7 +309,9 @@ const Changelog = () => {
                     {activeFilters.length === 1 ? ` "${currentFilterLabel()}"` : ''}.
                   </p>
                 ) : (
-                  <p className="text-zinc-500 mb-2">No releases were found, please try again later or contact support.</p>
+                  <p className="text-zinc-500 mb-2">
+                    No releases were found, please try again later or contact support.
+                  </p>
                 )}
               </div>
             </div>
@@ -323,14 +328,16 @@ const Changelog = () => {
                     {/* Timeline dot positioned relative to this release */}
                     <div className="absolute -left-48 flex items-baseline" style={{ top: '2px' }}>
                       <div className="relative">
-                        <div className={`timeline-dot w-3.5 h-3.5 ${index === 0 ? 'bg-green-500' : 'bg-zinc-600'} rounded-full border-2 border-zinc-900 shadow-lg transition-colors duration-300`}></div>
+                        <div
+                          className={`timeline-dot w-3.5 h-3.5 ${index === 0 ? 'bg-green-500' : 'bg-zinc-600'} rounded-full border-2 border-zinc-900 shadow-lg transition-colors duration-300`}
+                        ></div>
                         {index === 0 && (
                           <>
-                            <div 
+                            <div
                               className="absolute inset-0 w-3.5 h-3.5 bg-green-500 rounded-full animate-pulse opacity-50"
                               style={{ animationDuration: '3s' }}
                             ></div>
-                            <div 
+                            <div
                               className="absolute -inset-0.5 w-4.5 h-4.5 bg-green-500 rounded-full animate-ping opacity-20"
                               style={{ animationDuration: '3s' }}
                             ></div>
@@ -342,12 +349,15 @@ const Changelog = () => {
                             className="absolute left-1.75 w-px bg-zinc-800 transition-[height] duration-300 ease-out"
                             style={{
                               top: '14px',
-                              height: lineHeights[index] || 0
+                              height: lineHeights[index] || 0,
                             }}
                           ></div>
                         )}
                       </div>
-                      <div className="text-sm text-zinc-300 font-medium ml-4 whitespace-nowrap" style={{ marginTop: '-2px' }}>
+                      <div
+                        className="text-sm text-zinc-300 font-medium ml-4 whitespace-nowrap"
+                        style={{ marginTop: '-2px' }}
+                      >
                         {formatDate(release.created_at)}
                       </div>
                     </div>
@@ -356,7 +366,7 @@ const Changelog = () => {
                     <h2 className="text-2xl font-semibold text-white mb-6">
                       {formatProductName(release.product)} v{release.version}
                     </h2>
-                    
+
                     {/* Release Image (only if available) */}
                     {release.image_url && (
                       <div className="mb-6">
@@ -377,13 +387,13 @@ const Changelog = () => {
                     {release.changelog && (
                       <div className="mb-12">
                         <article className="markdown-preview prose prose-invert prose-zinc max-w-none">
-                          <div 
+                          <div
                             className="text-zinc-300 leading-relaxed space-y-4"
                             dangerouslySetInnerHTML={{ __html: renderMarkdown(release.changelog) }}
                             style={{
                               /* Custom markdown styles */
                               fontSize: '0.95rem',
-                              lineHeight: '1.7'
+                              lineHeight: '1.7',
                             }}
                           />
                         </article>

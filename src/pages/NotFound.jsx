@@ -14,28 +14,21 @@ const NotFound = () => {
           <div className="flex justify-center mb-8">
             <AlertOctagon className="w-20 h-20 text-red-500" />
           </div>
-          
+
           <h1 className="text-4xl font-bold mb-4">Page Not Found</h1>
-          
+
           <p className="text-zinc-400 mb-8">
-            The page you&apos;re looking for doesn&apos;t exist or has been moved.
-            Please check the URL or try navigating back to the home page.
+            The page you&apos;re looking for doesn&apos;t exist or has been moved. Please check the
+            URL or try navigating back to the home page.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button
-              variant="secondary"
-              onClick={() => navigate(-1)}
-              className="w-full sm:w-auto"
-            >
+            <Button variant="secondary" onClick={() => navigate(-1)} className="w-full sm:w-auto">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Go Back
             </Button>
-            
-            <Button
-              onClick={() => navigate('/')}
-              className="w-full sm:w-auto"
-            >
+
+            <Button onClick={() => navigate('/')} className="w-full sm:w-auto">
               <Home className="w-4 h-4 mr-2" />
               Return Home
             </Button>

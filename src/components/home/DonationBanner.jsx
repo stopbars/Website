@@ -4,8 +4,7 @@ export const DonationBanner = () => {
   return (
     <section className="py-12">
       <div className="max-w-5xl mx-auto px-6">
-  <div className="relative overflow-hidden rounded-2xl bg-emerald-900 border border-emerald-700">
-
+        <div className="relative overflow-hidden rounded-2xl bg-emerald-900 border border-emerald-700">
           <div className="relative px-8 py-10 text-center">
             <div className="flex items-center justify-center gap-3 mb-4">
               <HeartHandshake className="w-7 h-7 text-white" />
@@ -20,8 +19,8 @@ export const DonationBanner = () => {
               <div className="mx-auto max-w-2xl rounded-lg bg-emerald-900 border border-emerald-700 p-6">
                 <p className="text-emerald-50">
                   As our community grows, so do our costs. Your support directly keeps BARS free and
-                  accessible for everyone. All our finances are completely public - donations, expenses,
-                  and transactions - ensuring your support is used responsibly.
+                  accessible for everyone. All our finances are completely public - donations,
+                  expenses, and transactions - ensuring your support is used responsibly.
                 </p>
               </div>
             </div>
@@ -36,9 +35,8 @@ export const DonationBanner = () => {
               >
                 Support BARS
                 <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
-                
               </a>
-            </div>    
+            </div>
           </div>
         </div>
       </div>

@@ -8,7 +8,17 @@ import { AlertTriangle, CheckCircle2, Loader2, Trash2, Eraser, Sparkles } from '
 const API_BASE = 'https://v2.stopbars.com';
 
 // Known namespaces (from backend)
-const KNOWN_NAMESPACES = ['airports', 'points', 'divisions', 'auth', 'state', 'health', 'installer', 'github', 'faq'];
+const KNOWN_NAMESPACES = [
+  'airports',
+  'points',
+  'divisions',
+  'auth',
+  'state',
+  'health',
+  'installer',
+  'github',
+  'faq',
+];
 
 export default function CacheManagement() {
   const [key, setKey] = useState('');
@@ -30,15 +40,19 @@ export default function CacheManagement() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Vatsim-Token': token || ''
+          'X-Vatsim-Token': token || '',
         },
-        body: JSON.stringify({ key, namespace })
+        body: JSON.stringify({ key, namespace }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(data?.error || `${response.status} ${response.statusText}`);
       }
-      setResult({ type: 'success', message: `Purged key "${key}" in namespace "${namespace}".`, details: data });
+      setResult({
+        type: 'success',
+        message: `Purged key "${key}" in namespace "${namespace}".`,
+        details: data,
+      });
       setKey('');
     } catch (e) {
       setResult({ type: 'error', message: e.message || 'Failed to purge key' });
@@ -59,9 +73,9 @@ export default function CacheManagement() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Vatsim-Token': token || ''
+          'X-Vatsim-Token': token || '',
         },
-        body: JSON.stringify({ namespace })
+        body: JSON.stringify({ namespace }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -82,8 +96,8 @@ export default function CacheManagement() {
       const response = await fetch(`${API_BASE}/purge-cache-all`, {
         method: 'POST',
         headers: {
-          'X-Vatsim-Token': token || ''
-        }
+          'X-Vatsim-Token': token || '',
+        },
         // No body -> purge all namespaces
       });
       const data = await response.json().catch(() => ({}));
@@ -122,7 +136,9 @@ export default function CacheManagement() {
       {result && (
         <div
           className={`p-3 rounded-lg border flex items-start space-x-3 ${
-            result.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'
+            result.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/20'
+              : 'bg-red-500/10 border-red-500/20'
           }`}
         >
           {result.type === 'success' ? (
@@ -147,7 +163,9 @@ export default function CacheManagement() {
         <Card className="p-4 space-y-4">
           <div>
             <h3 className="font-medium">Purge Cache Key</h3>
-            <p className="text-sm text-zinc-400">Delete a specific cache entry by key within a required namespace.</p>
+            <p className="text-sm text-zinc-400">
+              Delete a specific cache entry by key within a required namespace.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -177,16 +195,22 @@ export default function CacheManagement() {
               </div>
               <div className="flex flex-wrap gap-2 mt-2">
                 {KNOWN_NAMESPACES.map((ns) => (
-                  <Badge key={ns} onClick={() => setNamespace(ns)}>{ns}</Badge>
+                  <Badge key={ns} onClick={() => setNamespace(ns)}>
+                    {ns}
+                  </Badge>
                 ))}
               </div>
             </div>
             <div>
               <Button onClick={handlePurgeKey} disabled={loading || !key || !namespace}>
                 {loading ? (
-                  <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Purging…</span>
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Purging…
+                  </span>
                 ) : (
-                  <span className="inline-flex items-center gap-2"><Trash2 className="w-4 h-4" /> Purge Key</span>
+                  <span className="inline-flex items-center gap-2">
+                    <Trash2 className="w-4 h-4" /> Purge Key
+                  </span>
                 )}
               </Button>
             </div>
@@ -196,7 +220,9 @@ export default function CacheManagement() {
         <Card className="p-4 space-y-4">
           <div>
             <h3 className="font-medium">Purge Namespace</h3>
-            <p className="text-sm text-zinc-400">Bump version for a namespace to invalidate all its entries.</p>
+            <p className="text-sm text-zinc-400">
+              Bump version for a namespace to invalidate all its entries.
+            </p>
           </div>
           <div className="space-y-3">
             <div>
@@ -211,15 +237,21 @@ export default function CacheManagement() {
                 />
                 <Button onClick={handlePurgeNamespace} disabled={loading}>
                   {loading ? (
-                    <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Purging…</span>
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Purging…
+                    </span>
                   ) : (
-                    <span className="inline-flex items-center gap-2"><Eraser className="w-4 h-4" /> Purge Namespace</span>
+                    <span className="inline-flex items-center gap-2">
+                      <Eraser className="w-4 h-4" /> Purge Namespace
+                    </span>
                   )}
                 </Button>
               </div>
               <div className="flex flex-wrap gap-2 mt-2">
                 {KNOWN_NAMESPACES.map((ns) => (
-                  <Badge key={ns} onClick={() => setNamespace(ns)}>{ns}</Badge>
+                  <Badge key={ns} onClick={() => setNamespace(ns)}>
+                    {ns}
+                  </Badge>
                 ))}
               </div>
             </div>
@@ -231,13 +263,23 @@ export default function CacheManagement() {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-medium">Purge ALL Namespaces</h3>
-            <p className="text-sm text-zinc-400">Bump versions for all known namespaces. Use with care.</p>
+            <p className="text-sm text-zinc-400">
+              Bump versions for all known namespaces. Use with care.
+            </p>
           </div>
-          <Button onClick={handlePurgeAll} disabled={loading} className="bg-red-600 hover:bg-red-500">
+          <Button
+            onClick={handlePurgeAll}
+            disabled={loading}
+            className="bg-red-600 hover:bg-red-500"
+          >
             {loading ? (
-              <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Purging…</span>
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Purging…
+              </span>
             ) : (
-              <span className="inline-flex items-center gap-2"><Sparkles className="w-4 h-4" /> Purge ALL</span>
+              <span className="inline-flex items-center gap-2">
+                <Sparkles className="w-4 h-4" /> Purge ALL
+              </span>
             )}
           </Button>
         </div>

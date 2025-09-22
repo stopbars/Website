@@ -7,7 +7,7 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 export const ProtectedRoute = ({ children }) => {
   const { user, loading, bannedInfo } = useAuth();
   const savedToken = getVatsimToken();
- 
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -19,7 +19,7 @@ export const ProtectedRoute = ({ children }) => {
   if (bannedInfo?.banned) {
     return <Navigate to="/banned" replace />;
   }
-  
+
   // Allow access if we have a valid token (not banned) or a resolved user
   if (savedToken || user) {
     return children;
@@ -29,5 +29,5 @@ export const ProtectedRoute = ({ children }) => {
 };
 
 ProtectedRoute.propTypes = {
-  children: PropTypes.node.isRequired
+  children: PropTypes.node.isRequired,
 };

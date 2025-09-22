@@ -4,8 +4,26 @@ import PropTypes from 'prop-types';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { AlertCircle, ChevronLeft, ChevronRight, CopyIcon, Info, Loader, Check, RefreshCw } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, LayersControl, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  CopyIcon,
+  Info,
+  Loader,
+  Check,
+  RefreshCw,
+} from 'lucide-react';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  LayersControl,
+  Popup,
+  Polyline,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -28,10 +46,17 @@ const toLatLngPair = (coords) => {
     const c = coords[0];
     return c && typeof c.lat === 'number' && typeof c.lng === 'number' ? [c.lat, c.lng] : null;
   }
-  return (typeof coords.lat === 'number' && typeof coords.lng === 'number') ? [coords.lat, coords.lng] : null;
+  return typeof coords.lat === 'number' && typeof coords.lng === 'number'
+    ? [coords.lat, coords.lng]
+    : null;
 };
 
-function SegmentedDefs({ segments = [], topColor = '#ef4444', bottomColor = '#999999', strokeWidth = 10 }) {
+function SegmentedDefs({
+  segments = [],
+  topColor = '#ef4444',
+  bottomColor = '#999999',
+  strokeWidth = 10,
+}) {
   const map = useMap();
 
   useEffect(() => {
@@ -49,9 +74,11 @@ function SegmentedDefs({ segments = [], topColor = '#ef4444', bottomColor = '#99
     }
 
     const build = () => {
-      [...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`)].forEach(n => n.remove());
+      [
+        ...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`),
+      ].forEach((n) => n.remove());
 
-      segments.forEach(seg => {
+      segments.forEach((seg) => {
         const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
 
         // convert lat/lng to SVG layer points (pixels)
@@ -104,7 +131,9 @@ function SegmentedDefs({ segments = [], topColor = '#ef4444', bottomColor = '#99
 
     return () => {
       map.off('zoom viewreset move', onChange);
-      [...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`)].forEach(n => n.remove());
+      [
+        ...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`),
+      ].forEach((n) => n.remove());
     };
   }, [map, segments, topColor, bottomColor, strokeWidth]);
 
@@ -118,17 +147,17 @@ SegmentedDefs.propTypes = {
       idx: PropTypes.number.isRequired,
       p1: PropTypes.shape({
         lat: PropTypes.number.isRequired,
-        lng: PropTypes.number.isRequired
+        lng: PropTypes.number.isRequired,
       }).isRequired,
       p2: PropTypes.shape({
         lat: PropTypes.number.isRequired,
-        lng: PropTypes.number.isRequired
-      }).isRequired
+        lng: PropTypes.number.isRequired,
+      }).isRequired,
     })
   ),
   topColor: PropTypes.string,
   bottomColor: PropTypes.string,
-  strokeWidth: PropTypes.number
+  strokeWidth: PropTypes.number,
 };
 
 // Get point color based on type and color properties
@@ -165,11 +194,12 @@ const createCustomIcon = (point) => {
     html = `
       <div class="marker-container">
         <div class="marker-circle stopbar-marker ${point.orientation || 'left'}">
-          ${point.directionality === 'uni-directional' ? 
-            (point.orientation === 'left' ? 
-              '<div class="marker-quarter marker-quarter-4"></div>' : 
-              '<div class="marker-quarter marker-quarter-1"></div>'
-            ) : ''
+          ${
+            point.directionality === 'uni-directional'
+              ? point.orientation === 'left'
+                ? '<div class="marker-quarter marker-quarter-4"></div>'
+                : '<div class="marker-quarter marker-quarter-1"></div>'
+              : ''
           }
         </div>
       </div>
@@ -194,8 +224,7 @@ const createCustomIcon = (point) => {
           </div>
         </div>
       `;
-      }
-      else if (point.color === 'green-yellow') {
+      } else if (point.color === 'green-yellow') {
         html = `
         <div class="marker-container">
           <div class="marker-circle lead-on-marker">
@@ -206,8 +235,7 @@ const createCustomIcon = (point) => {
           </div>
         </div>
       `;
-      }
-      else if (point.color === 'green-blue') {
+      } else if (point.color === 'green-blue') {
         html = `
         <div class="marker-container">
           <div class="marker-circle lead-on-marker">
@@ -218,8 +246,7 @@ const createCustomIcon = (point) => {
           </div>
         </div>
       `;
-      }
-      else if (point.color === 'green-orange') {
+      } else if (point.color === 'green-orange') {
         html = `
         <div class="marker-container">
           <div class="marker-circle lead-on-marker">
@@ -231,78 +258,78 @@ const createCustomIcon = (point) => {
         </div>
       `;
       }
-    }
-    else if (point.directionality === 'uni-directional') {
+    } else if (point.directionality === 'uni-directional') {
       if (point.color === 'green') {
         html = `
         <div class="marker-container">
           <div class="marker-circle taxiway-green ${point.orientation || 'left'}">
-            ${point.directionality === 'uni-directional' ? 
-              (point.orientation === 'left' ? 
-                `<div class="marker-quarter taxiway-quarter-L"></div>` : 
-                `<div class="marker-quarter taxiway-quarter-R"></div>`
-              ) : ''
+            ${
+              point.directionality === 'uni-directional'
+                ? point.orientation === 'left'
+                  ? `<div class="marker-quarter taxiway-quarter-L"></div>`
+                  : `<div class="marker-quarter taxiway-quarter-R"></div>`
+                : ''
             }
           </div>
         </div>
       `;
-      }
-      else if (point.color === 'green-yellow') {
-          html = `
+      } else if (point.color === 'green-yellow') {
+        html = `
             <div class="marker-container">
               <div class="marker-circle ${point.orientation || 'left'}">
-                ${point.directionality === 'uni-directional' ? 
-                  (point.orientation === 'left' ? 
-                    `
+                ${
+                  point.directionality === 'uni-directional'
+                    ? point.orientation === 'left'
+                      ? `
                     <div class="marker-quarter taxiway-yellow-quarter-1"></div>
                     <div class="marker-quarter taxiway-yellow-quarter-2"></div>
                     <div class="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div class="marker-quarter taxiway-quarter-L"></div>` : 
-                    `<div class="marker-quarter taxiway-quarter-R"></div>
+                    <div class="marker-quarter taxiway-quarter-L"></div>`
+                      : `<div class="marker-quarter taxiway-quarter-R"></div>
                     <div class="marker-quarter taxiway-yellow-quarter-2"></div>
                     <div class="marker-quarter taxiway-yellow-quarter-3"></div>
                     <div class="marker-quarter taxiway-yellow-quarter-4"></div>`
-                  ) : ''
+                    : ''
                 }
               </div>
             </div>
           `;
-          }
-      else if (point.color === 'green-blue') {
+      } else if (point.color === 'green-blue') {
         html = `
         <div class="marker-container">
           <div class="marker-circle ${point.orientation || 'left'}">
-            ${point.directionality === 'uni-directional' ? 
-              (point.orientation === 'left' ? 
-                `<div class="marker-quarter taxiway-blue-quarter-1"></div>
+            ${
+              point.directionality === 'uni-directional'
+                ? point.orientation === 'left'
+                  ? `<div class="marker-quarter taxiway-blue-quarter-1"></div>
                 <div class="marker-quarter taxiway-blue-quarter-2"></div>
                 <div class="marker-quarter taxiway-blue-quarter-3"></div>
-                <div class="marker-quarter taxiway-quarter-L"></div>` : 
-                `<div class="marker-quarter taxiway-quarter-R"></div>
+                <div class="marker-quarter taxiway-quarter-L"></div>`
+                  : `<div class="marker-quarter taxiway-quarter-R"></div>
                 <div class="marker-quarter taxiway-blue-quarter-2"></div>
                 <div class="marker-quarter taxiway-blue-quarter-3"></div>
                 <div class="marker-quarter taxiway-blue-quarter-4"></div>`
-              ) : ''
+                : ''
             }
           </div>
         </div>
-      `;    
-      }
-      else if (point.color === 'green-orange') {
+      `;
+      } else if (point.color === 'green-orange') {
         html = `
         <div class="marker-container">
           <div class="marker-circle ${point.orientation || 'left'}">
-            ${point.directionality === 'uni-directional' ? 
-              (point.orientation === 'left' ? 
-                `<div class="marker-quarter taxiway-orange-quarter-1"></div>
+            ${
+              point.directionality === 'uni-directional'
+                ? point.orientation === 'left'
+                  ? `<div class="marker-quarter taxiway-orange-quarter-1"></div>
                 <div class="marker-quarter taxiway-orange-quarter-2"></div>
                 <div class="marker-quarter taxiway-orange-quarter-3"></div>
-                <div class="marker-quarter taxiway-quarter-L"></div>` : 
-                `<div class="marker-quarter taxiway-quarter-R"></div>
+                <div class="marker-quarter taxiway-quarter-L"></div>`
+                  : `<div class="marker-quarter taxiway-quarter-R"></div>
                 <div class="marker-quarter taxiway-orange-quarter-2"></div>
                 <div class="marker-quarter taxiway-orange-quarter-3"></div>
                 <div class="marker-quarter taxiway-orange-quarter-4"></div>`
-              ) : ''
+                : ''
             }
           </div>
         </div>
@@ -322,7 +349,7 @@ const createCustomIcon = (point) => {
     html: html,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
-    popupAnchor: [0, -12]
+    popupAnchor: [0, -12],
   });
 };
 
@@ -460,7 +487,7 @@ delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png'
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
 // Determine polyline gradient colors to mirror single-point styles
@@ -530,7 +557,7 @@ const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
   const mapRef = useRef(null);
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [airport, setAirport] = useState(null);
@@ -587,7 +614,7 @@ const ContributeMap = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch airport data from API
         const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
         if (!airportResponse.ok) {
@@ -600,19 +627,19 @@ const ContributeMap = () => {
           icao: airportData.icao,
           name: airportData.name,
           latitude: airportData.latitude,
-          longitude: airportData.longitude
+          longitude: airportData.longitude,
         });
         setMapCenter([airportData.latitude, airportData.longitude]);
-        
+
         // Fetch points data for this airport
         const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${icao}/points`);
         if (!pointsResponse.ok) {
           throw new Error('Failed to fetch points data');
         }
         const pointsData = await pointsResponse.json();
-        
+
         // Transform points data to match our format
-        const transformedPoints = pointsData.map(point => ({
+        const transformedPoints = pointsData.map((point) => ({
           id: point.id,
           type: point.type,
           name: point.name,
@@ -620,9 +647,9 @@ const ContributeMap = () => {
           directionality: point.directionality,
           color: point.color || undefined,
           elevated: point.elevated,
-          ihp: point.ihp
+          ihp: point.ihp,
         }));
-        
+
         setPoints(transformedPoints);
       } catch (err) {
         setError('Failed to load airport data. Please try again.');
@@ -631,7 +658,7 @@ const ContributeMap = () => {
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, [icao]);
 
@@ -652,7 +679,7 @@ const ContributeMap = () => {
       event.stopPropagation();
       event.preventDefault();
     }
-    
+
     navigator.clipboard.writeText(id);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -712,17 +739,15 @@ const ContributeMap = () => {
               </Button>
               <h1 className="text-3xl font-bold">{airport.icao} Contribution</h1>
             </div>
-            <p className="text-zinc-400">
-              Step 2: Review existing points for {airport.name}
-            </p>
+            <p className="text-zinc-400">Step 2: Review existing points for {airport.name}</p>
           </div>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               {/* Map */}
               <div className="h-[600px] rounded-lg overflow-hidden border border-zinc-800">
-                <MapContainer 
-                  center={mapCenter} 
+                <MapContainer
+                  center={mapCenter}
                   zoom={mapZoom}
                   maxZoom={22}
                   style={{ height: '100%', width: '100%' }}
@@ -747,8 +772,8 @@ const ContributeMap = () => {
                       />
                     </LayersControl.BaseLayer>
                   </LayersControl>
-                  
-                  {points.map(point => {
+
+                  {points.map((point) => {
                     const coords = point.coordinates;
                     const isPath = Array.isArray(coords) && coords.length >= 2;
                     if (!isPath) {
@@ -763,24 +788,24 @@ const ContributeMap = () => {
                             click: () => {
                               setActivePointId(point.id === activePointId ? null : point.id);
                               if (mapRef.current) {
-                                mapRef.current.setView(
-                                  pos,
-                                  mapRef.current.getZoom()
-                                );
+                                mapRef.current.setView(pos, mapRef.current.getZoom());
                               }
                             },
                             popupclose: () => {
                               setActivePointId(null);
-                            }
+                            },
                           }}
                         >
-                          <Popup 
+                          <Popup
                             className="custom-popup"
-                            eventHandlers={{ close: () => setActivePointId(null), remove: () => setActivePointId(null) }}
+                            eventHandlers={{
+                              close: () => setActivePointId(null),
+                              remove: () => setActivePointId(null),
+                            }}
                           >
                             <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
                               <h3 className="font-bold text-white mb-1">{point.name}</h3>
-                              
+
                               <div className="bg-zinc-800/50 rounded px-3 py-2 mb-3 flex items-center justify-between">
                                 <code className="text-sm text-zinc-300">{point.id}</code>
                                 <button
@@ -788,29 +813,43 @@ const ContributeMap = () => {
                                   className={`text-zinc-400 hover:text-white transition-colors p-1 rounded ${copiedId === point.id ? 'text-green-500' : ''}`}
                                   title="Copy ID"
                                 >
-                                  {copiedId === point.id ? <Check className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                                  {copiedId === point.id ? (
+                                    <Check className="w-4 h-4" />
+                                  ) : (
+                                    <CopyIcon className="w-4 h-4" />
+                                  )}
                                 </button>
                               </div>
 
                               <div className="space-y-2">
                                 <div className="flex justify-between">
                                   <span className="text-sm text-zinc-400">Type:</span>
-                                  <span className="text-sm text-white">{formatType(point.type)}</span>
+                                  <span className="text-sm text-white">
+                                    {formatType(point.type)}
+                                  </span>
                                 </div>
 
                                 {point.type === 'stopbar' && (
                                   <>
                                     <div className="flex justify-between">
                                       <span className="text-sm text-zinc-400">Directionality:</span>
-                                      <span className="text-sm text-white capitalize">{point.directionality}</span>
+                                      <span className="text-sm text-white capitalize">
+                                        {point.directionality}
+                                      </span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span className="text-sm text-zinc-400">Has Elevated Bar:</span>
-                                      <span className="text-sm text-white">{point.elevated ? 'Yes' : 'No'}</span>
+                                      <span className="text-sm text-zinc-400">
+                                        Has Elevated Bar:
+                                      </span>
+                                      <span className="text-sm text-white">
+                                        {point.elevated ? 'Yes' : 'No'}
+                                      </span>
                                     </div>
                                     <div className="flex justify-between">
                                       <span className="text-sm text-zinc-400">IHP:</span>
-                                      <span className="text-sm text-white">{point.ihp ? 'Yes' : 'No'}</span>
+                                      <span className="text-sm text-white">
+                                        {point.ihp ? 'Yes' : 'No'}
+                                      </span>
                                     </div>
                                   </>
                                 )}
@@ -819,11 +858,15 @@ const ContributeMap = () => {
                                   <>
                                     <div className="flex justify-between">
                                       <span className="text-sm text-zinc-400">Directionality:</span>
-                                      <span className="text-sm text-white capitalize">{point.directionality}</span>
+                                      <span className="text-sm text-white capitalize">
+                                        {point.directionality}
+                                      </span>
                                     </div>
                                     <div className="flex justify-between">
                                       <span className="text-sm text-zinc-400">Color Style:</span>
-                                      <span className="text-sm text-white">{formatColorStyle(point.color)}</span>
+                                      <span className="text-sm text-white">
+                                        {formatColorStyle(point.color)}
+                                      </span>
                                     </div>
                                   </>
                                 )}
@@ -835,21 +878,28 @@ const ContributeMap = () => {
                     }
 
                     // Polyline rendering for multi-point objects (basic single red line)
-                    const safe = coords.filter(c => typeof c?.lat === 'number' && typeof c?.lng === 'number');
+                    const safe = coords.filter(
+                      (c) => typeof c?.lat === 'number' && typeof c?.lng === 'number'
+                    );
                     if (safe.length < 2) return null;
-                    const positions = safe.map(c => [c.lat, c.lng]);
+                    const positions = safe.map((c) => [c.lat, c.lng]);
                     const onClick = () => {
                       setActivePointId(point.id === activePointId ? null : point.id);
                       if (mapRef.current) {
-                        mapRef.current.setView([safe[0].lat, safe[0].lng], mapRef.current.getZoom());
+                        mapRef.current.setView(
+                          [safe[0].lat, safe[0].lng],
+                          mapRef.current.getZoom()
+                        );
                       }
                     };
 
-                    
                     const renderPopup = (
-                      <Popup 
+                      <Popup
                         className="custom-popup"
-                        eventHandlers={{ close: () => setActivePointId(null), remove: () => setActivePointId(null) }}
+                        eventHandlers={{
+                          close: () => setActivePointId(null),
+                          remove: () => setActivePointId(null),
+                        }}
                       >
                         <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
                           <h3 className="font-bold text-white mb-1">{point.name}</h3>
@@ -860,7 +910,11 @@ const ContributeMap = () => {
                               className={`text-zinc-400 hover:text-white transition-colors p-1 rounded ${copiedId === point.id ? 'text-green-500' : ''}`}
                               title="Copy ID"
                             >
-                              {copiedId === point.id ? <Check className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                              {copiedId === point.id ? (
+                                <Check className="w-4 h-4" />
+                              ) : (
+                                <CopyIcon className="w-4 h-4" />
+                              )}
                             </button>
                           </div>
                           <div className="space-y-2">
@@ -872,15 +926,21 @@ const ContributeMap = () => {
                               <>
                                 <div className="flex justify-between">
                                   <span className="text-sm text-zinc-400">Directionality:</span>
-                                  <span className="text-sm text-white capitalize">{point.directionality}</span>
+                                  <span className="text-sm text-white capitalize">
+                                    {point.directionality}
+                                  </span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-sm text-zinc-400">Has Elevated Bar:</span>
-                                  <span className="text-sm text-white">{point.elevated ? 'Yes' : 'No'}</span>
+                                  <span className="text-sm text-white">
+                                    {point.elevated ? 'Yes' : 'No'}
+                                  </span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-sm text-zinc-400">IHP:</span>
-                                  <span className="text-sm text-white">{point.ihp ? 'Yes' : 'No'}</span>
+                                  <span className="text-sm text-white">
+                                    {point.ihp ? 'Yes' : 'No'}
+                                  </span>
                                 </div>
                               </>
                             )}
@@ -888,11 +948,15 @@ const ContributeMap = () => {
                               <>
                                 <div className="flex justify-between">
                                   <span className="text-sm text-zinc-400">Directionality:</span>
-                                  <span className="text-sm text-white capitalize">{point.directionality}</span>
+                                  <span className="text-sm text-white capitalize">
+                                    {point.directionality}
+                                  </span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-sm text-zinc-400">Color Style:</span>
-                                  <span className="text-sm text-white">{formatColorStyle(point.color)}</span>
+                                  <span className="text-sm text-white">
+                                    {formatColorStyle(point.color)}
+                                  </span>
                                 </div>
                               </>
                             )}
@@ -907,28 +971,42 @@ const ContributeMap = () => {
                         baseId: point.id,
                         idx: i,
                         p1: safe[i],
-                        p2: safe[i + 1]
+                        p2: safe[i + 1],
                       });
                     }
                     const { topColor, bottomColor } = getPolylineColors(point);
                     const isActive = activePointId === point.id;
-                    
+
                     return (
                       <React.Fragment key={point.id}>
                         <Polyline
                           key={`${point.id}-outline`}
                           positions={positions}
-                          pathOptions={{ color: isActive ? '#f00' : '#ffffff', weight: 15, opacity: isActive ? 0.7 : 1, lineCap: 'round', lineJoin: 'round' }}
+                          pathOptions={{
+                            color: isActive ? '#f00' : '#ffffff',
+                            weight: 15,
+                            opacity: isActive ? 0.7 : 1,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                          }}
                           interactive={false}
                         />
 
                         {/* inject per-segment gradients into the map SVG */}
-                        <SegmentedDefs segments={segments} topColor={topColor} bottomColor={bottomColor} strokeWidth={10} />
+                        <SegmentedDefs
+                          segments={segments}
+                          topColor={topColor}
+                          bottomColor={bottomColor}
+                          strokeWidth={10}
+                        />
 
                         {/* render each segment as its own polyline, each referencing its gradient */}
-                        {segments.map(seg => {
+                        {segments.map((seg) => {
                           const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
-                          const segPositions = [[seg.p1.lat, seg.p1.lng], [seg.p2.lat, seg.p2.lng]];
+                          const segPositions = [
+                            [seg.p1.lat, seg.p1.lng],
+                            [seg.p2.lat, seg.p2.lng],
+                          ];
 
                           return (
                             <Polyline
@@ -939,7 +1017,7 @@ const ContributeMap = () => {
                                 weight: 10,
                                 opacity: 1,
                                 lineCap: 'round',
-                                lineJoin: 'round'
+                                lineJoin: 'round',
                               }}
                               eventHandlers={{ click: onClick }}
                             >
@@ -953,7 +1031,7 @@ const ContributeMap = () => {
                 </MapContainer>
               </div>
             </div>
-            
+
             <div className="space-y-6">
               {/* Airport info */}
               <Card className="p-6">
@@ -975,25 +1053,27 @@ const ContributeMap = () => {
                   </div>
                 </div>
               </Card>
-              
+
               {points.length === 0 ? (
                 <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
                   <AlertCircle className="w-5 h-5 text-amber-400 mr-3 flex-shrink-0" />
                   <p className="text-sm text-amber-400">
-                    This airport currently has no lighting points submitted by the owning Division. Please check back later, or contact the owning Division directly for support.
+                    This airport currently has no lighting points submitted by the owning Division.
+                    Please check back later, or contact the owning Division directly for support.
                   </p>
                 </div>
               ) : (
                 <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
                   <Info className="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" />
                   <p className="text-sm text-blue-400">
-                    These are the existing mapped points for this airport, set by the Division. Your contribution will add support for a specific simulator scenery package.
+                    These are the existing mapped points for this airport, set by the Division. Your
+                    contribution will add support for a specific simulator scenery package.
                   </p>
                 </div>
               )}
-              
+
               {/* Continue button (disabled when no Division points) */}
-              <Button 
+              <Button
                 onClick={points.length === 0 ? undefined : handleContinue}
                 disabled={points.length === 0}
                 aria-disabled={points.length === 0}

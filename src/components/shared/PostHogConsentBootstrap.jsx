@@ -5,7 +5,7 @@ import posthog from 'posthog-js';
 export const PostHogConsentBootstrap = () => {
   useEffect(() => {
     try {
-  const consent = localStorage.getItem('analytics-consent');
+      const consent = localStorage.getItem('analytics-consent');
 
       if (!posthog) return;
 

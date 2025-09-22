@@ -28,7 +28,7 @@ class ErrorBoundaryClass extends Component {
       return this.props.fallback({
         error: this.state.error,
         errorInfo: this.state.errorInfo,
-        resetError: () => this.setState({ hasError: false, error: null, errorInfo: null })
+        resetError: () => this.setState({ hasError: false, error: null, errorInfo: null }),
       });
     }
 
@@ -38,7 +38,7 @@ class ErrorBoundaryClass extends Component {
 
 ErrorBoundaryClass.propTypes = {
   children: PropTypes.node.isRequired,
-  fallback: PropTypes.func.isRequired
+  fallback: PropTypes.func.isRequired,
 };
 
 // Route Error component used with errorElement
@@ -52,8 +52,8 @@ export const RouteError = () => {
   };
 
   const copyErrorToClipboard = async () => {
-    const errorText = `Error: ${error?.message || "An unexpected error occurred"}\n\nStack trace:\n${error?.stack || "No stack trace available"}`;
-    
+    const errorText = `Error: ${error?.message || 'An unexpected error occurred'}\n\nStack trace:\n${error?.stack || 'No stack trace available'}`;
+
     try {
       await navigator.clipboard.writeText(errorText);
       setCopied(true);
@@ -79,44 +79,30 @@ export const RouteError = () => {
               className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded"
               title="Copy error to clipboard"
             >
-              {copied ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
+              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
             </button>
             <p className="text-zinc-300 font-mono text-sm pr-8">
-              {error?.message || "An unexpected error occurred"}
+              {error?.message || 'An unexpected error occurred'}
             </p>
             {error?.stack && (
               <p className="text-zinc-400 text-xs mt-3 font-mono pr-8">
-                {error.stack.split("\n").slice(0, 3).join("\n")}
+                {error.stack.split('\n').slice(0, 3).join('\n')}
               </p>
             )}
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button
-              variant="secondary"
-              onClick={() => navigate(-1)}
-              className="w-full sm:w-auto"
-            >
+            <Button variant="secondary" onClick={() => navigate(-1)} className="w-full sm:w-auto">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Go Back
             </Button>
-            
-            <Button
-              onClick={() => resetError()}
-              className="w-full sm:w-auto"
-            >
+
+            <Button onClick={() => resetError()} className="w-full sm:w-auto">
               <RefreshCw className="w-4 h-4 mr-2" />
               Retry
             </Button>
 
-            <Button
-              onClick={() => navigate('/')}
-              className="w-full sm:w-auto"
-            >
+            <Button onClick={() => navigate('/')} className="w-full sm:w-auto">
               <Home className="w-4 h-4 mr-2" />
               Return Home
             </Button>
@@ -133,8 +119,8 @@ const DefaultFallback = ({ error, resetError }) => {
   const [copied, setCopied] = useState(false);
 
   const copyErrorToClipboard = async () => {
-    const errorText = `Error: ${error?.message || "An unexpected error occurred"}\n\nStack trace:\n${error?.stack || "No stack trace available"}`;
-    
+    const errorText = `Error: ${error?.message || 'An unexpected error occurred'}\n\nStack trace:\n${error?.stack || 'No stack trace available'}`;
+
     try {
       await navigator.clipboard.writeText(errorText);
       setCopied(true);
@@ -143,7 +129,7 @@ const DefaultFallback = ({ error, resetError }) => {
       console.error('Failed to copy error to clipboard:', err);
     }
   };
-  
+
   return (
     <Layout>
       <div className="min-h-[90vh] flex items-center justify-center px-6 pt-24">
@@ -160,44 +146,30 @@ const DefaultFallback = ({ error, resetError }) => {
               className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded"
               title="Copy error to clipboard"
             >
-              {copied ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
+              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
             </button>
             <p className="text-zinc-300 font-mono text-sm pr-8">
-              {error?.message || "An unexpected error occurred"}
+              {error?.message || 'An unexpected error occurred'}
             </p>
             {error?.stack && (
               <p className="text-zinc-400 text-xs mt-3 font-mono pr-8">
-                {error.stack.split("\n").slice(0, 3).join("\n")}
+                {error.stack.split('\n').slice(0, 3).join('\n')}
               </p>
             )}
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button
-              variant="secondary"
-              onClick={() => navigate(-1)}
-              className="w-full sm:w-auto"
-            >
+            <Button variant="secondary" onClick={() => navigate(-1)} className="w-full sm:w-auto">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Go Back
             </Button>
-            
-            <Button
-              onClick={resetError}
-              className="w-full sm:w-auto"
-            >
+
+            <Button onClick={resetError} className="w-full sm:w-auto">
               <RefreshCw className="w-4 h-4 mr-2" />
               Retry
             </Button>
 
-            <Button
-              onClick={() => navigate('/')}
-              className="w-full sm:w-auto"
-            >
+            <Button onClick={() => navigate('/')} className="w-full sm:w-auto">
               <Home className="w-4 h-4 mr-2" />
               Return Home
             </Button>
@@ -211,21 +183,17 @@ const DefaultFallback = ({ error, resetError }) => {
 DefaultFallback.propTypes = {
   error: PropTypes.any,
   errorInfo: PropTypes.any,
-  resetError: PropTypes.func.isRequired
+  resetError: PropTypes.func.isRequired,
 };
 
 // Main ErrorBoundary component with default fallback
 const ErrorBoundary = ({ children, fallback = DefaultFallback }) => {
-  return (
-    <ErrorBoundaryClass fallback={fallback}>
-      {children}
-    </ErrorBoundaryClass>
-  );
+  return <ErrorBoundaryClass fallback={fallback}>{children}</ErrorBoundaryClass>;
 };
 
 ErrorBoundary.propTypes = {
   children: PropTypes.node.isRequired,
-  fallback: PropTypes.func
+  fallback: PropTypes.func,
 };
 
 export { ErrorBoundary };

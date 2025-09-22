@@ -2,10 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
-import { 
-  AlertTriangle, 
-  Check, 
-  RefreshCw, 
+import {
+  AlertTriangle,
+  Check,
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
   Upload,
@@ -56,7 +56,7 @@ const UploadContribution = ({ onClose, onUpload }) => {
 
       onUpload({
         airportIcao: airportIcao.toUpperCase(),
-        fileContent
+        fileContent,
       });
     } catch (err) {
       setError(err.message || 'Failed to process file');
@@ -69,7 +69,7 @@ const UploadContribution = ({ onClose, onUpload }) => {
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-zinc-900 p-8 rounded-xl max-w-2xl w-full mx-4 border border-zinc-800">
         <h2 className="text-2xl font-bold mb-6">Upload Contribution</h2>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium mb-2">Airport ICAO</label>
@@ -82,7 +82,7 @@ const UploadContribution = ({ onClose, onUpload }) => {
               maxLength={4}
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium mb-2">XML File</label>
             <div className="flex items-center space-x-2">
@@ -104,25 +104,18 @@ const UploadContribution = ({ onClose, onUpload }) => {
               </Button>
             </div>
           </div>
-          
+
           {error && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
               <p className="text-red-500 text-sm">{error}</p>
             </div>
           )}
-          
+
           <div className="flex space-x-4 justify-end pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-            >
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={loading || !file}
-            >
+            <Button type="submit" disabled={loading || !file}>
               {loading ? (
                 <div className="flex items-center justify-center">
                   <Loader className="w-4 h-4 mr-2 animate-spin" />
@@ -137,16 +130,15 @@ const UploadContribution = ({ onClose, onUpload }) => {
             </Button>
           </div>
         </form>
-    </div>
+      </div>
     </div>
   );
 };
 
 UploadContribution.propTypes = {
   onClose: PropTypes.func.isRequired,
-  onUpload: PropTypes.func.isRequired
+  onUpload: PropTypes.func.isRequired,
 };
-
 
 // New Review Modal component with map and XML upload
 const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
@@ -167,7 +159,9 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
     // Set initial map center based on airport coordinates
     const fetchAirportData = async () => {
       try {
-        const response = await fetch(`https://v2.stopbars.com/airports?icao=${contribution.airportIcao}`);
+        const response = await fetch(
+          `https://v2.stopbars.com/airports?icao=${contribution.airportIcao}`
+        );
         if (response.ok) {
           const airportData = await response.json();
           if (airportData && airportData.latitude && airportData.longitude) {
@@ -175,55 +169,58 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
           }
         }
       } catch (error) {
-        console.error("Failed to fetch airport coordinates:", error);
+        console.error('Failed to fetch airport coordinates:', error);
       }
     };
-    
+
     fetchAirportData();
-  }, [contribution.airportIcao]); (xmlString) => {
+  }, [contribution.airportIcao]);
+  (xmlString) => {
     try {
       const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-      
+      const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
+
       let polygonFeatures = [];
       let removeAreas = [];
-      
+
       // Check if the XML has FSData/Polygon elements (for MSFS XML files)
       const polygons = Array.from(xmlDoc.getElementsByTagName('Polygon'));
-      
+
       if (polygons.length > 0) {
-        polygons.forEach(polygon => {
+        polygons.forEach((polygon) => {
           const displayName = polygon.getAttribute('displayName') || 'Unknown';
           const groupIndex = polygon.getAttribute('groupIndex') || '';
           const vertices = Array.from(polygon.getElementsByTagName('Vertex'));
-          
+
           if (vertices.length < 2) {
             return; // Skip polygons with less than 2 vertices
           }
-          
+
           // Extract vertices as array of coordinate pairs
-          const polygonCoordinates = vertices.map(vertex => {
-            const lat = parseFloat(vertex.getAttribute('lat'));
-            const lon = parseFloat(vertex.getAttribute('lon'));
-            
-            if (!isNaN(lat) && !isNaN(lon)) {
-              return [lat, lon];
-            }
-            return null;
-          }).filter(coord => coord !== null);
-          
+          const polygonCoordinates = vertices
+            .map((vertex) => {
+              const lat = parseFloat(vertex.getAttribute('lat'));
+              const lon = parseFloat(vertex.getAttribute('lon'));
+
+              if (!isNaN(lat) && !isNaN(lon)) {
+                return [lat, lon];
+              }
+              return null;
+            })
+            .filter((coord) => coord !== null);
+
           // Skip empty polygons
           if (polygonCoordinates.length < 2) {
             return;
           }
-          
+
           // Handle "remove" areas differently
           if (displayName.toLowerCase() === 'remove') {
             removeAreas.push({
               id: `remove-${polygon.getAttribute('UniqueGUID') || Date.now()}`,
               name: displayName,
               type: 'remove',
-              coordinates: polygonCoordinates
+              coordinates: polygonCoordinates,
             });
           } else {
             // Determine type from naming convention or groupIndex
@@ -249,51 +246,53 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                   type = 'stopbar';
               }
             }
-            
+
             // Create polygon feature
             polygonFeatures.push({
               id: `${displayName}-${Date.now()}`,
               name: displayName,
               type,
-              coordinates: polygonCoordinates
+              coordinates: polygonCoordinates,
             });
           }
         });
       } else {
         // Fallback to original Stopbar parsing logic
         const stopbars = Array.from(xmlDoc.getElementsByTagName('Stopbar'));
-        
-        stopbars.forEach(stopbar => {
+
+        stopbars.forEach((stopbar) => {
           const coordinates = stopbar.getElementsByTagName('Coordinates')[0]?.textContent;
           const name = stopbar.getAttribute('name') || 'Unknown';
           const type = stopbar.getAttribute('type') || 'stopbar';
-          
+
           if (coordinates) {
             const points = coordinates.trim().split(' ');
-            const polygonCoordinates = points.map(point => {
-              const [lat, lon] = point.split(',');
-              if (lat && lon) {
-                return [parseFloat(lat), parseFloat(lon)];
-              }
-              return null;
-            }).filter(coord => coord !== null);
-            
+            const polygonCoordinates = points
+              .map((point) => {
+                const [lat, lon] = point.split(',');
+                if (lat && lon) {
+                  return [parseFloat(lat), parseFloat(lon)];
+                }
+                return null;
+              })
+              .filter((coord) => coord !== null);
+
             if (polygonCoordinates.length >= 2) {
               polygonFeatures.push({
                 id: `${name}-${Date.now()}`,
                 name,
                 type,
-                coordinates: polygonCoordinates
+                coordinates: polygonCoordinates,
               });
             }
           }
         });
       }
-      
+
       // Combine regular features and remove areas
       return [...polygonFeatures, ...removeAreas];
     } catch (error) {
-      console.error("Error parsing XML:", error);
+      console.error('Error parsing XML:', error);
       setError("Failed to parse XML file. Please ensure it's a valid format.");
       return [];
     }
@@ -303,28 +302,29 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
   const parseGeneratedXML = (xmlString) => {
     try {
       const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-      const objects = xmlDoc.getElementsByTagName("BarsObject");
+      const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
+      const objects = xmlDoc.getElementsByTagName('BarsObject');
       const allLights = [];
       let firstPosition = null;
 
       for (let i = 0; i < objects.length; i++) {
         const obj = objects[i];
-        const objId = obj.getAttribute("id");
-        const objType = obj.getAttribute("type");
-        const propsElement = obj.querySelector("Properties");
-        const color = propsElement?.querySelector("Color")?.textContent || '';
-        const orientation = propsElement?.querySelector("Orientation")?.textContent || '';
-        const elevated = propsElement?.querySelector("Elevated")?.textContent === 'true';
-        const lightElements = obj.getElementsByTagName("Light");
+        const objId = obj.getAttribute('id');
+        const objType = obj.getAttribute('type');
+        const propsElement = obj.querySelector('Properties');
+        const color = propsElement?.querySelector('Color')?.textContent || '';
+        const orientation = propsElement?.querySelector('Orientation')?.textContent || '';
+        const elevated = propsElement?.querySelector('Elevated')?.textContent === 'true';
+        const lightElements = obj.getElementsByTagName('Light');
 
         for (let j = 0; j < lightElements.length; j++) {
           const light = lightElements[j];
-          const position = light.querySelector("Position")?.textContent.split(",");
-          const heading = parseFloat(light.querySelector("Heading")?.textContent || "0");
-          const lightProps = light.querySelector("Properties");
-          const lightColor = lightProps?.querySelector("Color")?.textContent || color;
-          const lightOrientation = lightProps?.querySelector("Orientation")?.textContent || orientation;
+          const position = light.querySelector('Position')?.textContent.split(',');
+          const heading = parseFloat(light.querySelector('Heading')?.textContent || '0');
+          const lightProps = light.querySelector('Properties');
+          const lightColor = lightProps?.querySelector('Color')?.textContent || color;
+          const lightOrientation =
+            lightProps?.querySelector('Orientation')?.textContent || orientation;
 
           if (position && position.length === 2) {
             const lat = parseFloat(position[0]);
@@ -340,7 +340,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
               color: lightColor,
               orientation: lightOrientation,
               elevated: elevated,
-              objectId: objId
+              objectId: objId,
             });
           }
         }
@@ -352,15 +352,15 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
 
       return allLights;
     } catch (error) {
-      console.error("Error parsing generated XML:", error);
-      setError("Failed to parse the generated XML file.");
+      console.error('Error parsing generated XML:', error);
+      setError('Failed to parse the generated XML file.');
       return [];
     }
   };
   const generateLightsFromXML = async () => {
     setIsGenerating(true);
     setError('');
-    
+
     try {
       // Create a FormData object and append the XML
       const formData = new FormData();
@@ -371,7 +371,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       // Make the API request
       const response = await fetch('https://v2.stopbars.com/supports/generate', {
         method: 'POST',
-        body: formData
+        body: formData,
       });
 
       if (!response.ok) {
@@ -382,7 +382,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       const data = await response.json();
       setGeneratedFiles({
         supportsXml: data.supportsXml,
-        barsXml: data.barsXml
+        barsXml: data.barsXml,
       });
 
       // Parse and display the generated lights
@@ -405,27 +405,30 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
     setLoading(true);
     try {
       const token = getVatsimToken();
-      
+
       // Check if package name was modified
       const hasPackageNameChanged = updatedPackageName !== contribution.packageName;
-      
-      const response = await fetch(`https://v2.stopbars.com/contributions/${contribution.id}/decision`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Vatsim-Token': token,
-        },
-        body: JSON.stringify({
-          approved: true,
-          // Only include newPackageName if it was actually changed
-          ...(hasPackageNameChanged && { newPackageName: updatedPackageName })
-        }),
-      });
+
+      const response = await fetch(
+        `https://v2.stopbars.com/contributions/${contribution.id}/decision`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Vatsim-Token': token,
+          },
+          body: JSON.stringify({
+            approved: true,
+            // Only include newPackageName if it was actually changed
+            ...(hasPackageNameChanged && { newPackageName: updatedPackageName }),
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error('Failed to approve contribution');
       }
-      
+
       onApprove();
       onClose();
     } catch (error) {
@@ -439,32 +442,35 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       setError('Please provide a reason for rejection');
       return;
     }
-    
+
     setLoading(true);
     try {
       const token = getVatsimToken();
-      
+
       // Check if package name was modified
       const hasPackageNameChanged = updatedPackageName !== contribution.packageName;
-      
-      const response = await fetch(`https://v2.stopbars.com/contributions/${contribution.id}/decision`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Vatsim-Token': token,
-        },
-        body: JSON.stringify({
-          approved: false,
-          rejectionReason: rejectionReason,
-          // Only include newPackageName if it was actually changed
-          ...(hasPackageNameChanged && { newPackageName: updatedPackageName })
-        }),
-      });
+
+      const response = await fetch(
+        `https://v2.stopbars.com/contributions/${contribution.id}/decision`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Vatsim-Token': token,
+          },
+          body: JSON.stringify({
+            approved: false,
+            rejectionReason: rejectionReason,
+            // Only include newPackageName if it was actually changed
+            ...(hasPackageNameChanged && { newPackageName: updatedPackageName }),
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error('Failed to reject contribution');
       }
-      
+
       onReject();
       onClose();
     } catch (error) {
@@ -472,7 +478,8 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
     } finally {
       setLoading(false);
     }
-  };return (
+  };
+  return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-4">
       <div className="bg-zinc-900 p-5 rounded-xl max-w-3xl w-full mx-4 border border-zinc-800 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
@@ -486,24 +493,30 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
             </span>
           </div>
         </div>
-        
+
         {/* Stepper */}
         <div className="flex items-center mb-6">
-          <div className={`flex items-center justify-center w-8 h-8 rounded-full 
-            ${step >= 1 ? 'bg-blue-500' : 'bg-zinc-700'}`}>
+          <div
+            className={`flex items-center justify-center w-8 h-8 rounded-full 
+            ${step >= 1 ? 'bg-blue-500' : 'bg-zinc-700'}`}
+          >
             <span>1</span>
           </div>
           <div className={`flex-1 h-1 mx-2 ${step >= 2 ? 'bg-blue-500' : 'bg-zinc-700'}`}></div>
-          <div className={`flex items-center justify-center w-8 h-8 rounded-full 
-            ${step >= 2 ? 'bg-blue-500' : 'bg-zinc-700'}`}>
+          <div
+            className={`flex items-center justify-center w-8 h-8 rounded-full 
+            ${step >= 2 ? 'bg-blue-500' : 'bg-zinc-700'}`}
+          >
             <span>2</span>
           </div>
         </div>
-        
+
         {/* Step content */}
         <div className="mb-6">
           {step === 1 && (
-            <div className="space-y-6">              <div className="bg-zinc-800/50 p-4 rounded-lg">
+            <div className="space-y-6">
+              {' '}
+              <div className="bg-zinc-800/50 p-4 rounded-lg">
                 <h3 className="text-lg font-medium mb-4">Contribution Details</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -513,8 +526,8 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                   <div>
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-zinc-400">Package Name</p>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="xs"
                         className="text-xs text-blue-400 hover:text-blue-300"
                         onClick={() => setIsEditingPackage(!isEditingPackage)}
@@ -530,7 +543,9 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                         className="w-full px-2 py-1 bg-zinc-700 border border-zinc-600 rounded focus:outline-none focus:border-blue-500 font-semibold"
                       />
                     ) : (
-                      <p className="font-semibold">{updatedPackageName || contribution.packageName}</p>
+                      <p className="font-semibold">
+                        {updatedPackageName || contribution.packageName}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -541,10 +556,12 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                   </div>
                   <div>
                     <p className="text-sm text-zinc-400">Date</p>
-                    <p className="font-semibold">{new Date(contribution.submissionDate).toLocaleString()}</p>
+                    <p className="font-semibold">
+                      {new Date(contribution.submissionDate).toLocaleString()}
+                    </p>
                   </div>
                 </div>
-                
+
                 {contribution.notes && (
                   <div className="mt-4">
                     <p className="text-sm text-zinc-400">Notes</p>
@@ -552,7 +569,9 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                   </div>
                 )}
               </div>
-                <div className="bg-zinc-800/50 p-4 rounded-lg">                <div className="flex justify-between items-center mb-4">
+              <div className="bg-zinc-800/50 p-4 rounded-lg">
+                {' '}
+                <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium">XML Visualization</h3>
                   <div>
                     <Button
@@ -575,25 +594,26 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                     </Button>
                   </div>
                 </div>
-                  <div className="h-[400px] w-full bg-zinc-900 rounded-lg overflow-hidden">
+                <div className="h-[400px] w-full bg-zinc-900 rounded-lg overflow-hidden">
                   {generatedFiles && generatedFiles.barsXml ? (
                     <XMLMap xmlData={generatedFiles.barsXml} height="400px" />
                   ) : (
                     <div className="flex items-center justify-center h-full bg-zinc-800/30">
                       <p className="text-zinc-400">
-                        {isGenerating ? 'Generating map data...' : 'Click "Generate Points" to visualize the XML data'}
+                        {isGenerating
+                          ? 'Generating map data...'
+                          : 'Click "Generate Points" to visualize the XML data'}
                       </p>
                     </div>
                   )}
                 </div>
-                
                 {parsedLights.length > 0 && (
                   <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex justify-between items-center">
                     <p className="text-blue-400 text-sm">
                       {parsedLights.length} lights visualized
                       {generatedFiles && ' (generated)'}
                     </p>
-                    
+
                     {generatedFiles && (
                       <div className="flex space-x-2">
                         <Button
@@ -604,7 +624,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                               const reg = /(>)(<)(\/*)/g;
                               xml = xml.replace(reg, '$1\r\n$2$3');
                               let pad = 0;
-                              xml.split('\r\n').forEach(node => {
+                              xml.split('\r\n').forEach((node) => {
                                 let indent = 0;
                                 if (node.match(/.+<\/\w[^>]*>$/)) {
                                   indent = 0;
@@ -622,7 +642,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                               });
                               return formatted;
                             };
-                            
+
                             const formattedXML = formatXML(generatedFiles.barsXml);
                             const blob = new Blob([formattedXML], { type: 'application/xml' });
                             const url = URL.createObjectURL(blob);
@@ -644,7 +664,6 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                     )}
                   </div>
                 )}
-                
                 {error && (
                   <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                     <p className="text-red-500 text-sm">{error}</p>
@@ -653,7 +672,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
               </div>
             </div>
           )}
-          
+
           {step === 2 && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 gap-8">
@@ -683,14 +702,16 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                     )}
                   </Button>
                 </div>
-                
+
                 <div className="space-y-3 border border-red-500/20 p-4 rounded-lg bg-red-500/10">
                   <h4 className="font-medium flex items-center text-red-400">
                     <XCircle className="w-5 h-5 mr-2" />
                     Reject Contribution
                   </h4>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-zinc-300">Reason for Rejection</label>
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                      Reason for Rejection
+                    </label>
                     <textarea
                       value={rejectionReason}
                       onChange={(e) => setRejectionReason(e.target.value)}
@@ -719,7 +740,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                   </Button>
                 </div>
               </div>
-              
+
               {error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                   <p className="text-red-500 text-sm">{error}</p>
@@ -728,18 +749,20 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
             </div>
           )}
         </div>
-        
+
         {/* Footer actions */}
         <div className="flex justify-between">
           {step === 1 ? (
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
           ) : (
             <Button variant="outline" onClick={() => setStep(step - 1)}>
               <ChevronLeft className="w-4 h-4 mr-2" />
               Back
             </Button>
           )}
-          
+
           {step === 1 && (
             <Button onClick={() => setStep(2)}>
               Next
@@ -761,11 +784,11 @@ ReviewModal.propTypes = {
     userDisplayName: PropTypes.string,
     submittedXml: PropTypes.string.isRequired,
     notes: PropTypes.string,
-    submissionDate: PropTypes.string.isRequired
+    submissionDate: PropTypes.string.isRequired,
   }).isRequired,
   onClose: PropTypes.func.isRequired,
   onApprove: PropTypes.func.isRequired,
-  onReject: PropTypes.func.isRequired
+  onReject: PropTypes.func.isRequired,
 };
 
 // Main Component
@@ -789,22 +812,22 @@ const ContributionManagement = () => {
     try {
       const token = getVatsimToken();
       const response = await fetch(
-        `https://v2.stopbars.com/contributions?page=${currentPage}&limit=${CONTRIBUTIONS_PER_PAGE}&status=pending`, 
+        `https://v2.stopbars.com/contributions?page=${currentPage}&limit=${CONTRIBUTIONS_PER_PAGE}&status=pending`,
         {
           headers: {
-            'X-Vatsim-Token': token
-          }
+            'X-Vatsim-Token': token,
+          },
         }
       );
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch contributions');
       }
-      
+
       const data = await response.json();
       setContributions(data.contributions);
       setTotalPages(Math.ceil(data.totalCount / CONTRIBUTIONS_PER_PAGE));
-  setPendingCount(data.totalCount || 0);
+      setPendingCount(data.totalCount || 0);
       setLoading(false);
     } catch (err) {
       setError(err.message);
@@ -820,7 +843,6 @@ const ContributionManagement = () => {
     setSelectedContribution(contribution);
   };
 
-
   const handleApproval = async () => {
     await fetchContributions();
   };
@@ -828,14 +850,12 @@ const ContributionManagement = () => {
   const handleRejection = async () => {
     await fetchContributions();
   };
-  
+
   const handleContributionSelect = (contribution) => {
     setSelectedContribution(contribution);
     setActivePoints([]);
     setComparisonResults(null);
   };
-  
-
 
   const renderStatusBadge = (status) => {
     switch (status) {
@@ -872,13 +892,14 @@ const ContributionManagement = () => {
   const paginatedContributions = contributions;
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+    <div className="container mx-auto p-4 max-w-4xl">
+      {' '}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <h1 className="text-2xl font-bold mb-4 md:mb-0">Contribution Management</h1>
         <div className="text-sm bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full">
           {pendingCount || '0'} Pending Contributions
         </div>
       </div>
-
       {/* Status messages */}
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
@@ -886,13 +907,13 @@ const ContributionManagement = () => {
           <p className="text-red-500">{error}</p>
         </div>
       )}
-
       {success && (
         <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
           <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
           <p className="text-emerald-500">{success}</p>
         </div>
-      )}      <div className="grid grid-cols-1 gap-6">
+      )}{' '}
+      <div className="grid grid-cols-1 gap-6">
         {/* Contributions list */}
         <div className="space-y-4">
           {loading && !selectedContribution ? (
@@ -901,14 +922,12 @@ const ContributionManagement = () => {
             </div>
           ) : paginatedContributions.length === 0 ? (
             <Card className="p-6">
-              <div className="text-center text-zinc-400 py-8">
-                No pending contributions found.
-              </div>
+              <div className="text-center text-zinc-400 py-8">No pending contributions found.</div>
             </Card>
           ) : (
             <>
               {paginatedContributions.map((contribution) => (
-                <Card 
+                <Card
                   key={contribution.id}
                   className={`p-4 hover:border-zinc-700 transition-all duration-200 cursor-pointer ${
                     selectedContribution?.id === contribution.id ? 'border-blue-500' : ''
@@ -921,34 +940,39 @@ const ContributionManagement = () => {
                         <h3 className="font-bold">{contribution.airportIcao}</h3>
                         {renderStatusBadge(contribution.status)}
                       </div>
-                      
+
                       <p className="text-sm text-zinc-400 mb-2">
                         Package: <span className="text-zinc-300">{contribution.packageName}</span>
                       </p>
-                      
+
                       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
                         <p className="text-zinc-400">
-                          Submitted by: <span className="text-zinc-300">{contribution.userDisplayName || contribution.userId}</span>
+                          Submitted by:{' '}
+                          <span className="text-zinc-300">
+                            {contribution.userDisplayName || contribution.userId}
+                          </span>
                         </p>
-                        
+
                         <p className="text-zinc-400">
-                          Date: <span className="text-zinc-300">
+                          Date:{' '}
+                          <span className="text-zinc-300">
                             {new Date(contribution.submissionDate).toLocaleDateString()}
                           </span>
                         </p>
-                        
+
                         {contribution.status !== 'pending' && contribution.decisionDate && (
                           <p className="text-zinc-400">
-                            Decision: <span className="text-zinc-300">
+                            Decision:{' '}
+                            <span className="text-zinc-300">
                               {new Date(contribution.decisionDate).toLocaleDateString()}
                             </span>
                           </p>
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center">
-                      <Button 
+                      <Button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleReview(contribution);
@@ -975,7 +999,7 @@ const ContributionManagement = () => {
                 <div className="flex items-center justify-between pt-4">
                   <Button
                     variant="outline"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
@@ -986,7 +1010,7 @@ const ContributionManagement = () => {
                   </span>
                   <Button
                     variant="outline"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
                   >
                     Next
@@ -1000,7 +1024,7 @@ const ContributionManagement = () => {
       </div>
       {/* Review modal */}
       {selectedContribution && (
-        <ReviewModal 
+        <ReviewModal
           contribution={selectedContribution}
           onClose={() => setSelectedContribution(null)}
           onApprove={handleApproval}
