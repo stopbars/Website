@@ -9,7 +9,9 @@ import 'leaflet/dist/leaflet.css';
 
 const POINT_TYPES = ['stopbar', 'lead_on', 'taxiway', 'stand'];
 const DIRECTIONALITY = ['bi-directional', 'uni-directional'];
-const COLORS = ['yellow', 'green', 'green-yellow', 'green-orange', 'green-blue'];
+const COLORS = ['green', 'yellow', 'green-yellow', 'green-orange', 'green-blue'];
+
+const MIN_SEGMENT_POINT_DISTANCE_METERS = 1; // 1 meter
 
 const defaultChangeset = () => ({ create: [], modify: {}, delete: [] });
 
@@ -260,6 +262,9 @@ const getPolylineColors = (point) => {
       if (style === 'green') {
         topColor = POLYLINE_COLORS.green;
         bottomColor = POLYLINE_COLORS.green;
+      } else if (style === 'yellow') {
+        topColor = POLYLINE_COLORS.yellow;
+        bottomColor = POLYLINE_COLORS.yellow;
       } else if (style === 'green-yellow') {
         topColor = POLYLINE_COLORS.green;
         bottomColor = POLYLINE_COLORS.yellow;
@@ -404,7 +409,13 @@ const PolylineVisualizationOverlay = ({
       }
       list.push(merged);
     });
-    changeset.create.forEach((c) => list.push({ ...c, id: c._tempId }));
+    changeset.create.forEach((c) => {
+      const merged =
+        selectedId === c._tempId && formState
+          ? { ...c, ...formState, id: c._tempId }
+          : { ...c, id: c._tempId };
+      list.push(merged);
+    });
     if (
       selectedId &&
       selectedId.startsWith('new_') &&
@@ -506,23 +517,176 @@ PolylineVisualizationOverlay.propTypes = {
   drawingCoords: PropTypes.array,
 };
 
+const TYPE_RULES = {
+  stopbar: {
+    required: ['type', 'name', 'coordinates', 'directionality'],
+    optional: ['elevated', 'ihp'],
+    forbidden: ['color'],
+  },
+  lead_on: {
+    required: ['type', 'name', 'coordinates'],
+    optional: [],
+    forbidden: ['color', 'elevated', 'ihp', 'directionality'],
+  },
+  taxiway: {
+    required: ['type', 'name', 'coordinates', 'directionality', 'color'],
+    optional: [],
+    forbidden: ['elevated', 'ihp'],
+  },
+  stand: {
+    required: ['type', 'name', 'coordinates'],
+    optional: [],
+    forbidden: ['color', 'elevated', 'ihp', 'directionality'],
+  },
+};
+
+const sanitizePoint = (pt) => {
+  if (!pt || typeof pt !== 'object') return pt;
+  const copy = { ...pt };
+  if (!copy.type || !TYPE_RULES[copy.type]) return copy; // let validation handle invalid type later
+  copy.name = (copy.name || '').trim();
+  if (Array.isArray(copy.coordinates)) {
+    copy.coordinates = copy.coordinates.filter(
+      (c) => typeof c?.lat === 'number' && typeof c?.lng === 'number'
+    );
+  } else if (copy.coordinates && typeof copy.coordinates === 'object') {
+    const c = copy.coordinates;
+    if (typeof c.lat === 'number' && typeof c.lng === 'number') copy.coordinates = [c];
+    else copy.coordinates = [];
+  } else copy.coordinates = [];
+
+  // Apply defaults
+  if (copy.type === 'stopbar') {
+    copy.elevated = !!copy.elevated;
+    copy.ihp = !!copy.ihp;
+    if (copy.elevated) copy.directionality = 'uni-directional';
+  }
+  if (copy.type === 'taxiway') {
+    if (!copy.color) copy.color = 'green';
+  }
+  const { forbidden } = TYPE_RULES[copy.type];
+  forbidden.forEach((f) => {
+    if (f in copy) delete copy[f];
+  });
+  if (copy.directionality === '' && copy.type !== 'stopbar' && copy.type !== 'taxiway') {
+    delete copy.directionality;
+  }
+  return copy;
+};
+
+const buildSanitizedChangeset = (rawChangeset, existingMap) => {
+  const create = rawChangeset.create.map((c) => {
+    const { _tempId: _ignore, ...rest } = c; // eslint-disable-line no-unused-vars
+    return sanitizePoint({ ...rest });
+  });
+  const modify = {};
+  Object.entries(rawChangeset.modify).forEach(([id, partial]) => {
+    const base = existingMap[id];
+    if (!base) return; // skip unknown
+    const merged = sanitizePoint({ ...base, ...partial });
+    const diff = {};
+    ['type', 'name', 'coordinates', 'directionality', 'color', 'elevated', 'ihp'].forEach((k) => {
+      if (merged[k] === undefined) return;
+      const baseSanitized = sanitizePoint(base)[k];
+      const val = merged[k];
+      const same = (() => {
+        if (k === 'coordinates') {
+          if (!Array.isArray(val) || !Array.isArray(baseSanitized)) return false;
+          if (val.length !== baseSanitized.length) return false;
+          return val.every(
+            (p, i) => p.lat === baseSanitized[i].lat && p.lng === baseSanitized[i].lng
+          );
+        }
+        return val === baseSanitized;
+      })();
+      if (!same) diff[k] = val;
+    });
+    if (Object.keys(diff).length > 0) modify[id] = diff;
+  });
+  const del = rawChangeset.delete.slice();
+  return { create, modify, delete: del };
+};
+
 const validatePoint = (pt) => {
   const errors = [];
-  if (!pt.type || !POINT_TYPES.includes(pt.type)) errors.push('Type required.');
-  if (!pt.name) errors.push('Name required.');
-  if (!Array.isArray(pt.coordinates) || pt.coordinates.length < 1)
-    errors.push('At least one coordinate required.');
-  if (pt.type === 'stopbar' && !pt.directionality)
-    errors.push('Directionality required for stopbar.');
-  if (pt.type === 'taxiway') {
-    if (!pt.directionality) errors.push('Directionality required for taxiway.');
-    if (!pt.color) errors.push('Color required for taxiway.');
+  if (!pt || typeof pt !== 'object') return ['Point data missing.'];
+  const type = pt.type;
+  if (!type || !POINT_TYPES.includes(type)) {
+    errors.push('Invalid or missing type.');
+    return errors;
   }
-  if (pt.elevated) {
-    if (pt.directionality && pt.directionality !== 'uni-directional') {
-      errors.push('Elevated stopbars must be uni-directional.');
+  const rules = TYPE_RULES[type];
+
+  const name = (pt.name || '').trim();
+  if (!name) errors.push('Name required (non-empty after trimming).');
+
+  if (!Array.isArray(pt.coordinates) || pt.coordinates.length < 1) {
+    errors.push('At least one coordinate required.');
+  } else {
+    pt.coordinates.forEach((c, idx) => {
+      const latOk = typeof c?.lat === 'number' && c.lat >= -90 && c.lat <= 90;
+      const lngOk = typeof c?.lng === 'number' && c.lng >= -180 && c.lng <= 180;
+      if (!latOk || !lngOk)
+        errors.push(`Coordinate ${idx} out of range (lat -90..90, lng -180..180).`);
+    });
+    const distanceMeters = (a, b) => {
+      if (!a || !b) return Infinity;
+      const R = 6371000;
+      const toRad = (d) => (d * Math.PI) / 180;
+      const dLat = toRad(b.lat - a.lat);
+      const dLng = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const sinDLat = Math.sin(dLat / 2);
+      const sinDLng = Math.sin(dLng / 2);
+      const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+      const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+      return R * c;
+    };
+    if (pt.coordinates.length >= 2) {
+      for (let i = 0; i < pt.coordinates.length - 1; i++) {
+        const d = distanceMeters(pt.coordinates[i], pt.coordinates[i + 1]);
+        if (d < MIN_SEGMENT_POINT_DISTANCE_METERS) {
+          errors.push(
+            `Coordinate ${i} and ${i + 1} are only ${d.toFixed(
+              2
+            )}m apart (< ${MIN_SEGMENT_POINT_DISTANCE_METERS}m). Remove duplicate/overlapping point.`
+          );
+        }
+      }
     }
   }
+
+  rules.required.forEach((field) => {
+    if (field === 'name') return;
+    if (pt[field] === undefined || pt[field] === '') {
+      errors.push(`Field '${field}' is required for ${type}.`);
+    }
+  });
+
+  if (pt.directionality) {
+    if (!DIRECTIONALITY.includes(pt.directionality))
+      errors.push("directionality must be 'bi-directional' or 'uni-directional'.");
+  }
+  if ((type === 'lead_on' || type === 'stand') && pt.directionality) {
+    errors.push('directionality is forbidden for this type.');
+  }
+  if (type === 'taxiway') {
+    if (!pt.color) errors.push('color required for taxiway.');
+    else if (!COLORS.includes(pt.color)) errors.push('Invalid taxiway color.');
+  }
+  if (type !== 'taxiway' && pt.color) {
+    errors.push('color is forbidden for this type and will be ignored.');
+  }
+  if (type === 'stopbar') {
+    if (!pt.directionality) errors.push('directionality required for stopbar.');
+    if (pt.elevated && pt.directionality !== 'uni-directional')
+      errors.push("Elevated stopbars must be 'uni-directional'.");
+  } else {
+    if (pt.elevated) errors.push('elevated is only valid for stopbar.');
+    if (pt.ihp) errors.push('ihp is only valid for stopbar.');
+  }
+
   return errors;
 };
 
@@ -775,37 +939,75 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const handleCancelEdit = useCallback(() => {
     if (!selectedId) return;
     if (selectedId.startsWith('new_')) {
+      const createEntry = changeset.create.find((c) => c._tempId === selectedId);
       const tempLayer = featureLayerMapRef.current[selectedId];
-      const originId = redrawOriginRef.current[selectedId];
-      if (originId) {
-        const originLayer = featureLayerMapRef.current[originId];
-        const originSnapshot =
-          originalGeometryRef.current[originId] || existingMap[originId]?.coordinates;
-        if (originLayer && originSnapshot && originSnapshot.length) {
-          if (originLayer.setLatLngs && originSnapshot.length >= 2)
-            originLayer.setLatLngs(originSnapshot.map((c) => [c.lat, c.lng]));
-          else if (originLayer.setLatLng && originSnapshot.length === 1) {
-            const { lat, lng } = originSnapshot[0];
-            originLayer.setLatLng([lat, lng]);
+      if (createEntry) {
+        const snapshot = originalGeometryRef.current[selectedId] || createEntry.coordinates || [];
+        if (tempLayer && snapshot && snapshot.length) {
+          if (tempLayer.setLatLngs && snapshot.length >= 2) {
+            tempLayer.setLatLngs(snapshot.map((c) => [c.lat, c.lng]));
+          } else if (tempLayer.setLatLng && snapshot.length === 1) {
+            const { lat, lng } = snapshot[0];
+            tempLayer.setLatLng([lat, lng]);
           }
         }
-        delete redrawOriginRef.current[selectedId];
+        setChangeset((prev) => ({
+          ...prev,
+          create: prev.create.map((c) =>
+            c._tempId === selectedId ? { ...c, coordinates: snapshot } : c
+          ),
+        }));
+        setFormState((s) => ({
+          ...s,
+          type: createEntry.type || s.type,
+          name: createEntry.name || '',
+          directionality:
+            createEntry.directionality ||
+            (createEntry.type === 'stopbar' || createEntry.type === 'taxiway'
+              ? 'uni-directional'
+              : ''),
+          color: createEntry.color || '',
+          elevated: !!createEntry.elevated,
+          ihp: !!createEntry.ihp,
+        }));
+        if (tempLayer?.pm) tempLayer.pm.disable();
+        if (mapInstanceRef.current?.pm) mapInstanceRef.current.pm.disableDraw();
+        setSelectedId(null);
+        setFormErrors([]);
+        setCreatingNew(false);
+        return;
+      } else {
+        const originId = redrawOriginRef.current[selectedId];
+        if (originId) {
+          const originLayer = featureLayerMapRef.current[originId];
+          const originSnapshot =
+            originalGeometryRef.current[originId] || existingMap[originId]?.coordinates;
+          if (originLayer && originSnapshot && originSnapshot.length) {
+            if (originLayer.setLatLngs && originSnapshot.length >= 2)
+              originLayer.setLatLngs(originSnapshot.map((c) => [c.lat, c.lng]));
+            else if (originLayer.setLatLng && originSnapshot.length === 1) {
+              const { lat, lng } = originSnapshot[0];
+              originLayer.setLatLng([lat, lng]);
+            }
+          }
+          delete redrawOriginRef.current[selectedId];
+        }
+        if (tempLayer) {
+          if (tempLayer.pm) tempLayer.pm.disable();
+          tempLayer.remove();
+        }
+        setChangeset((prev) => ({
+          ...prev,
+          create: prev.create.filter((c) => c._tempId !== selectedId),
+        }));
+        delete featureLayerMapRef.current[selectedId];
+        if (mapInstanceRef.current?.pm) mapInstanceRef.current.pm.disableDraw();
+        setSelectedId(null);
+        setFormState(emptyFormState);
+        setFormErrors([]);
+        setCreatingNew(false);
+        return;
       }
-      if (tempLayer) {
-        if (tempLayer.pm) tempLayer.pm.disable();
-        tempLayer.remove();
-      }
-      setChangeset((prev) => ({
-        ...prev,
-        create: prev.create.filter((c) => c._tempId !== selectedId),
-      }));
-      delete featureLayerMapRef.current[selectedId];
-      if (mapInstanceRef.current?.pm) mapInstanceRef.current.pm.disableDraw();
-      setSelectedId(null);
-      setFormState(emptyFormState);
-      setFormErrors([]);
-      setCreatingNew(false);
-      return;
     }
     const layer = featureLayerMapRef.current[selectedId];
     const original = existingMap[selectedId];
@@ -850,15 +1052,21 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     }
   }, [selectedId]);
 
+  const serializeChangeset = useCallback(
+    (cs) => buildSanitizedChangeset(cs, existingMap),
+    [existingMap]
+  );
+
   useEffect(() => {
     onChangesetChange && onChangesetChange(serializeChangeset(changeset));
-  }, [changeset, onChangesetChange]);
+  }, [changeset, onChangesetChange, serializeChangeset]);
 
   const handleSave = () => {
     if (!selectedId) return;
     const layer = featureLayerMapRef.current[selectedId];
     const coordinates = extractCoords(layer);
     const pointObj = { ...formState, coordinates };
+    if (pointObj.type === 'taxiway' && !pointObj.color) pointObj.color = 'green';
     const errors = validatePoint(pointObj);
     setFormErrors(errors);
     if (errors.length) return;
@@ -926,13 +1134,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     });
   };
 
-  const serializeChangeset = (cs) => {
-    return {
-      create: cs.create.map(({ ...rest }) => rest),
-      modify: cs.modify,
-      delete: cs.delete,
-    };
-  };
+  // (serializeChangeset already defined earlier)
 
   const resetAll = () => {
     Object.keys(featureLayerMapRef.current).forEach((id) => {
@@ -946,7 +1148,10 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     if (mapInstanceRef.current) mapInstanceRef.current.pm.disableDraw();
   };
 
-  const prettyJson = JSON.stringify(serializeChangeset(changeset), null, 2);
+  const prettyJson = useMemo(
+    () => JSON.stringify(serializeChangeset(changeset), null, 2),
+    [changeset, serializeChangeset]
+  );
 
   useEffect(() => {
     Object.entries(featureLayerMapRef.current).forEach(([pid, lyr]) => {
@@ -1243,7 +1448,26 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   <select
                     className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
                     value={formState.type}
-                    onChange={(e) => setFormState((s) => ({ ...s, type: e.target.value }))}
+                    onChange={(e) =>
+                      setFormState((s) => {
+                        const newType = e.target.value;
+                        let next = { ...s, type: newType };
+                        if (newType === 'stopbar') {
+                          if (!next.directionality) next.directionality = 'uni-directional';
+                        } else if (newType === 'taxiway') {
+                          if (!next.directionality) next.directionality = 'uni-directional';
+                          if (!next.color) next.color = 'green';
+                        } else {
+                          next.directionality = '';
+                        }
+                        if (newType !== 'taxiway') next.color = '';
+                        if (newType !== 'stopbar') {
+                          next.elevated = false;
+                          next.ihp = false;
+                        }
+                        return next;
+                      })
+                    }
                   >
                     {POINT_TYPES.map((t) => (
                       <option key={t}>{t}</option>
@@ -1270,7 +1494,14 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                       className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
                       value={formState.directionality}
                       onChange={(e) =>
-                        setFormState((s) => ({ ...s, directionality: e.target.value }))
+                        setFormState((s) => {
+                          const nextDir = e.target.value;
+                          const next = { ...s, directionality: nextDir };
+                          if (s.type === 'stopbar' && nextDir === 'bi-directional' && s.elevated) {
+                            next.elevated = false;
+                          }
+                          return next;
+                        })
                       }
                     >
                       {DIRECTIONALITY.map((d) => (
@@ -1287,43 +1518,50 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                     <select
                       className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
                       value={formState.color}
-                      onChange={(e) => setFormState((s) => ({ ...s, color: e.target.value }))}
+                      onChange={(e) =>
+                        setFormState((s) => ({ ...s, color: e.target.value || 'green' }))
+                      }
                     >
-                      <option value="">-- select --</option>
                       {COLORS.map((c) => (
                         <option key={c}>{c}</option>
                       ))}
                     </select>
                   </div>
                 )}
-                <div className="flex items-center gap-2 text-sm">
-                  <input
-                    id="elevated"
-                    type="checkbox"
-                    checked={formState.elevated}
-                    onChange={(e) =>
-                      setFormState((s) => ({
-                        ...s,
-                        elevated: e.target.checked,
-                        directionality: e.target.checked ? 'uni-directional' : s.directionality,
-                      }))
-                    }
-                  />
-                  <label htmlFor="elevated" className="text-zinc-300">
-                    Has Elevated Bar?
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <input
-                    id="ihp"
-                    type="checkbox"
-                    checked={formState.ihp}
-                    onChange={(e) => setFormState((s) => ({ ...s, ihp: e.target.checked }))}
-                  />
-                  <label htmlFor="ihp" className="text-zinc-300">
-                    Is Intermediate Holding Point?
-                  </label>
-                </div>
+                {formState.type === 'stopbar' && (
+                  <>
+                    {formState.directionality === 'uni-directional' && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <input
+                          id="elevated"
+                          type="checkbox"
+                          checked={formState.elevated}
+                          onChange={(e) =>
+                            setFormState((s) => ({
+                              ...s,
+                              elevated: e.target.checked,
+                              directionality: 'uni-directional', // enforce
+                            }))
+                          }
+                        />
+                        <label htmlFor="elevated" className="text-zinc-300">
+                          Add Elevated stopbar lights?
+                        </label>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <input
+                        id="ihp"
+                        type="checkbox"
+                        checked={formState.ihp}
+                        onChange={(e) => setFormState((s) => ({ ...s, ihp: e.target.checked }))}
+                      />
+                      <label htmlFor="ihp" className="text-zinc-300">
+                        Intermediate Holding Point (IHP)
+                      </label>
+                    </div>
+                  </>
+                )}
                 {formErrors.length > 0 && (
                   <ul className="text-xs text-red-400 list-disc pl-4">
                     {formErrors.map((err) => (
@@ -1346,7 +1584,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   </button>
                   {selectedId.startsWith('new_') ? (
                     <button
-                      onClick={handleRemoveUnsavedNew}
+                      onClick={() => handleRemoveUnsavedNew(selectedId)}
                       className="text-white text-sm rounded px-3 py-1.5 bg-red-600 hover:bg-red-500"
                     >
                       Remove
