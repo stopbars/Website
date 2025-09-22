@@ -15,8 +15,6 @@
     "framer-motion": "^12.23.16",
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
-    "leaflet-bing-layer": "^3.3.1",
-    "leaflet.gridlayer.googlemutant": "^0.15.0",
     "lucide-react": "^0.544.0",
     "marked": "^16.3.0",
     "posthog-js": "^1.266.3",
