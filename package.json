@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "dompurify": "^3.2.6",
+    "dompurify": "^3.2.7",
     "framer-motion": "^12.23.12",
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
