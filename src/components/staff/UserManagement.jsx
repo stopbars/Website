@@ -50,7 +50,8 @@ const getDisplayName = (user) => {
   switch (displayMode) {
     case 0: // First name only
       return user.full_name.split(' ')[0];
-    case 1: { // First + Last Initial
+    case 1: {
+      // First + Last Initial
       const nameParts = user.full_name.split(' ');
       if (nameParts.length > 1) {
         return `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}`;
