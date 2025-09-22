@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet-bing-layer';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
