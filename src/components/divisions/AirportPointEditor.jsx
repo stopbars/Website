@@ -1,1351 +1,1301 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardContent } from '../shared/Card';
-import { Button } from '../shared/Button';
-import { 
-  AlertCircle, Trash2, Plus, 
-  Edit2, ChevronDown, ChevronUp
-} from 'lucide-react';
-import { MapContainer, TileLayer, Marker, LayersControl, useMapEvents, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
 import PropTypes from 'prop-types';
-import { getVatsimToken } from '../../utils/cookieUtils';
+import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet-bing-layer';
+import '@geoman-io/leaflet-geoman-free';
+import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
+import 'leaflet/dist/leaflet.css';
+
+const POINT_TYPES = ['stopbar', 'lead_on', 'taxiway', 'stand'];
+const DIRECTIONALITY = ['bi-directional', 'uni-directional'];
+const COLORS = ['yellow', 'green', 'green-yellow', 'green-orange', 'green-blue'];
+
+const defaultChangeset = () => ({ create: [], modify: {}, delete: [] });
 
 
-// Add Mapbox token from environment
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+// --- Map logic encapsulated in a child hook component to access useMap --- //
+const GeomanController = ({
+  existingPoints, featureLayerMapRef, registerSelect, pushGeometryChange, mapStyle, mapInstanceRef, onFeatureCreated,
+  onDrawingCoordsUpdate, onDrawingComplete, onLiveEdit, redrawTargetRef
+}) => {
+  const map = useMap();
+  const drawingLayerRef = useRef(null);
+  const lastClickPollRef = useRef(null);
+  const lastReportedLenRef = useRef(0);
 
-// Get point color based on type and color properties
-const getPointColor = (point) => {
-  switch (point.type) {
-    case 'lead_on':
-      return '#fbbf24';
-    case 'stopbar':
-      return '#ef4444';
-    case 'taxiway':
-      switch (point.color) {
-        case 'green-yellow':
-          return '#FFD700'; // Green-Yellow
-        case 'green-blue':
-          return '#0000FF'; // Green-Blue
-        case 'green-orange':
-          return '#FFA500'; // Green-Orange
-        default:
-          return '#00FF00'; // Normal green
-      }
-    case 'stand':
-      return 'rgb(255, 141, 35)';
-    default:
-      return '#ef4444';
-  }
-};
-
-const getFirstLatLng = (coords) => {
-  if (!coords) return null;
-  if (Array.isArray(coords)) {
-    const first = coords[0];
-    if (first && typeof first.lat === 'number' && typeof first.lng === 'number') return first;
-    return null;
-  }
-  if (typeof coords === 'object' && typeof coords.lat === 'number' && typeof coords.lng === 'number') {
-    return coords;
-  }
-  return null;
-};
-
-const toLatLngPair = (coords) => {
-  const c = getFirstLatLng(coords);
-  return c ? [c.lat, c.lng] : null;
-};
-
-// Create custom markers based on point type
-const createCustomIcon = (point) => {
-  const color = getPointColor(point);
-  let html = '';
-
-  if (point.type === 'stopbar') {
-    if (point.directionality === 'bi-directional') {
-      html = `
-        <div class="marker-container">
-          <div class="marker-circle stopbar-marker"></div>
-        </div>
-      `;
-    } else {
-      // Uni-directional: top half colored, bottom half gray
-      html = `
-        <div class="marker-container">
-          <div class="marker-circle split-stopbar" style="--left-color: rgb(77, 77, 77); --right-color: #ef4444;"></div>
-        </div>
-      `;
-    }
-  } else if (point.type === 'lead_on') {
-    html = `
-      <div class="marker-container">
-        <div class="marker-circle lead-on-marker">
-          <div class="marker-quarter marker-quarter-1"></div>
-          <div class="marker-quarter marker-quarter-2"></div>
-          <div class="marker-quarter marker-quarter-3"></div>
-          <div class="marker-quarter marker-quarter-4"></div>
-        </div>
-      </div>
-    `;
-  } else if (point.type === 'taxiway') {
-    // Render same visuals for uni and bi, no orientation dependency
-    if (point.directionality === 'bi-directional' || point.directionality === 'uni-directional') {
-      if (point.color === 'green') {
-        html = `
-        <div class="marker-container">
-          <div class="marker-circle lead-on-marker taxiway-green">
-          </div>
-        </div>
-      `;
-      }
-      else if (point.color === 'green-yellow') {
-        html = `
-        <div class="marker-container">
-          <div class="marker-circle lead-on-marker">
-            <div class="marker-quarter taxiway-yellow-quarter-1"></div>
-            <div class="marker-quarter taxiway-yellow-quarter-2"></div>
-            <div class="marker-quarter taxiway-yellow-quarter-3"></div>
-            <div class="marker-quarter taxiway-yellow-quarter-4"></div>
-          </div>
-        </div>
-      `;
-      }
-      else if (point.color === 'green-blue') {
-        html = `
-        <div class="marker-container">
-          <div class="marker-circle lead-on-marker">
-            <div class="marker-quarter taxiway-blue-quarter-1"></div>
-            <div class="marker-quarter taxiway-blue-quarter-2"></div>
-            <div class="marker-quarter taxiway-blue-quarter-3"></div>
-            <div class="marker-quarter taxiway-blue-quarter-4"></div>
-          </div>
-        </div>
-      `;
-      }
-      else if (point.color === 'green-orange') {
-        html = `
-        <div class="marker-container">
-          <div class="marker-circle lead-on-marker">
-            <div class="marker-quarter taxiway-orange-quarter-1"></div>
-            <div class="marker-quarter taxiway-orange-quarter-2"></div>
-            <div class="marker-quarter taxiway-orange-quarter-3"></div>
-            <div class="marker-quarter taxiway-orange-quarter-4"></div>
-          </div>
-        </div>
-      `;
-      }
-    }
-  } else {
-    html = `
-      <div class="marker-container">
-        <div class="marker-circle" style="background-color: ${color};"></div>
-      </div>
-    `;
-  }
-
-  return L.divIcon({
-    className: 'custom-div-icon',
-    html: html,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -12]
-  });
-};
-
-
-
-// Add required CSS styles
-const style = document.createElement('style');
-style.textContent = `
-  .marker-container {
-    position: relative;
-    width: 24px;
-    height: 24px;
-  }
-  .marker-circle {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    border: 2px solid #ffffff;
-    overflow: hidden;
-  }
-  .stopbar-marker {
-    background-color: #ef4444;
-  }
-  .stopbar-marker .marker-quarter {
-    background-color: #ffffff !important;
-  }
-  .taxiway-quarter-L {
-    bottom: 0;
-    right: 0;
-    background-color: #ffffff !important;
- }
-  .taxiway-quarter-R {
-    top: 0;
-    left: 0;
-    background-color: #ffffff !important;
-  }
-    .taxiway-green {
-    background-color: #4ade80 !important;
-    }
-  .taxiway-yellow-quarter-1 {
-    top: 0;
-    left: 0;
-    background-color: #4ade80 !important;
-  }
-  .taxiway-yellow-quarter-2 {
-    top: 0;
-    right: 0;
-    background-color: #fbbf24 !important;
-  }
-  .taxiway-yellow-quarter-3 {
-    bottom: 0;
-    left: 0;
-    background-color: #fbbf24 !important;
-  }
-  .taxiway-yellow-quarter-4 {
-    bottom: 0;
-    right: 0;
-    background-color: #4ade80 !important;
-  }
-  .taxiway-blue-quarter-1 {
-    top: 0;
-    left: 0;
-    background-color: #4ade80 !important;
-  }
-  .taxiway-blue-quarter-2 {
-    top: 0;
-    right: 0;
-    background-color:rgb(63, 63, 255) !important;
-  }
-  .taxiway-blue-quarter-3 {
-    bottom: 0;
-    left: 0;
-    background-color: rgb(63, 63, 255) !important;
-  }
-  .taxiway-blue-quarter-4 {
-    bottom: 0;
-    right: 0;
-    background-color: #4ade80 !important;
-  }
-  .taxiway-orange-quarter-1 {
-    top: 0;
-    left: 0;
-    background-color: #4ade80 !important;
-  }
-  .taxiway-orange-quarter-2 {
-    top: 0;
-    right: 0;
-    background-color: rgb(255, 141, 35) !important;
-  }
-  .taxiway-orange-quarter-3 {
-    bottom: 0;
-    left: 0;
-    background-color:rgb(255, 141, 35) !important;
-  }
-  .taxiway-orange-quarter-4 {
-    bottom: 0;
-    right: 0;
-    background-color: #4ade80 !important;
-  }
-  .lead-on-marker {
-    position: relative;
-  }
-  .split-stopbar {
-    background: linear-gradient(
-      0deg,
-      var(--left-color, rgb(77, 77, 77)) 50%,
-      var(--right-color, #ef4444) 50%
-    );
-  }
-  .marker-quarter {
-    position: absolute;
-    width: 50%;
-    height: 50%;
-  }
-  .marker-quarter-1 {
-    top: 0;
-    left: 0;
-    background-color: #4ade80 !important;
-  }
-  .marker-quarter-2 {
-    top: 0;
-    right: 0;
-    background-color: #fbbf24 !important;
-  }
-  .marker-quarter-3 {
-    bottom: 0;
-    left: 0;
-    background-color: #fbbf24 !important;
-  }
-  .marker-quarter-4 {
-    bottom: 0;
-    right: 0;
-    background-color: #4ade80 !important;
-  }
-  .leaflet-container.editing-mode {
-    cursor: pointer !important;
-  }
-`;
-document.head.appendChild(style);
-
-// Fix for Leaflet icon issue in React
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png'
-});
-
-
-
-// Map click handler component
-const MapClickHandler = ({ onMapClick }) => {
-  useMapEvents({
-    click: (e) => {
-      onMapClick(e);
-    }
-  });
-  return null;
-};
-
-MapClickHandler.propTypes = {
-  onMapClick: PropTypes.func.isRequired
-};
-
-const AirportPointEditor = () => {
-  const { airportId } = useParams();
-  const token = getVatsimToken();
-  const mapRef = useRef(null);
-  
-  // State variables
-  const [airport, setAirport] = useState(null);
-  const [points, setPoints] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [activePointId, setActivePointId] = useState(null);
-  const [mapCenter, setMapCenter] = useState([0, 0]);
-  const [mapZoom,] = useState(13);
-  const [addingPoint, setAddingPoint] = useState(false);
-  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const [editingPoint, setEditingPoint] = useState(null);
-  const [editForm, setEditForm] = useState(null);
-  const [newPoint, setNewPoint] = useState({
-    type: 'stopbar',
-    name: '',
-    coordinates: null,
-    directionality: 'uni-directional',
-    color: 'green',
-    elevated: false,
-    ihp: false
-  });
-  // Update new point form when type changes
-  const handleNewPointFieldChange = (field, value) => {
-    setNewPoint(prev => {
-      const updatedPoint = { ...prev, [field]: value };
-
-      if (field === 'type') {
-        // Reset fields based on type
-        switch (value) {
-          case 'stopbar':
-            updatedPoint.directionality = 'uni-directional';
-            delete updatedPoint.color; // Remove color for stopbars
-            break;
-          case 'lead_on':
-            delete updatedPoint.directionality;
-            delete updatedPoint.color; // Remove color for lead-on lights
-            break;
-          case 'taxiway':
-            updatedPoint.directionality = 'bi-directional';
-            updatedPoint.color = 'green'; // Set default color for taxiway
-            break;
-          case 'stand':
-            delete updatedPoint.directionality;
-            delete updatedPoint.color; // Remove color for stand lights
-            break;
-        }
-      }
-
-      // If changing directionality on a stopbar and it's bi-directional, force elevated to false and remove orientation
-      if (field === 'directionality') {
-        if (updatedPoint.type === 'stopbar' && value === 'bi-directional') {
-          updatedPoint.elevated = false;
-        }
-      }
-
-      return updatedPoint;
-    });
-  };
-  // Handle field changes for edit form
-  const handleEditFieldChange = (field, value) => {
-    setEditForm(prev => {
-      const updatedForm = { ...prev, [field]: value };
-
-      if (field === 'type') {
-        // Reset fields based on type
-        switch (value) {
-          case 'stopbar':
-            updatedForm.directionality = 'uni-directional';
-            delete updatedForm.color; // Remove color for stopbars
-            break;
-          case 'lead_on':
-            delete updatedForm.directionality;
-            delete updatedForm.color; // Remove color for lead-on lights
-            break;
-          case 'taxiway':
-            updatedForm.directionality = 'bi-directional';
-            updatedForm.color = 'green'; // Set default color for taxiway
-            break;
-          case 'stand':
-            delete updatedForm.directionality;
-            delete updatedForm.color; // Remove color for stand lights
-            break;
-        }
-      }
-
-      // If changing directionality on a stopbar and it's bi-directional, force elevated to false and remove orientation
-      if (field === 'directionality') {
-        if (updatedForm.type === 'stopbar' && value === 'bi-directional') {
-          updatedForm.elevated = false;
-        }
-      }
-
-      return updatedForm;
-    });
-  };
-
-  // Fetch airport and points data
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        // Fetch airport data
-        const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${airportId}`, {
-          headers: { 'X-Vatsim-Token': `${token}` }
-        });
-        
-        if (!airportResponse.ok) throw new Error('Failed to fetch airport data');
-        const airportData = await airportResponse.json();
-        setAirport(airportData);
-        setMapCenter([airportData.latitude, airportData.longitude]);
-        
-        // Fetch points data
-        const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${airportId}/points`, {
-          headers: { 'X-Vatsim-Token': `${token}` }
-        });
-        
-        if (!pointsResponse.ok) throw new Error('Failed to fetch points data');
-        const pointsData = await pointsResponse.json();
-        setPoints(pointsData || []); // Removed .points since backend returns array directly
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+    // Expose map instance upward for programmatic control
+    if (mapInstanceRef) {
+      mapInstanceRef.current = map;
+    }
+
+    // Style overrides
+    if (mapStyle) {
+      Object.entries(mapStyle).forEach(([k, v]) => map.getContainer().style[k] = v);
+    }
+
+    // Register existing points as layers (visualization)
+    existingPoints.forEach(pt => {
+      if (featureLayerMapRef.current[pt.id]) return; // already added
+      let layer;
+      const latlngs = pt.coordinates.map(c => [c.lat, c.lng]);
+      if (latlngs.length === 1) {
+        layer = L.marker(latlngs[0], { pointId: pt.id });
+      } else {
+        layer = L.polyline(latlngs, { pointId: pt.id });
+      }
+      styleLayerByPoint(layer, pt);
+      layer.addTo(map);
+      featureLayerMapRef.current[pt.id] = layer;
+
+      layer.on('click', () => registerSelect(layer, pt.id));
+      layer.on('pm:edit', () => pushGeometryChange(layer));
+    });
+
+    // Event: creation of new geometry
+    map.on('pm:create', (e) => {
+      const layer = e.layer; // new layer
+      let assignedId;
+      if (redrawTargetRef?.current) {
+        // reusing an existing (new_) id for redraw
+        assignedId = redrawTargetRef.current;
+        layer.options.pointId = assignedId;
+        // remove old layer if existed
+        const old = featureLayerMapRef.current[assignedId];
+        if (old && old.remove) old.remove();
+        featureLayerMapRef.current[assignedId] = layer;
+        registerSelect(layer, assignedId, true);
+        redrawTargetRef.current = null;
+      } else {
+        assignedId = `new_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+        layer.options.pointId = assignedId;
+        featureLayerMapRef.current[assignedId] = layer;
+        registerSelect(layer, assignedId, true);
+      }
+      if (onFeatureCreated) onFeatureCreated(layer, assignedId);
+      // Ensure freshly created (including redraw placeholder) geometry coordinates are synced
+      // so overlays (gradient preview) have >=2 vertices immediately and do not disappear until save.
+  try { pushGeometryChange(layer); } catch { /* no-op */ }
+      if (onDrawingComplete) onDrawingComplete();
+    });
+
+    // Drawing lifecycle for live preview (works for Line only)
+    map.on('pm:drawstart', (e) => {
+      // Geoman draws shape "Line" for enabled draw('Line')
+      if (e.shape === 'Line') {
+        drawingLayerRef.current = e.workingLayer || e.layer || null;
+        onDrawingCoordsUpdate && onDrawingCoordsUpdate([]);
+        lastReportedLenRef.current = 0;
+      }
+    });
+    const updateWorking = (e) => {
+      const layer = e?.workingLayer || e?.layer || drawingLayerRef.current;
+      if (!layer) return;
+      const read = () => {
+        const latlngs = layer.getLatLngs?.();
+        if (Array.isArray(latlngs)) {
+          const coords = latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+          onDrawingCoordsUpdate && onDrawingCoordsUpdate(coords);
+          drawingLayerRef.current = layer; // keep ref fresh
+        }
+      };
+      // Read immediately
+      read();
+      // Some Geoman internals update latlngs after the event cycle; schedule a next-frame read
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(read);
+      } else {
+        setTimeout(read, 0);
+      }
+      // If editing existing (not drawing), trigger live edit re-render
+      if (!drawingLayerRef.current && onLiveEdit) onLiveEdit();
+    };
+    map.on('pm:vertexadded', updateWorking);
+    map.on('pm:vertexremoved', updateWorking);
+    // While moving mouse between clicks Geoman adds a temporary hint line; poll for smoother preview
+    const moveHandler = () => {
+      if (!drawingLayerRef.current) return;
+      const latlngs = drawingLayerRef.current.getLatLngs?.();
+      if (Array.isArray(latlngs)) {
+        const coords = latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+        onDrawingCoordsUpdate && onDrawingCoordsUpdate(coords);
       }
     };
-    
-    if (airportId && token) {
-      fetchData();
+    map.on('mousemove', moveHandler);
+
+    // After each map click during drawing, poll a few frames to catch newly committed vertex
+    const clickHandler = () => {
+      if (!drawingLayerRef.current) return; // not drawing
+      let frames = 0;
+      const maxFrames = 6; // ~100ms at 60fps
+      if (lastClickPollRef.current) cancelAnimationFrame(lastClickPollRef.current);
+      const poll = () => {
+        if (!drawingLayerRef.current) return;
+        const latlngs = drawingLayerRef.current.getLatLngs?.();
+        if (Array.isArray(latlngs)) {
+          const len = latlngs.length;
+            if (len !== lastReportedLenRef.current) {
+              lastReportedLenRef.current = len;
+              const coords = latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+              onDrawingCoordsUpdate && onDrawingCoordsUpdate(coords);
+            }
+        }
+        frames++;
+        if (frames < maxFrames) {
+          lastClickPollRef.current = requestAnimationFrame(poll);
+        }
+      };
+      poll();
+    };
+    map.on('click', clickHandler);
+    map.on('pm:drawend', () => {
+      drawingLayerRef.current = null;
+      onDrawingCoordsUpdate && onDrawingCoordsUpdate([]);
+    });
+
+    // Global edit vertex drag for live updates (fallback if individual layer listeners not established)
+    map.on('pm:markerdrag', () => { onLiveEdit && onLiveEdit(); });
+    map.on('pm:snapdrag', () => { onLiveEdit && onLiveEdit(); });
+
+    return () => {
+      // no controls to remove now; clean listeners
+      map.off('pm:create');
+      map.off('pm:drawstart');
+      map.off('pm:vertexadded');
+      map.off('pm:vertexremoved');
+      map.off('pm:drawend');
+      map.off('mousemove', moveHandler);
+      map.off('click', clickHandler);
+      map.off('pm:markerdrag');
+      map.off('pm:snapdrag');
+    };
+  }, [map, existingPoints, featureLayerMapRef, registerSelect, pushGeometryChange, mapStyle, mapInstanceRef, onFeatureCreated, onDrawingCoordsUpdate, onDrawingComplete, onLiveEdit, redrawTargetRef]);
+
+  return null;
+};
+
+GeomanController.propTypes = {
+  existingPoints: PropTypes.array.isRequired,
+  featureLayerMapRef: PropTypes.object.isRequired,
+  registerSelect: PropTypes.func.isRequired,
+  pushGeometryChange: PropTypes.func.isRequired,
+  getPointForLayer: PropTypes.func,
+  mapStyle: PropTypes.object,
+  mapInstanceRef: PropTypes.object,
+  onFeatureCreated: PropTypes.func,
+  redrawTargetRef: PropTypes.object
+};
+GeomanController.propTypes.onDrawingCoordsUpdate = PropTypes.func;
+GeomanController.propTypes.onDrawingComplete = PropTypes.func;
+GeomanController.propTypes.onLiveEdit = PropTypes.func;
+
+// Layer styling based on type / state
+const styleLayerByPoint = (layer, pt, isSelected = false, isDeleted = false) => {
+  const baseColor = (() => {
+    switch (pt.type) {
+      case 'stopbar': return '#ef4444';
+      case 'lead_on': return '#facc15';
+      case 'taxiway': return '#22c55e';
+      case 'stand': return '#f59e0b';
+      default: return '#64748b';
     }
-  }, [airportId, token]);
+  })();
+  const color = isDeleted ? '#dc2626' : baseColor;
+  // For polylines we hide the base stroke so our overlay can render gradients / outlines.
+  // Keep minimal stroke when selected so edit handles remain obvious.
+  const weight = isSelected ? 2 : 1;
+  if (layer.setStyle && layer.getLatLngs) {
+    layer.setStyle({ color, weight, opacity: 0.15 });
+  } else if (layer.setStyle) {
+    layer.setStyle({ color, weight: isSelected ? 18 : 14, opacity: 0.9 });
+  }
+  if (layer.setIcon && pt.type) {
+    const iconHtml = `<div style="background:${color};width:${isSelected?18:14}px;height:${isSelected?18:14}px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 2px ${isDeleted? '#dc2626':'#334155'};"></div>`;
+    layer.setIcon(L.divIcon({ className: 'point-icon', html: iconHtml, iconSize: [isSelected?18:14, isSelected?18:14] }));
+  }
+};
 
-  // Update map click to set single point instead of array
-  const handleMapClick = (e) => {
-    if (!addingPoint && !editingPoint) return;
-    
-    const { lat, lng } = e.latlng;
-    if (editingPoint) {
-      setEditForm(prev => ({
-        ...prev,
-        coordinates: { lat, lng }
-      }));
-    } else if (addingPoint) {
-      setNewPoint(prev => ({
-        ...prev,
-        coordinates: { lat, lng }
-      }));
-    }
-  };
-  // Adjust the payload to exclude unnecessary fields based on type
-  const preparePointPayload = (point) => {
-    const payload = { ...point };
-    // Remove orientation entirely; no longer used or sent
-    delete payload.orientation;
-    if (point.type === 'stopbar') {
-      delete payload.color; // Remove color for stopbar
-    }
-    if (point.type === 'lead_on') {
-      delete payload.color; // Remove color for lead-on light
-    }
-    return payload;
-  };
+// Polyline gradient color logic copied from ContributeMap
+const POLYLINE_COLORS = {
+  green: '#4ade80',
+  yellow: '#fbbf24',
+  blue: 'rgb(63, 63, 255)',
+  orange: 'rgb(255, 141, 35)',
+  red: '#ef4444',
+  gray: '#999999'
+};
 
-  // Save a new point
-  const handleSavePoint = async () => {
-    try {
-      setLoading(true);
-
-      const payload = preparePointPayload({
-        ...newPoint
-      });
-
-      const response = await fetch(`https://v2.stopbars.com/airports/${airportId}/points`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Vatsim-Token': `${token}`
-        },
-        body: JSON.stringify({
-          ...payload,
-          airportId // Add airportId to match backend schema
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to save point');
+const getPolylineColors = (point) => {
+  let topColor = POLYLINE_COLORS.gray;
+  let bottomColor = POLYLINE_COLORS.red;
+  if (!point || !point.type) return { topColor, bottomColor };
+  switch (point.type) {
+    case 'taxiway': {
+      const style = point.color || 'green';
+      if (style === 'green') {
+        topColor = POLYLINE_COLORS.green; bottomColor = POLYLINE_COLORS.green;
+      } else if (style === 'green-yellow') {
+        topColor = POLYLINE_COLORS.green; bottomColor = POLYLINE_COLORS.yellow;
+      } else if (style === 'green-blue') {
+        topColor = POLYLINE_COLORS.green; bottomColor = POLYLINE_COLORS.blue;
+      } else if (style === 'green-orange') {
+        topColor = POLYLINE_COLORS.green; bottomColor = POLYLINE_COLORS.orange;
+      } else {
+        topColor = POLYLINE_COLORS.green; bottomColor = POLYLINE_COLORS.green;
       }
-
-      const savedPoint = await response.json();
-      setPoints(prev => [...prev, savedPoint]);
-      setSuccess('Point added successfully!');
-
-      // Reset form
-      setAddingPoint(false);
-      setNewPoint({
-        type: 'stopbar',
-        name: '',
-        coordinates: null,
-        directionality: 'uni-directional',
-        elevated: false,
-        ihp: false
-      });
-
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      break;
     }
-  };
-
-  // Delete a point
-  const handleDeletePoint = async (pointId) => {
-    try {
-      setLoading(true);
-      
-      const response = await fetch(`https://v2.stopbars.com/airports/${airportId}/points/${pointId}`, {
-        method: 'DELETE',
-        headers: { 'X-Vatsim-Token': `${token}` }
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to delete point');
+    case 'lead_on': {
+      topColor = POLYLINE_COLORS.green; bottomColor = POLYLINE_COLORS.yellow; break;
+    }
+    case 'stand': {
+      topColor = POLYLINE_COLORS.orange; bottomColor = POLYLINE_COLORS.orange; break;
+    }
+    case 'stopbar':
+    default: {
+      if (point.directionality === 'bi-directional') {
+        topColor = POLYLINE_COLORS.red; bottomColor = POLYLINE_COLORS.red;
+      } else {
+        topColor = POLYLINE_COLORS.gray; bottomColor = POLYLINE_COLORS.red;
       }
-      
-      setPoints(prev => prev.filter(p => p.id !== pointId));
-      setSuccess('Point deleted successfully!');
-      setShowConfirmDelete(false);
-      setActivePointId(null);
-      
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      break;
     }
-  };
+  }
+  return { topColor, bottomColor };
+};
 
-  // Update a point
-  const handleUpdatePoint = async () => {
-    try {
-      setLoading(true);
-      
-      const payload = preparePointPayload(editForm);
-
-      const response = await fetch(`https://v2.stopbars.com/airports/${airportId}/points/${editingPoint.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Vatsim-Token': `${token}`
-        },
-        body: JSON.stringify(payload)
+// --- Segmented gradient defs component (mirrors ContributeMap implementation) --- //
+const SegmentedDefs = ({ segments = [], topColor = '#ef4444', bottomColor = '#999999', strokeWidth = 10 }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !segments || segments.length === 0) return;
+    const ownerId = segments[0]?.baseId || 'unknown';
+    const svg = map.getPanes().overlayPane.querySelector('svg');
+    if (!svg) return;
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svg.prepend(defs);
+    }
+    const build = () => {
+      [...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`)].forEach(n => n.remove());
+      segments.forEach(seg => {
+        const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
+        const lp1 = map.latLngToLayerPoint(L.latLng(seg.p1.lat, seg.p1.lng));
+        const lp2 = map.latLngToLayerPoint(L.latLng(seg.p2.lat, seg.p2.lng));
+        const mx = (lp1.x + lp2.x) / 2; const my = (lp1.y + lp2.y) / 2;
+        const dx = lp2.x - lp1.x; const dy = lp2.y - lp1.y; const len = Math.sqrt(dx*dx + dy*dy) || 1;
+        const px = -dy / len; const py = dx / len; // perpendicular
+        const half = Math.max(1, strokeWidth / 2); const span = half * 1.2;
+        const x1 = mx - px * span; const y1 = my - py * span; const x2 = mx + px * span; const y2 = my + py * span;
+        const lg = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        lg.setAttribute('id', gradId);
+        lg.setAttribute('gradientUnits', 'userSpaceOnUse');
+        lg.setAttribute('x1', x1); lg.setAttribute('y1', y1); lg.setAttribute('x2', x2); lg.setAttribute('y2', y2);
+        lg.setAttribute('data-generated', 'seg'); lg.setAttribute('data-owner', ownerId);
+        lg.innerHTML = `\n          <stop offset="50%" stop-color="${topColor}" stop-opacity="1"/>\n          <stop offset="50%" stop-color="${bottomColor}" stop-opacity="1"/>\n        `;
+        defs.appendChild(lg);
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update point');
+    };
+    build();
+    const onChange = () => build();
+    map.on('zoom viewreset move', onChange);
+    return () => {
+      map.off('zoom viewreset move', onChange);
+      [...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`)].forEach(n => n.remove());
+    };
+  }, [map, segments, topColor, bottomColor, strokeWidth]);
+  return null;
+};
+SegmentedDefs.propTypes = {
+  segments: PropTypes.array,
+  topColor: PropTypes.string,
+  bottomColor: PropTypes.string,
+  strokeWidth: PropTypes.number
+};
+
+// Overlay that renders gradient polylines for each multi-coordinate point
+const PolylineVisualizationOverlay = ({ featureLayerMapRef, changeset, existingMap, selectedId, registerSelect, formState, drawingCoords }) => {
+  // Helper to pull coordinates live from a layer (for unsaved new geometry)
+  const extractCoords = useCallback((layer) => {
+    if (!layer) return [];
+    if (layer.getLatLng) { const { lat, lng } = layer.getLatLng(); return [{ lat, lng }]; }
+    if (layer.getLatLngs) { return layer.getLatLngs().map(ll => ({ lat: ll.lat, lng: ll.lng })); }
+    return [];
+  }, []);
+
+  // Build fresh each render for simplicity (dataset expected small). liveEditTick triggers parent re-render.
+  const overlayPoints = (() => {
+    const list = [];
+    Object.values(existingMap).forEach(base => {
+      if (!base) return;
+      const mod = changeset.modify[base.id] || {};
+      let merged = { ...base, ...mod };
+      if (selectedId === base.id && formState) merged = { ...merged, ...formState };
+      if (selectedId === base.id && featureLayerMapRef.current[base.id]) {
+        const liveCoords = extractCoords(featureLayerMapRef.current[base.id]);
+        if (liveCoords.length >= 2) merged.coordinates = liveCoords;
       }
-      
-      const updatedPoint = await response.json();
-      setPoints(prev => prev.map(p => p.id === updatedPoint.id ? updatedPoint : p));
-      setSuccess('Point updated successfully');
-      setEditingPoint(null);
-      setEditForm(null);
-      
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      list.push(merged);
+    });
+    changeset.create.forEach(c => list.push({ ...c, id: c._tempId }));
+    if (selectedId && selectedId.startsWith('new_') && !changeset.create.find(c => c._tempId === selectedId)) {
+      const layer = featureLayerMapRef.current[selectedId];
+      if (layer) {
+        const coords = extractCoords(layer);
+        list.push({ id: selectedId, _tempId: selectedId, coordinates: coords, ...formState });
+      }
     }
+    if (drawingCoords && drawingCoords.length >= 2) {
+      list.push({ id: '__drawing_preview__', coordinates: drawingCoords, ...(formState || {}), type: formState?.type || 'stopbar' });
+    }
+    return list;
+  })();
+
+  return (
+    <>
+      {overlayPoints.map(pt => {
+        const coords = pt?.coordinates;
+        if (!Array.isArray(coords) || coords.length < 2) return null; // only render polylines
+        const safe = coords.filter(c => typeof c?.lat === 'number' && typeof c?.lng === 'number');
+        if (safe.length < 2) return null;
+        const positions = safe.map(c => [c.lat, c.lng]);
+        const segments = [];
+        for (let i = 0; i < safe.length - 1; i++) segments.push({ baseId: pt.id, idx: i, p1: safe[i], p2: safe[i + 1] });
+        const { topColor, bottomColor } = getPolylineColors(pt);
+        const isSelected = selectedId === pt.id || pt.id === '__drawing_preview__';
+        const isDeleted = changeset.delete.includes(pt.id);
+        const onClick = pt.id === '__drawing_preview__' ? undefined : () => {
+          const layer = featureLayerMapRef.current[pt.id];
+          if (layer) registerSelect(layer, pt.id, pt.id.startsWith('new_'));
+        };
+        return (
+          <React.Fragment key={pt.id}>
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: isDeleted ? '#dc2626' : '#ffffff',
+                weight: 15,
+                opacity: isDeleted ? 0.5 : (isSelected ? 0.9 : 0.7),
+                dashArray: isDeleted ? '8 6' : undefined,
+                lineCap: 'round',
+                lineJoin: 'round'
+              }}
+              eventHandlers={onClick ? { click: onClick } : undefined}
+            />
+            <SegmentedDefs segments={segments} topColor={topColor} bottomColor={bottomColor} strokeWidth={10} />
+            {segments.map(seg => {
+              const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
+              const segPositions = [[seg.p1.lat, seg.p1.lng], [seg.p2.lat, seg.p2.lng]];
+              return (
+                <Polyline
+                  key={`${pt.id}-seg-${seg.idx}`}
+                  positions={segPositions}
+                  pathOptions={{
+                    color: `url(#${gradId})`,
+                    weight: 10,
+                    opacity: isDeleted ? 0.25 : 1,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                  }}
+                  eventHandlers={onClick ? { click: onClick } : undefined}
+                />
+              );
+            })}
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+};
+
+PolylineVisualizationOverlay.propTypes = {
+  featureLayerMapRef: PropTypes.object.isRequired,
+  changeset: PropTypes.object.isRequired,
+  existingMap: PropTypes.object.isRequired,
+  selectedId: PropTypes.string,
+  registerSelect: PropTypes.func.isRequired,
+  formState: PropTypes.object,
+  drawingCoords: PropTypes.array,
+};
+
+// Validation following schema conditional rules
+const validatePoint = (pt) => {
+  const errors = [];
+  if (!pt.type || !POINT_TYPES.includes(pt.type)) errors.push('Type required.');
+  if (!pt.name) errors.push('Name required.');
+  if (!Array.isArray(pt.coordinates) || pt.coordinates.length < 1) errors.push('At least one coordinate required.');
+  if (pt.type === 'stopbar' && !pt.directionality) errors.push('Directionality required for stopbar.');
+  if (pt.type === 'taxiway') {
+    if (!pt.directionality) errors.push('Directionality required for taxiway.');
+    if (!pt.color) errors.push('Color required for taxiway.');
+  }
+  if (pt.elevated) {
+    if (pt.directionality && pt.directionality !== 'uni-directional') {
+      errors.push('Elevated stopbars must be uni-directional.');
+    }
+  }
+  return errors;
+};
+
+const emptyFormState = {
+  type: 'stopbar',
+  name: '',
+  directionality: 'uni-directional',
+  color: '',
+  elevated: false,
+  ihp: false
+};
+
+const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = 'dynamic' }) => {
+  const { airportId } = useParams(); // route defines this param (contains ICAO)
+  const icao = (airportId || '').toUpperCase();
+  // Mapbox token (satellite imagery). Ensure .env contains VITE_MAPBOX_TOKEN
+  const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
+  const [airportMeta, setAirportMeta] = useState(null);
+  const [airportMetaError, setAirportMetaError] = useState(null);
+  const [airportMetaLoading, setAirportMetaLoading] = useState(false);
+
+  useEffect(() => {
+    if (!icao) return;
+    let aborted = false;
+    const fetchAirport = async () => {
+      try {
+        setAirportMetaLoading(true);
+        setAirportMetaError(null);
+        const resp = await fetch(`https://v2.stopbars.com/airports?icao=${encodeURIComponent(icao)}`);
+        if (!resp.ok) throw new Error(`Failed to fetch airport (${resp.status})`);
+        const data = await resp.json();
+        if (!aborted) setAirportMeta(data);
+      } catch (e) {
+        if (!aborted) setAirportMetaError(e.message);
+      } finally {
+        if (!aborted) setAirportMetaLoading(false);
+      }
+    };
+    fetchAirport();
+    return () => { aborted = true; };
+  }, [icao]);
+  const [changeset, setChangeset] = useState(defaultChangeset);
+  const [selectedId, setSelectedId] = useState(null); // id or temp id
+  // Track if selected feature is new (implicit via id prefix; state var removed)
+  const [formState, setFormState] = useState(emptyFormState);
+  const [formErrors, setFormErrors] = useState([]);
+  const featureLayerMapRef = useRef({});
+  const mapInstanceRef = useRef(null);
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [drawingCoords, setDrawingCoords] = useState([]); // live vertices while drawing
+  // Store original geometry snapshot for existing feature editing so we can restore on cancel
+  const originalGeometryRef = useRef({});
+  // If a polyline is wiped (<=1 vertices) we enable redraw and reuse this temp id
+  const redrawTargetRef = useRef(null);
+  // Map of temporary redraw IDs to their original existing feature IDs for restoration on cancel
+  const redrawOriginRef = useRef({});
+  // live edit re-render now handled by forcing state changes through changeset modifications
+
+  // Start drawing a new polyline point
+  const startAddPoint = useCallback(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    // Ensure no existing drawing in progress
+    map.pm.disableDraw();
+    setCreatingNew(true);
+    setDrawingCoords([]);
+    setFormState(emptyFormState); // reset form for new object defaults
+    map.pm.enableDraw('Line', {
+      snappable: true,
+      snapDistance: 12,
+      snapSegment: true,
+      snapMiddle: true,
+      requireSnapToFinish: false,
+      templineStyle: { color: '#3b82f6' },
+      hintlineStyle: { color: '#60a5fa', dashArray: '5,5' }
+    });
+  }, []);
+
+  // Remove unsaved new geometry helper (hoisted above cancelCreate for reference)
+  const handleRemoveUnsavedNew = useCallback((targetId) => {
+    if (!targetId || !targetId.startsWith('new_')) return;
+    const layer = featureLayerMapRef.current[targetId];
+    if (layer) layer.remove();
+    setChangeset(prev => ({ ...prev, create: prev.create.filter(c => c._tempId !== targetId) }));
+    delete featureLayerMapRef.current[targetId];
+    if (selectedId === targetId) {
+      setSelectedId(null);
+      setCreatingNew(false);
+      setFormState(emptyFormState);
+      setFormErrors([]);
+    }
+  }, [selectedId]);
+
+
+  // Quick lookup for existing point data
+  const existingMap = useMemo(() => {
+    const map = {}; existingPoints.forEach(p => map[p.id] = p); return map;
+  }, [existingPoints]);
+
+  // Get coordinates from a layer
+  const extractCoords = (layer) => {
+    if (!layer) return [];
+    if (layer.getLatLng) { // marker
+      const { lat, lng } = layer.getLatLng();
+      return [{ lat, lng }];
+    }
+    if (layer.getLatLngs) {
+      const latlngs = layer.getLatLngs();
+      // Polyline returns array of LatLng
+      return latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+    }
+    return [];
   };
 
-  // Cancel point creation
-  const handleCancelAddPoint = () => {
-    setAddingPoint(false);
-    setNewPoint({
-      type: 'stopbar',
-      name: '',
-      coordinates: null,
-      directionality: 'uni-directional',
-      elevated: false,
-      ihp: false
+  // When a geometry is edited for an existing point, push to modify (moved earlier to avoid TDZ issues)
+  const pushGeometryChange = useCallback((layer) => {
+    if (!layer) return;
+    const id = layer.options.pointId;
+    const coords = extractCoords(layer);
+    setChangeset(prev => {
+      if (id.startsWith('new_')) {
+        const clone = { ...prev }; // update in create array
+        clone.create = clone.create.map(c => c._tempId === id ? { ...c, coordinates: coords } : c);
+        return clone;
+      }
+      const m = { ...(prev.modify[id] || {}) }; m.coordinates = coords;
+      return { ...prev, modify: { ...prev.modify, [id]: m } };
+    });
+  }, []);
+
+  // Register selecting a layer (either existing or new)
+  const registerSelect = useCallback((layer, id, isNew = false) => {
+    setSelectedId(id);
+    // For newly created (temp id) objects, attempt to pull the saved create entry (so we retain name & properties after saving once)
+    let basePoint;
+    if (isNew) {
+      const createEntry = changeset.create.find(c => c._tempId === id);
+      if (createEntry) {
+        basePoint = { ...createEntry, id: createEntry._tempId, coordinates: createEntry.coordinates || extractCoords(layer) };
+      } else {
+        // Freshly drawn, not yet saved
+        basePoint = { ...emptyFormState, name: '', type: 'stopbar', coordinates: extractCoords(layer) };
+      }
+    } else {
+      basePoint = existingMap[id];
+    }
+    if (basePoint) {
+      const currentModify = changeset.modify[id];
+      const effective = currentModify ? { ...basePoint, ...currentModify } : basePoint;
+      setFormState({
+        type: effective.type || 'stopbar',
+        name: effective.name || '',
+        directionality: effective.directionality || (effective.type === 'stopbar' || effective.type === 'taxiway' ? 'uni-directional' : ''),
+        color: effective.color || '',
+        elevated: !!effective.elevated,
+        ihp: !!effective.ihp
+      });
+    }
+
+    // Enable editing on this layer only
+    if (layer?.pm) {
+      Object.values(featureLayerMapRef.current).forEach(l => { if (l.pm && l !== layer) l.pm.disable(); });
+      // While editing, disable snapping to avoid grid/magnetic feel.
+      layer.pm.enable({ allowSelfIntersection: false, snappable: false, snapDistance: 0 });
+      // Capture original geometry snapshot for existing points (only once per selection)
+      if (isNew) {
+        // Snapshot initial drawn geometry for temp so Cancel can revert (not delete)
+        const coords = extractCoords(layer);
+        originalGeometryRef.current[id] = coords.map(c => ({ ...c }));
+      } else if (existingMap[id]) {
+        originalGeometryRef.current[id] = (existingMap[id].coordinates || []).map(c => ({ ...c }));
+      }
+      // Live edit tick bump during vertex drag
+      const bump = () => {
+        // push current geometry into modify so overlay re-renders with live shape
+        pushGeometryChange(layer);
+        // After updating, check if geometry became empty (all vertices removed)
+        const ll = layer.getLatLngs ? layer.getLatLngs() : (layer.getLatLng ? [layer.getLatLng()] : []);
+        const count = Array.isArray(ll) ? ll.length : 0;
+        // Treat 0 or 1 vertices as effectively removed (cannot form a valid polyline)
+        if (count <= 1) { // geometry wiped/invalid -> start redraw keeping form
+          if (layer?.pm) layer.pm.disable();
+          // Only allow redraw for new_ objects; for existing we revert to original geometry snapshot then allow redraw of copy as new
+          if (id.startsWith('new_')) {
+            redrawTargetRef.current = id; // reuse same id
+          } else {
+            // Create a fresh temp id to redraw, keeping current formState
+            const newId = `new_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+            redrawTargetRef.current = newId;
+            // Store create record placeholder using original properties so Save works later
+            setChangeset(prev => {
+              const next = { ...prev };
+              next.create = [...next.create, { _tempId: newId, ...existingMap[id], coordinates: [] }];
+              return next;
+            });
+            // Track original so we can restore if user cancels redraw
+            redrawOriginRef.current[newId] = id;
+            setSelectedId(newId);
+          }
+          setCreatingNew(true);
+          // Re-enable draw mode for line
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.pm.disableDraw();
+            mapInstanceRef.current.pm.enableDraw('Line', {
+              snappable: true,
+              snapDistance: 12,
+              snapSegment: true,
+              snapMiddle: true,
+              requireSnapToFinish: false,
+              templineStyle: { color: '#3b82f6' },
+              hintlineStyle: { color: '#60a5fa', dashArray: '5,5' }
+            });
+          }
+          return; // stop further bump processing
+        }
+      };
+      layer.on('pm:markerdrag', bump);
+      layer.on('pm:snapdrag', bump);
+      // Vertex add/remove events during edit mode
+      layer.on('pm:vertexadded', () => {
+        bump();
+      });
+      layer.on('pm:vertexremoved', () => {
+        bump();
+      });
+    }
+
+    // If newly created feature selected, ensure form opens and we are in creating state
+    if (isNew) setCreatingNew(true); else setCreatingNew(false);
+
+    // Visual highlight
+    Object.entries(featureLayerMapRef.current).forEach(([pid, lyr]) => {
+      const isDeleted = changeset.delete.includes(pid);
+      const ptData = existingMap[pid] || changeset.create.find(c => c._tempId === pid) || { type: 'stopbar' };
+      styleLayerByPoint(lyr, ptData, pid === id, isDeleted);
+    });
+  }, [existingMap, changeset, pushGeometryChange]);
+
+  // Cancel editing (different behaviour for new vs existing)
+  const handleCancelEdit = useCallback(() => {
+    if (!selectedId) return;
+    if (selectedId.startsWith('new_')) {
+      // Revert geometry to snapshot if exists; keep feature
+      const layer = featureLayerMapRef.current[selectedId];
+      const snapshot = originalGeometryRef.current[selectedId];
+      if (layer && snapshot && snapshot.length) {
+        if (layer.setLatLngs && snapshot.length >= 2) {
+          layer.setLatLngs(snapshot.map(c => [c.lat, c.lng]));
+        } else if (layer.setLatLng && snapshot.length === 1) {
+          const { lat, lng } = snapshot[0];
+          layer.setLatLng([lat, lng]);
+        }
+      }
+      // If this temp id was spawned from an existing feature redraw, restore original geometry & remove temp placeholder
+      const originId = redrawOriginRef.current[selectedId];
+      if (originId) {
+        const originLayer = featureLayerMapRef.current[originId];
+        const originSnapshot = originalGeometryRef.current[originId] || existingMap[originId]?.coordinates;
+        if (originLayer && originSnapshot && originSnapshot.length) {
+          if (originLayer.setLatLngs && originSnapshot.length >= 2) originLayer.setLatLngs(originSnapshot.map(c => [c.lat, c.lng]));
+          else if (originLayer.setLatLng && originSnapshot.length === 1) {
+            const { lat, lng } = originSnapshot[0];
+            originLayer.setLatLng([lat, lng]);
+          }
+        }
+        // Remove temp layer & create entry since user canceled redraw
+        if (layer) layer.remove();
+        setChangeset(prev => ({ ...prev, create: prev.create.filter(c => c._tempId !== selectedId) }));
+        delete featureLayerMapRef.current[selectedId];
+        delete redrawOriginRef.current[selectedId];
+      } else {
+        // If snapshot missing or coordinates invalid (<2), treat as abort and remove the unsaved temp feature
+        const coordsNow = (layer && layer.getLatLngs) ? layer.getLatLngs() : [];
+        if (!snapshot && (!coordsNow || coordsNow.length < 2)) {
+          if (layer) layer.remove();
+          setChangeset(prev => ({ ...prev, create: prev.create.filter(c => c._tempId !== selectedId) }));
+          delete featureLayerMapRef.current[selectedId];
+        }
+      }
+      // Remove any create entry modifications (leave create array as-is with original coordinates)
+      setChangeset(prev => {
+        const next = { ...prev };
+        next.create = next.create.map(c => {
+          if (c._tempId === selectedId && snapshot && snapshot.length) {
+            return { ...c, coordinates: snapshot.map(s => ({ ...s })) };
+          }
+          return c;
+        });
+        return next;
+      });
+      // Exit editing
+      if (layer?.pm) layer.pm.disable();
+      // Always disable global draw mode (in case we were mid-redraw)
+      if (mapInstanceRef.current?.pm) mapInstanceRef.current.pm.disableDraw();
+      setSelectedId(null);
+      setFormState(emptyFormState);
+      setFormErrors([]);
+      setCreatingNew(false);
+      return;
+    }
+    const layer = featureLayerMapRef.current[selectedId];
+    const original = existingMap[selectedId];
+    if (layer && original) {
+      const snapshot = originalGeometryRef.current[selectedId] || original.coordinates;
+      if (layer.setLatLngs && Array.isArray(snapshot) && snapshot.length >= 2) {
+        layer.setLatLngs(snapshot.map(c => [c.lat, c.lng]));
+      } else if (layer.setLatLng && Array.isArray(snapshot) && snapshot.length === 1) {
+        const { lat, lng } = snapshot[0];
+        layer.setLatLng([lat, lng]);
+      }
+    }
+    // Remove any unsaved modifications (both geometry and property diffs) for this point
+    setChangeset(prev => {
+      if (!prev.modify[selectedId]) return prev; // nothing to revert
+      const clone = { ...prev, modify: { ...prev.modify } };
+      delete clone.modify[selectedId];
+      return clone;
+    });
+    // Clear stored snapshot after cancel
+    delete originalGeometryRef.current[selectedId];
+    // Disable editing mode on layer
+    if (layer?.pm) layer.pm.disable();
+  if (mapInstanceRef.current?.pm) mapInstanceRef.current.pm.disableDraw();
+    // Deselect & reset form
+    setSelectedId(null);
+    setFormState(emptyFormState);
+    setFormErrors([]);
+    // Restyle all layers to clear selection highlight
+    Object.entries(featureLayerMapRef.current).forEach(([pid, lyr]) => {
+      const isDeleted = changeset.delete.includes(pid);
+      const pointData = existingMap[pid] || changeset.create.find(c => c._tempId === pid) || { type: 'stopbar' };
+      styleLayerByPoint(lyr, pointData, false, isDeleted);
+    });
+  }, [selectedId, existingMap, changeset.create, changeset.delete]);
+
+  // When selection cleared we should disable editing on all layers
+  useEffect(() => {
+    if (!selectedId) {
+      Object.values(featureLayerMapRef.current).forEach(l => { if (l.pm) l.pm.disable(); });
+    }
+  }, [selectedId]);
+
+  // (pushGeometryChange defined earlier)
+  // Keep parent informed
+  useEffect(() => {
+    onChangesetChange && onChangesetChange(serializeChangeset(changeset));
+  }, [changeset, onChangesetChange]);
+
+  // Create/update point from form submission
+  const handleSave = () => {
+    if (!selectedId) return;
+    // Compose point object
+    const layer = featureLayerMapRef.current[selectedId];
+    const coordinates = extractCoords(layer);
+    const pointObj = { ...formState, coordinates };
+    const errors = validatePoint(pointObj);
+    setFormErrors(errors);
+    if (errors.length) return;
+
+    setChangeset(prev => {
+      const next = { ...prev };
+      if (selectedId.startsWith('new_')) {
+        // find existing temp entry or add
+        if (!next.create.find(c => c._tempId === selectedId)) {
+          next.create = [...next.create, { ...pointObj, _tempId: selectedId }];
+        } else {
+          next.create = next.create.map(c => c._tempId === selectedId ? { ...c, ...pointObj } : c);
+        }
+      } else {
+        // existing point: add partial diff vs original
+        const original = existingMap[selectedId];
+        if (original) {
+          const diff = {};
+          ['type','name','directionality','color','elevated','ihp'].forEach(k => {
+            if (pointObj[k] !== undefined && pointObj[k] !== original[k]) diff[k] = pointObj[k];
+          });
+          if (!arraysEqualCoords(pointObj.coordinates, original.coordinates)) diff.coordinates = pointObj.coordinates;
+          if (Object.keys(diff).length > 0) {
+            next.modify = { ...next.modify, [selectedId]: diff };
+          } else {
+            // remove modification if diff empty
+            if (next.modify[selectedId]) {
+              const cloneMod = { ...next.modify }; delete cloneMod[selectedId]; next.modify = cloneMod;
+            }
+          }
+        }
+      }
+      return next;
+    });
+
+    // After saving: close form / deselect while keeping pending changes
+    if (layer?.pm) layer.pm.disable();
+    setSelectedId(null);
+    setFormState(emptyFormState);
+    setCreatingNew(false);
+    setFormErrors([]);
+  };
+
+  const arraysEqualCoords = (a, b) => {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((p,i) => p.lat === b[i].lat && p.lng === b[i].lng);
+  };
+
+  const handleDeleteToggle = () => {
+    if (!selectedId || selectedId.startsWith('new_')) return; // cannot delete new (remove from create instead)
+    setChangeset(prev => {
+      const next = { ...prev };
+      if (next.delete.includes(selectedId)) {
+        next.delete = next.delete.filter(i => i !== selectedId);
+      } else {
+        next.delete = [...next.delete, selectedId];
+        // if previously modified, remove modification (delete supersedes)
+        if (next.modify[selectedId]) {
+          const m = { ...next.modify }; delete m[selectedId]; next.modify = m;
+        }
+      }
+      return next;
     });
   };
 
-  // Format type for display
-  const formatType = (type) => {
-    switch (type) {
-      case 'lead_on':
-        return 'Lead-On Light';
-      case 'stopbar':
-        return 'Stopbar';
-      case 'taxiway':
-        return 'Taxiway Segment';
-      case 'stand':
-        return 'Stand Lead-In Light';
-      default:
-        return type;
-    }
+  // (Moved earlier) handleRemoveUnsavedNew defined with useCallback above
+
+  const serializeChangeset = (cs) => {
+    // Remove helper keys (_tempId) before export
+    return {
+  create: cs.create.map(({ _tempId, ...rest }) => rest), // eslint-disable-line no-unused-vars
+      modify: cs.modify,
+      delete: cs.delete
+    };
   };
 
-  // Add new helper function for taxiway colors
-  const formatTaxiwayColor = (color) => {
-    switch (color) {
-      case 'green':
-        return 'Normal (Green)';
-      case 'green-yellow':
-        return 'Enhanced (Green-Yellow)';
-      case 'green-blue':
-        return 'Blue (Green-Blue)';
-      case 'green-orange':
-        return 'Orange (Green-Orange)';
-      default:
-        return color;
-    }
+  const resetAll = () => {
+    // Remove temp layers
+    Object.keys(featureLayerMapRef.current).forEach(id => {
+      if (id.startsWith('new_')) featureLayerMapRef.current[id].remove();
+    });
+    featureLayerMapRef.current.current = {};
+    setChangeset(defaultChangeset());
+    setSelectedId(null);
+    setFormState(emptyFormState);
+    setCreatingNew(false);
+    if (mapInstanceRef.current) mapInstanceRef.current.pm.disableDraw();
   };
 
-  // Function to start editing a point
-  const startEditing = (point) => {
-    // First set editing point and form
-    const coord = getFirstLatLng(point.coordinates);
-    setEditingPoint(point);
-    setEditForm({ ...point, coordinates: coord || null });
-    
-    // Center map on the point's current location
-    if (mapRef.current) {
-      const pair = toLatLngPair(point.coordinates);
-      if (pair) {
-        mapRef.current.setView(
-          pair,
-          mapRef.current.getZoom()
-        );
-      }
-    }
-    
-    // Prevent any click events for 100ms to avoid position snap
-    setTimeout(() => {
-      const mapContainer = document.querySelector('.leaflet-container');
-      if (mapContainer) {
-        mapContainer.classList.add('editing-mode');
-      }
-    }, 100);
-  };
+  const prettyJson = JSON.stringify(serializeChangeset(changeset), null, 2);
 
-  // Function to cancel editing a point
-  const handleCancelEdit = () => {
-    setEditingPoint(null);
-    setEditForm(null);
-  };
-
+  // Keep style highlight updated when changeset delete list changes
   useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => {
-        setError(null);
-      }, 5000); // Dismiss after 5 seconds
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
+    Object.entries(featureLayerMapRef.current).forEach(([pid, lyr]) => {
+      const isDeleted = changeset.delete.includes(pid);
+      const pointData = existingMap[pid] || changeset.create.find(c => c._tempId === pid) || { type: 'stopbar' };
+      styleLayerByPoint(lyr, pointData, pid === selectedId, isDeleted);
+    });
+  }, [changeset.delete, changeset.create, existingMap, selectedId]);
 
-  // Update the map container class based on editing state
-  useEffect(() => {
-    const mapContainer = document.querySelector('.leaflet-container');
-    if (mapContainer) {
-      if (addingPoint || editingPoint) {
-        mapContainer.classList.add('editing-mode');
-      } else {
-        mapContainer.classList.remove('editing-mode');
+  // Derived list of display points (existing + new)
+  const displayPoints = [
+    ...existingPoints.map(p => ({ ...p, state: changeset.delete.includes(p.id) ? 'delete' : (changeset.modify[p.id] ? 'modify' : 'existing') })),
+    ...changeset.create.map(c => ({ ...c, id: c._tempId, state: 'create' }))
+  ];
+
+  const copyChangeset = async () => {
+    try {
+      await navigator.clipboard.writeText(prettyJson);
+    } catch (e) {
+      console.error('Clipboard copy failed', e);
+    }
+  };
+
+  // Fit bounds to existing points once
+  const allExistingCoords = useMemo(() => existingPoints.flatMap(p => p.coordinates), [existingPoints]);
+  const BoundsFitter = () => {
+    const map = useMap();
+    useEffect(() => {
+      if (allExistingCoords.length > 0) {
+        const latlngs = allExistingCoords.map(c => [c.lat, c.lng]);
+        const bounds = L.latLngBounds(latlngs);
+        map.fitBounds(bounds.pad(0.1));
       }
-    }
-  }, [addingPoint, editingPoint]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [map, allExistingCoords.length]);
+    return null;
+  };
 
-  if (loading && !airport) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
-      </div>
-    );
+  // Determine map center: prefer fetched airport lat/lon; freeze first valid center to avoid later recenter
+  const parsedAirportCenter = useMemo(() => {
+    if (!airportMeta) return null;
+    const lat = parseFloat(airportMeta.latitude);
+    const lon = parseFloat(airportMeta.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      return [lat, lon];
+    }
+    return null;
+  }, [airportMeta]);
+  const frozenCenterRef = useRef(null);
+  if (!frozenCenterRef.current && parsedAirportCenter) {
+    frozenCenterRef.current = parsedAirportCenter; // set once
   }
+  const derivedCenter = frozenCenterRef.current;
+
+  const MAX_BOUNDS_RADIUS_KM = 25;
+  const maxBounds = useMemo(() => {
+    if (!parsedAirportCenter) return null;
+    const [clat, clon] = parsedAirportCenter;
+    const radiusKm = MAX_BOUNDS_RADIUS_KM;
+    const latDelta = radiusKm / 111.32 / 2;
+    const cosLat = Math.cos(clat * Math.PI / 180) || 1;
+    const lngDelta = radiusKm / (111.32 * cosLat) / 2;
+    return L.latLngBounds(
+      [clat - latDelta, clon - lngDelta],
+      [clat + latDelta, clon + lngDelta]
+    );
+  }, [parsedAirportCenter]);
+
+  // Refetch support (retry button)
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    if (!icao) return;
+    let aborted = false;
+    const fetchAirport = async () => {
+      try {
+        setAirportMetaLoading(true);
+        setAirportMetaError(null);
+        const resp = await fetch(`https://v2.stopbars.com/airports?icao=${encodeURIComponent(icao)}`);
+        if (!resp.ok) throw new Error(`Failed to fetch airport (${resp.status})`);
+        const data = await resp.json();
+        if (!aborted) setAirportMeta(data);
+      } catch (e) {
+        if (!aborted) setAirportMetaError(e.message);
+      } finally {
+        if (!aborted) setAirportMetaLoading(false);
+      }
+    };
+    fetchAirport();
+    return () => { aborted = true; };
+  }, [icao, refreshTick]);
+
+  // Component to enforce bounds & adjust min zoom so user cannot zoom out to world
+  const BoundsController = ({ bounds }) => {
+    const map = useMap();
+    useEffect(() => {
+      if (!bounds) return;
+      map.setMaxBounds(bounds);
+      const computeMinZoom = () => {
+        const FIT_PADDING = 24; // px padding for computing the tight fit
+        const fitZoom = map.getBoundsZoom(bounds, true, [FIT_PADDING, FIT_PADDING]);
+        const ALLOW_ZOOM_OUT_LEVELS = 1;
+        let minZoom = Math.max(3, fitZoom - ALLOW_ZOOM_OUT_LEVELS);
+        const maxZoom = map.getMaxZoom?.() ?? 22;
+        if (minZoom > maxZoom) minZoom = maxZoom - 1;
+        map.setMinZoom(minZoom);
+        if (map.getZoom() < minZoom) map.setZoom(minZoom);
+      };
+      computeMinZoom();
+      // Helper to clamp map center inside bounds during user drag to avoid fetching outside tiles
+      const clampCenter = () => {
+        if (!bounds.contains(map.getCenter())) {
+          // panInsideBounds will adjust center without animation
+            map.panInsideBounds(bounds, { animate: false });
+        }
+      };
+      map.on('drag', clampCenter);
+      const onResize = () => computeMinZoom();
+      map.on('resize', onResize);
+      return () => {
+        map.off('resize', onResize);
+        map.off('drag', clampCenter);
+      };
+    }, [bounds, map]);
+    return null;
+  };
+  BoundsController.propTypes = { bounds: PropTypes.object };
+
+  // Track last user view; useful if external actions attempt to recenter
+  const lastViewRef = useRef({ center: null, zoom: null });
+  const ViewTracker = () => {
+    const map = useMap();
+    useEffect(() => {
+      if (!lastViewRef.current.center && derivedCenter) {
+        lastViewRef.current = { center: map.getCenter(), zoom: map.getZoom() };
+      }
+      const handler = () => {
+        lastViewRef.current = { center: map.getCenter(), zoom: map.getZoom() };
+      };
+      map.on('moveend', handler);
+      map.on('zoomend', handler);
+      return () => {
+        map.off('moveend', handler);
+        map.off('zoomend', handler);
+      };
+  }, [map]);
+    return null;
+  };
+
+  // --- Dynamic height handling (CSS driven to avoid resize-triggered re-renders) --- //
+  const HEIGHT_OFFSET = 120; // px reserved for any global nav / top padding
+  const resolvedHeightValue = useMemo(() => {
+    if (!height || height === 'dynamic') {
+      // Use clamp so we keep a minimum without triggering JS resize calculations.
+      return `clamp(650px, calc(100vh - ${HEIGHT_OFFSET}px), 100vh)`;
+    }
+    return height;
+  }, [height]);
 
   return (
-    <div className="h-[calc(100vh-6rem)] p-6 pt-12">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    // Apply resolved (possibly dynamic) height so the map + sidebar resize with viewport
+  <div className="flex flex-col px-4 py-6 lg:px-8 pt-16" style={{ height: resolvedHeightValue }}>
+      {/* Page Header */}
+      <div className="flex items-start justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">{airport?.icao || airportId} Points Editor</h1>
-          <p className="text-zinc-400 text-sm">Manage points for BARS system integration</p>
+          <h1 className="text-xl font-semibold text-white tracking-tight">{icao ? `${icao} Object Editor` : 'Airport Object Editor'}</h1>
+          <p className="text-sm text-zinc-400 mt-1">Manage objects for BARS system integration</p>
         </div>
-        <Button
-          onClick={() => setAddingPoint(true)}
-          disabled={addingPoint}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add New Point
-        </Button>
+        <button
+          onClick={() => { if (!selectedId && !creatingNew) startAddPoint(); }}
+          disabled={!!selectedId || creatingNew}
+          className={`shrink-0 inline-flex items-center rounded-md text-sm font-medium px-4 py-2 border transition-colors ${(selectedId || creatingNew) ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' : 'bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300 shadow'}`}
+        >+ Add New Object</button>
       </div>
-
-      {/* Success/Error messages */}
-      {success && (
-        <div className="fixed bottom-8 left-8 p-4 bg-emerald-500/10 border border-emerald-500 rounded-lg z-50 animate-in fade-in slide-in-from-bottom-4">
-          <p className="text-emerald-500">{success}</p>
-        </div>
-      )}
-      {error && (
-        <div className="fixed bottom-8 left-8 p-4 bg-red-500/10 border border-red-500 rounded-lg z-50 animate-in fade-in slide-in-from-bottom-4">
-          <p className="text-red-500">{error}</p>
-        </div>
-      )}
-
-      {/* Main content - split view with map taking more space */}
-      <div className="grid grid-cols-[3fr_2fr] gap-6 h-[calc(100%-4rem)]">
-        {/* Left side - Map */}
-        <div className="rounded-lg overflow-hidden border border-zinc-800">
-          <MapContainer 
-            center={mapCenter} 
-            zoom={mapZoom} 
-            style={{ height: '100%', width: '100%' }}
-            ref={mapRef}
-          >
-            <LayersControl position="topright">
-              <LayersControl.BaseLayer checked name="Street Map">
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-              </LayersControl.BaseLayer>
-              <LayersControl.BaseLayer name="Satellite">
-                <TileLayer
-                  attribution='Imagery &copy; <a href="https://www.mapbox.com/">Mapbox</a>'
-                  url={`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`}
-
-                />
-              </LayersControl.BaseLayer>
-            </LayersControl>
-            <MapClickHandler onMapClick={handleMapClick} />
-            
-            {/* Display existing points */}
-            {points
-            .filter(point => !editingPoint || point.id !== editingPoint.id)
-            .map(point => (
-              (() => {
-                const pos = toLatLngPair(point.coordinates);
-                if (!pos) return null;
-                return (
-                  <Marker
-                    key={point.id}
-                    position={pos}
-                    icon={createCustomIcon(point)}
-                    eventHandlers={{
-                      click: () => {
-                        setActivePointId(point.id === activePointId ? null : point.id);
-                        if (mapRef.current) {
-                          mapRef.current.setView(
-                            pos,
-                            mapRef.current.getZoom()
-                          );
-                        }
-                      },
-                      popupclose: () => {
-                        setActivePointId(null);
-                      }
-                    }}
-                  >
-                <Popup 
-                  className="custom-popup"
-                  onClose={() => setActivePointId(null)}
-                >
-                  <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
-                    <h3 className="font-bold text-white mb-1">{point.name}</h3>
-                    <div className="space-y-0 mb-3">
-                      <p className="text-sm text-zinc-400">Type: {formatType(point.type)}</p>
-                      <p className="text-sm text-zinc-400">BARS ID: {point.id}</p>
-                      {/* Orientation removed from UI for stopbars */}
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startEditing(point);
-                        }}
-                      >
-                        <Edit2 className="w-3 h-3 mr-1" /> Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-red-500 hover:bg-red-500/10 hover:border-red-500"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActivePointId(point.id);
-                          setShowConfirmDelete(true);
-                        }}
-                      >
-                        <Trash2 className="w-3 h-3 mr-1" /> Delete
-                      </Button>
-                    </div>
-                  </div>
-                </Popup>
-                  </Marker>
-                );
-              })()
-            ))}
-            
-            {/* Display temporary marker for new point or edit */}
-            {(() => {
-              const activeCoords = (editingPoint && editForm?.coordinates) ? editForm.coordinates : newPoint.coordinates;
-              if (!activeCoords) return null;
-              return (
-                <Marker 
-                  position={[activeCoords.lat, activeCoords.lng]}
-                  icon={createCustomIcon(editForm || newPoint)}
-                />
-              );
-            })()}
-          </MapContainer>
-        </div>
-
-        {/* Right side - Points list */}
-        <div className="space-y-6 overflow-y-auto">
-          {/* Edit form */}
-          {editingPoint && editForm && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Edit Point: {editingPoint.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Point type */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Point Type</label>
-                    <select
-                      value={editForm.type}
-                      onChange={e => handleEditFieldChange('type', e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="stopbar">Stopbar</option>
-                      <option value="lead_on">Lead-On Light</option>
-                      <option value="taxiway">Taxiway Segment</option>
-                      <option value="stand">Stand Lead-On Light</option>
-                    </select>
-                  </div>
-                  
-                  {/* Point name */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Point Name</label>
-                    <input
-                      type="text"
-                      value={editForm.name}
-                      onChange={e => handleEditFieldChange('name', e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                      placeholder="e.g., A1, B2, etc."
-                    />
-                  </div>
-                
-                  
-                  {editForm.type === 'stopbar' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Directionality</label>
-                        <select
-                          value={editForm.directionality}
-                          onChange={e => handleEditFieldChange('directionality', e.target.value)}
-                          className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="uni-directional">Uni-directional</option>
-                          <option value="bi-directional">Bi-directional</option>
-                        </select>
-                      </div>
-                      
-                      {/* Elevated toggle only relevant for uni-directional stopbars */}
-                      {editForm.directionality === 'uni-directional' && (
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="edit-elevated"
-                            checked={editForm.elevated || false}
-                            onChange={e => handleEditFieldChange('elevated', e.target.checked)}
-                            className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
-                          />
-                          <label htmlFor="edit-elevated" className="text-sm font-medium">
-                            Has Elevated Bar?
-                          </label>
-                        </div>
-                      )}
-
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="edit-ihp"
-                          checked={editForm.ihp || false}
-                          onChange={e => handleEditFieldChange('ihp', e.target.checked)}
-                          className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
-                        />
-                        <label htmlFor="edit-ihp" className="text-sm font-medium">
-                          Intermediate Holding Point?
-                        </label>
-                      </div>
-                    </>
-                  )}                  {editForm.type === 'taxiway' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Directionality</label>
-                        <select
-                          value={editForm.directionality}
-                          onChange={e => handleEditFieldChange('directionality', e.target.value)}
-                          className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="uni-directional">Uni-directional</option>
-                          <option value="bi-directional">Bi-directional</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Color Style</label>
-                        <select
-                          value={editForm.color}
-                          onChange={e => handleEditFieldChange('color', e.target.value)}
-                          className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="green">Normal (Green)</option>
-                          <option value="green-yellow">Enhanced (Green-Yellow)</option>
-                          <option value="green-blue">Blue (Green-Blue)</option>
-                          <option value="green-orange">Orange (Green-Orange)</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-                  
-                  {/* Map instructions */}
-                  <div className="p-4 bg-blue-500/10 border border-blue-500 rounded-lg">
-                    <p className="text-blue-400 text-sm">Click on the map to move the point to a new position.</p>
-                  </div>
-
-                  {/* Point coordinates display */}
-                  <div className="p-4 bg-zinc-800/50 rounded-lg">
-                    <p className="text-sm font-medium mb-2">Current Position:</p>
-                    <p className="text-sm text-zinc-400">
-                      [{editForm.coordinates.lat.toFixed(6)}, {editForm.coordinates.lng.toFixed(6)}]
-                    </p>
-                  </div>
-                  
-                  {/* Form actions */}
-                  <div className="flex justify-end space-x-4 pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={handleCancelEdit}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      disabled={!editForm.name || !editForm.coordinates}
-                      onClick={handleUpdatePoint}
-                    >
-                      Save Changes
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+        <div className="flex-1 relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900">
+          {airportMetaLoading && !derivedCenter && (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="h-12 w-12 rounded-full border-4 border-zinc-700 border-t-blue-500 animate-spin" />
+                <p className="text-xs text-zinc-400 tracking-wide">Loading airport map…</p>
+              </div>
+            </div>
           )}
-
-          {/* Add point form - show only when not editing */}
-          {addingPoint && !editingPoint && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Add New Point</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Point type */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Point Type</label>
-                    <select
-                      value={newPoint.type}
-                      onChange={e => handleNewPointFieldChange('type', e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="stopbar">Stopbar</option>
-                      <option value="lead_on">Lead-On Light</option>
-                      <option value="taxiway">Taxiway Segment</option>
-                      <option value="stand">Stand Lead-On Light</option>
-                    </select>
-                  </div>
-                  
-                  {/* Point name */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Point Name</label>
-                    <input
-                      type="text"
-                      value={newPoint.name}
-                      onChange={e => setNewPoint({...newPoint, name: e.target.value})}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                      placeholder="e.g., A1, B2, etc."
-                    />
-                  </div>
-                  
-                  
-                  {newPoint.type === 'stopbar' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Directionality</label>
-                        <select
-                          value={newPoint.directionality}
-                          onChange={e => handleNewPointFieldChange('directionality', e.target.value)}
-                          className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="uni-directional">Uni-directional</option>
-                          <option value="bi-directional">Bi-directional</option>
-                        </select>
-                      </div>
-                      
-                      {/* Elevated toggle only for uni-directional stopbars */}
-                      {newPoint.directionality === 'uni-directional' && (
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="new-elevated"
-                            checked={newPoint.elevated || false}
-                            onChange={e => handleNewPointFieldChange('elevated', e.target.checked)}
-                            className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
-                          />
-                          <label htmlFor="new-elevated" className="text-sm font-medium">
-                            Has Elevated Bar?
-                          </label>
-                        </div>
-                      )}
-
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="new-ihp"
-                          checked={newPoint.ihp || false}
-                          onChange={e => handleNewPointFieldChange('ihp', e.target.checked)}
-                          className="w-4 h-4 rounded border-zinc-700 bg-zinc-800"
-                        />
-                        <label htmlFor="new-ihp" className="text-sm font-medium">
-                          Is Intermediate Holding Point?
-                        </label>
-                      </div>
-                    </>
-                  )}                      {newPoint.type === 'taxiway' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Directionality</label>
-                        <select
-                          value={newPoint.directionality}
-                          onChange={e => handleNewPointFieldChange('directionality', e.target.value)}
-                          className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="uni-directional">Uni-directional</option>
-                          <option value="bi-directional">Bi-directional</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Color Style</label>
-                        <select
-                          value={newPoint.color}
-                          onChange={e => handleNewPointFieldChange('color', e.target.value)}
-                          className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="green">Normal (Green)</option>
-                          <option value="green-yellow">Enhanced (Green-Yellow)</option>
-                          <option value="green-blue">Blue (Green-Blue)</option>
-                          <option value="green-orange">Orange (Green-Orange)</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-                  
-                  {/* Map instructions */}
-                  <div className="p-4 bg-blue-500/10 border border-blue-500 rounded-lg">
-                    <p className="text-blue-400 text-sm">Click on the map to place the point.</p>
-                  </div>
-
-                  {/* Point coordinates display */}
-                  {newPoint.coordinates && (
-                    <div className="p-4 bg-zinc-800/50 rounded-lg">
-                      <p className="text-sm font-medium mb-2">Selected Position:</p>
-                      <p className="text-sm text-zinc-400">
-                        [{newPoint.coordinates.lat.toFixed(6)}, {newPoint.coordinates.lng.toFixed(6)}]
-                      </p>
-                    </div>
-                  )}
-                  
-                  {/* Form actions */}
-                  <div className="flex justify-end space-x-4 pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={handleCancelAddPoint}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      disabled={!newPoint.name || !newPoint.coordinates}
-                      onClick={handleSavePoint}
-                    >
-                      Save Point
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {!airportMetaLoading && !derivedCenter && (
+            <div className="w-full h-full flex items-center justify-center p-4">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <span className="text-sm font-medium text-red-400">Unable to load airport position</span>
+                {airportMetaError && <span className="text-[11px] text-red-300 max-w-xs break-words">{airportMetaError}</span>}
+                <button
+                  onClick={() => { setRefreshTick(t => t + 1); }}
+                  className="px-3 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-200"
+                >Retry</button>
+              </div>
+            </div>
           )}
-
-          {/* Points list - show only when not editing */}
-          {!editingPoint && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Managed Points</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {points.length === 0 ? (
-                  <div className="p-4 bg-zinc-800 rounded-lg text-center">
-                    <p className="text-zinc-400">No points added yet. Add your first point to get started.</p>
-                  </div>
+          {derivedCenter && (
+            <MapContainer
+              center={derivedCenter}
+              zoom={13}
+              maxZoom={22}
+              style={{ height: '100%', width: '100%' }}
+              worldCopyJump={false}
+              maxBounds={maxBounds || undefined}
+              maxBoundsViscosity={maxBounds ? 1.0 : undefined}
+              inertia={false}
+            >
+              <>
+                {mapboxToken ? (
+                  <TileLayer
+                    url={`${'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}'}?access_token=${mapboxToken}`}
+                    tileSize={512}
+                    zoomOffset={-1}
+                    maxZoom={22}
+                    attribution='Imagery © Mapbox, © OpenStreetMap contributors'
+                  />
                 ) : (
-                  <div className="space-y-3">
-                    {points.map(point => (
-                      <div key={point.id} className="p-4 border rounded-lg transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div 
-                              className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: getPointColor(point) }}
-                            ></div>
-                            <div>
-                              <h3 className="font-medium">{point.name}</h3>
-                              <p className="text-xs text-zinc-400">
-                                {formatType(point.type)} • BARS ID: {point.id}
-                              </p>
-                            </div>
-                          </div>
-                          {/* Show expand/collapse and edit buttons when not expanded */}
-                          {activePointId !== point.id && (
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="outline"
-                                className="h-8"
-                                onClick={() => {
-                                  setActivePointId(point.id);
-                                  // Center map on this point
-                                  if (mapRef.current) {
-                                    const pos = toLatLngPair(point.coordinates);
-                                    if (pos) {
-                                      mapRef.current.setView(
-                                        pos,
-                                        17
-                                      );
-                                    }
-                                  }
-                                }}
-                              >
-                                <ChevronDown className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                className="h-8"
-                                onClick={() => startEditing(point)}
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )}
-                          {/* Show collapse button when expanded */}
-                          {activePointId === point.id && (
-                            <Button
-                              variant="outline"
-                              className="h-8"
-                              onClick={() => setActivePointId(null)}
-                            >
-                              <ChevronUp className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                        
-                        {/* Point details when expanded */}
-                        {activePointId === point.id && (
-                          <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
-                            {/* Point details */}
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <p className="text-zinc-400">Type:</p>
-                                <p>{formatType(point.type)}</p>
-                              </div>
-                              {(point.type === 'stopbar' || point.type === 'taxiway') && (
-                                <>
-                                  <div>
-                                    <p className="text-zinc-400">Directionality:</p>
-                                    <p>{point.directionality === 'uni-directional' ? 'Uni-directional' : 'Bi-directional'}</p>
-                                  </div>
-                                </>
-                              )}
-                              {point.type === 'stopbar' && (
-                                <>
-                                  {point.directionality === 'uni-directional' && (
-                                    <div>
-                                      <p className="text-zinc-400">Elevated Bar:</p>
-                                      <p>{point.elevated ? 'Yes' : 'No'}</p>
-                                    </div>
-                                  )}
-                                  <div>
-                                    <p className="text-zinc-400">IHP:</p>
-                                    <p>{point.ihp ? 'Yes' : 'No'}</p>
-                                  </div>
-                                </>
-                              )}
-                              {point.type === 'taxiway' && (
-                                <div>
-                                  <p className="text-zinc-400">Color Style:</p>
-                                  <p>{formatTaxiwayColor(point.color)}</p>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Coordinates */}
-                            <div>
-                              <p className="text-zinc-400 text-sm">Position:</p>
-                              {(() => {
-                                const c = getFirstLatLng(point.coordinates);
-                                return (
-                                  <p className="text-sm">
-                                    {c ? `[${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}]` : '—'}
-                                  </p>
-                                );
-                              })()}
-                            </div>
-
-                            {/* Actions */}
-                            <div className="flex justify-end space-x-3">
-                              <Button
-                                variant="outline"
-                                onClick={() => startEditing(point)}
-                              >
-                                <Edit2 className="w-4 h-4 mr-2" />
-                                Edit
-                              </Button>
-                              <Button
-                                variant="outline"
-                                className="text-red-500 hover:bg-red-500/10 hover:border-red-500"
-                                onClick={() => {
-                                  setActivePointId(point.id);
-                                  setShowConfirmDelete(true);
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    maxZoom={19}
+                    attribution='© OpenStreetMap contributors'
+                  />
+                )}
+              </>
+              <ViewTracker />
+              <BoundsFitter />
+              <GeomanController
+                existingPoints={existingPoints}
+                featureLayerMapRef={featureLayerMapRef}
+                registerSelect={registerSelect}
+                pushGeometryChange={pushGeometryChange}
+                mapInstanceRef={mapInstanceRef}
+                onFeatureCreated={() => {
+                  if (mapInstanceRef.current) mapInstanceRef.current.pm.disableDraw();
+                }}
+                onDrawingCoordsUpdate={setDrawingCoords}
+                onDrawingComplete={() => setDrawingCoords([])}
+                redrawTargetRef={redrawTargetRef}
+              />
+              {/* Gradient polyline visualization overlay replicating ContributeMap styles */}
+              <PolylineVisualizationOverlay
+                featureLayerMapRef={featureLayerMapRef}
+                changeset={changeset}
+                existingMap={existingMap}
+                selectedId={selectedId}
+                registerSelect={registerSelect}
+                formState={formState}
+            drawingCoords={drawingCoords}
+              />
+              {maxBounds && <BoundsController bounds={maxBounds} />}
+              {maxBounds && (
+                <Rectangle
+                  bounds={maxBounds}
+                  pathOptions={{ color: '#dc2626', weight: 2, dashArray: '6 4', fill: false }}
+                />
+              )}
+            </MapContainer>
+          )}
+        </div>
+        <div className="w-full lg:w-96 flex flex-col gap-5 overflow-y-auto p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg">
+          <h3 className="text-lg font-medium text-white">
+            {selectedId && !selectedId.startsWith('new_') ? 'Edit Object' : 'Add New Object'}
+          </h3>
+          {selectedId ? (
+            <>
+              <div className="space-y-3">
+                {!creatingNew && selectedId.startsWith('new_') && (
+                  <div className="text-[10px] text-amber-300 bg-amber-900/40 px-2 py-1 rounded">New geometry captured. Fill details and save.</div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">Object Type</label>
+                  <select
+                    className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+                    value={formState.type}
+                    onChange={e => setFormState(s => ({ ...s, type: e.target.value }))}
+                  >
+                    {POINT_TYPES.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">Object Name</label>
+                  <input
+                    className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+                    value={formState.name}
+                    onChange={e => setFormState(s => ({ ...s, name: e.target.value }))}
+                    placeholder="SB A5"
+                  />
+                </div>
+                {(formState.type === 'stopbar' || formState.type === 'taxiway') && (
+                  <div>
+                    <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">Directionality</label>
+                    <select
+                      className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+                      value={formState.directionality}
+                      onChange={e => setFormState(s => ({ ...s, directionality: e.target.value }))}
+                    >
+                      {DIRECTIONALITY.map(d => <option key={d}>{d}</option>)}
+                    </select>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Delete confirmation dialog */}
-      {showConfirmDelete && activePointId && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-            <div className="flex items-center space-x-3 mb-6">
-              <AlertCircle className="w-6 h-6 text-red-500" />
-              <h3 className="text-xl font-bold text-red-500">Confirm Point Deletion</h3>
-            </div>
-            <div className="space-y-4">
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-zinc-200 mb-3">
-                  You are about to delete the following point:
-                </p>
-                {(() => {
-                  const pointToDelete = points.find(p => p.id === activePointId);
-                  return pointToDelete ? (
-                    <div className="flex items-start space-x-3">
-                      <div 
-                        className="w-3 h-3 rounded-full mt-1" 
-                        style={{ backgroundColor: getPointColor(pointToDelete) }}
-                      ></div>
-                      <div className="flex-1">
-                        <span className="font-medium text-red-200 block">{pointToDelete.name}</span>
-                        <div className="text-sm text-red-200/80 space-y-1 mt-1">
-                          <p>Type: {formatType(pointToDelete.type)}</p>
-                          <p>BARS ID: {pointToDelete.id}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null;
-                })()}
+                {formState.type === 'taxiway' && (
+                  <div>
+                    <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">Color</label>
+                    <select
+                      className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+                      value={formState.color}
+                      onChange={e => setFormState(s => ({ ...s, color: e.target.value }))}
+                    >
+                      <option value="">-- select --</option>
+                      {COLORS.map(c => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-sm">
+                  <input
+                    id="elevated"
+                    type="checkbox"
+                    checked={formState.elevated}
+                    onChange={e => setFormState(s => ({ ...s, elevated: e.target.checked, directionality: e.target.checked ? 'uni-directional' : s.directionality }))}
+                  />
+                  <label htmlFor="elevated" className="text-zinc-300">Has Elevated Bar?</label>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <input
+                    id="ihp"
+                    type="checkbox"
+                    checked={formState.ihp}
+                    onChange={e => setFormState(s => ({ ...s, ihp: e.target.checked }))}
+                  />
+                  <label htmlFor="ihp" className="text-zinc-300">Is Intermediate Holding Point?</label>
+                </div>
+                {formErrors.length > 0 && (
+                  <ul className="text-xs text-red-400 list-disc pl-4">
+                    {formErrors.map(err => <li key={err}>{err}</li>)}
+                  </ul>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={handleSave} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded px-3 py-1.5">Save</button>
+                  <button onClick={handleCancelEdit} className="bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded px-3 py-1.5">Cancel</button>
+                  {selectedId.startsWith('new_') ? (
+                    <button onClick={handleRemoveUnsavedNew} className="text-white text-sm rounded px-3 py-1.5 bg-red-600 hover:bg-red-500">Remove</button>
+                  ) : (
+                    <button onClick={handleDeleteToggle} className={`text-white text-sm rounded px-3 py-1.5 ${changeset.delete.includes(selectedId) ? 'bg-amber-600 hover:bg-amber-500' : 'bg-red-600 hover:bg-red-500'}`}>{changeset.delete.includes(selectedId) ? 'Undo Delete' : 'Delete'}</button>
+                  )}
+                </div>
               </div>
-              
-              <p className="text-zinc-300">
-                This action cannot be undone and will cause any scenery contribution using this BARS ID to no longer function correctly.
-              </p>
+            </>
+          ) : (
+            <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded p-3">
+              {creatingNew ? (
+                <span>
+                  Click on the map to add vertices. Finish with the last click, adjust if needed, then press Save.{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Abort creation: just clear state & keep any temp layer (user can remove later)
+                      setCreatingNew(false);
+                      setDrawingCoords([]);
+                      if (selectedId && selectedId.startsWith('new_')) {
+                        // deselect but keep geometry
+                        const layer = featureLayerMapRef.current[selectedId];
+                        if (layer?.pm) layer.pm.disable();
+                        setSelectedId(null);
+                        setFormState(emptyFormState);
+                      }
+                    }}
+                    className="text-amber-400 underline-offset-2 hover:underline ml-1"
+                  >Cancel</button>
+                </span>
+              ) : 'Click + Add New Object to start creating a new object polyline on the map.'}
             </div>
-            
-            <div className="flex justify-end space-x-3 mt-6">
-              <Button
-                variant="outline"
-                onClick={() => setShowConfirmDelete(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="!bg-red-500 hover:!bg-red-600 text-white"
-                onClick={() => handleDeletePoint(activePointId)}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete Point
-              </Button>
+          )}
+          <hr className="border-zinc-800" />
+          <h3 className="text-sm font-medium text-zinc-200">Managed Objects</h3>
+          {displayPoints.length === 0 ? (
+            <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded px-3 py-4 text-center">
+              No objects added yet. Add your first object to get started.
             </div>
+          ) : (
+            <ul className="flex flex-col gap-1 text-sm max-h-60 overflow-y-auto pr-1">
+              {displayPoints.map(p => (
+                <li key={p.id} className={`px-2 py-1 rounded cursor-pointer flex items-center justify-between transition-colors ${p.id===selectedId?'bg-zinc-700':'bg-zinc-800 hover:bg-zinc-700'}`}
+                  onClick={() => {
+                    const layer = featureLayerMapRef.current[p.id];
+                    if (layer) registerSelect(layer, p.id, p.id.startsWith('new_'));
+                  }}
+                >
+                  <span className="truncate">{p.name || '(unnamed)'} <span className="text-xs text-zinc-400">[{p.type}]</span></span>
+                  <span className={`text-[10px] uppercase tracking-wide rounded px-1 ml-2 ${p.state==='create' && 'bg-green-700 text-green-100'} ${p.state==='modify' && 'bg-blue-700 text-blue-100'} ${p.state==='delete' && 'bg-red-700 text-red-100'} ${p.state==='existing' && 'bg-zinc-600 text-zinc-200'}`}>{p.state}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="pt-2 flex gap-2">
+            <button onClick={resetAll} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-xs rounded px-3 py-1.5">Reset</button>
+            <button onClick={copyChangeset} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded px-3 py-1.5">Copy JSON</button>
+          </div>
+          <div className="pt-1">
+            <button
+              disabled={changeset.create.length===0 && Object.keys(changeset.modify).length===0 && changeset.delete.length===0}
+              onClick={() => { console.log('Upload placeholder', serializeChangeset(changeset)); }}
+              className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 transition-colors ${ (changeset.create.length===0 && Object.keys(changeset.modify).length===0 && changeset.delete.length===0) ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+            >Save & Upload (placeholder)</button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
+};
+
+AirportPointEditor.propTypes = {
+  existingPoints: PropTypes.array,
+  onChangesetChange: PropTypes.func,
+  height: PropTypes.string
 };
 
 export default AirportPointEditor;
