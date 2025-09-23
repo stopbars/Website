@@ -731,6 +731,10 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const [airportMeta, setAirportMeta] = useState(null);
   const [airportMetaError, setAirportMetaError] = useState(null);
   const [airportMetaLoading, setAirportMetaLoading] = useState(false);
+  // Automatic base map fallback state. 0 = primary (BARS/Azure), then Mapbox satellite (if token), then OSM.
+  const [providerIndex, setProviderIndex] = useState(0);
+  const tileLoadSuccessRef = useRef(false); // whether current provider has at least one loaded tile
+  const attemptedFallbackRef = useRef(false); // prevent infinite loop
 
   useEffect(() => {
     if (!icao) return;
@@ -1294,16 +1298,46 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   }
   const derivedCenter = frozenCenterRef.current;
 
-  const MAX_BOUNDS_RADIUS_KM = 25;
+  const MAX_BOUNDS_RADIUS_KM = 25; // fallback radius if bbox not present
   const maxBounds = useMemo(() => {
+    // Prefer explicit bbox from airport metadata if available
+    if (
+      airportMeta &&
+      Number.isFinite(airportMeta.bbox_min_lat) &&
+      Number.isFinite(airportMeta.bbox_min_lon) &&
+      Number.isFinite(airportMeta.bbox_max_lat) &&
+      Number.isFinite(airportMeta.bbox_max_lon)
+    ) {
+      const minLat = airportMeta.bbox_min_lat;
+      const minLon = airportMeta.bbox_min_lon;
+      const maxLat = airportMeta.bbox_max_lat;
+      const maxLon = airportMeta.bbox_max_lon;
+      if (
+        Math.abs(minLat) <= 90 &&
+        Math.abs(maxLat) <= 90 &&
+        Math.abs(minLon) <= 180 &&
+        Math.abs(maxLon) <= 180 &&
+        maxLat > minLat &&
+        maxLon > minLon
+      ) {
+        // Add a small padding (10%) similar to prior logic to avoid tight edges
+        const padLat = (maxLat - minLat) * 0.1 || 0.001;
+        const padLon = (maxLon - minLon) * 0.1 || 0.001;
+        return L.latLngBounds(
+          [minLat - padLat, minLon - padLon],
+          [maxLat + padLat, maxLon + padLon]
+        );
+      }
+    }
+    // Fallback: old synthetic radius around center
     if (!parsedAirportCenter) return null;
     const [clat, clon] = parsedAirportCenter;
     const radiusKm = MAX_BOUNDS_RADIUS_KM;
-    const latDelta = radiusKm / 111.32 / 2;
+    const latDelta = radiusKm / 111.32 / 3;
     const cosLat = Math.cos((clat * Math.PI) / 180) || 1;
-    const lngDelta = radiusKm / (111.32 * cosLat) / 2;
+    const lngDelta = radiusKm / (111.32 * cosLat) / 3;
     return L.latLngBounds([clat - latDelta, clon - lngDelta], [clat + latDelta, clon + lngDelta]);
-  }, [parsedAirportCenter]);
+  }, [airportMeta, parsedAirportCenter]);
 
   const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
@@ -1456,23 +1490,83 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               maxBoundsViscosity={maxBounds ? 1.0 : undefined}
               inertia={false}
             >
-              <>
-                {mapboxToken ? (
-                  <TileLayer
-                    url={`${'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}'}?access_token=${mapboxToken}`}
-                    tileSize={512}
-                    zoomOffset={-1}
-                    maxZoom={22}
-                    attribution="Imagery © Mapbox, © OpenStreetMap contributors"
-                  />
-                ) : (
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    maxZoom={19}
-                    attribution="© OpenStreetMap contributors"
-                  />
-                )}
-              </>
+              {(() => {
+                const providers = [
+                  {
+                    key: 'azure',
+                    element: (
+                      <TileLayer
+                        url="https://maps.stopbars.com/{z}/{x}/{y}.png"
+                        tileSize={256}
+                        maxZoom={22}
+                        maxNativeZoom={19}
+                        attribution="Imagery © Azure Maps"
+                        eventHandlers={{
+                          tileload: () => {
+                            tileLoadSuccessRef.current = true;
+                          },
+                          tileerror: () => {
+                            if (!tileLoadSuccessRef.current) {
+                              setProviderIndex((idx) => {
+                                return idx + 1;
+                              });
+                            }
+                          },
+                        }}
+                      />
+                    ),
+                  },
+                ];
+                if (mapboxToken) {
+                  providers.push({
+                    key: 'satellite',
+                    element: (
+                      <TileLayer
+                        url={`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`}
+                        tileSize={512}
+                        zoomOffset={-1}
+                        maxZoom={22}
+                        attribution="Imagery © Mapbox"
+                        eventHandlers={{
+                          tileload: () => {
+                            tileLoadSuccessRef.current = true;
+                          },
+                          tileerror: () => {
+                            if (!tileLoadSuccessRef.current) {
+                              setProviderIndex((idx) => idx + 1);
+                            }
+                          },
+                        }}
+                      />
+                    ),
+                  });
+                }
+                providers.push({
+                  key: 'osm',
+                  element: (
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      maxZoom={19}
+                      attribution="© OpenStreetMap contributors"
+                      eventHandlers={{
+                        tileload: () => {
+                          tileLoadSuccessRef.current = true;
+                        },
+                        tileerror: () => {
+                          // Last provider; nothing further to do
+                        },
+                      }}
+                    />
+                  ),
+                });
+
+                const current = providers[Math.min(providerIndex, providers.length - 1)];
+                // Reset flags when provider changes
+                if (!attemptedFallbackRef.current) {
+                  attemptedFallbackRef.current = true;
+                }
+                return current.element;
+              })()}
               <ViewTracker />
               {/* Removed automatic BoundsFitter to prevent unwanted recentering while editing */}
               <GeomanController
