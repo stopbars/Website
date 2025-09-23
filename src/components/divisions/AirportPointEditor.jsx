@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
+import { getVatsimToken } from '../../utils/cookieUtils';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
@@ -10,6 +11,21 @@ import 'leaflet/dist/leaflet.css';
 const POINT_TYPES = ['stopbar', 'lead_on', 'taxiway', 'stand'];
 const DIRECTIONALITY = ['bi-directional', 'uni-directional'];
 const COLORS = ['green', 'yellow', 'green-yellow', 'green-orange', 'green-blue'];
+
+// Visual label formatter (does not alter underlying values)
+const formatLabel = (str) => {
+  if (!str || typeof str !== 'string') return str;
+  return str
+    .replace(/_/g, ' ') // underscores to spaces
+    .split(' ') // split words
+    .map((w) =>
+      w
+        .split('-') // preserve hyphenated segments while capitalizing each part
+        .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+        .join('-')
+    )
+    .join(' ');
+};
 
 const MIN_SEGMENT_POINT_DISTANCE_METERS = 1; // 1 meter
 
@@ -383,7 +399,10 @@ const PolylineVisualizationOverlay = ({
   registerSelect,
   formState,
   drawingCoords,
+  liveGeometryTick, // used to trigger re-render on live geometry edits
 }) => {
+  // Read liveGeometryTick so React registers it; no other action needed.
+  liveGeometryTick;
   const extractCoords = useCallback((layer) => {
     if (!layer) return [];
     if (layer.getLatLng) {
@@ -515,6 +534,7 @@ PolylineVisualizationOverlay.propTypes = {
   registerSelect: PropTypes.func.isRequired,
   formState: PropTypes.object,
   drawingCoords: PropTypes.array,
+  liveGeometryTick: PropTypes.number,
 };
 
 const TYPE_RULES = {
@@ -620,8 +640,8 @@ const validatePoint = (pt) => {
   const name = (pt.name || '').trim();
   if (!name) errors.push('Name required (non-empty after trimming).');
 
-  if (!Array.isArray(pt.coordinates) || pt.coordinates.length < 1) {
-    errors.push('At least one coordinate required.');
+  if (!Array.isArray(pt.coordinates) || pt.coordinates.length < 2) {
+    errors.push('At least two coordinates required.');
   } else {
     pt.coordinates.forEach((c, idx) => {
       const latOk = typeof c?.lat === 'number' && c.lat >= -90 && c.lat <= 90;
@@ -700,6 +720,11 @@ const emptyFormState = {
 };
 
 const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = 'dynamic' }) => {
+  const [remotePoints, setRemotePoints] = useState(null); // null = not loaded
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState(null);
+  const [uploadState, setUploadState] = useState({ status: 'idle', message: '' }); // uploading|success|error|idle
+  const fetchInFlightRef = useRef(false);
   const { airportId } = useParams();
   const icao = (airportId || '').toUpperCase();
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -742,6 +767,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const originalGeometryRef = useRef({});
   const redrawTargetRef = useRef(null);
   const redrawOriginRef = useRef({});
+  const [liveGeometryTick, setLiveGeometryTick] = useState(0);
 
   const startAddPoint = useCallback(() => {
     if (!mapInstanceRef.current) return;
@@ -781,11 +807,54 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     [selectedId]
   );
 
+  const activeExistingPoints = useMemo(
+    () => (remotePoints !== null ? remotePoints : existingPoints),
+    [remotePoints, existingPoints]
+  );
   const existingMap = useMemo(() => {
     const map = {};
-    existingPoints.forEach((p) => (map[p.id] = p));
+    activeExistingPoints.forEach((p) => (map[p.id] = p));
     return map;
-  }, [existingPoints]);
+  }, [activeExistingPoints]);
+
+  const triggerFetchPoints = useCallback(
+    async (force = false) => {
+      if (!icao) return;
+      if (fetchInFlightRef.current && !force) return; // already fetching
+      if (!force && remotePoints !== null) return; // already loaded
+      fetchInFlightRef.current = true;
+      try {
+        setRemoteLoading(true);
+        setRemoteError(null);
+        const resp = await fetch(
+          `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/points`
+        );
+        if (!resp.ok) throw new Error(`Failed to load points (${resp.status})`);
+        const data = await resp.json();
+        if (!Array.isArray(data)) throw new Error('Invalid points response format');
+        // Remove non-new layers so they rebuild with fresh data
+        Object.entries(featureLayerMapRef.current).forEach(([id, layer]) => {
+          if (!id.startsWith('new_') && layer?.remove) layer.remove();
+        });
+        featureLayerMapRef.current = Object.fromEntries(
+          Object.entries(featureLayerMapRef.current).filter(([id]) => id.startsWith('new_'))
+        );
+        setRemotePoints(data);
+      } catch (e) {
+        setRemoteError(e.message);
+      } finally {
+        setRemoteLoading(false);
+        fetchInFlightRef.current = false;
+      }
+    },
+    [icao, remotePoints]
+  );
+
+  useEffect(() => {
+    if (existingPoints.length === 0 && remotePoints === null && !remoteLoading) {
+      triggerFetchPoints();
+    }
+  }, [existingPoints.length, remotePoints, remoteLoading, triggerFetchPoints]);
 
   const extractCoords = (layer) => {
     if (!layer) return [];
@@ -801,23 +870,25 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     return [];
   };
 
-  const pushGeometryChange = useCallback((layer) => {
-    if (!layer) return;
-    const id = layer.options.pointId;
-    const coords = extractCoords(layer);
-    setChangeset((prev) => {
-      if (id.startsWith('new_')) {
-        const clone = { ...prev };
-        clone.create = clone.create.map((c) =>
-          c._tempId === id ? { ...c, coordinates: coords } : c
-        );
-        return clone;
-      }
-      const m = { ...(prev.modify[id] || {}) };
-      m.coordinates = coords;
-      return { ...prev, modify: { ...prev.modify, [id]: m } };
-    });
-  }, []);
+  const pushGeometryChange = useCallback(
+    (layer) => {
+      if (!layer) return;
+      const id = layer.options.pointId;
+      const coords = extractCoords(layer);
+      setChangeset((prev) => {
+        if (id.startsWith('new_')) {
+          const clone = { ...prev };
+          clone.create = clone.create.map((c) =>
+            c._tempId === id ? { ...c, coordinates: coords } : c
+          );
+          return clone;
+        }
+        setLiveGeometryTick((t) => t + 1);
+        return prev;
+      });
+    },
+    [setLiveGeometryTick]
+  );
 
   const registerSelect = useCallback(
     (layer, id, isNew = false) => {
@@ -1084,20 +1155,29 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
       } else {
         const original = existingMap[selectedId];
         if (original) {
+          const originalSan = sanitizePoint(original);
+          const newSan = sanitizePoint(pointObj);
           const diff = {};
           ['type', 'name', 'directionality', 'color', 'elevated', 'ihp'].forEach((k) => {
-            if (pointObj[k] !== undefined && pointObj[k] !== original[k]) diff[k] = pointObj[k];
+            const oVal = originalSan[k];
+            const nVal = newSan[k];
+            if (k === 'name') {
+              if (nVal !== oVal) diff[k] = nVal;
+              return;
+            }
+            const norm = (v) => (v === '' ? undefined : v);
+            if (norm(nVal) !== norm(oVal)) diff[k] = nVal;
           });
-          if (!arraysEqualCoords(pointObj.coordinates, original.coordinates))
-            diff.coordinates = pointObj.coordinates;
+          // Coordinates diff (compare sanitized arrays)
+          if (!arraysEqualCoords(newSan.coordinates, originalSan.coordinates)) {
+            diff.coordinates = newSan.coordinates;
+          }
           if (Object.keys(diff).length > 0) {
             next.modify = { ...next.modify, [selectedId]: diff };
-          } else {
-            if (next.modify[selectedId]) {
-              const cloneMod = { ...next.modify };
-              delete cloneMod[selectedId];
-              next.modify = cloneMod;
-            }
+          } else if (next.modify[selectedId]) {
+            const cloneMod = { ...next.modify };
+            delete cloneMod[selectedId];
+            next.modify = cloneMod;
           }
         }
       }
@@ -1140,18 +1220,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     Object.keys(featureLayerMapRef.current).forEach((id) => {
       if (id.startsWith('new_')) featureLayerMapRef.current[id].remove();
     });
-    featureLayerMapRef.current.current = {};
     setChangeset(defaultChangeset());
     setSelectedId(null);
     setFormState(emptyFormState);
     setCreatingNew(false);
     if (mapInstanceRef.current) mapInstanceRef.current.pm.disableDraw();
   };
-
-  const prettyJson = useMemo(
-    () => JSON.stringify(serializeChangeset(changeset), null, 2),
-    [changeset, serializeChangeset]
-  );
 
   useEffect(() => {
     Object.entries(featureLayerMapRef.current).forEach(([pid, lyr]) => {
@@ -1162,41 +1236,43 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     });
   }, [changeset.delete, changeset.create, existingMap, selectedId]);
 
-  const displayPoints = [
-    ...existingPoints.map((p) => ({
-      ...p,
-      state: changeset.delete.includes(p.id)
-        ? 'delete'
-        : changeset.modify[p.id]
-          ? 'modify'
-          : 'existing',
-    })),
-    ...changeset.create.map((c) => ({ ...c, id: c._tempId, state: 'create' })),
-  ];
+  // Build pending and existing lists for sidebar
+  const pendingCreates = changeset.create.map((c) => ({ ...c, id: c._tempId, state: 'create' }));
+  const pendingModifies = Object.keys(changeset.modify).map((id) => {
+    const base = existingMap[id] || { id };
+    const diff = changeset.modify[id] || {};
+    return { ...base, ...diff, id, state: 'modify' };
+  });
+  const pendingDeletes = changeset.delete.map((id) => ({
+    ...(existingMap[id] || { id }),
+    id,
+    state: 'delete',
+  }));
+  const pendingIds = new Set([
+    ...pendingCreates.map((p) => p.id),
+    ...pendingModifies.map((p) => p.id),
+    ...pendingDeletes.map((p) => p.id),
+  ]);
+  const existingStable = activeExistingPoints
+    .filter((p) => !pendingIds.has(p.id))
+    .map((p) => ({ ...p, state: 'existing' }));
 
-  const copyChangeset = async () => {
-    try {
-      await navigator.clipboard.writeText(prettyJson);
-    } catch (e) {
-      console.error('Clipboard copy failed', e);
+  // Build unified list of all objects (pending + existing) and sort alphabetically by name (case-insensitive), fallback to id
+  const combinedObjects = useMemo(() => {
+    // For existing objects being edited, we do NOT show unsaved name/type changes.
+    // Pending creates should still reflect current entered form values if selected (since no original).
+    let list = [...pendingCreates, ...pendingModifies, ...pendingDeletes, ...existingStable];
+    if (selectedId && formState && selectedId.startsWith('new_')) {
+      list = list.map((p) => (p.id === selectedId ? { ...p, ...formState } : p));
     }
-  };
-
-  const allExistingCoords = useMemo(
-    () => existingPoints.flatMap((p) => p.coordinates),
-    [existingPoints]
-  );
-  const BoundsFitter = () => {
-    const map = useMap();
-    useEffect(() => {
-      if (allExistingCoords.length > 0) {
-        const latlngs = allExistingCoords.map((c) => [c.lat, c.lng]);
-        const bounds = L.latLngBounds(latlngs);
-        map.fitBounds(bounds.pad(0.1));
-      }
-    }, [map]);
-    return null;
-  };
+    return list.sort((a, b) => {
+      const na = (a.name || '').toLowerCase();
+      const nb = (b.name || '').toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return a.id.localeCompare(b.id);
+    });
+  }, [pendingCreates, pendingModifies, pendingDeletes, existingStable, selectedId, formState]);
 
   const parsedAirportCenter = useMemo(() => {
     if (!airportMeta) return null;
@@ -1255,7 +1331,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     };
   }, [icao, refreshTick]);
 
-  const BoundsController = ({ bounds }) => {
+  const BoundsController = ({ bounds, suppressClamp }) => {
     const map = useMap();
     useEffect(() => {
       if (!bounds) return;
@@ -1272,21 +1348,23 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
       };
       computeMinZoom();
       const clampCenter = () => {
-        if (!bounds.contains(map.getCenter())) {
+        if (suppressClamp) return; // Don't fight user while editing
+        const center = map.getCenter();
+        if (!bounds.contains(center)) {
           map.panInsideBounds(bounds, { animate: false });
         }
       };
-      map.on('drag', clampCenter);
+      if (!suppressClamp) map.on('drag', clampCenter);
       const onResize = () => computeMinZoom();
       map.on('resize', onResize);
       return () => {
         map.off('resize', onResize);
         map.off('drag', clampCenter);
       };
-    }, [bounds, map]);
+    }, [bounds, map, suppressClamp]);
     return null;
   };
-  BoundsController.propTypes = { bounds: PropTypes.object };
+  BoundsController.propTypes = { bounds: PropTypes.object, suppressClamp: PropTypes.bool };
 
   const lastViewRef = useRef({ center: null, zoom: null });
   const ViewTracker = () => {
@@ -1396,9 +1474,9 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 )}
               </>
               <ViewTracker />
-              <BoundsFitter />
+              {/* Removed automatic BoundsFitter to prevent unwanted recentering while editing */}
               <GeomanController
-                existingPoints={existingPoints}
+                existingPoints={activeExistingPoints}
                 featureLayerMapRef={featureLayerMapRef}
                 registerSelect={registerSelect}
                 pushGeometryChange={pushGeometryChange}
@@ -1418,8 +1496,9 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 registerSelect={registerSelect}
                 formState={formState}
                 drawingCoords={drawingCoords}
+                liveGeometryTick={liveGeometryTick}
               />
-              {maxBounds && <BoundsController bounds={maxBounds} />}
+              {maxBounds && <BoundsController bounds={maxBounds} suppressClamp={!!selectedId} />}
               {maxBounds && (
                 <Rectangle
                   bounds={maxBounds}
@@ -1433,6 +1512,29 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           <h3 className="text-lg font-medium text-white">
             {selectedId && !selectedId.startsWith('new_') ? 'Edit Object' : 'Add New Object'}
           </h3>
+          {remoteLoading && (
+            <div className="text-[11px] text-blue-300 bg-blue-900/30 rounded px-2 py-1">
+              Loading existing points…
+            </div>
+          )}
+          {remoteError && (
+            <div className="text-[11px] text-red-300 bg-red-900/40 rounded px-2 py-1 flex items-start gap-2">
+              <span className="flex-1">Failed to load points: {remoteError}</span>
+              <button type="button" className="underline" onClick={() => triggerFetchPoints(true)}>
+                Retry
+              </button>
+            </div>
+          )}
+          {uploadState.status === 'error' && (
+            <div className="text-[11px] text-red-300 bg-red-900/40 rounded px-2 py-1">
+              {uploadState.message || 'Upload failed.'}
+            </div>
+          )}
+          {uploadState.status === 'success' && (
+            <div className="text-[11px] text-emerald-300 bg-emerald-900/30 rounded px-2 py-1">
+              {uploadState.message || 'Changes uploaded.'}
+            </div>
+          )}
           {selectedId ? (
             <>
               <div className="space-y-3">
@@ -1470,7 +1572,9 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                     }
                   >
                     {POINT_TYPES.map((t) => (
-                      <option key={t}>{t}</option>
+                      <option key={t} value={t}>
+                        {formatLabel(t)}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1481,8 +1585,13 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   <input
                     className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
                     value={formState.name}
-                    onChange={(e) => setFormState((s) => ({ ...s, name: e.target.value }))}
-                    placeholder="SB A5"
+                    onChange={(e) =>
+                      setFormState((s) => ({
+                        ...s,
+                        name: (e.target.value || '').toUpperCase(),
+                      }))
+                    }
+                    placeholder="A1"
                   />
                 </div>
                 {(formState.type === 'stopbar' || formState.type === 'taxiway') && (
@@ -1505,7 +1614,9 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                       }
                     >
                       {DIRECTIONALITY.map((d) => (
-                        <option key={d}>{d}</option>
+                        <option key={d} value={d}>
+                          {formatLabel(d)}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1523,7 +1634,9 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                       }
                     >
                       {COLORS.map((c) => (
-                        <option key={c}>{c}</option>
+                        <option key={c} value={c}>
+                          {formatLabel(c)}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1629,62 +1742,114 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
             </div>
           )}
           <hr className="border-zinc-800" />
-          <h3 className="text-sm font-medium text-zinc-200">Managed Objects</h3>
-          {displayPoints.length === 0 ? (
-            <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded px-3 py-4 text-center">
-              No objects added yet. Add your first object to get started.
+          <div className="flex items-center mt-2">
+            <h3 className="text-sm font-medium text-zinc-200">Objects</h3>
+          </div>
+          {combinedObjects.length === 0 ? (
+            <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded px-3 py-3 text-center">
+              No objects.
             </div>
           ) : (
-            <ul className="flex flex-col gap-1 text-sm max-h-60 overflow-y-auto pr-1">
-              {displayPoints.map((p) => (
-                <li
-                  key={p.id}
-                  className={`px-2 py-1 rounded cursor-pointer flex items-center justify-between transition-colors ${p.id === selectedId ? 'bg-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}
-                  onClick={() => {
-                    const layer = featureLayerMapRef.current[p.id];
-                    if (layer) registerSelect(layer, p.id, p.id.startsWith('new_'));
-                  }}
-                >
-                  <span className="truncate">
-                    {p.name || '(unnamed)'}{' '}
-                    <span className="text-xs text-zinc-400">[{p.type}]</span>
-                  </span>
-                  <span
-                    className={`text-[10px] uppercase tracking-wide rounded px-1 ml-2 ${p.state === 'create' && 'bg-green-700 text-green-100'} ${p.state === 'modify' && 'bg-blue-700 text-blue-100'} ${p.state === 'delete' && 'bg-red-700 text-red-100'} ${p.state === 'existing' && 'bg-zinc-600 text-zinc-200'}`}
+            <ul className="flex flex-col gap-1.5 text-[13px] max-h-72 overflow-y-auto pr-1">
+              {combinedObjects.map((p) => {
+                const isSelected = p.id === selectedId;
+                const isNew = p.id.startsWith('new_');
+                const typeLabel = formatLabel(p.type || '');
+                const barsId = !isNew ? p.id : 'Unsaved';
+                return (
+                  <li
+                    key={`obj-${p.id}-${p.state}`}
+                    className={`group rounded border flex flex-col gap-1 px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'border-blue-500 bg-zinc-700/80' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700/70'}`}
+                    onClick={() => {
+                      const layer = featureLayerMapRef.current[p.id];
+                      if (layer) registerSelect(layer, p.id, isNew);
+                    }}
                   >
-                    {p.state}
-                  </span>
-                </li>
-              ))}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-medium text-zinc-100 truncate text-[12px]">
+                          {p.name || '(Unnamed)'}
+                        </span>
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-600/60 text-zinc-100 tracking-wide">
+                          {typeLabel}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[9px] uppercase tracking-wide rounded px-1 py-0.5 shrink-0 ${p.state === 'create' && 'bg-green-700 text-green-100'} ${p.state === 'modify' && 'bg-blue-700 text-blue-100'} ${p.state === 'delete' && 'bg-red-700 text-red-100'} ${p.state === 'existing' && 'bg-zinc-600 text-zinc-200'}`}
+                      >
+                        {p.state}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-start text-[10px] text-zinc-400 font-mono">
+                      <span className="truncate" title={barsId}>
+                        {barsId}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
-          <div className="pt-2 flex gap-2">
-            <button
-              onClick={resetAll}
-              className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-xs rounded px-3 py-1.5"
-            >
-              Reset
-            </button>
-            <button
-              onClick={copyChangeset}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded px-3 py-1.5"
-            >
-              Copy JSON
-            </button>
-          </div>
           <div className="pt-1">
             <button
               disabled={
-                changeset.create.length === 0 &&
-                Object.keys(changeset.modify).length === 0 &&
-                changeset.delete.length === 0
+                uploadState.status === 'uploading' ||
+                (changeset.create.length === 0 &&
+                  Object.keys(changeset.modify).length === 0 &&
+                  changeset.delete.length === 0)
               }
-              onClick={() => {
-                console.log('Upload placeholder', serializeChangeset(changeset));
+              onClick={async () => {
+                const token = getVatsimToken();
+                if (!token) {
+                  setUploadState({ status: 'error', message: 'Login required to upload.' });
+                  return;
+                }
+                const payload = serializeChangeset(changeset);
+                if (
+                  payload.create.length === 0 &&
+                  Object.keys(payload.modify).length === 0 &&
+                  payload.delete.length === 0
+                )
+                  return;
+                setUploadState({ status: 'uploading', message: 'Uploading changes…' });
+                try {
+                  const resp = await fetch(
+                    `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/points/batch`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'X-Vatsim-Token': token,
+                      },
+                      body: JSON.stringify(payload),
+                    }
+                  );
+                  if (!resp.ok) {
+                    let msg = '';
+                    try {
+                      const j = await resp.json();
+                      msg = j?.error || j?.message || '';
+                    } catch {
+                      /* ignore */
+                    }
+                    throw new Error(msg || `Upload failed (${resp.status})`);
+                  }
+                  setUploadState({ status: 'success', message: 'Changes saved.' });
+                  // Clear local layers and refetch
+                  Object.entries(featureLayerMapRef.current).forEach(([, layer]) => {
+                    if (layer?.remove) layer.remove();
+                  });
+                  featureLayerMapRef.current = {};
+                  resetAll();
+                  setRemotePoints(null);
+                  triggerFetchPoints(true);
+                } catch (e) {
+                  setUploadState({ status: 'error', message: e.message });
+                }
               }}
-              className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 transition-colors ${changeset.create.length === 0 && Object.keys(changeset.modify).length === 0 && changeset.delete.length === 0 ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+              className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 transition-colors ${uploadState.status === 'uploading' || (changeset.create.length === 0 && Object.keys(changeset.modify).length === 0 && changeset.delete.length === 0) ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
             >
-              Save & Upload (placeholder)
+              {uploadState.status === 'uploading' ? 'Uploading…' : 'Save & Upload'}
             </button>
           </div>
         </div>

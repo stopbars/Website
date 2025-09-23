@@ -77,6 +77,8 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
     const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
     const objects = xmlDoc.getElementsByTagName('BarsObject');
     const allLights = [];
+    // Track used IDs to ensure uniqueness for React keys (duplicate object ids in merged XMLs)
+    const usedIds = new Set();
     const objectGroups = {};
     let firstPosition = null;
 
@@ -124,8 +126,17 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
             objectGroups[objId].positions.push([lat, lng]);
           }
 
+          // Base ID (may collide if object IDs repeat across XML merges)
+          const baseId = `${objId}_${j}`;
+          let uniqueId = baseId;
+          let dup = 1;
+          while (usedIds.has(uniqueId)) {
+            uniqueId = `${baseId}__${dup++}`; // append numeric suffix until unique
+          }
+          usedIds.add(uniqueId);
+
           allLights.push({
-            id: `${objId}_${j}`,
+            id: uniqueId,
             position: [lat, lng],
             heading: heading,
             type: objType,

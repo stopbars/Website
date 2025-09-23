@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { Github, Users, GitBranch, Heart, ExternalLink, RefreshCw } from 'lucide-react';
+import { Github, Users, GitBranch, Heart, ExternalLink } from 'lucide-react';
 
 const Credits = () => {
   const [contributors, setContributors] = useState([]);
@@ -12,7 +12,6 @@ const Credits = () => {
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [hearts, setHearts] = useState([]);
   const statusRef = useRef(null); // for aria-live updates
 
@@ -107,7 +106,6 @@ const Credits = () => {
       setContributors(Array.isArray(data.contributors) ? data.contributors : []);
       setRepositories(Array.isArray(data.repositories) ? data.repositories : []);
       setStatistics(data.statistics || null);
-      setLastUpdated(new Date());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -124,7 +122,7 @@ const Credits = () => {
       {/* Page Header */}
       <section className="relative pt-39 pb-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 md:gap-0">
+          <div className="flex flex-col md:flex-row md:items-center gap-6 md:gap-0">
             <div className="flex-1 min-w-0">
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 flex items-center">
                 <Github className="w-8 h-8 sm:w-10 sm:h-10 mr-3 sm:mr-4" />
@@ -142,25 +140,8 @@ const Credits = () => {
                 aria-atomic="true"
               >
                 {loading && 'Loading contributors…'}
-                {!loading &&
-                  !error &&
-                  lastUpdated &&
-                  `Loaded ${contributors.length} contributor${contributors.length === 1 ? '' : 's'} • Updated at ${lastUpdated.toLocaleString()}`}
                 {!loading && error && 'Encountered an error while loading contributors.'}
               </div>
-            </div>
-            <div className="flex flex-col w-full md:w-auto md:block md:justify-end flex-shrink-0">
-              <Button
-                onClick={fetchContributors}
-                disabled={loading}
-                aria-label={loading ? 'Refreshing contributor list' : 'Refresh contributor list'}
-                className="flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 hover:scale-105 transition-transform duration-200 group w-full md:w-auto"
-              >
-                <RefreshCw
-                  className={`w-4 h-4 ${loading ? 'animate-spin' : 'group-hover:rotate-12'} transition-transform duration-200`}
-                />
-                <span>Refresh</span>
-              </Button>
             </div>
           </div>
           {/* Status text below header on md+ only */}
@@ -170,10 +151,6 @@ const Credits = () => {
             aria-atomic="true"
           >
             {loading && 'Loading contributors…'}
-            {!loading &&
-              !error &&
-              lastUpdated &&
-              `Loaded ${contributors.length} contributor${contributors.length === 1 ? '' : 's'} • Updated at ${lastUpdated.toLocaleString()}`}
             {!loading && error && 'Encountered an error while loading contributors.'}
           </div>
         </div>
