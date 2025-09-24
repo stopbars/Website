@@ -188,18 +188,33 @@
 
   // Initialize stopbars s1..s32
   for (let i=1;i<=32;i++) {
-    state.stopbars.push({ id: 's'+i, enabled: false, displayName: '', barsId: '', leadOnId: '' });
+  // leadOnIds: array of one or more lead-on light identifiers (was single leadOnId string previously)
+  state.stopbars.push({ id: 's'+i, enabled: false, displayName: '', barsId: '', leadOnIds: [] });
   }
 
   // Helpers
   const $ = sel => document.querySelector(sel);
-  const esc = s => (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const esc = s => (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   // Auto-generate BARS IDs for enabled stopbars that don't have one yet
   function random3(){ return Math.floor(100 + Math.random()*900).toString(); }
   function sanitizeName(s){
     const trimmed = (s||'').trim();
     return (trimmed ? trimmed : 'SB').replace(/[^A-Za-z0-9_-]+/g,'_');
+  }
+  // Normalize lead-on id arrays: trim, drop empty, dedupe preserving order
+  function normalizeLeadOnIds(list){
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    const out = [];
+    list.forEach(raw=>{
+      const v = (raw||'').trim();
+      if (!v) return;
+      if (seen.has(v)) return;
+      seen.add(v);
+      out.push(v);
+    });
+    return out;
   }
   function ensureBarsIds(){
     let generated = false;
@@ -293,7 +308,7 @@
         <td><span class="pill">${sb.id}</span></td>
         <td><input type="text" value="${esc(sb.displayName)}" data-action="edit-display" data-idx="${idx}" placeholder="A6"></td>
         <td><input type="text" value="${esc(sb.barsId)}" data-action="edit-barsid" data-idx="${idx}" placeholder="BARS_XXXXX or number"></td>
-        <td><input type="text" value="${esc(sb.leadOnId||'')}" data-action="edit-leadon" data-idx="${idx}" placeholder="optional"></td>
+  <td><input type="text" value="${esc((sb.leadOnIds||[]).join(', '))}" data-action="edit-leadon" data-idx="${idx}" placeholder="optional (comma or space separated)" title="Enter multiple LeadOn IDs separated by comma, space, or semicolon"></td>
         <td><button class="ghost" data-action="select" data-idx="${idx}">Focus</button></td>
       `;
       tbody.appendChild(tr);
@@ -467,6 +482,14 @@
     const h = state.runways.horizontal;
     const v = state.runways.vertical;
     const stopbars = state.stopbars.filter(s=>s.enabled);
+    // Defensive: if any stopbar has a single leadOnIds entry that still contains a comma, split it now
+    stopbars.forEach(s=>{
+      if (Array.isArray(s.leadOnIds) && s.leadOnIds.length===1 && /[,;\s].+/.test(s.leadOnIds[0])){
+        s.leadOnIds = normalizeLeadOnIds(s.leadOnIds[0].split(/[\s,;]+/));
+      } else {
+        s.leadOnIds = normalizeLeadOnIds(s.leadOnIds);
+      }
+    });
     const crossbars = state.crossbars.filter(c=>c.enabled);
 
     function el(tag, inner, indent){
@@ -508,7 +531,12 @@
       xml += el('ID', esc(s.id), 3);
       xml += el('BARSId', esc(s.barsId), 3);
       xml += el('DisplayName', esc(s.displayName), 3);
-      if (s.leadOnId && s.leadOnId.trim()) xml += el('LeadOnId', esc(s.leadOnId), 3);
+      // Multiple LeadOnIds: emit one <LeadOnId> element per id (backward compatible)
+      if (Array.isArray(s.leadOnIds) && s.leadOnIds.length){
+        s.leadOnIds.filter(x=>x && x.trim()).forEach(id=>{
+          xml += el('LeadOnId', esc(id.trim()), 3);
+        });
+      }
       xml += '    </Stopbar>\n';
     });
     xml += '  </Stopbars>\n';
@@ -582,7 +610,7 @@
       }
 
       // Stopbars
-      state.stopbars.forEach(s=>{ s.enabled=false; s.displayName=''; s.barsId=''; s.leadOnId=''; });
+  state.stopbars.forEach(s=>{ s.enabled=false; s.displayName=''; s.barsId=''; s.leadOnIds=[]; });
       doc.querySelectorAll('Stopbars > Stopbar').forEach(node=>{
         const id = (node.querySelector('ID')?.textContent||'').trim();
         const sb = state.stopbars.find(x=>x.id===id);
@@ -590,7 +618,9 @@
           sb.enabled = true;
           sb.barsId = (node.querySelector('BARSId')?.textContent||'').trim();
           sb.displayName = (node.querySelector('DisplayName')?.textContent||'').trim();
-          sb.leadOnId = (node.querySelector('LeadOnId')?.textContent||'').trim();
+      // Collect one or many LeadOnId elements (legacy files may have only one)
+  const leadNodes = node.querySelectorAll('LeadOnId');
+  sb.leadOnIds = normalizeLeadOnIds(Array.from(leadNodes).map(n=> n.textContent||''));
         }
       });
 
@@ -661,10 +691,23 @@
           }
           break;
         case 'edit-barsid': sb.barsId = t.value; break;
-        case 'edit-leadon': sb.leadOnId = t.value; break;
+        case 'edit-leadon': {
+          // While typing, just update the raw parsed array without re-rendering the whole row to preserve cursor position.
+          const raw = t.value || '';
+          sb.leadOnIds = normalizeLeadOnIds(raw.split(/[\s,;]+/));
+          break; }
       }
       renderVisual();
     });
+    // On blur, normalize display formatting for LeadOn IDs (single space after comma)
+    $('#stopbarRows').addEventListener('blur', (e)=>{
+      const t = e.target; if (!t || t.getAttribute('data-action') !== 'edit-leadon') return;
+      const idx = +t.getAttribute('data-idx'); if (Number.isNaN(idx)) return;
+      const sb = state.stopbars[idx];
+      // Ensure normalization (already parsed on input) then update visible value
+      sb.leadOnIds = normalizeLeadOnIds(sb.leadOnIds);
+      t.value = sb.leadOnIds.join(', ');
+    }, true);
     $('#stopbarRows').addEventListener('change', (e)=>{
       const t = e.target; const idx = +t.getAttribute('data-idx'); if (Number.isNaN(idx)) return;
       const sb = state.stopbars[idx];

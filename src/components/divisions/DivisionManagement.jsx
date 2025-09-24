@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../layout/Layout';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
-import { Plus, UserX, TowerControl, Users, MapPin, AlertOctagon, Loader } from 'lucide-react';
+import { Plus, UserX, TowerControl, Users, Settings, AlertOctagon, Loader } from 'lucide-react';
 import { Alert } from '../shared/Alert';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
@@ -429,10 +429,9 @@ const DivisionManagement = () => {
                                     navigate(`/divisions/${divisionId}/airports/${airport.icao}`)
                                   }
                                   variant="secondary"
-                                  className="text-emerald-500 hover:text-emerald-400"
                                 >
-                                  <MapPin className="w-4 h-4 mr-2" />
-                                  Manage Points
+                                  <Settings className="w-4 h-4 mr-2" />
+                                  Manage Airport
                                 </Button>
                               )}
                             </div>
@@ -472,7 +471,6 @@ const DivisionManagement = () => {
                           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                           .join(' ')}
                       </p>
-                      <p>Division: {division?.name}</p>
                     </div>
                   </div>
                 </div>
