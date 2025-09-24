@@ -14,29 +14,10 @@ const NewDivision = () => {
   const [error, setError] = useState(null);
   const token = getVatsimToken();
 
-  const handleNameBlur = () => {
-    if (name.toUpperCase().startsWith('VAT')) {
-      // Auto-uppercase VAT (e.g., "vatpac, VatPac" -> "VATPAC")
-      setName(name.toUpperCase());
-    } else if (name.toLowerCase().includes('vacc')) {
-      // Auto-format vACC (e.g., "Dutch vacc", "Dutch vAcC" -> "Dutch vACC")
-      setName(name.replace(/vacc/gi, 'vACC'));
-    }
-    // Other names keep their original casing
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
-    // Handle special formatting for divisions and vACCs
-    let formattedName = name;
-    if (name.toUpperCase().startsWith('VAT')) {
-      // Auto-uppercase VAT (e.g., "vatpac, VatPac" -> "VATPAC")
-      formattedName = name.toUpperCase();
-    }
-    // vACC names keep their original casing to preserve "vACC" formatting
 
     try {
       const response = await fetch('https://v2.stopbars.com/divisions', {
@@ -46,7 +27,7 @@ const NewDivision = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: formattedName,
+          name: name,
           headVatsimId: headCid,
         }),
       });
@@ -67,7 +48,7 @@ const NewDivision = () => {
 
   return (
     <Layout>
-      <div className="pt-40 pb-20">
+      <div className="min-h-screen flex items-center justify-center py-40">
         <div className="container mx-auto px-4">
           <div className="max-w-2xl mx-auto">
             <h1 className="text-3xl font-bold text-white mb-8">Create Division</h1>
@@ -90,9 +71,8 @@ const NewDivision = () => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    onBlur={handleNameBlur}
                     className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
-                    placeholder="e.g. VATxxx, xxx vACC"
+                    placeholder="e.g. VATxxx"
                     required
                   />
                 </div>
@@ -107,7 +87,7 @@ const NewDivision = () => {
                     value={headCid}
                     onChange={(e) => setHeadCid(e.target.value)}
                     className="w-full bg-zinc-900 text-white rounded-lg px-4 py-2 border border-zinc-800"
-                    placeholder="VATSIM CID of Division Nav Head"
+                    placeholder="e.g. 1234567"
                     required
                   />
                   <p className="mt-2 text-sm text-zinc-500">
