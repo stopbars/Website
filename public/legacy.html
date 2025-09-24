@@ -194,7 +194,7 @@
 
   // Helpers
   const $ = sel => document.querySelector(sel);
-  const esc = s => (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const esc = s => (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   // Auto-generate BARS IDs for enabled stopbars that don't have one yet
   function random3(){ return Math.floor(100 + Math.random()*900).toString(); }
