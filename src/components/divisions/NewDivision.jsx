@@ -96,7 +96,11 @@ const NewDivision = () => {
                 </div>
 
                 <div className="flex justify-end gap-4 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => navigate('/divisions')}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => navigate('/staff?tool=divisionManagement')}
+                  >
                     Cancel
                   </Button>
                   <Button
