@@ -542,9 +542,9 @@ const SegmentedDefs = ({
     };
     build();
     const onChange = () => build();
-    map.on('zoom viewreset move', onChange);
+    map.on('zoomend viewreset moveend', onChange);
     return () => {
-      map.off('zoom viewreset move', onChange);
+      map.off('zoomend viewreset moveend', onChange);
       [
         ...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`),
       ].forEach((n) => n.remove());
@@ -698,6 +698,63 @@ const PolylineVisualizationOverlay = ({
 }) => {
   // Read liveGeometryTick so React registers it; no other action needed.
   liveGeometryTick;
+  const map = useMap();
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [viewBounds, setViewBounds] = useState(null);
+  useEffect(() => {
+    if (!map) return;
+    const start = () => setIsInteracting(true);
+    const end = () => {
+      setIsInteracting(false);
+      try {
+        setViewBounds(map.getBounds());
+      } catch {
+        /* ignore */
+      }
+    };
+    // Initial bounds
+    try {
+      setViewBounds(map.getBounds());
+    } catch {
+      /* ignore */
+    }
+    map.on('movestart zoomstart dragstart', start);
+    map.on('moveend zoomend viewreset', end);
+    return () => {
+      map.off('movestart zoomstart dragstart', start);
+      map.off('moveend zoomend viewreset', end);
+    };
+  }, [map]);
+
+  const paddedBounds = useMemo(() => {
+    if (!viewBounds) return null;
+    try {
+      const sw = viewBounds.getSouthWest();
+      const ne = viewBounds.getNorthEast();
+      const latPad = Math.max(0.001, (ne.lat - sw.lat) * 0.2);
+      const lngPad = Math.max(0.001, (ne.lng - sw.lng) * 0.2);
+      return L.latLngBounds([sw.lat - latPad, sw.lng - lngPad], [ne.lat + latPad, ne.lng + lngPad]);
+    } catch {
+      return null;
+    }
+  }, [viewBounds]);
+
+  const isAnyCoordInBounds = useCallback(
+    (coords) => {
+      if (!paddedBounds || !Array.isArray(coords)) return true; // no culling if unknown
+      for (let i = 0; i < coords.length; i++) {
+        const c = coords[i];
+        if (
+          typeof c?.lat === 'number' &&
+          typeof c?.lng === 'number' &&
+          paddedBounds.contains([c.lat, c.lng])
+        )
+          return true;
+      }
+      return false;
+    },
+    [paddedBounds]
+  );
   const extractCoords = useCallback((layer) => {
     if (!layer) return [];
     if (layer.getLatLng) {
@@ -759,12 +816,13 @@ const PolylineVisualizationOverlay = ({
         if (!Array.isArray(coords) || coords.length < 2) return null;
         const safe = coords.filter((c) => typeof c?.lat === 'number' && typeof c?.lng === 'number');
         if (safe.length < 2) return null;
+        const isSelected = selectedId === pt.id || pt.id === '__drawing_preview__';
+        if (!isSelected && !isAnyCoordInBounds(safe)) return null;
         const positions = safe.map((c) => [c.lat, c.lng]);
         const segments = [];
         for (let i = 0; i < safe.length - 1; i++)
           segments.push({ baseId: pt.id, idx: i, p1: safe[i], p2: safe[i + 1] });
         const { topColor, bottomColor } = getPolylineColors(pt);
-        const isSelected = selectedId === pt.id || pt.id === '__drawing_preview__';
         const isDeleted = changeset.delete.includes(pt.id);
         const onClick =
           pt.id === '__drawing_preview__'
@@ -773,6 +831,7 @@ const PolylineVisualizationOverlay = ({
                 const layer = featureLayerMapRef.current[pt.id];
                 if (layer) registerSelect(layer, pt.id, pt.id.startsWith('new_'));
               };
+        const renderDetailed = !isInteracting || isSelected;
         return (
           <React.Fragment key={pt.id}>
             <Polyline
@@ -787,35 +846,39 @@ const PolylineVisualizationOverlay = ({
               }}
               eventHandlers={onClick ? { click: onClick } : undefined}
             />
-            <SegmentedDefs
-              segments={segments}
-              topColor={topColor}
-              bottomColor={bottomColor}
-              strokeWidth={10}
-            />
-            {segments.map((seg) => {
-              const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
-              const segPositions = [
-                [seg.p1.lat, seg.p1.lng],
-                [seg.p2.lat, seg.p2.lng],
-              ];
-              return (
-                <Polyline
-                  key={`${pt.id}-seg-${seg.idx}`}
-                  positions={segPositions}
-                  pathOptions={{
-                    color: `url(#${gradId})`,
-                    weight: 10,
-                    opacity: isDeleted ? 0.25 : 1,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                  eventHandlers={onClick ? { click: onClick } : undefined}
+            {renderDetailed && (
+              <>
+                <SegmentedDefs
+                  segments={segments}
+                  topColor={topColor}
+                  bottomColor={bottomColor}
+                  strokeWidth={10}
                 />
-              );
-            })}
-            {/* Direction arrows on top */}
-            {!isDeleted && (
+                {segments.map((seg) => {
+                  const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
+                  const segPositions = [
+                    [seg.p1.lat, seg.p1.lng],
+                    [seg.p2.lat, seg.p2.lng],
+                  ];
+                  return (
+                    <Polyline
+                      key={`${pt.id}-seg-${seg.idx}`}
+                      positions={segPositions}
+                      pathOptions={{
+                        color: `url(#${gradId})`,
+                        weight: 10,
+                        opacity: isDeleted ? 0.25 : 1,
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                      }}
+                      eventHandlers={onClick ? { click: onClick } : undefined}
+                    />
+                  );
+                })}
+              </>
+            )}
+            {/* Direction arrows on top: render only for selected/preview to save CPU */}
+            {!isDeleted && isSelected && (
               <ArrowDecorator
                 positions={positions}
                 offset="5%"
