@@ -211,8 +211,98 @@ const GeomanController = ({
     };
     map.on('mousemove', moveHandler);
 
-    const clickHandler = () => {
+    // Precapture Ctrl+Click to finish drawing before a new vertex is added
+    const preclickHandler = (e) => {
       if (!drawingLayerRef.current) return;
+      if (
+        drawingShapeRef.current === 'Line' &&
+        e &&
+        e.originalEvent &&
+        e.originalEvent.ctrlKey === true
+      ) {
+        try {
+          e.originalEvent.preventDefault && e.originalEvent.preventDefault();
+          e.originalEvent.stopPropagation && e.originalEvent.stopPropagation();
+        } catch {
+          /* ignore */
+        }
+        let finished = false;
+        try {
+          const pm = map?.pm;
+          const drawLine = pm?.Draw?.Line;
+          if (drawLine) {
+            if (typeof drawLine.finish === 'function') {
+              drawLine.finish();
+              finished = true;
+            } else if (typeof drawLine._finishShape === 'function') {
+              drawLine._finishShape();
+              finished = true;
+            } else if (typeof drawLine._finish === 'function') {
+              drawLine._finish();
+              finished = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        if (!finished) {
+          try {
+            const enterEvt = new KeyboardEvent('keydown', {
+              key: 'Enter',
+              code: 'Enter',
+              keyCode: 13,
+              which: 13,
+              bubbles: true,
+            });
+            const container = map?.getContainer?.();
+            if (container && typeof container.dispatchEvent === 'function') {
+              container.dispatchEvent(enterEvt);
+            }
+            document.dispatchEvent(enterEvt);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    };
+    map.on('preclick', preclickHandler);
+
+    const clickHandler = (e) => {
+      if (!drawingLayerRef.current) return;
+      // Ctrl+Click anywhere on canvas finishes the current Line drawing
+      if (
+        drawingShapeRef.current === 'Line' &&
+        e &&
+        e.originalEvent &&
+        e.originalEvent.ctrlKey === true
+      ) {
+        try {
+          // Prevent default and stop bubbling to avoid adding another vertex
+          e.originalEvent.preventDefault && e.originalEvent.preventDefault();
+          e.originalEvent.stopPropagation && e.originalEvent.stopPropagation();
+        } catch {
+          /* ignore */
+        }
+        try {
+          // Leaflet-Geoman listens for Enter to finish drawing
+          const enterEvt = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+          });
+          document.dispatchEvent(enterEvt);
+        } catch {
+          // Fallback: gracefully end draw mode if key dispatch fails
+          try {
+            if (map?.pm) map.pm.disableDraw();
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
       let frames = 0;
       const maxFrames = 6;
       if (lastClickPollRef.current) cancelAnimationFrame(lastClickPollRef.current);
@@ -264,6 +354,7 @@ const GeomanController = ({
       map.off('pm:drawend');
       map.off('mousemove', moveHandler);
       map.off('click', clickHandler);
+      map.off('preclick', preclickHandler);
       map.off('pm:markerdrag');
       map.off('pm:snapdrag');
     };
@@ -2225,8 +2316,8 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
             <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded p-3">
               {creatingNew ? (
                 <span>
-                  Click on the map to add vertices. Finish with the last click, adjust if needed,
-                  then press Save.
+                  Click on the map to add vertices. To finish, Ctrl+Left Click anywhere on the map
+                  or click on a vertex. Adjust if needed, then press Save.
                 </span>
               ) : (
                 'Click + Add New Object to start creating a new object polyline on the map.'
