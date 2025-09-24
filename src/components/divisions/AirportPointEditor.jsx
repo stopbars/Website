@@ -7,6 +7,8 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
+import ArrowDecorator from '../shared/ArrowDecorator';
+import useSearchQuery from '../../hooks/useSearchQuery';
 
 const POINT_TYPES = ['stopbar', 'lead_on', 'taxiway', 'stand'];
 const DIRECTIONALITY = ['bi-directional', 'uni-directional'];
@@ -43,11 +45,16 @@ const GeomanController = ({
   onDrawingComplete,
   onLiveEdit,
   redrawTargetRef,
+  geomanAPIRef,
 }) => {
   const map = useMap();
   const drawingLayerRef = useRef(null);
+  const drawingShapeRef = useRef(null);
   const lastClickPollRef = useRef(null);
   const lastReportedLenRef = useRef(0);
+  // Drawing history stack for Undo while actively drawing
+  const drawingUndoStackRef = useRef([]); // array of coords arrays
+  const lastDrawCoordsRef = useRef([]);
 
   useEffect(() => {
     if (mapInstanceRef) {
@@ -104,10 +111,59 @@ const GeomanController = ({
     });
 
     map.on('pm:drawstart', (e) => {
+      drawingShapeRef.current = e.shape;
       if (e.shape === 'Line') {
         drawingLayerRef.current = e.workingLayer || e.layer || null;
         onDrawingCoordsUpdate && onDrawingCoordsUpdate([]);
         lastReportedLenRef.current = 0;
+        // reset drawing history; start with empty to allow undo back to blank
+        drawingUndoStackRef.current = [[]];
+        lastDrawCoordsRef.current = [];
+        // expose API for Undo while drawing
+        if (geomanAPIRef) {
+          geomanAPIRef.current = {
+            undoDrawing: () => {
+              // Prefer Geoman's native removal to keep vertex markers in sync
+              try {
+                // Only attempt while drawing a Line
+                if (drawingShapeRef.current !== 'Line') return false;
+                const drawLine = map.pm?.Draw?.Line || map.pm?.Draw?.Poly;
+                if (drawLine && typeof drawLine._removeLastVertex === 'function') {
+                  drawLine._removeLastVertex();
+                  // Refresh preview/overlay after Geoman mutates vertices
+                  const refresh = () => {
+                    const layer = drawingLayerRef.current;
+                    const latlngs = layer?.getLatLngs?.();
+                    if (Array.isArray(latlngs)) {
+                      const coords = latlngs.map((ll) => ({ lat: ll.lat, lng: ll.lng }));
+                      lastDrawCoordsRef.current = coords;
+                      onDrawingCoordsUpdate && onDrawingCoordsUpdate(coords);
+                    } else {
+                      lastDrawCoordsRef.current = [];
+                      onDrawingCoordsUpdate && onDrawingCoordsUpdate([]);
+                    }
+                  };
+                  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(refresh);
+                  else setTimeout(refresh, 0);
+                  return true;
+                }
+              } catch {
+                // Fallback to manual coords approach
+              }
+              const layer = drawingLayerRef.current;
+              if (!layer) return false;
+              const prev = drawingUndoStackRef.current.pop();
+              if (!prev) return false;
+              if (layer.setLatLngs) {
+                const latlngs = Array.isArray(prev) ? prev.map((c) => [c.lat, c.lng]) : [];
+                layer.setLatLngs(latlngs);
+              }
+              lastDrawCoordsRef.current = prev;
+              onDrawingCoordsUpdate && onDrawingCoordsUpdate(prev);
+              return true;
+            },
+          };
+        }
       }
     });
     const updateWorking = (e) => {
@@ -118,6 +174,16 @@ const GeomanController = ({
         if (Array.isArray(latlngs)) {
           const coords = latlngs.map((ll) => ({ lat: ll.lat, lng: ll.lng }));
           onDrawingCoordsUpdate && onDrawingCoordsUpdate(coords);
+          // record drawing step when vertex count or coords changed
+          const prev = lastDrawCoordsRef.current || [];
+          const changed =
+            coords.length !== prev.length ||
+            coords.some((c, i) => !prev[i] || c.lat !== prev[i].lat || c.lng !== prev[i].lng);
+          if (changed) {
+            // push previous into undo stack
+            drawingUndoStackRef.current.push(prev);
+            lastDrawCoordsRef.current = coords;
+          }
           drawingLayerRef.current = layer;
         }
       };
@@ -151,13 +217,19 @@ const GeomanController = ({
       const maxFrames = 6;
       if (lastClickPollRef.current) cancelAnimationFrame(lastClickPollRef.current);
       const poll = () => {
-        if (!drawingLayerRef.current) return;
-        const latlngs = drawingLayerRef.current.getLatLngs?.();
+        const layer = drawingLayerRef.current;
+        if (!layer) return;
+        const latlngs = layer.getLatLngs?.();
         if (Array.isArray(latlngs)) {
           const len = latlngs.length;
           if (len !== lastReportedLenRef.current) {
+            // Vertex count changed -> record undo step
             lastReportedLenRef.current = len;
             const coords = latlngs.map((ll) => ({ lat: ll.lat, lng: ll.lng }));
+            const prev = lastDrawCoordsRef.current || [];
+            drawingUndoStackRef.current.push(prev);
+            lastDrawCoordsRef.current = coords;
+            drawingLayerRef.current = layer;
             onDrawingCoordsUpdate && onDrawingCoordsUpdate(coords);
           }
         }
@@ -171,7 +243,10 @@ const GeomanController = ({
     map.on('click', clickHandler);
     map.on('pm:drawend', () => {
       drawingLayerRef.current = null;
+      drawingShapeRef.current = null;
       onDrawingCoordsUpdate && onDrawingCoordsUpdate([]);
+      // clear drawing API on finish
+      if (geomanAPIRef?.current) geomanAPIRef.current = null;
     });
 
     map.on('pm:markerdrag', () => {
@@ -205,6 +280,7 @@ const GeomanController = ({
     onDrawingComplete,
     onLiveEdit,
     redrawTargetRef,
+    geomanAPIRef,
   ]);
 
   return null;
@@ -224,6 +300,7 @@ GeomanController.propTypes = {
 GeomanController.propTypes.onDrawingCoordsUpdate = PropTypes.func;
 GeomanController.propTypes.onDrawingComplete = PropTypes.func;
 GeomanController.propTypes.onLiveEdit = PropTypes.func;
+GeomanController.propTypes.geomanAPIRef = PropTypes.object;
 
 const styleLayerByPoint = (layer, pt, isSelected = false, isDeleted = false) => {
   const baseColor = (() => {
@@ -391,6 +468,133 @@ SegmentedDefs.propTypes = {
   strokeWidth: PropTypes.number,
 };
 
+// MapAttributionUpdater
+// Fetches attribution snippets from maps.stopbars.com and updates Leaflet's native attribution control
+const MapAttributionUpdater = ({ bounds }) => {
+  const map = useMap();
+  const abortRef = useRef(null);
+  const timeoutRef = useRef(null);
+  const lastParamsRef = useRef({ zoom: null, boundsStr: null });
+  const currentAttrRef = useRef('');
+
+  useEffect(() => {
+    if (!map) return;
+
+    if (!map.attributionControl) {
+      try {
+        L.control.attribution({ prefix: '' }).addTo(map);
+      } catch {
+        // ignore
+      }
+    }
+    if (!map.attributionControl) return; // still not available; bail
+
+    const computeParams = () => {
+      // Floor and clamp to native zoom range to avoid server errors (max native zoom = 19)
+      const rawZoom = map.getZoom();
+      const zoom = Math.min(19, Math.max(0, Math.floor(rawZoom)));
+      const b = map.getBounds();
+      const sw = b.getSouthWest();
+      const ne = b.getNorthEast();
+      const boundsStr = `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`;
+      return { zoom, boundsStr };
+    };
+
+    const setAttribution = (html) => {
+      const ctrl = map.attributionControl;
+      if (!ctrl) return;
+      if (currentAttrRef.current) {
+        try {
+          ctrl.removeAttribution(currentAttrRef.current);
+        } catch {
+          // ignore
+        }
+      }
+      currentAttrRef.current = html || '';
+      if (currentAttrRef.current) {
+        try {
+          ctrl.addAttribution(currentAttrRef.current);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    const doFetch = async (zoom, boundsStr) => {
+      // Abort previous
+      if (abortRef.current) abortRef.current.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+      try {
+        const url = `https://maps.stopbars.com/map/attribution?zoom=${encodeURIComponent(
+          zoom
+        )}&bounds=${encodeURIComponent(boundsStr)}`;
+        const resp = await fetch(url, { signal: ac.signal, cache: 'no-store' });
+        if (!resp.ok) throw new Error('Attribution fetch failed');
+        const ct = resp.headers.get('content-type') || '';
+        let html = '';
+        if (ct.includes('application/json')) {
+          const data = await resp.json();
+          const parts = Array.isArray(data?.copyrights) ? data.copyrights : [];
+          html = parts.join(' ');
+        } else {
+          html = await resp.text();
+        }
+        if (html !== currentAttrRef.current) setAttribution(html);
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+      }
+    };
+
+    const schedule = () => {
+      const { zoom, boundsStr } = computeParams();
+      const last = lastParamsRef.current;
+      if (last.zoom === zoom && last.boundsStr === boundsStr) return; // no change
+      lastParamsRef.current = { zoom, boundsStr };
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      // debounce 300ms
+      timeoutRef.current = setTimeout(() => doFetch(zoom, boundsStr), 300);
+    };
+
+    const immediateFetch = () => {
+      const { zoom, boundsStr } = computeParams();
+      lastParamsRef.current = { zoom, boundsStr };
+      doFetch(zoom, boundsStr);
+    };
+
+    if (map._loaded) {
+      immediateFetch();
+    } else {
+      map.once('load', immediateFetch);
+    }
+
+    schedule();
+
+    map.on('moveend zoomend resize', schedule);
+
+    return () => {
+      map.off('moveend zoomend resize', schedule);
+      map.off('load', immediateFetch);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (abortRef.current) abortRef.current.abort();
+      if (map.attributionControl && currentAttrRef.current) {
+        try {
+          map.attributionControl.removeAttribution(currentAttrRef.current);
+        } catch {
+          // ignore
+        }
+      }
+      currentAttrRef.current = '';
+    };
+  }, [map, bounds]);
+
+  return null;
+};
+
+MapAttributionUpdater.propTypes = {
+  bounds: PropTypes.object,
+};
+
 const PolylineVisualizationOverlay = ({
   featureLayerMapRef,
   changeset,
@@ -519,6 +723,18 @@ const PolylineVisualizationOverlay = ({
                 />
               );
             })}
+            {/* Direction arrows on top */}
+            {!isDeleted && (
+              <ArrowDecorator
+                positions={positions}
+                offset="5%"
+                repeat="10%"
+                pixelSize={10}
+                color="#ffffff"
+                weight={1.5}
+                opacity={0.9}
+              />
+            )}
           </React.Fragment>
         );
       })}
@@ -772,11 +988,109 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const redrawTargetRef = useRef(null);
   const redrawOriginRef = useRef({});
   const [liveGeometryTick, setLiveGeometryTick] = useState(0);
+  const geomanAPIRef = useRef(null);
+  const editUndoStackRef = useRef({});
+  const lastEditCoordsRef = useRef({});
+  const drawingCoordsRef = useRef([]);
+  useEffect(() => {
+    drawingCoordsRef.current = drawingCoords;
+  }, [drawingCoords]);
+  useEffect(() => {
+    if (uploadState.status === 'success') {
+      const t = setTimeout(() => {
+        setUploadState({ status: 'idle', message: '' });
+      }, 5000);
+      return () => clearTimeout(t);
+    }
+  }, [uploadState.status]);
+
+  // No global snapshots; undo only in drawing or when editing a selected geometry
+
+  const performUndo = useCallback(() => {
+    // Drawing-time undo
+    if (geomanAPIRef.current?.undoDrawing && geomanAPIRef.current.undoDrawing()) {
+      setTimeout(() => {
+        if (creatingNew && !selectedId && (drawingCoordsRef.current?.length || 0) === 0) {
+          const pm = mapInstanceRef.current?.pm;
+          if (pm) {
+            try {
+              pm.disableDraw();
+            } catch (e) {
+              void e; /* ignore */
+            }
+            pm.enableDraw('Line', {
+              snappable: true,
+              snapDistance: 12,
+              snapSegment: true,
+              snapMiddle: true,
+              requireSnapToFinish: false,
+              templineStyle: { color: '#3b82f6' },
+              hintlineStyle: { color: '#60a5fa', dashArray: '5,5' },
+            });
+          }
+        }
+      }, 0);
+      return true;
+    }
+    // Edit-time undo for selected feature
+    if (selectedId) {
+      const layer = featureLayerMapRef.current[selectedId];
+      const stack = editUndoStackRef.current[selectedId] || [];
+      if (layer && stack.length > 0) {
+        const prevCoords = stack.pop();
+        if (layer.setLatLngs && prevCoords.length >= 2) {
+          layer.setLatLngs(prevCoords.map((c) => [c.lat, c.lng]));
+        } else if (layer.setLatLng && prevCoords.length === 1) {
+          const { lat, lng } = prevCoords[0];
+          layer.setLatLng([lat, lng]);
+        }
+        lastEditCoordsRef.current[selectedId] = prevCoords;
+        setChangeset((prev) => {
+          const next = { ...prev };
+          if (selectedId.startsWith('new_')) {
+            next.create = next.create.map((c) =>
+              c._tempId === selectedId ? { ...c, coordinates: prevCoords } : c
+            );
+          } else {
+            const cur = next.modify[selectedId] || {};
+            next.modify = { ...next.modify, [selectedId]: { ...cur, coordinates: prevCoords } };
+          }
+
+          return next;
+        });
+        setLiveGeometryTick((t) => t + 1);
+        return true;
+      }
+    }
+    return false;
+  }, [creatingNew, selectedId]);
+
+  // Redo removed
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const isMac = navigator.platform.toLowerCase().includes('mac');
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod) return;
+      const key = (e.key || '').toLowerCase();
+      // Undo: Ctrl/Cmd+Z
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        performUndo();
+        return;
+      }
+    };
+    // Use capture phase to win over any handlers inside the map canvas
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, [performUndo]);
 
   const startAddPoint = useCallback(() => {
     if (!mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
     map.pm.disableDraw();
+    // entering drawing mode — undo/redo uses drawing stacks only
     setCreatingNew(true);
     setDrawingCoords([]);
     setFormState(emptyFormState);
@@ -791,9 +1105,26 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     });
   }, []);
 
+  // Cancel in-progress placement (before a new temp feature is created/selected)
+  const cancelNewDrawing = useCallback(() => {
+    setCreatingNew(false);
+    setDrawingCoords([]);
+    if (mapInstanceRef.current?.pm) {
+      mapInstanceRef.current.pm.disableDraw();
+    }
+    // If somehow a new temp layer got selected, just clear selection state
+    if (selectedId && selectedId.startsWith('new_')) {
+      const layer = featureLayerMapRef.current[selectedId];
+      if (layer?.pm) layer.pm.disable();
+      setSelectedId(null);
+      setFormState(emptyFormState);
+    }
+  }, [selectedId]);
+
   const handleRemoveUnsavedNew = useCallback(
     (targetId) => {
       if (!targetId || !targetId.startsWith('new_')) return;
+      // removing an unsaved new feature; no edit history needed here
       const layer = featureLayerMapRef.current[targetId];
       if (layer) layer.remove();
       setChangeset((prev) => ({
@@ -860,7 +1191,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     }
   }, [existingPoints.length, remotePoints, remoteLoading, triggerFetchPoints]);
 
-  const extractCoords = (layer) => {
+  const extractCoords = useCallback((layer) => {
     if (!layer) return [];
     if (layer.getLatLng) {
       const { lat, lng } = layer.getLatLng();
@@ -872,13 +1203,22 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
       return latlngs.map((ll) => ({ lat: ll.lat, lng: ll.lng }));
     }
     return [];
-  };
+  }, []);
 
   const pushGeometryChange = useCallback(
     (layer) => {
       if (!layer) return;
       const id = layer.options.pointId;
       const coords = extractCoords(layer);
+      // Edit mode history: record previous coords when selected layer changes
+      if (selectedId === id) {
+        const last = lastEditCoordsRef.current[id];
+        if (last) {
+          if (!editUndoStackRef.current[id]) editUndoStackRef.current[id] = [];
+          editUndoStackRef.current[id].push(last);
+        }
+        lastEditCoordsRef.current[id] = coords;
+      }
       setChangeset((prev) => {
         if (id.startsWith('new_')) {
           const clone = { ...prev };
@@ -891,12 +1231,16 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
         return prev;
       });
     },
-    [setLiveGeometryTick]
+    [setLiveGeometryTick, extractCoords, selectedId]
   );
 
   const registerSelect = useCallback(
     (layer, id, isNew = false) => {
       setSelectedId(id);
+      // initialize per-object edit history
+      const currentCoords = extractCoords(layer);
+      lastEditCoordsRef.current[id] = currentCoords;
+      editUndoStackRef.current[id] = [];
       let basePoint;
       if (isNew) {
         const createEntry = changeset.create.find((c) => c._tempId === id);
@@ -1008,7 +1352,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
         styleLayerByPoint(lyr, ptData, pid === id, isDeleted);
       });
     },
-    [existingMap, changeset, pushGeometryChange]
+    [existingMap, changeset, pushGeometryChange, extractCoords]
   );
 
   const handleCancelEdit = useCallback(() => {
@@ -1200,6 +1544,40 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     return a.every((p, i) => p.lat === b[i].lat && p.lng === b[i].lng);
   };
 
+  const handleReverse = useCallback(() => {
+    if (!selectedId) return;
+    const layer = featureLayerMapRef.current[selectedId];
+    const coords = extractCoords(layer);
+    if (!Array.isArray(coords) || coords.length < 2) return;
+    const rev = [...coords].reverse();
+
+    // update visual layer
+    if (layer) {
+      if (layer.setLatLngs && rev.length >= 2) {
+        layer.setLatLngs(rev.map((c) => [c.lat, c.lng]));
+      } else if (layer.setLatLng && rev.length === 1) {
+        layer.setLatLng([rev[0].lat, rev[0].lng]);
+      }
+    }
+
+    // persist to changeset
+    setChangeset((prev) => {
+      const next = { ...prev };
+      if (selectedId.startsWith('new_')) {
+        next.create = next.create.map((c) =>
+          c._tempId === selectedId ? { ...c, coordinates: rev } : c
+        );
+      } else {
+        const cur = next.modify[selectedId] || {};
+        next.modify = { ...next.modify, [selectedId]: { ...cur, coordinates: rev } };
+      }
+      return next;
+    });
+
+    // notify live geometry changed
+    setLiveGeometryTick((t) => t + 1);
+  }, [selectedId, extractCoords]);
+
   const handleDeleteToggle = () => {
     if (!selectedId || selectedId.startsWith('new_')) return;
     setChangeset((prev) => {
@@ -1229,6 +1607,8 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     setFormState(emptyFormState);
     setCreatingNew(false);
     if (mapInstanceRef.current) mapInstanceRef.current.pm.disableDraw();
+    editUndoStackRef.current = {};
+    lastEditCoordsRef.current = {};
   };
 
   useEffect(() => {
@@ -1261,13 +1641,20 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     .filter((p) => !pendingIds.has(p.id))
     .map((p) => ({ ...p, state: 'existing' }));
 
-  // Build unified list of all objects (pending + existing) and sort alphabetically by name (case-insensitive), fallback to id
+  const [searchQuery, setSearchQuery] = useSearchQuery();
   const combinedObjects = useMemo(() => {
-    // For existing objects being edited, we do NOT show unsaved name/type changes.
-    // Pending creates should still reflect current entered form values if selected (since no original).
     let list = [...pendingCreates, ...pendingModifies, ...pendingDeletes, ...existingStable];
     if (selectedId && formState && selectedId.startsWith('new_')) {
       list = list.map((p) => (p.id === selectedId ? { ...p, ...formState } : p));
+    }
+    const q = (searchQuery || '').trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) => {
+        const name = (p.name || '').toLowerCase();
+        const type = (p.type || '').toLowerCase();
+        const id = (p.id || '').toLowerCase();
+        return name.includes(q) || type.includes(q) || id.includes(q);
+      });
     }
     return list.sort((a, b) => {
       const na = (a.name || '').toLowerCase();
@@ -1276,7 +1663,15 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
       if (na > nb) return 1;
       return a.id.localeCompare(b.id);
     });
-  }, [pendingCreates, pendingModifies, pendingDeletes, existingStable, selectedId, formState]);
+  }, [
+    pendingCreates,
+    pendingModifies,
+    pendingDeletes,
+    existingStable,
+    selectedId,
+    formState,
+    searchQuery,
+  ]);
 
   const parsedAirportCenter = useMemo(() => {
     if (!airportMeta) return null;
@@ -1437,15 +1832,22 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           </h1>
           <p className="text-sm text-zinc-400 mt-1">Manage objects for BARS system integration</p>
         </div>
-        <button
-          onClick={() => {
-            if (!selectedId && !creatingNew) startAddPoint();
-          }}
-          disabled={!!selectedId || creatingNew}
-          className={`shrink-0 inline-flex items-center rounded-md text-sm font-medium px-4 py-2 border transition-colors ${selectedId || creatingNew ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' : 'bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300 shadow'}`}
-        >
-          + Add New Object
-        </button>
+        {(() => {
+          const isPlacing = creatingNew && !selectedId; // only toggle to Cancel while actively placing
+          const disabled = !!selectedId; // disabled when editing an object
+          return (
+            <button
+              onClick={() => {
+                if (isPlacing) return cancelNewDrawing();
+                if (!selectedId && !creatingNew) startAddPoint();
+              }}
+              disabled={disabled}
+              className={`shrink-0 inline-flex items-center rounded-md text-sm font-medium px-4 py-2 border transition-colors ${disabled ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' : isPlacing ? 'bg-red-600 hover:bg-red-500 text-white border-red-500' : 'bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300 shadow'}`}
+            >
+              {isPlacing ? 'Cancel' : '+ Add New Object'}
+            </button>
+          );
+        })()}
       </div>
       <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
         <div className="flex-1 relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900">
@@ -1494,26 +1896,30 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 const providers = [
                   {
                     key: 'azure',
+                    // maps.stopbars.com base layer -- attribution is dynamic and loaded by MapAttributionUpdater
                     element: (
-                      <TileLayer
-                        url="https://maps.stopbars.com/{z}/{x}/{y}.png"
-                        tileSize={256}
-                        maxZoom={22}
-                        maxNativeZoom={19}
-                        attribution="Imagery © Azure Maps"
-                        eventHandlers={{
-                          tileload: () => {
-                            tileLoadSuccessRef.current = true;
-                          },
-                          tileerror: () => {
-                            if (!tileLoadSuccessRef.current) {
-                              setProviderIndex((idx) => {
-                                return idx + 1;
-                              });
-                            }
-                          },
-                        }}
-                      />
+                      <>
+                        <TileLayer
+                          url="https://maps.stopbars.com/{z}/{x}/{y}.png"
+                          tileSize={256}
+                          maxZoom={22}
+                          maxNativeZoom={19}
+                          attribution={false}
+                          eventHandlers={{
+                            tileload: () => {
+                              tileLoadSuccessRef.current = true;
+                            },
+                            tileerror: () => {
+                              if (!tileLoadSuccessRef.current) {
+                                setProviderIndex((idx) => {
+                                  return idx + 1;
+                                });
+                              }
+                            },
+                          }}
+                        />
+                        <MapAttributionUpdater bounds={maxBounds} />
+                      </>
                     ),
                   },
                 ];
@@ -1581,6 +1987,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 onDrawingCoordsUpdate={setDrawingCoords}
                 onDrawingComplete={() => setDrawingCoords([])}
                 redrawTargetRef={redrawTargetRef}
+                geomanAPIRef={geomanAPIRef}
               />
               <PolylineVisualizationOverlay
                 featureLayerMapRef={featureLayerMapRef}
@@ -1626,7 +2033,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           )}
           {uploadState.status === 'success' && (
             <div className="text-[11px] text-emerald-300 bg-emerald-900/30 rounded px-2 py-1">
-              {uploadState.message || 'Changes uploaded.'}
+              {uploadState.message || 'Changes saved.'}
             </div>
           )}
           {selectedId ? (
@@ -1789,6 +2196,13 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   >
                     Cancel
                   </button>
+                  <button
+                    onClick={handleReverse}
+                    disabled={!selectedId}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded px-3 py-1.5"
+                  >
+                    Reverse
+                  </button>
                   {selectedId.startsWith('new_') ? (
                     <button
                       onClick={() => handleRemoveUnsavedNew(selectedId)}
@@ -1812,23 +2226,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               {creatingNew ? (
                 <span>
                   Click on the map to add vertices. Finish with the last click, adjust if needed,
-                  then press Save.{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCreatingNew(false);
-                      setDrawingCoords([]);
-                      if (selectedId && selectedId.startsWith('new_')) {
-                        const layer = featureLayerMapRef.current[selectedId];
-                        if (layer?.pm) layer.pm.disable();
-                        setSelectedId(null);
-                        setFormState(emptyFormState);
-                      }
-                    }}
-                    className="text-amber-400 underline-offset-2 hover:underline ml-1"
-                  >
-                    Cancel
-                  </button>
+                  then press Save.
                 </span>
               ) : (
                 'Click + Add New Object to start creating a new object polyline on the map.'
@@ -1838,6 +2236,15 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           <hr className="border-zinc-800" />
           <div className="flex items-center mt-2">
             <h3 className="text-sm font-medium text-zinc-200">Objects</h3>
+          </div>
+          <div className="mt-1">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, type, or ID"
+              className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+            />
           </div>
           {combinedObjects.length === 0 ? (
             <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded px-3 py-3 text-center">
