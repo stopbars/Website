@@ -489,6 +489,36 @@ const getPolylineColors = (point) => {
   return { topColor, bottomColor };
 };
 
+const ARROW_SPACING_METERS = 75;
+const MIN_ARROW_REPEAT_PERCENT = 2;
+const MAX_ARROW_REPEAT_PERCENT = 50;
+
+const computeArrowPattern = (positions, mapInstance) => {
+  if (!mapInstance || !Array.isArray(positions) || positions.length < 2) return null;
+
+  let totalLengthMeters = 0;
+  for (let i = 0; i < positions.length - 1; i += 1) {
+    const start = L.latLng(positions[i][0], positions[i][1]);
+    const end = L.latLng(positions[i + 1][0], positions[i + 1][1]);
+    totalLengthMeters += mapInstance.distance(start, end);
+  }
+
+  if (!Number.isFinite(totalLengthMeters) || totalLengthMeters <= 0) return null;
+  if (totalLengthMeters <= ARROW_SPACING_METERS * 1.5) return { offset: '50%', repeat: '100%' };
+
+  const desiredRepeatPercent = (ARROW_SPACING_METERS / totalLengthMeters) * 100;
+  const repeatPercent = Math.min(
+    MAX_ARROW_REPEAT_PERCENT,
+    Math.max(MIN_ARROW_REPEAT_PERCENT, desiredRepeatPercent)
+  );
+  const offsetPercent = Math.min(50, Math.max(5, repeatPercent / 2));
+
+  return {
+    offset: `${offsetPercent}%`,
+    repeat: `${repeatPercent}%`,
+  };
+};
+
 const SegmentedDefs = ({
   segments = [],
   topColor = '#ef4444',
@@ -819,6 +849,7 @@ const PolylineVisualizationOverlay = ({
         const isSelected = selectedId === pt.id || pt.id === '__drawing_preview__';
         if (!isSelected && !isAnyCoordInBounds(safe)) return null;
         const positions = safe.map((c) => [c.lat, c.lng]);
+        const arrowPattern = map ? computeArrowPattern(positions, map) : null;
         const segments = [];
         for (let i = 0; i < safe.length - 1; i++)
           segments.push({ baseId: pt.id, idx: i, p1: safe[i], p2: safe[i + 1] });
@@ -881,8 +912,8 @@ const PolylineVisualizationOverlay = ({
             {!isDeleted && isSelected && (
               <ArrowDecorator
                 positions={positions}
-                offset="5%"
-                repeat="10%"
+                offset={arrowPattern?.offset ?? '5%'}
+                repeat={arrowPattern?.repeat ?? '10%'}
                 pixelSize={10}
                 color="#ffffff"
                 weight={1.5}

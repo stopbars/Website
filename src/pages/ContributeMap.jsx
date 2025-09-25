@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { Layout } from '../components/layout/Layout';
@@ -26,6 +26,7 @@ import {
 } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import ArrowDecorator from '../components/shared/ArrowDecorator';
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 // Color palette used across markers and polylines
@@ -553,6 +554,43 @@ const getPolylineColors = (point) => {
   return { topColor, bottomColor };
 };
 
+const ARROW_SPACING_METERS = 7;
+const MIN_ARROW_REPEAT_PERCENT = 2;
+const MAX_ARROW_REPEAT_PERCENT = 50;
+
+const computeArrowPattern = (positions, mapInstance) => {
+  if (!mapInstance || !Array.isArray(positions) || positions.length < 2) {
+    return null;
+  }
+
+  let totalLengthMeters = 0;
+  for (let i = 0; i < positions.length - 1; i += 1) {
+    const start = L.latLng(positions[i][0], positions[i][1]);
+    const end = L.latLng(positions[i + 1][0], positions[i + 1][1]);
+    totalLengthMeters += mapInstance.distance(start, end);
+  }
+
+  if (!Number.isFinite(totalLengthMeters) || totalLengthMeters <= 0) {
+    return null;
+  }
+
+  if (totalLengthMeters <= ARROW_SPACING_METERS * 1.5) {
+    return { offset: '50%', repeat: '100%' };
+  }
+
+  const desiredRepeatPercent = (ARROW_SPACING_METERS / totalLengthMeters) * 100;
+  const repeatPercent = Math.min(
+    MAX_ARROW_REPEAT_PERCENT,
+    Math.max(MIN_ARROW_REPEAT_PERCENT, desiredRepeatPercent)
+  );
+  const offsetPercent = Math.min(50, Math.max(5, repeatPercent / 2));
+
+  return {
+    offset: `${offsetPercent}%`,
+    repeat: `${repeatPercent}%`,
+  };
+};
+
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -566,6 +604,8 @@ const ContributeMap = () => {
   const [mapCenter, setMapCenter] = useState([0, 0]);
   const [mapZoom] = useState(13);
   const [copiedId, setCopiedId] = useState(null);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [viewBounds, setViewBounds] = useState(null);
 
   // Clear active selection when clicking the map background
   const ClearSelectionOnMapClick = ({ onClear }) => {
@@ -577,6 +617,46 @@ const ContributeMap = () => {
 
   ClearSelectionOnMapClick.propTypes = {
     onClear: PropTypes.func,
+  };
+
+  const MapInteractionTracker = () => {
+    const map = useMap();
+
+    useEffect(() => {
+      if (!map) return;
+      let frameId = null;
+
+      const queueBoundsUpdate = () => {
+        if (frameId) cancelAnimationFrame(frameId);
+        frameId = requestAnimationFrame(() => {
+          try {
+            setViewBounds(map.getBounds());
+          } catch {
+            /* ignore */
+          }
+        });
+      };
+
+      const handleStart = () => setIsInteracting(true);
+      const handleEnd = () => {
+        setIsInteracting(false);
+        queueBoundsUpdate();
+      };
+
+      queueBoundsUpdate();
+      map.on('movestart zoomstart dragstart', handleStart);
+      map.on('moveend zoomend viewreset', handleEnd);
+      map.on('resize', queueBoundsUpdate);
+
+      return () => {
+        map.off('movestart zoomstart dragstart', handleStart);
+        map.off('moveend zoomend viewreset', handleEnd);
+        map.off('resize', queueBoundsUpdate);
+        if (frameId) cancelAnimationFrame(frameId);
+      };
+    }, [map]);
+
+    return null;
   };
 
   // Format type for display
@@ -685,6 +765,37 @@ const ContributeMap = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const paddedBounds = useMemo(() => {
+    if (!viewBounds) return null;
+    try {
+      const sw = viewBounds.getSouthWest();
+      const ne = viewBounds.getNorthEast();
+      const latPad = Math.max(0.001, (ne.lat - sw.lat) * 0.2);
+      const lngPad = Math.max(0.001, (ne.lng - sw.lng) * 0.2);
+      return L.latLngBounds([sw.lat - latPad, sw.lng - lngPad], [ne.lat + latPad, ne.lng + lngPad]);
+    } catch {
+      return null;
+    }
+  }, [viewBounds]);
+
+  const isAnyCoordInBounds = useCallback(
+    (coords) => {
+      if (!paddedBounds || !Array.isArray(coords)) return true;
+      for (let i = 0; i < coords.length; i++) {
+        const c = coords[i];
+        if (
+          typeof c?.lat === 'number' &&
+          typeof c?.lng === 'number' &&
+          paddedBounds.contains([c.lat, c.lng])
+        ) {
+          return true;
+        }
+      }
+      return false;
+    },
+    [paddedBounds]
+  );
+
   if (loading) {
     return (
       <Layout>
@@ -755,6 +866,7 @@ const ContributeMap = () => {
                 >
                   {/* Clear selection when clicking anywhere on the map */}
                   <ClearSelectionOnMapClick onClear={() => setActivePointId(null)} />
+                  <MapInteractionTracker />
                   <LayersControl position="topright">
                     <LayersControl.BaseLayer checked name="Street Map">
                       <TileLayer
@@ -883,6 +995,10 @@ const ContributeMap = () => {
                     );
                     if (safe.length < 2) return null;
                     const positions = safe.map((c) => [c.lat, c.lng]);
+                    const isActive = activePointId === point.id;
+                    if (!isActive && !isAnyCoordInBounds(safe)) return null;
+                    const renderDetailed = !isInteracting || isActive;
+                    const arrowPattern = computeArrowPattern(positions, mapRef.current);
                     const onClick = () => {
                       setActivePointId(point.id === activePointId ? null : point.id);
                       if (mapRef.current) {
@@ -975,7 +1091,6 @@ const ContributeMap = () => {
                       });
                     }
                     const { topColor, bottomColor } = getPolylineColors(point);
-                    const isActive = activePointId === point.id;
 
                     return (
                       <React.Fragment key={point.id}>
@@ -992,39 +1107,55 @@ const ContributeMap = () => {
                           interactive={false}
                         />
 
-                        {/* inject per-segment gradients into the map SVG */}
-                        <SegmentedDefs
-                          segments={segments}
-                          topColor={topColor}
-                          bottomColor={bottomColor}
-                          strokeWidth={10}
-                        />
+                        {renderDetailed && segments.length > 0 && (
+                          <>
+                            {/* inject per-segment gradients into the map SVG */}
+                            <SegmentedDefs
+                              segments={segments}
+                              topColor={topColor}
+                              bottomColor={bottomColor}
+                              strokeWidth={10}
+                            />
 
-                        {/* render each segment as its own polyline, each referencing its gradient */}
-                        {segments.map((seg) => {
-                          const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
-                          const segPositions = [
-                            [seg.p1.lat, seg.p1.lng],
-                            [seg.p2.lat, seg.p2.lng],
-                          ];
+                            {/* render each segment as its own polyline, each referencing its gradient */}
+                            {segments.map((seg) => {
+                              const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
+                              const segPositions = [
+                                [seg.p1.lat, seg.p1.lng],
+                                [seg.p2.lat, seg.p2.lng],
+                              ];
 
-                          return (
-                            <Polyline
-                              key={`${point.id}-seg-${seg.idx}`}
-                              positions={segPositions}
-                              pathOptions={{
-                                color: `url(#${gradId})`,
-                                weight: 10,
-                                opacity: 1,
-                                lineCap: 'round',
-                                lineJoin: 'round',
-                              }}
-                              eventHandlers={{ click: onClick }}
-                            >
-                              {renderPopup}
-                            </Polyline>
-                          );
-                        })}
+                              return (
+                                <Polyline
+                                  key={`${point.id}-seg-${seg.idx}`}
+                                  positions={segPositions}
+                                  pathOptions={{
+                                    color: `url(#${gradId})`,
+                                    weight: 10,
+                                    opacity: 1,
+                                    lineCap: 'round',
+                                    lineJoin: 'round',
+                                  }}
+                                  eventHandlers={{ click: onClick }}
+                                >
+                                  {renderPopup}
+                                </Polyline>
+                              );
+                            })}
+
+                            {arrowPattern && (
+                              <ArrowDecorator
+                                positions={positions}
+                                offset={arrowPattern.offset}
+                                repeat={arrowPattern.repeat}
+                                pixelSize={10}
+                                color="#ffffff"
+                                weight={1.5}
+                                opacity={0.9}
+                              />
+                            )}
+                          </>
+                        )}
                       </React.Fragment>
                     );
                   })}
