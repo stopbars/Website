@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { getVatsimToken } from '../../utils/cookieUtils';
+import { X } from 'lucide-react';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
@@ -1827,6 +1828,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     .map((p) => ({ ...p, state: 'existing' }));
 
   const [searchQuery, setSearchQuery] = useSearchQuery();
+  const searchInputRef = useRef(null);
   const combinedObjects = useMemo(() => {
     let list = [...pendingCreates, ...pendingModifies, ...pendingDeletes, ...existingStable];
     if (selectedId && formState && selectedId.startsWith('new_')) {
@@ -2422,14 +2424,28 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           <div className="flex items-center mt-2">
             <h3 className="text-sm font-medium text-zinc-200">Objects</h3>
           </div>
-          <div className="mt-1">
+          <div className="mt-1 relative">
             <input
+              ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name, type, or ID"
-              className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+              className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded pl-2 pr-8 py-1 text-sm"
             />
+            {searchQuery?.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  searchInputRef.current?.focus();
+                }}
+                aria-label="Clear search"
+                className="absolute inset-y-0 right-0 flex items-center pr-2 text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            ) : null}
           </div>
           {combinedObjects.length === 0 ? (
             <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded px-3 py-3 text-center">
