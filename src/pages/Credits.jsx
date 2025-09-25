@@ -124,7 +124,7 @@ const Credits = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col md:flex-row md:items-center gap-6 md:gap-0">
             <div className="flex-1 min-w-0">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 flex items-center">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold mb-4 flex items-center">
                 <Github className="w-8 h-8 sm:w-10 sm:h-10 mr-3 sm:mr-4" />
                 GitHub Contributors
               </h1>
