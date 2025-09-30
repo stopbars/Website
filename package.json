@@ -13,7 +13,7 @@
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "dompurify": "^3.2.7",
-    "framer-motion": "^12.23.20",
+    "framer-motion": "^12.23.22",
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
     "leaflet-polylinedecorator": "^1.6.0",
