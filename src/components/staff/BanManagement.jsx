@@ -17,7 +17,7 @@ import {
 
 const API_BASE = 'https://v2.stopbars.com';
 
-export default function BansManagement() {
+export default function BanManagement() {
   const token = getVatsimToken();
   const [bans, setBans] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -194,7 +194,7 @@ export default function BansManagement() {
     <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
       {/* Header to match StaffManagement */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">Bans Management</h1>
+        <h1 className="text-2xl font-bold mb-4 md:mb-0">Ban Management</h1>
       </div>
 
       <div className="space-y-7">

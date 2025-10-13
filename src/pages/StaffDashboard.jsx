@@ -36,7 +36,7 @@ import ContactMessages from '../components/staff/ContactMessages';
 import PackagesManagement from '../components/staff/PackagesManagement';
 import VatSysProfiles from '../components/staff/VatSysProfiles';
 import CacheManagement from '../components/staff/CacheManagement';
-import BansManagement from '../components/staff/BansManagement';
+import BanManagement from '../components/staff/BanManagement';
 
 // Tab configurations with role requirements
 const TABS = {
@@ -97,13 +97,13 @@ const TABS = {
     description: 'Purge cache keys and namespaces',
     component: CacheManagement,
   },
-  bansManagement: {
-    id: 'bansManagement',
-    label: 'Bans Management',
+  banManagement: {
+    id: 'banManagement',
+    label: 'Ban Management',
     icon: AlertTriangle,
     roles: ['lead_developer'],
     description: 'List, create, and remove user bans',
-    component: BansManagement,
+    component: BanManagement,
   },
 
   // Product Manager & Lead Developer Tabs
@@ -410,7 +410,7 @@ const StaffDashboard = () => {
                               'staffManagement',
                               'divisionManagement',
                               'cacheManagement',
-                              'bansManagement',
+                              'banManagement',
                               'releaseManagement',
                             ].includes(tab.id) && hasTabAccess(tab)
                         )
