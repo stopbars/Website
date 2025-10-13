@@ -8,6 +8,7 @@ Thank you for your interest in contributing to the BARS website! This guide will
 
 - Node.js 18 or higher
 - Git
+- Bun package manager
 - A modern web browser for testing
 
 > **⚠️ Important for Authentication Development**: If you're working on authentication features, user management, or any functionality that requires user login, you **MUST** also clone and run the BARS backend API locally. The frontend alone cannot handle authentication without the backend.
@@ -35,7 +36,7 @@ Thank you for your interest in contributing to the BARS website! This guide will
 2. **Install Dependencies**
 
    ```bash
-   npm install
+   bun install
    ```
 
 3. **Configure Environment Variables**
@@ -75,17 +76,17 @@ Thank you for your interest in contributing to the BARS website! This guide will
 4. **Start Development Server**
 
    ```bash
-   npm run dev
+   bun run dev
    ```
 
    The development server will start at `http://localhost:5173` with hot module replacement enabled.
 
 5. **Available Scripts**
 
-   - `npm run dev` - Start development server with hot reload
-   - `npm run build` - Build for production
-   - `npm run preview` - Preview production build locally
-   - `npm run lint` - Run ESLint to check code quality
+   - `bun run dev` - Start development server with hot reload
+   - `bun run build` - Build for production
+   - `bun run preview` - Preview production build locally
+   - `bun run lint` - Run ESLint to check code quality
 
 ## Development Guidelines
 
@@ -169,7 +170,7 @@ Create a pull request with:
 
 ### Local Testing
 
-1. Start the development server: `npm run dev`
+1. Start the development server: `bun run dev`
 2. Test the application in different browsers
 3. Verify responsive design on various screen sizes
 4. Test form submissions and user interactions
@@ -177,8 +178,8 @@ Create a pull request with:
 
 ### Build Testing
 
-1. Create a production build: `npm run build`
-2. Preview the build locally: `npm run preview`
+1. Create a production build: `bun run build`
+2. Preview the build locally: `bun run preview`
 3. Verify all features work in production mode
 
 ### UI/UX Testing
@@ -192,8 +193,8 @@ Create a pull request with:
 
 ### Build Errors
 
-- Run `npm install` to ensure all dependencies are installed
-- Clear cache with `rm -rf node_modules package-lock.json && npm install`
+- Run `bun install` to ensure all dependencies are installed
+- Clear cache with `rm -rf node_modules package-lock.json && bun install`
 - Check for Node.js version compatibility (18+)
 
 ### Styling Issues

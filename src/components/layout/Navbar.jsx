@@ -207,16 +207,21 @@ export const Navbar = () => {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-20">
-            <Link
-              to="/"
-              className="text-2xl font-bold tracking-tight hover:text-zinc-300 transition-colors cursor-pointer"
-            >
-              BARS
-            </Link>
+            <div className="flex items-center md:flex-1">
+              <Link
+                to="/"
+                className="text-2xl font-bold tracking-tight hover:text-zinc-300 transition-colors cursor-pointer"
+              >
+                BARS
+              </Link>
+            </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-6 lg:space-x-12">
+            <div className="hidden md:flex md:flex-1 justify-center">
               <div className="flex items-center space-x-6 lg:space-x-12">
+                <Link to="/about" className="text-zinc-400 hover:text-white transition-colors">
+                  About
+                </Link>
                 <Link to="/contribute" className="text-zinc-400 hover:text-white transition-colors">
                   Contribute
                 </Link>
@@ -237,6 +242,9 @@ export const Navbar = () => {
                   Donate
                 </a>
               </div>
+            </div>
+
+            <div className="hidden md:flex md:flex-1 items-center justify-end">
               {user ? (
                 <div className="flex items-center space-x-4">
                   <Link to="/account">
@@ -299,6 +307,13 @@ export const Navbar = () => {
         >
           <div className="bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 shadow-lg rounded-b-xl mx-2">
             <div className="px-5 py-4 space-y-1">
+              <Link
+                to="/about"
+                className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <span className="font-medium">About</span>
+              </Link>
               <Link
                 to="/contribute"
                 className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
