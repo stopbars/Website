@@ -1,5 +1,6 @@
 // Changelog.jsx
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Select } from '../components/shared/Select';
 import { Loader, AlertTriangle } from 'lucide-react';
@@ -12,8 +13,26 @@ marked.setOptions({
   gfm: true,
 });
 
+const FILTER_PARAM = 'product';
+
+const filterOptions = [
+  { id: 'pilot-client', label: 'Pilot Client' },
+  { id: 'vatsys-plugin', label: 'vatSys Plugin' },
+  { id: 'euroscope-plugin', label: 'EuroScope Plugin' },
+  { id: 'simconnect.net', label: 'SimConnect.NET' },
+  { id: 'installer', label: 'Installer' },
+];
+
+const validFilterIds = new Set(filterOptions.map((opt) => opt.id));
+
+const isValidFilter = (value) => validFilterIds.has(value);
+
 const Changelog = () => {
-  const [activeFilters, setActiveFilters] = useState([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentFilterParam = (searchParams.get(FILTER_PARAM) || '').toLowerCase();
+  const [activeFilters, setActiveFilters] = useState(() =>
+    isValidFilter(currentFilterParam) ? [currentFilterParam] : []
+  );
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -28,14 +47,6 @@ const Changelog = () => {
   };
 
   // Filter options
-  const filterOptions = [
-    { id: 'pilot-client', label: 'Pilot Client' },
-    { id: 'vatsys-plugin', label: 'vatSys Plugin' },
-    { id: 'euroscope-plugin', label: 'EuroScope Plugin' },
-    { id: 'simconnect.net', label: 'SimConnect.NET' },
-    { id: 'installer', label: 'Installer' },
-  ];
-
   const normalizeProduct = (p) => (p || '').toLowerCase().replace(/\s+/g, '-');
 
   // Handle selection via dropdown
@@ -44,7 +55,8 @@ const Changelog = () => {
       setActiveFilters([]);
       return;
     }
-    setActiveFilters([value]);
+    const normalized = value.toLowerCase();
+    setActiveFilters(isValidFilter(normalized) ? [normalized] : []);
   };
 
   const currentFilterLabel = () => {
@@ -61,6 +73,38 @@ const Changelog = () => {
           const releaseProduct = normalizeProduct(release.product);
           return activeFilters.some((filterId) => releaseProduct === filterId);
         });
+
+  // Keep local filter state aligned with ?product query parameter changes
+  useEffect(() => {
+    const nextFilters = isValidFilter(currentFilterParam) ? [currentFilterParam] : [];
+    setActiveFilters((prev) => {
+      if (
+        prev.length === nextFilters.length &&
+        prev.every((val, idx) => val === nextFilters[idx])
+      ) {
+        return prev;
+      }
+      return nextFilters;
+    });
+  }, [currentFilterParam]);
+
+  // Reflect active filter selection in the URL ?product query parameter
+  useEffect(() => {
+    const nextParam = activeFilters[0] || '';
+    if (nextParam === currentFilterParam || (!nextParam && !currentFilterParam)) {
+      return;
+    }
+
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (nextParam) {
+        params.set(FILTER_PARAM, nextParam);
+      } else {
+        params.delete(FILTER_PARAM);
+      }
+      return params;
+    });
+  }, [activeFilters, currentFilterParam, setSearchParams]);
 
   // Fetch releases from API
   useEffect(() => {
