@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '../shared/Button';
 
@@ -12,6 +12,30 @@ const previewOptions = [
 
 export const Hero = () => {
   const [selectedPreview, setSelectedPreview] = useState(previewOptions[0]);
+  const [downloadInfo, setDownloadInfo] = useState(null);
+  const [downloadLoading, setDownloadLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const url = 'https://v2.stopbars.com/releases/latest?product=Installer';
+
+    (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (mounted) setDownloadInfo(json);
+      } catch (err) {
+        console.error('Failed to fetch latest installer release:', err);
+      } finally {
+        if (mounted) setDownloadLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <section
@@ -29,8 +53,46 @@ export const Hero = () => {
           integrated with both default and major third-party sceneries.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button variant="primary" className="h-14 px-10 text-base md:text-lg gap-2">
-            Download
+          <Button
+            variant="primary"
+            className="h-14 px-10 text-base md:text-lg gap-2"
+            onClick={async () => {
+              const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
+              const downloadUrl = downloadInfo?.downloadUrl;
+              const fallback = 'https://stopbars.com/downloads';
+
+              try {
+                if (navigator && typeof navigator.sendBeacon === 'function') {
+                  try {
+                    navigator.sendBeacon(trackingUrl, '');
+                  } catch {
+                    await fetch(trackingUrl, { method: 'POST', keepalive: true });
+                  }
+                } else {
+                  await fetch(trackingUrl, { method: 'POST', keepalive: true });
+                }
+              } catch {
+                console.warn('Download tracking failed');
+              }
+              try {
+                window.open(downloadUrl || fallback, '_blank', 'noopener,noreferrer');
+              } catch {
+                window.location.href = downloadUrl || fallback;
+              }
+            }}
+            aria-label={
+              downloadLoading
+                ? 'Download (loading latest release)'
+                : downloadInfo
+                  ? `Download installer version ${downloadInfo.version}`
+                  : 'Download'
+            }
+          >
+            {downloadLoading
+              ? 'Download'
+              : downloadInfo
+                ? `Download v${downloadInfo.version}`
+                : 'Download'}
             <ChevronRight className="w-4 h-4" aria-hidden="true" />
           </Button>
           <Button
