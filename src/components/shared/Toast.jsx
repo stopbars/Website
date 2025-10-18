@@ -18,20 +18,26 @@ export const Toast = ({
     setTimeout(() => {
       setIsVisible(false);
       if (onClose) onClose();
-    }, 300); // Wait for exit animation
+    }, 500); // Wait for exit animation
   }, [onClose]);
 
   useEffect(() => {
     if (show) {
       setIsVisible(true);
-      setIsAnimating(true);
+      // Small delay before starting animation for smoother effect
+      const animationDelay = setTimeout(() => {
+        setIsAnimating(true);
+      }, 50);
 
       // Auto-dismiss after duration
       const timer = setTimeout(() => {
         handleClose();
       }, duration);
 
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(animationDelay);
+        clearTimeout(timer);
+      };
     }
   }, [show, duration, handleClose]);
 
@@ -79,14 +85,20 @@ export const Toast = ({
     <div
       className={`
         fixed bottom-4 left-4 z-50 max-w-sm w-full
-        transform transition-all duration-300 ease-in-out
-        ${isAnimating ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'}
+        transform transition-all duration-500 ease-out
+        ${
+          isAnimating
+            ? 'translate-x-0 opacity-100 scale-100'
+            : '-translate-x-full opacity-0 scale-95'
+        }
       `}
     >
       <div
         className={`
           ${currentVariant.container}
           border rounded-xl p-5 relative
+          transform transition-all duration-500 ease-out
+          ${isAnimating ? 'translate-y-0 scale-100' : 'translate-y-2 scale-98'}
         `}
       >
         {/* Close button */}
