@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
 import { getVatsimToken } from '../utils/cookieUtils';
+import { Toast } from '../components/shared/Toast';
 
 const Account = () => {
   const { user, loading, logout, setUser, refreshUserData } = useAuth();
@@ -32,11 +33,16 @@ const Account = () => {
   const [regeneratingApiKey, setRegeneratingApiKey] = useState(false);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [regenerateError, setRegenerateError] = useState(null);
+  const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
   const [userDivisions, setUserDivisions] = useState([]);
   const [displayMode, setDisplayMode] = useState(user?.display_mode ?? 0);
-  const [displayModeStatus, setDisplayModeStatus] = useState(null); // {type:'success'|'error', message:string}
   const [isDisplayModeSaving, setIsDisplayModeSaving] = useState(false);
   const [pendingDisplayMode, setPendingDisplayMode] = useState(null);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [showRegenerateSuccessToast, setShowRegenerateSuccessToast] = useState(false);
+  const [showRegenerateErrorToast, setShowRegenerateErrorToast] = useState(false);
+  const [regenerateErrorMessage, setRegenerateErrorMessage] = useState('');
   const displayModeRequestRef = useRef({ id: 0, controller: null });
   const refreshDebounceRef = useRef(null);
 
@@ -165,13 +171,11 @@ const Account = () => {
 
       if (!response.ok) {
         if (response.status === 429) {
-          // Rate limit error handling
-          const errorData = data;
-          setRegenerateError({
-            message: errorData.message,
-            retryAfter: errorData.retryAfter,
-          });
-          return;
+          // Rate limit - use the message from the API
+          throw new Error(
+            data.message ||
+              'You can only regenerate your API key once every 24 hours, please try again later.'
+          );
         }
         throw new Error('Failed to regenerate API key');
       }
@@ -184,9 +188,14 @@ const Account = () => {
 
       setShowApiKey(false);
       setIsRegenerateDialogOpen(false);
+      setRegenerateConfirmation('');
+      setShowRegenerateSuccessToast(true);
     } catch (error) {
       console.error('Failed to regenerate API key:', error);
-      setRegenerateError({ message: 'Failed to regenerate API key. Please try again.' });
+      setIsRegenerateDialogOpen(false);
+      setRegenerateConfirmation('');
+      setRegenerateErrorMessage(error.message);
+      setShowRegenerateErrorToast(true);
     } finally {
       setRegeneratingApiKey(false);
     }
@@ -247,7 +256,6 @@ const Account = () => {
     }
     setIsDisplayModeSaving(true);
     setPendingDisplayMode(newMode);
-    setDisplayModeStatus({ type: 'success', message: 'Updating preference…' });
 
     // Fire & forget request
     // Cancel any in-flight request (latest-wins)
@@ -271,7 +279,7 @@ const Account = () => {
         // Ignore stale responses
         if (displayModeRequestRef.current.id !== requestId) return;
         if (!res.ok) throw new Error('Failed');
-        setDisplayModeStatus({ type: 'success', message: 'Preferred Display Name updated.' });
+        setShowSuccessToast(true);
         setIsDisplayModeSaving(false);
         setPendingDisplayMode(null);
         // Debounced background refresh to align with server canonical values
@@ -295,7 +303,7 @@ const Account = () => {
         }
         if (displayModeRequestRef.current.id !== requestId) return;
         console.error('Failed to persist display mode:', err);
-        setDisplayModeStatus({ type: 'error', message: 'Failed to save preference. Reverted.' });
+        setShowErrorToast(true);
         setIsDisplayModeSaving(false);
         setPendingDisplayMode(null);
         if (prevUser) {
@@ -317,14 +325,6 @@ const Account = () => {
       }
     };
   }, []);
-
-  // Auto clear success message after a few seconds
-  useEffect(() => {
-    if (displayModeStatus?.type === 'success') {
-      const t = setTimeout(() => setDisplayModeStatus(null), 3000);
-      return () => clearTimeout(t);
-    }
-  }, [displayModeStatus]);
 
   if (loading) {
     return (
@@ -516,13 +516,6 @@ const Account = () => {
                       );
                     })}
                   </div>
-                  {displayModeStatus && (
-                    <div
-                      className={`mt-4 text-sm rounded-md px-3 py-2 border ${displayModeStatus.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}
-                    >
-                      {displayModeStatus.message}
-                    </div>
-                  )}
                 </div>
 
                 <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/50">
@@ -700,9 +693,12 @@ const Account = () => {
             </div>
           )}
           {isRegenerateDialogOpen && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
-              <div className="bg-zinc-900 p-8 rounded-lg max-w-md w-full mx-4 border border-blue-500/20">
-                <h2 className="text-2xl font-semibold text-blue-500 mb-4">Regenerate API Key</h2>
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
+                <div className="flex items-center space-x-3 mb-6">
+                  <RefreshCcw className="w-6 h-6 text-orange-400" />
+                  <h3 className="text-xl font-semibold text-orange-400">Regenerate API Token</h3>
+                </div>
 
                 {regenerateError ? (
                   <>
@@ -737,37 +733,70 @@ const Account = () => {
                   </>
                 ) : (
                   <>
-                    <p className="text-zinc-400 mb-6">
-                      Are you sure you want to regenerate your API key? Your current key will stop
-                      working immediately, and all services using it will need to be updated with
-                      the new key.
-                    </p>
-                    <div className="flex space-x-4">
-                      <Button
-                        className="!bg-blue-500 hover:!bg-blue-600 text-white"
-                        onClick={handleRegenerateApiKey}
-                        disabled={regeneratingApiKey}
+                    <div className="space-y-4">
+                      <p className="text-zinc-300">
+                        This action cannot be undone, your current key will stop working
+                        immediately, and all services using it will need to be updated with the new
+                        key.
+                      </p>
+
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (regenerateConfirmation === 'REGENERATE') {
+                            handleRegenerateApiKey();
+                          }
+                        }}
                       >
-                        {regeneratingApiKey ? (
-                          <>
-                            <RefreshCcw className="w-4 h-4 mr-2 animate-spin" />
-                            Regenerating...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCcw className="w-4 h-4 mr-2" />
-                            Yes, Regenerate Key
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsRegenerateDialogOpen(false)}
-                        className="hover:bg-zinc-800"
-                        disabled={regeneratingApiKey}
-                      >
-                        Cancel
-                      </Button>
+                        <div>
+                          <label className="block text-sm font-medium mb-2 text-zinc-300">
+                            Type REGENERATE to confirm:
+                          </label>
+                          <input
+                            type="text"
+                            value={regenerateConfirmation}
+                            onChange={(e) => setRegenerateConfirmation(e.target.value)}
+                            onPaste={(e) => e.preventDefault()}
+                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-orange-500"
+                            disabled={regeneratingApiKey}
+                          />
+                        </div>
+                        <div className="flex space-x-3 mt-6">
+                          <Button
+                            type="submit"
+                            className={`${
+                              regenerateConfirmation === 'REGENERATE' && !regeneratingApiKey
+                                ? '!bg-orange-500 text-white'
+                                : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                            }`}
+                            disabled={regenerateConfirmation !== 'REGENERATE' || regeneratingApiKey}
+                          >
+                            {regeneratingApiKey ? (
+                              <>
+                                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                Regenerating...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCcw className="w-4 h-4 mr-2" />
+                                Regenerate Token
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setRegenerateConfirmation('');
+                              setIsRegenerateDialogOpen(false);
+                            }}
+                            className="hover:bg-zinc-800"
+                            disabled={regeneratingApiKey}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </form>
                     </div>
                   </>
                 )}
@@ -776,6 +805,39 @@ const Account = () => {
           )}
         </div>
       </div>
+
+      {/* Toast notifications */}
+      <Toast
+        title="Success"
+        description="Preferred Display Name updated successfully."
+        variant="success"
+        show={showSuccessToast}
+        onClose={() => setShowSuccessToast(false)}
+      />
+
+      <Toast
+        title="Error"
+        description="Failed to save preference, display name has been reverted."
+        variant="destructive"
+        show={showErrorToast}
+        onClose={() => setShowErrorToast(false)}
+      />
+
+      <Toast
+        title="Success"
+        description="Successfully regenerate API Token"
+        variant="success"
+        show={showRegenerateSuccessToast}
+        onClose={() => setShowRegenerateSuccessToast(false)}
+      />
+
+      <Toast
+        title="Error"
+        description={regenerateErrorMessage || 'Failed to regenerate API token, please try again.'}
+        variant="destructive"
+        show={showRegenerateErrorToast}
+        onClose={() => setShowRegenerateErrorToast(false)}
+      />
     </Layout>
   );
 };
