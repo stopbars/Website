@@ -97,7 +97,7 @@ export const Hero = () => {
           </Button>
           <Button
             variant="secondary"
-            className="h-14 px-10 text-base md:text-lg gap-2 !bg-zinc-800 !text-zinc-200 !border !border-zinc-700 hover:!bg-zinc-700 focus:!bg-zinc-700"
+            className="h-14 px-10 text-base md:text-lg gap-2 !bg-zinc-800 !text-zinc-200 !border !border-zinc-700 hover:!bg-zinc-700"
             onClick={() =>
               window.open('https://docs.stopbars.com/', '_blank', 'noopener,noreferrer')
             }
@@ -117,9 +117,9 @@ export const Hero = () => {
                   key={option}
                   type="button"
                   onClick={() => setSelectedPreview(option)}
-                  className={`px-5 py-2.5 rounded-full text-sm md:text-base border transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:ring-white/60 ${
+                  className={`px-5 py-2.5 rounded-full text-sm md:text-base border transition-colors duration-300 ${
                     isSelected
-                      ? 'bg-white text-black border-white shadow-lg shadow-white/10'
+                      ? 'bg-white text-black border-white'
                       : 'bg-zinc-900/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
                   }`}
                   aria-pressed={isSelected}

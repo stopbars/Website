@@ -19,8 +19,8 @@ export const DonationBanner = () => {
               <div className="mx-auto max-w-2xl rounded-lg bg-emerald-900 border border-emerald-700 p-6">
                 <p className="text-emerald-50">
                   As our community grows, so do our costs. Your support directly keeps BARS free and
-                  accessible for everyone. All our finances are completely public - donations,
-                  expenses, and transactions - ensuring your support is used responsibly.
+                  accessible for everyone. All our finances are completely public, donations,
+                  expenses, and transactions, ensuring your support is used responsibly.
                 </p>
               </div>
             </div>
