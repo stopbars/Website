@@ -12,7 +12,6 @@ import {
   Info,
   Loader,
   Check,
-  RefreshCw,
 } from 'lucide-react';
 import {
   MapContainer,
@@ -597,7 +596,6 @@ const ContributeMap = () => {
   const mapRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [airport, setAirport] = useState(null);
   const [points, setPoints] = useState([]);
   const [activePointId, setActivePointId] = useState(null);
@@ -732,23 +730,22 @@ const ContributeMap = () => {
 
         setPoints(transformedPoints);
       } catch (err) {
-        setError('Failed to load airport data. Please try again.');
         console.error(err);
+        // Redirect back to contribute/new with error parameter
+        navigate('/contribute/new?error=airport_load_failed');
+        return;
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [icao]);
+  }, [icao, navigate]);
 
   const handleBack = () => {
     navigate('/contribute/new');
   };
 
-  const handleRetry = () => {
-    window.location.reload();
-  };
   const handleContinue = () => {
     navigate(`/contribute/test/${icao}`);
   };
@@ -807,32 +804,6 @@ const ContributeMap = () => {
               </div>
             </div>
           </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 pt-24">
-          <Card className="p-8 max-w-lg w-full">
-            <div className="flex items-center space-x-3 text-red-500 mb-4">
-              <AlertCircle className="w-6 h-6" />
-              <h2 className="text-xl font-medium">Error Loading Airport</h2>
-            </div>
-            <p className="text-zinc-300 mb-6">{error}</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={handleBack} variant="secondary" className="w-full sm:w-auto">
-                <ChevronLeft className="w-4 h-4 mr-2" />
-                Go Back
-              </Button>
-              <Button onClick={handleRetry} className="w-full sm:w-auto">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Retry
-              </Button>
-            </div>
-          </Card>
         </div>
       </Layout>
     );
@@ -950,9 +921,7 @@ const ContributeMap = () => {
                                       </span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span className="text-sm text-zinc-400">
-                                        Has Elevated Bar:
-                                      </span>
+                                      <span className="text-sm text-zinc-400">Elevated Bar:</span>
                                       <span className="text-sm text-white">
                                         {point.elevated ? 'Yes' : 'No'}
                                       </span>
