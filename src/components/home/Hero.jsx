@@ -59,7 +59,6 @@ export const Hero = () => {
             onClick={async () => {
               const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
               const downloadUrl = downloadInfo?.downloadUrl;
-              const fallback = 'https://stopbars.com/downloads';
 
               try {
                 if (navigator && typeof navigator.sendBeacon === 'function') {
@@ -75,9 +74,9 @@ export const Hero = () => {
                 console.warn('Download tracking failed');
               }
               try {
-                window.open(downloadUrl || fallback, '_blank', 'noopener,noreferrer');
+                window.open(downloadUrl, '_blank', 'noopener,noreferrer');
               } catch {
-                window.location.href = downloadUrl || fallback;
+                window.location.href = downloadUrl;
               }
             }}
             aria-label={
