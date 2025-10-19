@@ -22,24 +22,43 @@ export const Toast = ({
   }, [onClose]);
 
   useEffect(() => {
-    if (show) {
+    if (!show) return undefined;
+
+    let animationDelay;
+    let autoDismiss;
+    const opener = setTimeout(() => {
       setIsVisible(true);
-      // Small delay before starting animation for smoother effect
-      const animationDelay = setTimeout(() => {
+      animationDelay = setTimeout(() => {
         setIsAnimating(true);
       }, 50);
-
-      // Auto-dismiss after duration
-      const timer = setTimeout(() => {
+      autoDismiss = setTimeout(() => {
         handleClose();
       }, duration);
+    }, 0);
 
-      return () => {
-        clearTimeout(animationDelay);
-        clearTimeout(timer);
-      };
-    }
+    return () => {
+      clearTimeout(opener);
+      if (animationDelay) clearTimeout(animationDelay);
+      if (autoDismiss) clearTimeout(autoDismiss);
+    };
   }, [show, duration, handleClose]);
+
+  useEffect(() => {
+    if (show) return undefined;
+
+    let finalizeTimer;
+    const hideTimer = setTimeout(() => {
+      setIsAnimating(false);
+      finalizeTimer = setTimeout(() => {
+        setIsVisible(false);
+      }, 500);
+    }, 0);
+
+    return () => {
+      clearTimeout(hideTimer);
+      if (finalizeTimer) clearTimeout(finalizeTimer);
+    };
+  }, [show]);
 
   if (!isVisible) return null;
 

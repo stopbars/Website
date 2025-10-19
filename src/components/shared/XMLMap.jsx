@@ -53,7 +53,6 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
 
         if (!firstPosition && !isNaN(lat) && !isNaN(lng)) {
           firstPosition = [lat, lng];
-          setMapCenter(firstPosition);
         }
 
         const polygon = calculateRectangleCorners(lat, lng, width, length, heading);
@@ -66,7 +65,7 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
         }
       }
 
-      return areas;
+      return { areas, center: firstPosition };
     },
     [calculateRectangleCorners]
   );
@@ -160,10 +159,6 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       }
     }
 
-    if (firstPosition) {
-      setMapCenter(firstPosition);
-    }
-
     const lines = Object.keys(objectGroups).map((objId) => {
       const group = objectGroups[objId];
       let color = '#ef4444';
@@ -178,7 +173,11 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       };
     });
 
-    return { lights: allLights, lines: lines };
+    return {
+      lights: allLights,
+      lines: lines,
+      center: firstPosition ? [...firstPosition] : null,
+    };
   }, []);
 
   useEffect(() => {
@@ -241,20 +240,32 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
     `;
     document.head.appendChild(style);
 
+    const scheduledUpdates = [];
+
     // If XML data is provided, parse it
     if (xmlData) {
       // Check if it's a BARS XML or a LightSupport XML
       if (xmlData.includes('BarsObject')) {
-        const { lights, lines } = parseXML(xmlData);
-        setParsedLights(lights);
-        setPolylines(lines);
-      } else if (xmlData.includes('LightSupport')) {
-        const areas = parseRemoveAreasXML(xmlData);
-        setRemoveAreas(areas);
+        const { lights, lines, center } = parseXML(xmlData);
+        const handle = setTimeout(() => {
+          setParsedLights(lights);
+          setPolylines(lines);
+          if (center) setMapCenter(center);
+        }, 0);
+        scheduledUpdates.push(handle);
+      }
+      if (xmlData.includes('LightSupport')) {
+        const { areas, center } = parseRemoveAreasXML(xmlData);
+        const handle = setTimeout(() => {
+          setRemoveAreas(areas);
+          if (center) setMapCenter(center);
+        }, 0);
+        scheduledUpdates.push(handle);
       }
     }
 
     return () => {
+      scheduledUpdates.forEach((handle) => clearTimeout(handle));
       document.head.removeChild(style);
     };
   }, [xmlData, parseXML, parseRemoveAreasXML]);

@@ -7,7 +7,28 @@ import { ConsentBanner } from '../shared/ConsentBanner';
 
 export const Layout = ({ children }) => {
   const { pathname } = useLocation();
-  const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [showConsentBanner, setShowConsentBanner] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const consent = window.localStorage.getItem('analytics-consent');
+      const gpc = typeof navigator !== 'undefined' && navigator.globalPrivacyControl === true;
+      const dnt =
+        typeof navigator !== 'undefined' &&
+        (navigator.doNotTrack === '1' || window.doNotTrack === '1');
+
+      if (!consent) {
+        if (gpc || dnt) {
+          window.localStorage.setItem('analytics-consent', 'denied');
+          return false;
+        }
+        return true;
+      }
+
+      return consent !== 'denied';
+    } catch {
+      return false;
+    }
+  });
   const [, setKeyBuffer] = useState('');
   const layoutRef = useRef(null);
 
@@ -75,7 +96,7 @@ export const Layout = ({ children }) => {
         });
       }
     },
-    [reverseAllText, restoreAllText]
+    [reverseAllText, restoreAllText, setKeyBuffer]
   );
 
   // Page navigation effect
@@ -110,23 +131,6 @@ Support BARS: https://stopbars.com/donate`,
     }
   }, []);
 
-  // Consent banner effect
-  useEffect(() => {
-    const consent = localStorage.getItem('analytics-consent');
-    const gpc = typeof navigator !== 'undefined' && navigator.globalPrivacyControl === true;
-    const dnt =
-      typeof navigator !== 'undefined' &&
-      (navigator.doNotTrack === '1' || window.doNotTrack === '1');
-
-    if (!consent) {
-      if (gpc || dnt) {
-        localStorage.setItem('analytics-consent', 'denied');
-        setShowConsentBanner(false);
-      } else {
-        setShowConsentBanner(true);
-      }
-    }
-  }, []);
   // Add keydown event listener for the Easter egg
   useEffect(() => {
     window.addEventListener('keydown', handleKeyPress);

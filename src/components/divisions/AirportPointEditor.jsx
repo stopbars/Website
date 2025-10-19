@@ -732,20 +732,28 @@ const PolylineVisualizationOverlay = ({
   const map = useMap();
   const [isInteracting, setIsInteracting] = useState(false);
   const [viewBounds, setViewBounds] = useState(null);
+  const [overlayPoints, setOverlayPoints] = useState([]);
+  const [layerSyncTick, setLayerSyncTick] = useState(0);
   useEffect(() => {
     if (!map) return;
     const start = () => setIsInteracting(true);
     const end = () => {
       setIsInteracting(false);
       try {
-        setViewBounds(map.getBounds());
+        const nextBounds = map.getBounds();
+        const schedule = () => setViewBounds(nextBounds);
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(schedule);
+        else setTimeout(schedule, 0);
       } catch {
         /* ignore */
       }
     };
     // Initial bounds
     try {
-      setViewBounds(map.getBounds());
+      const initialBounds = map.getBounds();
+      const schedule = () => setViewBounds(initialBounds);
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(schedule);
+      else setTimeout(schedule, 0);
     } catch {
       /* ignore */
     }
@@ -798,47 +806,87 @@ const PolylineVisualizationOverlay = ({
     return [];
   }, []);
 
-  const overlayPoints = (() => {
+  useEffect(() => {
+    const layers = featureLayerMapRef.current || {};
     const list = [];
+
     Object.values(existingMap).forEach((base) => {
       if (!base) return;
       const mod = changeset.modify[base.id] || {};
       let merged = { ...base, ...mod };
       if (selectedId === base.id && formState) merged = { ...merged, ...formState };
-      if (selectedId === base.id && featureLayerMapRef.current[base.id]) {
-        const liveCoords = extractCoords(featureLayerMapRef.current[base.id]);
+      const liveLayer = layers[base.id];
+      if (selectedId === base.id && liveLayer) {
+        const liveCoords = extractCoords(liveLayer);
         if (liveCoords.length >= 2) merged.coordinates = liveCoords;
       }
-      list.push(merged);
+      list.push({ ...merged, layerRef: liveLayer });
     });
+
     changeset.create.forEach((c) => {
       const merged =
         selectedId === c._tempId && formState
           ? { ...c, ...formState, id: c._tempId }
           : { ...c, id: c._tempId };
-      list.push(merged);
+      const liveLayer = layers[c._tempId];
+      list.push({ ...merged, layerRef: liveLayer });
     });
+
     if (
       selectedId &&
       selectedId.startsWith('new_') &&
       !changeset.create.find((c) => c._tempId === selectedId)
     ) {
-      const layer = featureLayerMapRef.current[selectedId];
-      if (layer) {
-        const coords = extractCoords(layer);
-        list.push({ id: selectedId, _tempId: selectedId, coordinates: coords, ...formState });
+      const liveLayer = layers[selectedId];
+      if (liveLayer) {
+        const coords = extractCoords(liveLayer);
+        list.push({
+          id: selectedId,
+          _tempId: selectedId,
+          coordinates: coords,
+          ...formState,
+          layerRef: liveLayer,
+        });
       }
     }
+
     if (drawingCoords && drawingCoords.length >= 2) {
       list.push({
         id: '__drawing_preview__',
         coordinates: drawingCoords,
         ...(formState || {}),
         type: formState?.type || 'stopbar',
+        layerRef: null,
       });
     }
-    return list;
-  })();
+
+    const updateHandle = setTimeout(() => {
+      setOverlayPoints(list);
+    }, 0);
+
+    let retryHandle;
+    const needsLayerSync = list.some((pt) => pt.id !== '__drawing_preview__' && !pt.layerRef);
+    if (needsLayerSync) {
+      retryHandle = setTimeout(() => {
+        setLayerSyncTick((tick) => tick + 1);
+      }, 50);
+    }
+
+    return () => {
+      clearTimeout(updateHandle);
+      if (retryHandle) clearTimeout(retryHandle);
+    };
+  }, [
+    existingMap,
+    changeset,
+    selectedId,
+    formState,
+    drawingCoords,
+    liveGeometryTick,
+    extractCoords,
+    featureLayerMapRef,
+    layerSyncTick,
+  ]);
 
   return (
     <>
@@ -860,8 +908,9 @@ const PolylineVisualizationOverlay = ({
           pt.id === '__drawing_preview__'
             ? undefined
             : () => {
-                const layer = featureLayerMapRef.current[pt.id];
-                if (layer) registerSelect(layer, pt.id, pt.id.startsWith('new_'));
+                if (pt.layerRef) {
+                  registerSelect(pt.layerRef, pt.id, pt.id.startsWith('new_'));
+                }
               };
         const renderDetailed = !isInteracting || isSelected;
         return (
