@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Toast } from '../components/shared/Toast';
 import ReactConfetti from 'react-confetti';
 import { useWindowSize } from '../hooks/useWindowSize';
 import {
@@ -44,6 +45,8 @@ const ContributeDetails = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { width, height } = useWindowSize();
   const [confettiRun, setConfettiRun] = useState(true);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -229,7 +232,8 @@ const ContributeDetails = () => {
 
       setSubmissionSuccess(true);
     } catch (err) {
-      setError(err.message || 'Failed to submit contribution');
+      setToastMessage(err.message || 'Failed to submit contribution');
+      setShowToast(true);
       console.error('Submission error:', err);
     } finally {
       setIsSubmitting(false);
@@ -497,6 +501,15 @@ const ContributeDetails = () => {
           </Card>
         </div>
       </div>
+
+      {/* Toast notification */}
+      <Toast
+        title="Submission failed"
+        description={toastMessage}
+        variant="destructive"
+        show={showToast}
+        onClose={() => setShowToast(false)}
+      />
     </Layout>
   );
 };

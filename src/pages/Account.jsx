@@ -43,6 +43,9 @@ const Account = () => {
   const [showRegenerateSuccessToast, setShowRegenerateSuccessToast] = useState(false);
   const [showRegenerateErrorToast, setShowRegenerateErrorToast] = useState(false);
   const [regenerateErrorMessage, setRegenerateErrorMessage] = useState('');
+  const [showDeleteSuccessToast, setShowDeleteSuccessToast] = useState(false);
+  const [showDeleteErrorToast, setShowDeleteErrorToast] = useState(false);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
   const displayModeRequestRef = useRef({ id: 0, controller: null });
   const refreshDebounceRef = useRef(null);
 
@@ -150,9 +153,24 @@ const Account = () => {
         method: 'DELETE',
         headers: { 'X-Vatsim-Token': token },
       });
-      if (response.ok) logout();
+
+      if (response.ok) {
+        setIsDeleteDialogOpen(false);
+        setDeleteConfirmation('');
+        setShowDeleteSuccessToast(true);
+        // Give the toast a moment to show before logout
+        setTimeout(() => {
+          logout();
+        }, 2000);
+      } else {
+        throw new Error('Failed to delete account');
+      }
     } catch (error) {
-      console.error(error);
+      console.error('Failed to delete account:', error);
+      setIsDeleteDialogOpen(false);
+      setDeleteConfirmation('');
+      setDeleteErrorMessage(error.message || 'Failed to delete account, please try again.');
+      setShowDeleteErrorToast(true);
     } finally {
       setIsDeletingAccount(false);
     }
@@ -625,11 +643,11 @@ const Account = () => {
               <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
                 <div className="flex items-center space-x-3 mb-6">
                   <AlertOctagon className="w-6 h-6 text-red-500" />
-                  <h3 className="text-xl font-bold text-red-500">Delete Account</h3>
+                  <h3 className="text-xl font-semibold text-red-500">Delete Account</h3>
                 </div>
 
                 <div className="space-y-4">
-                  <p className="text-zinc-400">
+                  <p className="text-zinc-300">
                     This action cannot be undone. This will permanently delete your account and
                     remove all associated data.
                   </p>
@@ -655,12 +673,12 @@ const Account = () => {
                         disabled={isDeletingAccount}
                       />
                     </div>
-                    <div className="flex space-x-4 mt-6">
+                    <div className="flex space-x-3 mt-6">
                       <Button
                         type="submit"
                         className={`${
                           deleteConfirmation === 'DELETE' && !isDeletingAccount
-                            ? '!bg-red-500 hover:!bg-red-600 text-white'
+                            ? '!bg-red-500 text-white'
                             : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
                         }`}
                         disabled={deleteConfirmation !== 'DELETE' || isDeletingAccount}
@@ -671,7 +689,7 @@ const Account = () => {
                             Deleting...
                           </>
                         ) : (
-                          'Delete Account'
+                          'Delete'
                         )}
                       </Button>
                       <Button
@@ -825,7 +843,7 @@ const Account = () => {
 
       <Toast
         title="Success"
-        description="Successfully regenerate API Token"
+        description="API Token successfully regenerated"
         variant="success"
         show={showRegenerateSuccessToast}
         onClose={() => setShowRegenerateSuccessToast(false)}
@@ -837,6 +855,22 @@ const Account = () => {
         variant="destructive"
         show={showRegenerateErrorToast}
         onClose={() => setShowRegenerateErrorToast(false)}
+      />
+
+      <Toast
+        title="Account Deleted"
+        description="Your account has been successfully deleted. You will be redirected shortly."
+        variant="success"
+        show={showDeleteSuccessToast}
+        onClose={() => setShowDeleteSuccessToast(false)}
+      />
+
+      <Toast
+        title="Error"
+        description={deleteErrorMessage || 'Failed to delete account, please try again.'}
+        variant="destructive"
+        show={showDeleteErrorToast}
+        onClose={() => setShowDeleteErrorToast(false)}
       />
     </Layout>
   );
