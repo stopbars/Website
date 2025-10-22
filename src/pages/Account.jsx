@@ -499,12 +499,6 @@ const Account = () => {
                     </div>
                     {user?.display_name && (
                       <div className="flex items-center gap-3">
-                        {isDisplayModeSaving && (
-                          <div className="text-xs text-zinc-400 flex items-center gap-2">
-                            <Loader className="w-3 h-3 animate-spin" />
-                            Saving…
-                          </div>
-                        )}
                         <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60">
                           Current: <span className="font-medium">{user.display_name}</span>
                         </div>
