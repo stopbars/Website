@@ -25,7 +25,6 @@ import {
 } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import ArrowDecorator from '../components/shared/ArrowDecorator';
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 // Color palette used across markers and polylines
@@ -58,6 +57,8 @@ function SegmentedDefs({
   strokeWidth = 10,
 }) {
   const map = useMap();
+  const gradientCacheRef = useRef(new Map());
+  const defsRef = useRef(null);
 
   useEffect(() => {
     if (!map || !segments || segments.length === 0) return;
@@ -73,17 +74,58 @@ function SegmentedDefs({
       svg.prepend(defs);
     }
 
-    const build = () => {
-      [
-        ...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`),
-      ].forEach((n) => n.remove());
+    const gradientCache = gradientCacheRef.current;
+
+    // If defs node changes between renders, reattach cached gradients.
+    if (defsRef.current && defsRef.current !== defs) {
+      gradientCache.forEach((node) => {
+        if (!defs.contains(node)) {
+          defs.appendChild(node);
+        }
+      });
+    }
+    defsRef.current = defs;
+
+    const build = (zoomEvent = null) => {
+      const hasNewLayerPoint = typeof map.latLngToNewLayerPoint === 'function';
+      const toLayerPoint =
+        zoomEvent && hasNewLayerPoint
+          ? (latlng) => map.latLngToNewLayerPoint(latlng, zoomEvent.zoom, zoomEvent.center)
+          : (latlng) => map.latLngToLayerPoint(latlng);
+
+      const activeIds = new Set();
 
       segments.forEach((seg) => {
         const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
+        activeIds.add(gradId);
+
+        let lg = gradientCache.get(gradId);
+        if (!lg) {
+          lg = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+          lg.setAttribute('id', gradId);
+          lg.setAttribute('gradientUnits', 'userSpaceOnUse');
+          lg.setAttribute('data-generated', 'seg');
+          lg.setAttribute('data-owner', ownerId);
+
+          const topStop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+          topStop.setAttribute('offset', '50%');
+          topStop.setAttribute('data-pos', 'top');
+          lg.appendChild(topStop);
+
+          const bottomStop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+          bottomStop.setAttribute('offset', '50%');
+          bottomStop.setAttribute('data-pos', 'bottom');
+          lg.appendChild(bottomStop);
+
+          defs.appendChild(lg);
+          gradientCache.set(gradId, lg);
+        } else if (!defs.contains(lg)) {
+          defs.appendChild(lg);
+        }
 
         // convert lat/lng to SVG layer points (pixels)
-        const lp1 = map.latLngToLayerPoint(L.latLng(seg.p1.lat, seg.p1.lng));
-        const lp2 = map.latLngToLayerPoint(L.latLng(seg.p2.lat, seg.p2.lng));
+        const lp1 = toLayerPoint(L.latLng(seg.p1.lat, seg.p1.lng));
+        const lp2 = toLayerPoint(L.latLng(seg.p2.lat, seg.p2.lng));
 
         const mx = (lp1.x + lp2.x) / 2;
         const my = (lp1.y + lp2.y) / 2;
@@ -106,34 +148,88 @@ function SegmentedDefs({
         const x2 = mx + px * span;
         const y2 = my + py * span;
 
-        const lg = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-        lg.setAttribute('id', gradId);
-        lg.setAttribute('gradientUnits', 'userSpaceOnUse');
         lg.setAttribute('x1', x1);
         lg.setAttribute('y1', y1);
         lg.setAttribute('x2', x2);
         lg.setAttribute('y2', y2);
-        lg.setAttribute('data-generated', 'seg');
-        lg.setAttribute('data-owner', ownerId);
+        const topStop = lg.querySelector('stop[data-pos="top"]');
+        const bottomStop = lg.querySelector('stop[data-pos="bottom"]');
+        if (topStop) {
+          topStop.setAttribute('stop-color', topColor);
+          topStop.setAttribute('stop-opacity', '1');
+        }
+        if (bottomStop) {
+          bottomStop.setAttribute('stop-color', bottomColor);
+          bottomStop.setAttribute('stop-opacity', '1');
+        }
+      });
 
-        // exactly 50% stops gives a hard split across the stroke width
-        lg.innerHTML = `
-          <stop offset="50%" stop-color="${topColor}" stop-opacity="1"/>
-          <stop offset="50%" stop-color="${bottomColor}" stop-opacity="1"/>
-        `;
-        defs.appendChild(lg);
+      gradientCache.forEach((node, id) => {
+        if (!activeIds.has(id)) {
+          node.remove();
+          gradientCache.delete(id);
+        }
       });
     };
 
     build();
-    const onChange = () => build();
-    map.on('zoom viewreset move', onChange);
+
+    let frameToken = null;
+    let suppressUpdates = false;
+    let pendingZoomEvent = null;
+
+    const scheduleBuild = (event = null) => {
+      if (event) {
+        pendingZoomEvent = event;
+      }
+      const isZoomAnim = event && event.type === 'zoomanim';
+      if (suppressUpdates && !isZoomAnim) {
+        return;
+      }
+      if (frameToken) {
+        return;
+      }
+      frameToken = requestAnimationFrame(() => {
+        frameToken = null;
+        const eventToUse = pendingZoomEvent;
+        pendingZoomEvent = null;
+        build(eventToUse);
+      });
+    };
+
+    const onInteractionStart = () => {
+      suppressUpdates = true;
+      if (frameToken) {
+        cancelAnimationFrame(frameToken);
+        frameToken = null;
+      }
+    };
+
+    const onInteractionEnd = () => {
+      suppressUpdates = false;
+      scheduleBuild();
+    };
+
+    const onResize = () => scheduleBuild();
+    const onZoomAnim = (event) => scheduleBuild(event);
+
+    map.on('movestart zoomstart', onInteractionStart);
+    map.on('moveend zoomend viewreset', onInteractionEnd);
+    map.on('resize', onResize);
+    map.on('zoomanim', onZoomAnim);
 
     return () => {
-      map.off('zoom viewreset move', onChange);
-      [
-        ...defs.querySelectorAll(`linearGradient[data-generated="seg"][data-owner="${ownerId}"]`),
-      ].forEach((n) => n.remove());
+      map.off('movestart zoomstart', onInteractionStart);
+      map.off('moveend zoomend viewreset', onInteractionEnd);
+      map.off('resize', onResize);
+      map.off('zoomanim', onZoomAnim);
+      if (frameToken) {
+        cancelAnimationFrame(frameToken);
+      }
+      pendingZoomEvent = null;
+      suppressUpdates = false;
+      gradientCache.forEach((node) => node.remove());
+      gradientCache.clear();
     };
   }, [map, segments, topColor, bottomColor, strokeWidth]);
 
@@ -158,6 +254,105 @@ SegmentedDefs.propTypes = {
   topColor: PropTypes.string,
   bottomColor: PropTypes.string,
   strokeWidth: PropTypes.number,
+};
+
+const formatPointType = (type) => {
+  switch (type) {
+    case 'lead_on':
+      return 'Lead-On Light';
+    case 'stopbar':
+      return 'Stopbar';
+    case 'taxiway':
+      return 'Taxiway Segment';
+    case 'stand':
+      return 'Stand Lead-In Light';
+    default:
+      return type;
+  }
+};
+
+const formatPointColorStyle = (color) => {
+  switch (color) {
+    case 'green-yellow':
+      return 'Enhanced (Green-Yellow)';
+    case 'green-blue':
+      return 'Enhanced (Green-Blue)';
+    case 'green-orange':
+      return 'Enhanced (Green-Orange)';
+    case 'green':
+    default:
+      return 'Standard (Green)';
+  }
+};
+
+const PointPopupContent = React.memo(({ point, copiedId, onCopy }) => (
+  <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
+    <h3 className="font-bold text-white mb-1">{point.name}</h3>
+
+    <div className="bg-zinc-800/50 rounded px-3 py-2 mb-3 flex items-center justify-between">
+      <code className="text-sm text-zinc-300">{point.id}</code>
+      <button
+        onClick={(event) => onCopy(point.id, event)}
+        className={`text-zinc-400 hover:text-white transition-colors p-1 rounded ${copiedId === point.id ? 'text-green-500' : ''}`}
+        title="Copy ID"
+      >
+        {copiedId === point.id ? <Check className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+      </button>
+    </div>
+
+    <div className="space-y-2">
+      <div className="flex justify-between">
+        <span className="text-sm text-zinc-400">Type:</span>
+        <span className="text-sm text-white">{formatPointType(point.type)}</span>
+      </div>
+
+      {point.type === 'stopbar' && (
+        <>
+          <div className="flex justify-between">
+            <span className="text-sm text-zinc-400">Directionality:</span>
+            <span className="text-sm text-white capitalize">{point.directionality}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-sm text-zinc-400">Elevated Bar:</span>
+            <span className="text-sm text-white">{point.elevated ? 'Yes' : 'No'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-sm text-zinc-400">IHP:</span>
+            <span className="text-sm text-white">{point.ihp ? 'Yes' : 'No'}</span>
+          </div>
+        </>
+      )}
+
+      {point.type === 'taxiway' && (
+        <>
+          <div className="flex justify-between">
+            <span className="text-sm text-zinc-400">Directionality:</span>
+            <span className="text-sm text-white capitalize">{point.directionality}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-sm text-zinc-400">Color Style:</span>
+            <span className="text-sm text-white">{formatPointColorStyle(point.color)}</span>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+));
+
+PointPopupContent.displayName = 'PointPopupContent';
+
+PointPopupContent.propTypes = {
+  point: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    type: PropTypes.string.isRequired,
+    directionality: PropTypes.string,
+    elevated: PropTypes.bool,
+    ihp: PropTypes.bool,
+    color: PropTypes.string,
+  }).isRequired,
+  copiedId: PropTypes.string,
+  onCopy: PropTypes.func.isRequired,
 };
 
 // Get point color based on type and color properties
@@ -553,43 +748,6 @@ const getPolylineColors = (point) => {
   return { topColor, bottomColor };
 };
 
-const ARROW_SPACING_METERS = 7;
-const MIN_ARROW_REPEAT_PERCENT = 2;
-const MAX_ARROW_REPEAT_PERCENT = 50;
-
-const computeArrowPattern = (positions, mapInstance) => {
-  if (!mapInstance || !Array.isArray(positions) || positions.length < 2) {
-    return null;
-  }
-
-  let totalLengthMeters = 0;
-  for (let i = 0; i < positions.length - 1; i += 1) {
-    const start = L.latLng(positions[i][0], positions[i][1]);
-    const end = L.latLng(positions[i + 1][0], positions[i + 1][1]);
-    totalLengthMeters += mapInstance.distance(start, end);
-  }
-
-  if (!Number.isFinite(totalLengthMeters) || totalLengthMeters <= 0) {
-    return null;
-  }
-
-  if (totalLengthMeters <= ARROW_SPACING_METERS * 1.5) {
-    return { offset: '50%', repeat: '100%' };
-  }
-
-  const desiredRepeatPercent = (ARROW_SPACING_METERS / totalLengthMeters) * 100;
-  const repeatPercent = Math.min(
-    MAX_ARROW_REPEAT_PERCENT,
-    Math.max(MIN_ARROW_REPEAT_PERCENT, desiredRepeatPercent)
-  );
-  const offsetPercent = Math.min(50, Math.max(5, repeatPercent / 2));
-
-  return {
-    offset: `${offsetPercent}%`,
-    repeat: `${repeatPercent}%`,
-  };
-};
-
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -600,10 +758,12 @@ const ContributeMap = () => {
   const [points, setPoints] = useState([]);
   const [activePointId, setActivePointId] = useState(null);
   const [mapCenter, setMapCenter] = useState([0, 0]);
-  const [mapZoom] = useState(13);
+  const [mapZoom] = useState(14);
   const [copiedId, setCopiedId] = useState(null);
   const [isInteracting, setIsInteracting] = useState(false);
   const [viewBounds, setViewBounds] = useState(null);
+  const [mapBounds, setMapBounds] = useState(null);
+  const [minZoom, setMinZoom] = useState(10);
 
   // Clear active selection when clicking the map background
   const ClearSelectionOnMapClick = ({ onClear }) => {
@@ -635,57 +795,29 @@ const ContributeMap = () => {
         });
       };
 
-      const handleStart = () => setIsInteracting(true);
-      const handleEnd = () => {
+      const handleInteractionStart = () => {
+        setIsInteracting(true);
+      };
+
+      const handleInteractionEnd = () => {
         setIsInteracting(false);
         queueBoundsUpdate();
       };
 
       queueBoundsUpdate();
-      map.on('movestart zoomstart dragstart', handleStart);
-      map.on('moveend zoomend viewreset', handleEnd);
+      map.on('movestart zoomstart', handleInteractionStart);
+      map.on('moveend zoomend viewreset', handleInteractionEnd);
       map.on('resize', queueBoundsUpdate);
 
       return () => {
-        map.off('movestart zoomstart dragstart', handleStart);
-        map.off('moveend zoomend viewreset', handleEnd);
+        map.off('movestart zoomstart', handleInteractionStart);
+        map.off('moveend zoomend viewreset', handleInteractionEnd);
         map.off('resize', queueBoundsUpdate);
         if (frameId) cancelAnimationFrame(frameId);
       };
     }, [map]);
 
     return null;
-  };
-
-  // Format type for display
-  const formatType = (type) => {
-    switch (type) {
-      case 'lead_on':
-        return 'Lead-On Light';
-      case 'stopbar':
-        return 'Stopbar';
-      case 'taxiway':
-        return 'Taxiway Segment';
-      case 'stand':
-        return 'Stand Lead-In Light';
-      default:
-        return type;
-    }
-  };
-
-  // Format color style for display
-  const formatColorStyle = (color) => {
-    switch (color) {
-      case 'green-yellow':
-        return 'Enhanced (Green-Yellow)';
-      case 'green-blue':
-        return 'Enhanced (Green-Blue)';
-      case 'green-orange':
-        return 'Enhanced (Green-Orange)';
-      case 'green':
-      default:
-        return 'Standard (Green)';
-    }
   };
 
   useEffect(() => {
@@ -707,7 +839,35 @@ const ContributeMap = () => {
           latitude: airportData.latitude,
           longitude: airportData.longitude,
         });
-        setMapCenter([airportData.latitude, airportData.longitude]);
+
+        let centerLat = airportData.latitude;
+        let centerLng = airportData.longitude;
+        const hasBoundingBox =
+          typeof airportData.bbox_min_lat === 'number' &&
+          typeof airportData.bbox_min_lon === 'number' &&
+          typeof airportData.bbox_max_lat === 'number' &&
+          typeof airportData.bbox_max_lon === 'number';
+
+        if (hasBoundingBox) {
+          try {
+            const bounds = L.latLngBounds(
+              [airportData.bbox_min_lat, airportData.bbox_min_lon],
+              [airportData.bbox_max_lat, airportData.bbox_max_lon]
+            );
+            const boundsCenter = bounds.getCenter();
+            centerLat = boundsCenter.lat;
+            centerLng = boundsCenter.lng;
+            setMapBounds(bounds);
+          } catch {
+            setMapBounds(null);
+          }
+        } else {
+          setMapBounds(null);
+        }
+
+        setMapCenter([centerLat, centerLng]);
+
+        setMinZoom(mapZoom - 1);
 
         // Fetch points data for this airport
         const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${icao}/points`);
@@ -740,7 +900,123 @@ const ContributeMap = () => {
     };
 
     fetchData();
-  }, [icao, navigate]);
+  }, [icao, navigate, mapZoom]);
+
+  const ensureBoundsVisible = useCallback(() => {
+    if (!mapRef.current || !mapBounds) {
+      return;
+    }
+    try {
+      mapRef.current.fitBounds(mapBounds, { padding: [40, 40] });
+    } catch {
+      /* ignore */
+    }
+  }, [mapBounds]);
+
+  useEffect(() => {
+    ensureBoundsVisible();
+  }, [ensureBoundsVisible]);
+
+  const preparedPoints = useMemo(() => {
+    if (!Array.isArray(points) || points.length === 0) {
+      return [];
+    }
+
+    return points.reduce((accumulator, point) => {
+      const coords = point.coordinates;
+      const isPath = Array.isArray(coords) && coords.length >= 2;
+
+      if (!isPath) {
+        const position = toLatLngPair(coords);
+        if (!position) {
+          return accumulator;
+        }
+
+        accumulator.push({
+          kind: 'marker',
+          point,
+          position,
+          focusPosition: position,
+          icon: createCustomIcon(point),
+        });
+        return accumulator;
+      }
+
+      const safeCoords = coords.filter(
+        (c) => typeof c?.lat === 'number' && typeof c?.lng === 'number'
+      );
+
+      if (safeCoords.length < 2) {
+        return accumulator;
+      }
+
+      const positions = safeCoords.map((c) => [c.lat, c.lng]);
+      const segments = safeCoords.slice(0, safeCoords.length - 1).map((_, idx) => ({
+        baseId: point.id,
+        idx,
+        p1: safeCoords[idx],
+        p2: safeCoords[idx + 1],
+      }));
+      const bounds = L.latLngBounds(positions);
+      const { topColor, bottomColor } = getPolylineColors(point);
+
+      accumulator.push({
+        kind: 'polyline',
+        point,
+        positions,
+        segments,
+        bounds,
+        focusPosition: [safeCoords[0].lat, safeCoords[0].lng],
+        polylineColors: { topColor, bottomColor },
+      });
+
+      return accumulator;
+    }, []);
+  }, [points]);
+
+  const handlePopupClose = useCallback(() => {
+    setActivePointId(null);
+  }, []);
+
+  const handleFeatureSelect = useCallback(
+    (pointId, focusPosition, leafletEvent) => {
+      const isActivating = activePointId !== pointId;
+      setActivePointId(isActivating ? pointId : null);
+
+      if (isActivating && focusPosition && mapRef.current) {
+        try {
+          mapRef.current.setView(focusPosition, mapRef.current.getZoom());
+        } catch {
+          /* ignore */
+        }
+      } else if (!isActivating) {
+        const layer = leafletEvent?.target;
+        if (layer && typeof layer.closePopup === 'function') {
+          try {
+            layer.closePopup();
+          } catch {
+            /* ignore */
+          }
+        }
+        if (mapRef.current) {
+          try {
+            mapRef.current.closePopup();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+    [activePointId]
+  );
+
+  const handleMapCreated = useCallback(
+    (mapInstance) => {
+      mapRef.current = mapInstance;
+      ensureBoundsVisible();
+    },
+    [ensureBoundsVisible]
+  );
 
   const handleBack = () => {
     navigate('/contribute/new');
@@ -774,24 +1050,6 @@ const ContributeMap = () => {
       return null;
     }
   }, [viewBounds]);
-
-  const isAnyCoordInBounds = useCallback(
-    (coords) => {
-      if (!paddedBounds || !Array.isArray(coords)) return true;
-      for (let i = 0; i < coords.length; i++) {
-        const c = coords[i];
-        if (
-          typeof c?.lat === 'number' &&
-          typeof c?.lng === 'number' &&
-          paddedBounds.contains([c.lat, c.lng])
-        ) {
-          return true;
-        }
-      }
-      return false;
-    },
-    [paddedBounds]
-  );
 
   if (loading) {
     return (
@@ -832,301 +1090,170 @@ const ContributeMap = () => {
                   center={mapCenter}
                   zoom={mapZoom}
                   maxZoom={22}
+                  minZoom={minZoom}
                   style={{ height: '100%', width: '100%' }}
-                  ref={mapRef}
+                  whenCreated={handleMapCreated}
+                  zoomAnimation={true}
+                  zoomAnimationDuration={0.18}
+                  easeLinearity={0.35}
+                  wheelDebounceTime={30}
+                  wheelPxPerZoomLevel={50}
+                  zoomSnap={0.25}
+                  zoomDelta={0.5}
                 >
                   {/* Clear selection when clicking anywhere on the map */}
-                  <ClearSelectionOnMapClick onClear={() => setActivePointId(null)} />
+                  <ClearSelectionOnMapClick onClear={handlePopupClose} />
                   <MapInteractionTracker />
                   <LayersControl position="topright">
-                    <LayersControl.BaseLayer checked name="Street Map">
+                    <LayersControl.BaseLayer name="Street Map">
                       <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         maxZoom={22}
                         maxNativeZoom={19}
+                        // Buffer extra tiles and skip mid-zoom redraws to avoid flicker.
+                        updateWhenZooming={false}
+                        updateWhenIdle={true}
+                        keepBuffer={6}
                       />
                     </LayersControl.BaseLayer>
-                    <LayersControl.BaseLayer name="Satellite">
+                    <LayersControl.BaseLayer checked name="Satellite">
                       <TileLayer
                         attribution='Imagery &copy; <a href="https://www.mapbox.com/">Mapbox</a>'
                         url={`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`}
                         maxZoom={22}
+                        // Mirror anti-flicker settings for the satellite layer.
+                        updateWhenZooming={false}
+                        updateWhenIdle={true}
+                        keepBuffer={6}
                       />
                     </LayersControl.BaseLayer>
                   </LayersControl>
 
-                  {points.map((point) => {
-                    const coords = point.coordinates;
-                    const isPath = Array.isArray(coords) && coords.length >= 2;
-                    if (!isPath) {
-                      const pos = toLatLngPair(coords);
-                      if (!pos) return null;
+                  {preparedPoints.map((item) => {
+                    const { point } = item;
+                    const isActive = activePointId === point.id;
+
+                    if (item.kind === 'marker') {
+                      if (!item.position) {
+                        return null;
+                      }
+
+                      if (!isActive && paddedBounds && !paddedBounds.contains(item.position)) {
+                        return null;
+                      }
+
                       return (
                         <Marker
                           key={point.id}
-                          position={pos}
-                          icon={createCustomIcon(point)}
+                          position={item.position}
+                          icon={item.icon}
                           eventHandlers={{
-                            click: () => {
-                              setActivePointId(point.id === activePointId ? null : point.id);
-                              if (mapRef.current) {
-                                mapRef.current.setView(pos, mapRef.current.getZoom());
-                              }
-                            },
-                            popupclose: () => {
-                              setActivePointId(null);
-                            },
+                            click: (event) =>
+                              handleFeatureSelect(point.id, item.focusPosition, event),
+                            popupclose: handlePopupClose,
                           }}
                         >
                           <Popup
                             className="custom-popup"
+                            autoPan={false}
                             eventHandlers={{
-                              close: () => setActivePointId(null),
-                              remove: () => setActivePointId(null),
+                              close: handlePopupClose,
+                              remove: handlePopupClose,
                             }}
                           >
-                            <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
-                              <h3 className="font-bold text-white mb-1">{point.name}</h3>
-
-                              <div className="bg-zinc-800/50 rounded px-3 py-2 mb-3 flex items-center justify-between">
-                                <code className="text-sm text-zinc-300">{point.id}</code>
-                                <button
-                                  onClick={(event) => handleCopyId(point.id, event)}
-                                  className={`text-zinc-400 hover:text-white transition-colors p-1 rounded ${copiedId === point.id ? 'text-green-500' : ''}`}
-                                  title="Copy ID"
-                                >
-                                  {copiedId === point.id ? (
-                                    <Check className="w-4 h-4" />
-                                  ) : (
-                                    <CopyIcon className="w-4 h-4" />
-                                  )}
-                                </button>
-                              </div>
-
-                              <div className="space-y-2">
-                                <div className="flex justify-between">
-                                  <span className="text-sm text-zinc-400">Type:</span>
-                                  <span className="text-sm text-white">
-                                    {formatType(point.type)}
-                                  </span>
-                                </div>
-
-                                {point.type === 'stopbar' && (
-                                  <>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-zinc-400">Directionality:</span>
-                                      <span className="text-sm text-white capitalize">
-                                        {point.directionality}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-zinc-400">Elevated Bar:</span>
-                                      <span className="text-sm text-white">
-                                        {point.elevated ? 'Yes' : 'No'}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-zinc-400">IHP:</span>
-                                      <span className="text-sm text-white">
-                                        {point.ihp ? 'Yes' : 'No'}
-                                      </span>
-                                    </div>
-                                  </>
-                                )}
-
-                                {point.type === 'taxiway' && (
-                                  <>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-zinc-400">Directionality:</span>
-                                      <span className="text-sm text-white capitalize">
-                                        {point.directionality}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-sm text-zinc-400">Color Style:</span>
-                                      <span className="text-sm text-white">
-                                        {formatColorStyle(point.color)}
-                                      </span>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                            <PointPopupContent
+                              point={point}
+                              copiedId={copiedId}
+                              onCopy={handleCopyId}
+                            />
                           </Popup>
                         </Marker>
                       );
                     }
 
-                    // Polyline rendering for multi-point objects (basic single red line)
-                    const safe = coords.filter(
-                      (c) => typeof c?.lat === 'number' && typeof c?.lng === 'number'
-                    );
-                    if (safe.length < 2) return null;
-                    const positions = safe.map((c) => [c.lat, c.lng]);
-                    const isActive = activePointId === point.id;
-                    if (!isActive && !isAnyCoordInBounds(safe)) return null;
-                    const renderDetailed = !isInteracting || isActive;
-                    const arrowPattern = computeArrowPattern(positions, mapRef.current);
-                    const onClick = () => {
-                      setActivePointId(point.id === activePointId ? null : point.id);
-                      if (mapRef.current) {
-                        mapRef.current.setView(
-                          [safe[0].lat, safe[0].lng],
-                          mapRef.current.getZoom()
-                        );
+                    if (item.kind === 'polyline') {
+                      if (
+                        !isActive &&
+                        paddedBounds &&
+                        item.bounds &&
+                        !paddedBounds.intersects(item.bounds)
+                      ) {
+                        return null;
                       }
-                    };
 
-                    const renderPopup = (
-                      <Popup
-                        className="custom-popup"
-                        eventHandlers={{
-                          close: () => setActivePointId(null),
-                          remove: () => setActivePointId(null),
-                        }}
-                      >
-                        <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg">
-                          <h3 className="font-bold text-white mb-1">{point.name}</h3>
-                          <div className="bg-zinc-800/50 rounded px-3 py-2 mb-3 flex items-center justify-between">
-                            <code className="text-sm text-zinc-300">{point.id}</code>
-                            <button
-                              onClick={(event) => handleCopyId(point.id, event)}
-                              className={`text-zinc-400 hover:text-white transition-colors p-1 rounded ${copiedId === point.id ? 'text-green-500' : ''}`}
-                              title="Copy ID"
-                            >
-                              {copiedId === point.id ? (
-                                <Check className="w-4 h-4" />
-                              ) : (
-                                <CopyIcon className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between">
-                              <span className="text-sm text-zinc-400">Type:</span>
-                              <span className="text-sm text-white">{formatType(point.type)}</span>
-                            </div>
-                            {point.type === 'stopbar' && (
-                              <>
-                                <div className="flex justify-between">
-                                  <span className="text-sm text-zinc-400">Directionality:</span>
-                                  <span className="text-sm text-white capitalize">
-                                    {point.directionality}
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm text-zinc-400">Has Elevated Bar:</span>
-                                  <span className="text-sm text-white">
-                                    {point.elevated ? 'Yes' : 'No'}
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm text-zinc-400">IHP:</span>
-                                  <span className="text-sm text-white">
-                                    {point.ihp ? 'Yes' : 'No'}
-                                  </span>
-                                </div>
-                              </>
-                            )}
-                            {point.type === 'taxiway' && (
-                              <>
-                                <div className="flex justify-between">
-                                  <span className="text-sm text-zinc-400">Directionality:</span>
-                                  <span className="text-sm text-white capitalize">
-                                    {point.directionality}
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-sm text-zinc-400">Color Style:</span>
-                                  <span className="text-sm text-white">
-                                    {formatColorStyle(point.color)}
-                                  </span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </Popup>
-                    );
+                      const renderDetailed = !isInteracting || isActive;
+                      return (
+                        <React.Fragment key={point.id}>
+                          <Polyline
+                            key={`${point.id}-outline`}
+                            positions={item.positions}
+                            pathOptions={{
+                              color: isActive ? '#f00' : '#ffffff',
+                              weight: 15,
+                              opacity: isActive ? 0.7 : 1,
+                              lineCap: 'round',
+                              lineJoin: 'round',
+                            }}
+                            interactive={false}
+                          />
 
-                    const segments = [];
-                    for (let i = 0; i < safe.length - 1; i++) {
-                      segments.push({
-                        baseId: point.id,
-                        idx: i,
-                        p1: safe[i],
-                        p2: safe[i + 1],
-                      });
-                    }
-                    const { topColor, bottomColor } = getPolylineColors(point);
-
-                    return (
-                      <React.Fragment key={point.id}>
-                        <Polyline
-                          key={`${point.id}-outline`}
-                          positions={positions}
-                          pathOptions={{
-                            color: isActive ? '#f00' : '#ffffff',
-                            weight: 15,
-                            opacity: isActive ? 0.7 : 1,
-                            lineCap: 'round',
-                            lineJoin: 'round',
-                          }}
-                          interactive={false}
-                        />
-
-                        {renderDetailed && segments.length > 0 && (
-                          <>
-                            {/* inject per-segment gradients into the map SVG */}
-                            <SegmentedDefs
-                              segments={segments}
-                              topColor={topColor}
-                              bottomColor={bottomColor}
-                              strokeWidth={10}
-                            />
-
-                            {/* render each segment as its own polyline, each referencing its gradient */}
-                            {segments.map((seg) => {
-                              const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
-                              const segPositions = [
-                                [seg.p1.lat, seg.p1.lng],
-                                [seg.p2.lat, seg.p2.lng],
-                              ];
-
-                              return (
-                                <Polyline
-                                  key={`${point.id}-seg-${seg.idx}`}
-                                  positions={segPositions}
-                                  pathOptions={{
-                                    color: `url(#${gradId})`,
-                                    weight: 10,
-                                    opacity: 1,
-                                    lineCap: 'round',
-                                    lineJoin: 'round',
-                                  }}
-                                  eventHandlers={{ click: onClick }}
-                                >
-                                  {renderPopup}
-                                </Polyline>
-                              );
-                            })}
-
-                            {arrowPattern && (
-                              <ArrowDecorator
-                                positions={positions}
-                                offset={arrowPattern.offset}
-                                repeat={arrowPattern.repeat}
-                                pixelSize={10}
-                                color="#ffffff"
-                                weight={1.5}
-                                opacity={0.9}
+                          {renderDetailed && item.segments.length > 0 && (
+                            <>
+                              <SegmentedDefs
+                                segments={item.segments}
+                                topColor={item.polylineColors.topColor}
+                                bottomColor={item.polylineColors.bottomColor}
+                                strokeWidth={10}
                               />
-                            )}
-                          </>
-                        )}
-                      </React.Fragment>
-                    );
+
+                              {item.segments.map((seg) => {
+                                const gradId = `seggrad-${seg.baseId}-${seg.idx}`;
+                                const segPositions = [
+                                  [seg.p1.lat, seg.p1.lng],
+                                  [seg.p2.lat, seg.p2.lng],
+                                ];
+
+                                return (
+                                  <Polyline
+                                    key={`${point.id}-seg-${seg.idx}`}
+                                    positions={segPositions}
+                                    pathOptions={{
+                                      color: `url(#${gradId})`,
+                                      weight: 10,
+                                      opacity: 1,
+                                      lineCap: 'round',
+                                      lineJoin: 'round',
+                                    }}
+                                    eventHandlers={{
+                                      click: (event) =>
+                                        handleFeatureSelect(point.id, item.focusPosition, event),
+                                    }}
+                                  >
+                                    <Popup
+                                      className="custom-popup"
+                                      autoPan={false}
+                                      eventHandlers={{
+                                        close: handlePopupClose,
+                                        remove: handlePopupClose,
+                                      }}
+                                    >
+                                      <PointPopupContent
+                                        point={point}
+                                        copiedId={copiedId}
+                                        onCopy={handleCopyId}
+                                      />
+                                    </Popup>
+                                  </Polyline>
+                                );
+                              })}
+                            </>
+                          )}
+                        </React.Fragment>
+                      );
+                    }
+
+                    return null;
                   })}
                 </MapContainer>
               </div>
