@@ -17,6 +17,7 @@
     "geolib": "^3.3.4",
     "leaflet": "^1.9.4",
     "leaflet-polylinedecorator": "^1.6.0",
+    "lightningcss": "^1.30.2",
     "lucide-react": "^0.548.0",
     "marked": "^16.4.1",
     "posthog-js": "^1.281.0",
