@@ -10,8 +10,7 @@ function vendorChunkName(id: string) {
   return `vendor-${pkg.replace('@', '').replace('/', '-')}`
 }
 
-export default defineConfig(({ mode }): UserConfig => {
-  const isProd = mode === 'production'
+export default defineConfig((): UserConfig => {
   return {
     plugins: [
       react(),
@@ -46,7 +45,7 @@ export default defineConfig(({ mode }): UserConfig => {
     },
 
     server: {
-      open: true,
+      open: false,
       strictPort: false,
     },
 
@@ -57,7 +56,6 @@ export default defineConfig(({ mode }): UserConfig => {
         'react-router-dom',
         'lucide-react',
         'framer-motion',
-        'posthog-js',
         'dompurify',
         'marked',
         'geolib',

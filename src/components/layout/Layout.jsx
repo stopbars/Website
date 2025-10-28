@@ -1,16 +1,17 @@
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import PropTypes from 'prop-types';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ConsentBanner } from '../shared/ConsentBanner';
+import { CONSENT_KEY } from '../../utils/posthogLoader';
 
 export const Layout = ({ children }) => {
   const { pathname } = useLocation();
   const [showConsentBanner, setShowConsentBanner] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
-      const consent = window.localStorage.getItem('analytics-consent');
+      const consent = window.localStorage.getItem(CONSENT_KEY);
       const gpc = typeof navigator !== 'undefined' && navigator.globalPrivacyControl === true;
       const dnt =
         typeof navigator !== 'undefined' &&
@@ -18,18 +19,18 @@ export const Layout = ({ children }) => {
 
       if (!consent) {
         if (gpc || dnt) {
-          window.localStorage.setItem('analytics-consent', 'denied');
+          window.localStorage.setItem(CONSENT_KEY, 'denied');
           return false;
         }
         return true;
       }
 
-      return consent !== 'denied';
+      return false;
     } catch {
       return false;
     }
   });
-  const [, setKeyBuffer] = useState('');
+  const keyBufferRef = useRef('');
   const layoutRef = useRef(null);
 
   // Function to reverse all text content
@@ -79,24 +80,20 @@ export const Layout = ({ children }) => {
 
       // Only track alphabetic keys
       if (/^[a-z]$/.test(key)) {
-        setKeyBuffer((prev) => {
-          // Update buffer with new key (keep the last 8 keys)
-          const newBuffer = (prev + key).slice(-8);
+        const newBuffer = (keyBufferRef.current + key).slice(-8);
 
-          // Check for keywords
-          if (newBuffer === 'srabpots') {
-            console.log('SRAB!');
-            reverseAllText();
-          } else if (newBuffer === 'stopbars') {
-            console.log('BARS!');
-            restoreAllText();
-          }
+        if (newBuffer === 'srabpots') {
+          console.log('SRAB!');
+          reverseAllText();
+        } else if (newBuffer === 'stopbars') {
+          console.log('BARS!');
+          restoreAllText();
+        }
 
-          return newBuffer;
-        });
+        keyBufferRef.current = newBuffer;
       }
     },
-    [reverseAllText, restoreAllText, setKeyBuffer]
+    [reverseAllText, restoreAllText]
   );
 
   // Page navigation effect

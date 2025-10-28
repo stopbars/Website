@@ -1,101 +1,120 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-  <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    
+
     <!-- Primary Meta Tags -->
-    <title>BARS - Advanced Stop Bar Simulation for VATSIM</title>
-    <meta name="title" content="BARS - Advanced Stop Bar Simulation for VATSIM">
-    <meta name="description" content="Experience realistic stopbar simulation in Microsoft Flight Simulator 2020 and 2024. Zero performance impact, extensive third-party scenery support, and seamless VATSIM integration. Download BARS for free today!">
-    <meta name="keywords" content="BARS, BARS MSFS, stopbar simulation, VATSIM, MSFS 2024, MSFS 2020, Microsoft Flight Simulator, flight sim, ATC simulation, aviation, runway lighting, airport simulation, flight simulator addon, vatsim plugin, stopbars, stop bar, MSFS stopbars">
-    <meta name="robots" content="noindex, nofollow"> <!-- Prevent indexing by search engines till complete -->
-    <meta name="author" content="BARS Development Team">
-    <meta name="copyright" content="© 2025 BARS">
-    <meta name="application-name" content="BARS">
-    <meta name="apple-mobile-web-app-title" content="BARS">
+    <title>BARS - Advanced Airport Lighting Simulation for VATSIM</title>
+    <meta name="title" content="BARS - Advanced Airport Lighting Simulation for VATSIM" />
+    <meta
+      name="description"
+      content="Experience realistic airport lighting simulation in Microsoft Flight Simulator 2020 and 2024. Zero performance impact, extensive third-party scenery support, and seamless VATSIM integration. Download BARS for free today!"
+    />
+    <meta
+      name="keywords"
+      content="BARS, BARS MSFS, airport lighting simulation, VATSIM, MSFS 2024, MSFS 2020, Microsoft Flight Simulator, flight sim, ATC simulation, aviation, runway lighting, airport simulation, flight simulator addon, vatsim plugin, stopbars, stop bar, MSFS stopbars"
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- Prevent indexing by search engines till complete -->
+    <meta name="author" content="BARS Development Team" />
+    <meta name="copyright" content="© 2025 BARS" />
+    <meta name="application-name" content="BARS" />
+    <meta name="apple-mobile-web-app-title" content="BARS" />
 
     <!-- Language Tags -->
-    <link rel="canonical" href="https://stopbars.com/">
-    <link rel="alternate" hreflang="en" href="https://stopbars.com/">
-    <link rel="alternate" hreflang="x-default" href="https://stopbars.com/">
-    <meta http-equiv="content-language" content="en">
-    <meta name="language" content="English">
-    
+    <link rel="canonical" href="https://stopbars.com/" />
+    <link rel="alternate" hreflang="en" href="https://stopbars.com/" />
+    <link rel="alternate" hreflang="x-default" href="https://stopbars.com/" />
+    <meta http-equiv="content-language" content="en" />
+    <meta name="language" content="English" />
+
     <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://stopbars.com/">
-    <meta property="og:site_name" content="BARS">
-    <meta property="og:title" content="BARS - Advanced Stop Bar Simulation for Flight Simulator">
-    <meta property="og:description" content="Transform your VATSIM experience with realistic stopbar operations. Free download, zero performance impact, and perfect compatibility with MSFS 2020 and MSFS 2024.">
-    <meta property="og:image" content="https://stopbars.com/banner.png">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
-    <meta property="og:locale" content="en_US">
-    <meta property="og:image:alt" content="BARS banner showcasing advanced stop bar simulation for flight simulation enthusiasts.">
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://stopbars.com/" />
+    <meta property="og:site_name" content="BARS" />
+    <meta property="og:title" content="BARS - Advanced Airport Lighting Simulation" />
+    <meta
+      property="og:description"
+      content="Transform your VATSIM experience with realistic airport lighting operations. Free download, zero performance impact, and perfect compatibility with MSFS 2020 and MSFS 2024."
+    />
+    <meta property="og:image" content="https://stopbars.com/banner.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="400" />
+    <meta property="og:locale" content="en_US" />
+    <meta
+      property="og:image:alt"
+      content="BARS banner showcasing advanced airport lighting simulation for flight simulation enthusiasts."
+    />
 
-
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:url" content="https://stopbars.com/">
-    <meta name="twitter:title" content="BARS - Advanced Stop Bar Simulation">
-    <meta name="twitter:description" content="Transform your VATSIM experience with realistic stopbar operations. Free download, zero performance impact, and perfect compatibility with MSFS 2020 and MSFS 2024.">
-    <meta name="twitter:image" content="https://stopbars.com/banner.png">
-    <meta name="twitter:image:alt" content="BARS banner showcasing advanced stop bar simulation for flight sim.">
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://stopbars.com/" />
+    <meta name="twitter:title" content="BARS - Advanced Airport Lighting Simulation for VATSIM" />
+    <meta
+      name="twitter:description"
+      content="Transform your VATSIM experience with realistic airport lighting operations. Free download, zero performance impact, and perfect compatibility with MSFS 2020 and MSFS 2024."
+    />
+    <meta name="twitter:image" content="https://stopbars.com/banner.png" />
+    <meta
+      name="twitter:image:alt"
+      content="BARS banner showcasing advanced airport lighting simulation for flight sim."
+    />
 
     <!-- Theme -->
-    <meta name="theme-color" content="#18181B">
-    <meta name="msapplication-TileColor" content="#18181B">
-    
+    <meta name="theme-color" content="#18181B" />
+    <meta name="msapplication-TileColor" content="#18181B" />
+
     <!-- Preload Critical Assets -->
-    <link rel="preconnect" href="https://api.stopbars.com">
-    <link rel="preconnect" href="https://v2.stopbars.com">
-    <link rel="preconnect" href="https://cdn.stopbars.com">
-    <link rel="dns-prefetch" href="https://api.stopbars.com">
-    <link rel="dns-prefetch" href="https://v2.stopbars.com">
-    <link rel="dns-prefetch" href="https://cdn.stopbars.com">
+    <link rel="preconnect" href="https://api.stopbars.com" />
+    <link rel="preconnect" href="https://v2.stopbars.com" />
+    <link rel="preconnect" href="https://cdn.stopbars.com" />
+    <link rel="dns-prefetch" href="https://api.stopbars.com" />
+    <link rel="dns-prefetch" href="https://v2.stopbars.com" />
+    <link rel="dns-prefetch" href="https://cdn.stopbars.com" />
+
+    <!-- Prefetch frequent navigation targets -->
+    <link rel="prefetch" href="/status" as="document" />
+    <link rel="prefetch" href="/contribute" as="document" />
+    <link rel="prefetch" href="/account" as="document" />
 
     <!-- Structured Data for Organization -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "BARS Development Team",
-      "url": "https://stopbars.com",
-      "logo": "https://stopbars.com/favicon.png",
-      "sameAs": [
-        "https://github.com/BARS",
-        "https://discord.gg/7EhmtwKWzs"
-      ],
-      "contactPoint": {
-        "@type": "ContactPoint",
-        "email": "support@stopbars.com",
-        "contactType": "customer support"
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "BARS Development Team",
+        "url": "https://stopbars.com",
+        "logo": "https://stopbars.com/favicon.png",
+        "sameAs": ["https://github.com/stopbars", "https://discord.gg/7EhmtwKWzs"],
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "email": "support@stopbars.com",
+          "contactType": "customer support"
+        }
       }
-    }
     </script>
 
     <!-- Structured Data for Website -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "BARS",
-      "url": "https://stopbars.com"
-    }
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "BARS",
+        "url": "https://stopbars.com"
+      }
     </script>
 
     <!-- Browser Cache Control -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
   </head>
   <body>
     <noscript>
-      <div style="padding: 20px; text-align: center; background: #18181B; color: white;">
-        JavaScript is required to run BARS. Please enable JavaScript to continue.
+      <div style="padding: 20px; text-align: center; background: #18181b; color: white">
+        JavaScript is required to run the BARS website. Please enable JavaScript to continue.
       </div>
     </noscript>
     <div id="root"></div>
