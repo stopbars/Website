@@ -103,7 +103,7 @@ export const Hero = () => {
                   key={option}
                   type="button"
                   onClick={() => setSelectedPreview(option)}
-                  className={`px-5 py-2.5 rounded-full text-sm md:text-base border transition-colors duration-300 ${
+                  className={`px-5 py-2.5 rounded-full text-sm md:text-base border transition-colors duration-300 cursor-pointer ${
                     isSelected
                       ? 'bg-white text-black border-white'
                       : 'bg-zinc-900/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
