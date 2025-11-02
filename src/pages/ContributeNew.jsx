@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -8,21 +8,19 @@ import { AlertCircle, Search, Loader, BookOpen, ChevronRight } from 'lucide-reac
 
 const ContributeNew = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [icao, setIcao] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState('');
   const [showToast, setShowToast] = useState(false);
 
-  // Check for error parameter on mount
+  // Check for error in navigation state on mount
   useEffect(() => {
-    const errorParam = searchParams.get('error');
-    if (errorParam === 'airport_load_failed') {
+    if (location.state?.error === 'airport_load_failed') {
       setShowToast(true);
-      // Clear the error parameter from URL
-      setSearchParams({});
+      navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [searchParams, setSearchParams]);
+  }, [location, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

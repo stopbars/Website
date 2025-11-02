@@ -3,15 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
+import { Toast } from '../components/shared/Toast';
 import XMLMap from '../components/shared/XMLMap';
 import {
-  AlertCircle,
-  ChevronLeft,
   ChevronRight,
   FileUp,
   Check,
   Loader,
-  Info,
   FileSearch,
   LineChart,
   SquareSlash,
@@ -28,6 +27,8 @@ const ContributeTest = () => {
   const [originalXmlData, setOriginalXmlData] = useState('');
   const [supportsXmlData, setSupportsXmlData] = useState('');
   const [error, setError] = useState('');
+  const [errorTitle, setErrorTitle] = useState('Error');
+  const [showErrorToast, setShowErrorToast] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [isXmlTested, setIsXmlTested] = useState(false);
   const [showPolyLines, setShowPolyLines] = useState(false);
@@ -46,7 +47,9 @@ const ContributeTest = () => {
     const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
 
     if (!validExtensions.includes(fileExtension)) {
-      setError('Please select an XML file');
+      setErrorTitle('Error');
+      setError('Please upload an XML file');
+      setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -55,7 +58,9 @@ const ContributeTest = () => {
 
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      setError('File size must be less than 5MB');
+      setErrorTitle('Error');
+      setError('XML file size must be less than 5MB');
+      setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -63,6 +68,7 @@ const ContributeTest = () => {
     }
 
     setError('');
+    setShowErrorToast(false);
     setSelectedFile(file);
     setIsXmlTested(false);
 
@@ -108,11 +114,14 @@ const ContributeTest = () => {
 
   const handleTestXml = async () => {
     if (!xmlData) {
+      setErrorTitle('Error');
       setError('Please upload an XML file first');
+      setShowErrorToast(true);
       return;
     }
 
     setError('');
+    setShowErrorToast(false);
     setIsValidating(true);
 
     try {
@@ -130,6 +139,15 @@ const ContributeTest = () => {
         method: 'POST',
         body: formData,
       });
+
+      // Check for rate limiting before trying to parse JSON
+      if (response.status === 429) {
+        setErrorTitle('Rate Limited');
+        setError('You are being rate limited, please try again shortly.');
+        setShowErrorToast(true);
+        setIsValidating(false);
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -161,7 +179,9 @@ const ContributeTest = () => {
       // Reset the file selection state, but keep the XML data for the map preview
       setSelectedFile(null);
     } catch (err) {
-      setError(err.message || 'Failed to validate XML. Please check the file format.');
+      setErrorTitle('Error');
+      setError(err.message || 'Failed to validate XML, please check the file format.');
+      setShowErrorToast(true);
       console.error('XML validation error:', err);
     } finally {
       setIsValidating(false);
@@ -184,10 +204,6 @@ const ContributeTest = () => {
     setShowRemoveAreas(!showRemoveAreas);
   };
 
-  const handleBack = () => {
-    navigate(`/contribute/map/${icao}`);
-  };
-
   const handleContinue = () => {
     // Only allow navigation if XML has been tested and is valid
     if (isXmlTested && !error) {
@@ -198,7 +214,9 @@ const ContributeTest = () => {
         },
       });
     } else {
+      setErrorTitle('Error');
       setError('Please test your XML file before continuing');
+      setShowErrorToast(true);
     }
   };
 
@@ -206,15 +224,14 @@ const ContributeTest = () => {
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-8">
+          <div className="mb-12 mt-6">
             <div className="flex items-center space-x-2 mb-1">
-              <Button variant="outline" onClick={handleBack} className="h-8 px-3">
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back
-              </Button>
-              <h1 className="text-3xl font-bold">{icao} Contribution</h1>
+              <Breadcrumb>
+                <BreadcrumbItem title="Airport" link="/contribute/new" />
+                <BreadcrumbItem title="Map" link={`/contribute/map/${icao}`} />
+                <BreadcrumbItem title="Test" />
+              </Breadcrumb>
             </div>
-            <p className="text-zinc-400">Step 3: Test your XML file</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -345,14 +362,6 @@ const ContributeTest = () => {
                 </Button>
               </Card>
 
-              {/* Error message */}
-              {error && (
-                <div className="flex items-center space-x-2 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                  <p className="text-red-500">{error}</p>
-                </div>
-              )}
-
               {/* Testing Guide */}
               <Card className="p-6">
                 <h2 className="text-xl font-medium mb-4">Testing Guide</h2>
@@ -396,23 +405,6 @@ const ContributeTest = () => {
                 </div>
               </Card>
 
-              {/* Info banner */}
-              <div className="flex items-center p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                <Info className="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" />
-                <p className="text-sm text-blue-400">
-                  Testing your XML file ensures it&apos;s compatible with BARS and helps maintain
-                  quality contributions.
-                </p>
-              </div>
-
-              {/* Error message */}
-              {error && (
-                <div className="flex items-center space-x-2 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                  <p className="text-red-500">{error}</p>
-                </div>
-              )}
-
               {/* Continue button */}
               <Button
                 onClick={handleContinue}
@@ -426,6 +418,19 @@ const ContributeTest = () => {
           </div>
         </div>
       </div>
+
+      {/* Error Toast */}
+      <Toast
+        title={errorTitle}
+        description={error}
+        variant="destructive"
+        show={showErrorToast}
+        onClose={() => {
+          setShowErrorToast(false);
+          setError('');
+          setErrorTitle('Error');
+        }}
+      />
     </Layout>
   );
 };

@@ -13,7 +13,6 @@ const previewOptions = [
 export const Hero = () => {
   const [selectedPreview, setSelectedPreview] = useState(previewOptions[0]);
   const [downloadInfo, setDownloadInfo] = useState(null);
-  const [downloadLoading, setDownloadLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -27,8 +26,6 @@ export const Hero = () => {
         if (mounted) setDownloadInfo(json);
       } catch (err) {
         console.error('Failed to fetch latest installer release:', err);
-      } finally {
-        if (mounted) setDownloadLoading(false);
       }
     })();
 
@@ -79,19 +76,9 @@ export const Hero = () => {
                 window.location.href = downloadUrl;
               }
             }}
-            aria-label={
-              downloadLoading
-                ? 'Download (loading latest release)'
-                : downloadInfo
-                  ? `Download installer version ${downloadInfo.version}`
-                  : 'Download'
-            }
+            aria-label="Download BARS"
           >
-            {downloadLoading
-              ? 'Download'
-              : downloadInfo
-                ? `Download v${downloadInfo.version}`
-                : 'Download'}
+            Download
             <ChevronRight className="w-4 h-4" aria-hidden="true" />
           </Button>
           <Button

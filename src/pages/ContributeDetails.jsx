@@ -1,22 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
+import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
 import ReactConfetti from 'react-confetti';
 import { useWindowSize } from '../hooks/useWindowSize';
-import {
-  AlertCircle,
-  ChevronLeft,
-  ArrowRight,
-  FileUp,
-  Upload,
-  Check,
-  Loader,
-  Info,
-  Search,
-} from 'lucide-react';
+import { ArrowRight, FileUp, Upload, Check, Loader, Info, Search } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
 
@@ -25,17 +16,15 @@ const ContributeDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const fileInputRef = useRef(null);
   const vatsimToken = getVatsimToken();
 
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [preloaded, setPreloaded] = useState(false);
-  const [testedOriginalXml, setTestedOriginalXml] = useState(''); // raw XML that was previously tested
-  const [isFileDifferent, setIsFileDifferent] = useState(false);
-  const [isDragActive, setIsDragActive] = useState(false);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  const [errorTitle, setErrorTitle] = useState('Error');
+  const [showErrorToast, setShowErrorToast] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState(false);
   const [topPackages, setTopPackages] = useState([]);
@@ -45,8 +34,6 @@ const ContributeDetails = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { width, height } = useWindowSize();
   const [confettiRun, setConfettiRun] = useState(true);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -59,7 +46,6 @@ const ContributeDetails = () => {
           type: 'application/xml',
         });
         setSelectedFile(syntheticFile);
-        setTestedOriginalXml(originalXml);
         setPreloaded(true);
       } catch (e) {
         console.error('Failed to preload tested XML:', e);
@@ -93,8 +79,6 @@ const ContributeDetails = () => {
     fetchTopPackages();
   }, [vatsimToken]);
 
-  // (Display name feature removed)
-
   // Handle input change for scenery name with suggestions
   const handleSceneryNameChange = (e) => {
     const value = e.target.value;
@@ -119,95 +103,41 @@ const ContributeDetails = () => {
     setShowSuggestions(false);
   };
 
-  const validateAndSetFile = (file, resetInputCb) => {
-    if (!file) {
-      setSelectedFile(null);
-      setIsFileDifferent(false);
-      return;
-    }
-    const validExtensions = ['.xml'];
-    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    if (!validExtensions.includes(fileExtension)) {
-      setError('Please select an XML file');
-      setSelectedFile(null);
-      if (resetInputCb) resetInputCb();
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File size must be less than 5MB');
-      setSelectedFile(null);
-      if (resetInputCb) resetInputCb();
-      return;
-    }
-    setError('');
-    setSelectedFile(file);
-    // Compare content to testedOriginalXml
-    if (testedOriginalXml) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const content = ev.target.result;
-        setIsFileDifferent(content !== testedOriginalXml);
-      };
-      reader.readAsText(file);
-    } else {
-      setIsFileDifferent(false);
-    }
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    validateAndSetFile(file, () => {
-      e.target.value = '';
-    });
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isDragActive) setIsDragActive(true);
-  };
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.currentTarget === e.target) setIsDragActive(false);
-  };
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragActive(false);
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    validateAndSetFile(file);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!user) {
+      setErrorTitle('Error');
       setError('You must be logged in to submit a contribution');
+      setShowErrorToast(true);
       return;
     }
 
     if (!sceneryName) {
+      setErrorTitle('Error');
       setError('Please select or enter a scenery name');
+      setShowErrorToast(true);
       return;
     }
 
     if (!selectedFile) {
+      setErrorTitle('Error');
       setError('Please upload an XML file');
+      setShowErrorToast(true);
       return;
     }
 
     setError('');
+    setShowErrorToast(false);
     setIsSubmitting(true);
 
     try {
-      // Read the file content
       const fileContent = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result);
         reader.readAsText(selectedFile);
       });
-      // Prepare the payload
+
       const payload = {
         airportIcao: icao,
         packageName: sceneryName,
@@ -215,7 +145,6 @@ const ContributeDetails = () => {
         notes: notes || undefined,
       };
 
-      // Send to the API
       const response = await fetch('https://v2.stopbars.com/contributions', {
         method: 'POST',
         headers: {
@@ -232,16 +161,13 @@ const ContributeDetails = () => {
 
       setSubmissionSuccess(true);
     } catch (err) {
-      setToastMessage(err.message || 'Failed to submit contribution');
-      setShowToast(true);
+      setErrorTitle('Submission Failed');
+      setError(err.message || 'Failed to submit contribution, please try again.');
+      setShowErrorToast(true);
       console.error('Submission error:', err);
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleBack = () => {
-    navigate(`/contribute/map/${icao}`);
   };
 
   if (submissionSuccess) {
@@ -278,7 +204,7 @@ const ContributeDetails = () => {
               </p>
               <div className="flex justify-center">
                 <Button onClick={() => navigate('/contribute')}>
-                  Visit Contribution Dashboard
+                  Contribution Dashboard
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
@@ -293,15 +219,14 @@ const ContributeDetails = () => {
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-3xl mx-auto px-6">
-          <div className="mb-8">
+          <div className="mb-12 mt-6">
             <div className="flex items-center space-x-2 mb-1">
-              <Button variant="outline" onClick={handleBack} className="h-8 px-3">
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back
-              </Button>
-              <h1 className="text-3xl font-bold">{icao} Contribution</h1>
-            </div>{' '}
-            <p className="text-zinc-400">Step 4: Submit scenery details and XML data</p>
+              <Breadcrumb>
+                <BreadcrumbItem title="Map" link={`/contribute/map/${icao}`} />
+                <BreadcrumbItem title="Test" link={`/contribute/test/${icao}`} />
+                <BreadcrumbItem title="Details" />
+              </Breadcrumb>
+            </div>
           </div>
 
           <Card className="p-8">
@@ -373,12 +298,7 @@ const ContributeDetails = () => {
                           ))}
                         </ul>
                       )}{' '}
-                      <p className="mt-1 text-xs text-zinc-400">
-                        {showSuggestions
-                          ? 'Click a suggestion or continue typing'
-                          : 'Type to search existing packages or enter a new package name (examples: FlyTampa, iniBuilds)'}
-                      </p>
-                      <p className="mt-1 text-xs text-blue-400">
+                      <p className="mt-3 text-xs text-blue-400">
                         <Info className="inline-block w-3 h-3 mr-1" />
                         If your scenery package isn&apos;t listed, simply type the name and submit
                       </p>
@@ -387,23 +307,15 @@ const ContributeDetails = () => {
                 )}
               </div>
 
-              {/* File upload */}
+              {/* XML File */}
               <div>
-                <label className="block text-sm font-medium mb-2">Upload XML File</label>
+                <label className="block text-sm font-medium mb-2">XML File</label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                    isDragActive
-                      ? 'border-blue-400 bg-blue-500/10'
-                      : selectedFile
-                        ? 'border-emerald-500/50 bg-emerald-500/5'
-                        : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                  className={`border-2 border-dashed rounded-lg p-6 text-center ${
+                    selectedFile
+                      ? 'border-emerald-500/50 bg-emerald-500/5'
+                      : 'border-zinc-600 bg-zinc-800/50'
                   }`}
-                  onClick={() => fileInputRef.current.click()}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  role="button"
-                  aria-label="Upload XML file via click or drag and drop"
                 >
                   {selectedFile ? (
                     <div className="flex flex-col items-center">
@@ -412,7 +324,7 @@ const ContributeDetails = () => {
                       </div>
                       <p className="font-medium mb-1">{selectedFile.name}</p>
                       <p className="text-sm text-zinc-400">
-                        {(selectedFile.size / 1024).toFixed(1)} KB • Click to change
+                        {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous step
                       </p>
                     </div>
                   ) : (
@@ -420,47 +332,16 @@ const ContributeDetails = () => {
                       <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
                         <FileUp className="w-6 h-6 text-zinc-400" />
                       </div>
-                      <p className="font-medium mb-1">
-                        {isDragActive ? 'Drop file to upload' : 'Click to select XML file'}
-                      </p>
-                      <p className="text-sm text-zinc-400">or drag and drop (max 5MB)</p>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept=".xml"
-                    className="hidden"
-                  />
-                </div>
-                <div className="flex flex-col gap-2 mt-2">
-                  <div className="flex items-center p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm">
-                    <Info className="w-5 h-5 text-blue-400 mr-2 flex-shrink-0" />
-                    <p className="text-blue-400">
-                      The XML file should contain the necessary stopbar and taxiway light
-                      definitions for the scenery package.
-                    </p>
-                  </div>
-                  {isFileDifferent && (
-                    <div className="flex items-center p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm">
-                      <AlertCircle className="w-5 h-5 text-amber-400 mr-2 flex-shrink-0" />
-                      <p className="text-amber-400">
-                        This file&apos;s contents differ from the XML you tested on the previous
-                        step. Please go back and retest if you intended to make changes.
-                      </p>
+                      <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
+                      <p className="text-sm text-zinc-500">Please go back and test your XML file</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Display Name field removed */}
-
               {/* Additional notes */}
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Additional Notes (Optional)
-                </label>
+                <label className="block text-sm font-medium mb-2">Additional Notes</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -468,14 +349,6 @@ const ContributeDetails = () => {
                   className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-[100px]"
                 ></textarea>
               </div>
-
-              {/* Error message */}
-              {error && (
-                <div className="flex items-center space-x-2 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                  <p className="text-red-500">{error}</p>
-                </div>
-              )}
 
               {/* Submit button */}
               <div className="flex justify-end">
@@ -502,13 +375,17 @@ const ContributeDetails = () => {
         </div>
       </div>
 
-      {/* Toast notification */}
+      {/* Error Toast */}
       <Toast
-        title="Submission failed"
-        description={toastMessage}
+        title={errorTitle}
+        description={error}
         variant="destructive"
-        show={showToast}
-        onClose={() => setShowToast(false)}
+        show={showErrorToast}
+        onClose={() => {
+          setShowErrorToast(false);
+          setError('');
+          setErrorTitle('Error');
+        }}
       />
     </Layout>
   );

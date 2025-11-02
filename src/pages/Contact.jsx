@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Toast } from '../components/shared/Toast';
 import {
   Mail,
   AlertTriangle,
@@ -29,28 +30,31 @@ const teamMembers = [
   },
 ];
 
+const topicOptions = [
+  'Technical Support',
+  'VATSIM Division',
+  'Bug Report',
+  'Feature Request',
+  'Security Concern',
+  'Partnership Inquiry',
+  'Legal Inquiry',
+  'Media Request',
+  'Other',
+];
+
 const Contact = () => {
   const [selectedTopic, setSelectedTopic] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState('');
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [errorTitle, setErrorTitle] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const dropdownRef = useRef(null);
-
-  const topicOptions = [
-    'Technical Support',
-    'VATSIM Division',
-    'Bug Report',
-    'Feature Request',
-    'Security Concern',
-    'Partnership Inquiry',
-    'Legal Inquiry',
-    'Media Request',
-    'Other',
-  ];
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -125,7 +129,6 @@ const Contact = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
     setIsSubmitting(true);
 
     // Validation
@@ -148,24 +151,41 @@ const Contact = () => {
         }),
       });
 
+      const data = await response.json();
+
       if (response.status === 429) {
-        throw new Error(
-          'You can only submit one contact message every 24 hours. Please try again later.'
-        );
+        setErrorTitle('Rate Limited');
+        setErrorMessage('You can only submit one message every 24 hours');
+        setShowErrorToast(true);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (response.status === 400) {
+        setErrorTitle('Invalid Content');
+        setErrorMessage('Your message must be 5-4000 characters');
+        setShowErrorToast(true);
+        setIsSubmitting(false);
+        return;
       }
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to send message');
+        setErrorTitle(data.error || 'Error');
+        setErrorMessage(data.message || 'Failed to send message, please try again.');
+        setShowErrorToast(true);
+        setIsSubmitting(false);
+        return;
       }
 
-      setSuccess('Message sent successfully! We will get back to you soon.');
+      setShowSuccessToast(true);
       setEmail('');
       setMessage('');
       setSelectedTopic('');
       setShowTopicDropdown(false);
     } catch (err) {
-      setError(err.message || 'Failed to send message. Please try again.');
+      setErrorTitle('Error');
+      setErrorMessage(err.message || 'Failed to send message, please try again.');
+      setShowErrorToast(true);
     } finally {
       setIsSubmitting(false);
     }
@@ -189,13 +209,6 @@ const Contact = () => {
               <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
                 <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
                 <p className="text-red-500">{error}</p>
-              </div>
-            )}
-
-            {success && (
-              <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
-                <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                <p className="text-emerald-500">{success}</p>
               </div>
             )}
 
@@ -311,7 +324,10 @@ const Contact = () => {
             </Card>
 
             {/* General Support Email */}
-            <Card className="p-6 hover:border-emerald-500/30 transition-all cursor-pointer group">
+            <Card
+              className="p-6 hover:border-emerald-500/30 transition-all cursor-pointer group"
+              onClick={() => handleCopyEmail('support@stopbars.com')}
+            >
               <div className="flex items-center space-x-3">
                 <Mail className="w-5 h-5 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
                 <div>
@@ -320,16 +336,11 @@ const Contact = () => {
                   </h3>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-zinc-400">support@stopbars.com</span>
-                    <button
-                      onClick={() => handleCopyEmail('support@stopbars.com')}
-                      className="text-zinc-500 hover:text-emerald-400 transition-colors"
-                    >
-                      {copiedEmail === 'support@stopbars.com' ? (
-                        <Check className="w-4 h-4" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
+                    {copiedEmail === 'support@stopbars.com' ? (
+                      <Check className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
+                    )}
                   </div>
                 </div>
               </div>
@@ -337,6 +348,23 @@ const Contact = () => {
           </div>
         </div>
       </div>
+
+      {/* Toast notifications */}
+      <Toast
+        title="Message sent successfully"
+        description="Your message has successfully been sent, we will get back to you soon."
+        variant="success"
+        show={showSuccessToast}
+        onClose={() => setShowSuccessToast(false)}
+      />
+
+      <Toast
+        title={errorTitle}
+        description={errorMessage}
+        variant="destructive"
+        show={showErrorToast}
+        onClose={() => setShowErrorToast(false)}
+      />
     </Layout>
   );
 };

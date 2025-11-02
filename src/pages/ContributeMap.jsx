@@ -4,15 +4,8 @@ import PropTypes from 'prop-types';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import {
-  AlertCircle,
-  ChevronLeft,
-  ChevronRight,
-  CopyIcon,
-  Info,
-  Loader,
-  Check,
-} from 'lucide-react';
+import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
+import { AlertCircle, ChevronRight, CopyIcon, Info, Loader, Check } from 'lucide-react';
 import {
   MapContainer,
   TileLayer,
@@ -891,8 +884,8 @@ const ContributeMap = () => {
         setPoints(transformedPoints);
       } catch (err) {
         console.error(err);
-        // Redirect back to contribute/new with error parameter
-        navigate('/contribute/new?error=airport_load_failed');
+        // Redirect back to contribute/new with error in state
+        navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
         return;
       } finally {
         setLoading(false);
@@ -1018,10 +1011,6 @@ const ContributeMap = () => {
     [ensureBoundsVisible]
   );
 
-  const handleBack = () => {
-    navigate('/contribute/new');
-  };
-
   const handleContinue = () => {
     navigate(`/contribute/test/${icao}`);
   };
@@ -1071,15 +1060,14 @@ const ContributeMap = () => {
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-8">
-            <div className="flex items-center space-x-2 mb-1">
-              <Button variant="outline" onClick={handleBack} className="h-8 px-3">
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back
-              </Button>
-              <h1 className="text-3xl font-bold">{airport.icao} Contribution</h1>
+          <div className="mb-12 mt-6">
+            <div className="flex items-center space-x-2 mb-12">
+              <Breadcrumb>
+                <BreadcrumbItem title="Contribute" link="/contribute" />
+                <BreadcrumbItem title="Airport" link="/contribute/new" />
+                <BreadcrumbItem title="Map" />
+              </Breadcrumb>
             </div>
-            <p className="text-zinc-400">Step 2: Review existing points for {airport.name}</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1286,7 +1274,7 @@ const ContributeMap = () => {
                   <AlertCircle className="w-5 h-5 text-amber-400 mr-3 flex-shrink-0" />
                   <p className="text-sm text-amber-400">
                     This airport currently has no lighting points submitted by the owning Division.
-                    Please check back later, or contact the owning Division directly for support.
+                    Please check back later, or contact the Division for support.
                   </p>
                 </div>
               ) : (

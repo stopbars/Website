@@ -161,22 +161,22 @@ export const Footer = () => {
                 </a>
               </li>
               <li>
-                <a
-                  href="https://status.stopbars.com/maintenance"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
-                >
-                  Maintenance
-                </a>
-              </li>
-              <li>
                 <Link
                   to="/contact"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
-                  Contact Us
+                  Contact
                 </Link>
+              </li>
+              <li>
+                <a
+                  href="https://discord.gg/7EhmtwKWzs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
+                >
+                  Community
+                </a>
               </li>
               <li>
                 <a
@@ -191,17 +191,19 @@ export const Footer = () => {
             </ul>
           </div>
 
-          {/* Organization Section */}
+          {/* Company Section */}
           <div className="col-span-1">
-            <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Organization</h3>
+            <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Company</h3>
             <ul className="space-y-3 md:space-y-3">
               <li>
-                <Link
-                  to="/divisions"
+                <a
+                  href="https://opencollective.com/stopbars/"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
-                  Divisions
-                </Link>
+                  Donate
+                </a>
               </li>
               <li>
                 <Link
@@ -222,7 +224,7 @@ export const Footer = () => {
               <li>
                 <button
                   onClick={handleManageCookies}
-                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors text-left"
+                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors text-left cursor-pointer"
                 >
                   Manage Cookies
                 </button>
