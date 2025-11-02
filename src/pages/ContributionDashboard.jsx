@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
@@ -27,6 +27,24 @@ const ContributionDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const vatsimToken = getVatsimToken();
+  const vatsimUserId = useMemo(() => {
+    if (!vatsimToken) {
+      return null;
+    }
+    try {
+      const segments = vatsimToken.split('.');
+      if (segments.length < 2) {
+        throw new Error('Malformed JWT');
+      }
+      const normalized = segments[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+      const payload = JSON.parse(atob(padded));
+      return payload?.sub ?? null;
+    } catch (err) {
+      console.error('Failed to decode VATSIM token', err);
+      return null;
+    }
+  }, [vatsimToken]);
 
   const [loading, setLoading] = useState(true);
   const [, setError] = useState(null);
@@ -120,7 +138,7 @@ const ContributionDashboard = () => {
 
         // Fetch all approved contributions
         const contributionsResponse = await fetch(
-          'https://v2.stopbars.com/contributions?status=approved&limit=100'
+          'https://v2.stopbars.com/contributions?status=approved'
         );
         if (!contributionsResponse.ok) {
           throw new Error('Failed to fetch contributions');
@@ -154,12 +172,10 @@ const ContributionDashboard = () => {
 
         // User contributions (if user is logged in)
         let userContribsArray = [];
-        if (user) {
-          const userResponse = await fetch('https://v2.stopbars.com/contributions/user', {
-            headers: {
-              'X-Vatsim-Token': vatsimToken,
-            },
-          });
+        if (vatsimUserId) {
+          const userResponse = await fetch(
+            `https://v2.stopbars.com/contributions?user=${encodeURIComponent(vatsimUserId)}&summary=true`
+          );
 
           if (userResponse.ok) {
             const userData = await userResponse.json();
@@ -206,7 +222,7 @@ const ContributionDashboard = () => {
     };
 
     fetchData();
-  }, [user, vatsimToken]);
+  }, [vatsimToken, vatsimUserId]);
   const handleDownload = async (airportCode, sceneryId) => {
     try {
       // Fetch the specific contribution
