@@ -697,7 +697,7 @@ const ReleaseManagement = () => {
                     (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) ||
                     uploading ||
                     updating
-                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent'
+                    ? 'opacity-50 cursor-not-allowed hover:bg-transparent!'
                     : '';
                 })()}`}
                 disabled={(() => {
@@ -745,7 +745,7 @@ const ReleaseManagement = () => {
         {/* Success Messages */}
         {uploadSuccess && (
           <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
-            <Check className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-emerald-400 font-medium">Release Published Successfully</p>
               <p className="text-emerald-300/80 text-sm mt-1">
@@ -754,7 +754,7 @@ const ReleaseManagement = () => {
             </div>
             <button
               onClick={() => setUploadSuccess('')}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors flex-shrink-0"
+              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -763,7 +763,7 @@ const ReleaseManagement = () => {
 
         {updateSuccess && (
           <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
-            <Check className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-emerald-400 font-medium">Changelog Updated Successfully</p>
               <p className="text-emerald-300/80 text-sm mt-1">
@@ -772,7 +772,7 @@ const ReleaseManagement = () => {
             </div>
             <button
               onClick={() => setUpdateSuccess('')}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors flex-shrink-0"
+              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -1225,7 +1225,7 @@ const ReleaseManagement = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
             <div className="flex items-start space-x-3">
-              <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0" />
+              <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
               <div>
                 <h3 className="text-lg font-semibold mb-1">Confirm Release Publication</h3>
               </div>

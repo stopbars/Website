@@ -36,11 +36,11 @@ const DeleteFAQModal = ({ faq, onConfirm, onCancel, isDeleting }) => {
             <p className="text-zinc-200 mb-3">You are about to delete the FAQ for:</p>
             <div className="space-y-3">
               <div className="flex items-start space-x-2 text-red-200">
-                <FileQuestion className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <FileQuestion className="w-4 h-4 mt-0.5 shrink-0" />
                 <p className="text-sm leading-relaxed">{faq.question}</p>
               </div>
               <div className="flex items-start space-x-2 text-red-200">
-                <MessageSquare className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
                 <p className="text-sm leading-relaxed">{faq.answer}</p>
               </div>
             </div>
@@ -49,7 +49,7 @@ const DeleteFAQModal = ({ faq, onConfirm, onCancel, isDeleting }) => {
           <div className="flex space-x-3 pt-2">
             <Button
               onClick={onConfirm}
-              className="!bg-red-500 hover:!bg-red-600 text-white"
+              className="bg-red-500! hover:bg-red-600! text-white"
               disabled={isDeleting}
             >
               {isDeleting ? (
@@ -395,14 +395,14 @@ const FAQManagement = () => {
         {/* Status Messages */}
         {error && (
           <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
             <p className="text-red-500">{error}</p>
           </div>
         )}
 
         {success && (
           <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
-            <Check className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+            <Check className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-emerald-400 font-medium">{success}</p>
             </div>
@@ -453,7 +453,7 @@ const FAQManagement = () => {
                   variant="outline"
                   className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
                     !newFaq.question.trim() || !newFaq.answer.trim() || isPublishing
-                      ? 'opacity-50 cursor-not-allowed hover:!bg-transparent'
+                      ? 'opacity-50 cursor-not-allowed hover:bg-transparent!'
                       : ''
                   }`}
                   disabled={!newFaq.question.trim() || !newFaq.answer.trim() || isPublishing}
@@ -555,7 +555,7 @@ const FAQManagement = () => {
                             !editForm.answer.trim() ||
                             !hasEditChanges() ||
                             isSaving
-                              ? 'opacity-50 cursor-not-allowed hover:!bg-zinc-800 hover:!border-zinc-700'
+                              ? 'opacity-50 cursor-not-allowed hover:bg-zinc-800! hover:border-zinc-700!'
                               : ''
                           }`}
                         >

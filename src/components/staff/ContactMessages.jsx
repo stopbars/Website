@@ -65,11 +65,11 @@ const DeleteConfirmationModal = ({ message, onCancel, onConfirmDelete, isDeletin
             <p className="text-zinc-200 mb-3">You are about to delete this message:</p>
             <div className="space-y-2">
               <div className="flex items-center space-x-2 text-red-200">
-                <Mail className="w-4 h-4 flex-shrink-0" />
+                <Mail className="w-4 h-4 shrink-0" />
                 <span className="text-sm truncate">{message.email || 'Unknown sender'}</span>
               </div>
               <div className="flex items-start space-x-2 text-red-200">
-                <MessageSquare className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
                 <span className="text-sm leading-relaxed">{message.subject || '(No subject)'}</span>
               </div>
             </div>
@@ -83,7 +83,7 @@ const DeleteConfirmationModal = ({ message, onCancel, onConfirmDelete, isDeletin
           <div className="flex space-x-3 pt-2">
             <Button
               onClick={onConfirmDelete}
-              className="!bg-red-500 hover:!bg-red-600 text-white"
+              className="bg-red-500! hover:bg-red-600! text-white"
               disabled={isDeleting}
             >
               {isDeleting ? (
@@ -385,7 +385,7 @@ export default function ContactMessages() {
                     size="xs"
                     onClick={() => setDeletingMessage(selectedMessage)}
                     disabled={isDeletingMessage}
-                    className="text-xs flex items-center gap-1 whitespace-nowrap !bg-red-500/10 hover:!bg-red-500/20 border border-red-500/30 text-red-300 hover:text-red-200 transition"
+                    className="text-xs flex items-center gap-1 whitespace-nowrap bg-red-500/10! hover:bg-red-500/20! border border-red-500/30 text-red-300 hover:text-red-200 transition"
                   >
                     <Trash2 className="w-3 h-3" />
                     Delete

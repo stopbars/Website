@@ -487,7 +487,7 @@ const DivisionManagement = () => {
                 Cancel
               </Button>
               <Button
-                className="!bg-red-500 hover:!bg-red-600 text-white active:scale-95 transition-transform duration-75"
+                className="bg-red-500! hover:bg-red-600! text-white active:scale-95 transition-transform duration-75"
                 onClick={() => handleRemoveMember(memberToRemove.vatsim_id)}
                 disabled={removingMember}
               >

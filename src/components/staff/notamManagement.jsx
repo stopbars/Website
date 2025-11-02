@@ -385,7 +385,7 @@ const NotamManagement = () => {
                   (isAdding && newContent.trim().length < 5) ||
                   (isEditing && !hasEditChanges) ||
                   saving
-                    ? 'opacity-50 cursor-not-allowed hover:!bg-transparent'
+                    ? 'opacity-50 cursor-not-allowed hover:bg-transparent!'
                     : ''
                 }`}
                 disabled={
@@ -428,7 +428,7 @@ const NotamManagement = () => {
         {/* Success Message */}
         {saveSuccess && (
           <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-emerald-400 font-medium">NOTAM Updated Successfully</p>
               <p className="text-emerald-300/80 text-sm mt-1">
@@ -440,7 +440,7 @@ const NotamManagement = () => {
             </div>
             <button
               onClick={() => setSaveSuccess(false)}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors flex-shrink-0"
+              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -577,7 +577,7 @@ const NotamManagement = () => {
               </div>
             ) : error ? (
               <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
                 <p className="text-red-400">{error}</p>
               </div>
             ) : notamData?.notam ? (
@@ -605,7 +605,7 @@ const NotamManagement = () => {
             ) : (
               <div className="p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <Info className="w-5 h-5 text-zinc-400 flex-shrink-0" />
+                  <Info className="w-5 h-5 text-zinc-400 shrink-0" />
                   <p className="text-zinc-400">No NOTAM currently active</p>
                 </div>
               </div>

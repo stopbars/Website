@@ -380,7 +380,7 @@ const VatSysProfiles = () => {
                       </button>
                       <Button
                         variant="destructive"
-                        className="!px-3 !py-1.5 text-xs"
+                        className="px-3! py-1.5! text-xs"
                         onClick={() => doDelete(p)}
                       >
                         <Trash2 className="w-3.5 h-3.5 mr-1" />

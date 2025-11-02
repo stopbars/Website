@@ -1271,7 +1271,7 @@ const ContributeMap = () => {
 
               {points.length === 0 ? (
                 <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 flex-shrink-0" />
+                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
                   <p className="text-sm text-amber-400">
                     This airport currently has no lighting points submitted by the owning Division.
                     Please check back later, or contact the Division for support.
@@ -1279,7 +1279,7 @@ const ContributeMap = () => {
                 </div>
               ) : (
                 <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
-                  <Info className="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" />
+                  <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
                   <p className="text-sm text-blue-400">
                     These are the existing mapped points for this airport, set by the Division. Your
                     contribution will add support for a specific simulator scenery package.

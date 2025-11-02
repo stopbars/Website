@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
-import { ChevronRight } from './Icons';
+import { ChevronRight } from 'lucide-react';
 
 export const Breadcrumb = ({ children }) => {
   const items = Array.isArray(children) ? children : [children];

@@ -2102,7 +2102,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   Unable to load airport position
                 </span>
                 {airportMetaError && (
-                  <span className="text-[11px] text-red-300 max-w-xs break-words">
+                  <span className="text-[11px] text-red-300 max-w-xs wrap-break-word">
                     {airportMetaError}
                   </span>
                 )}

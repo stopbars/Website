@@ -83,7 +83,7 @@ export const Hero = () => {
           </Button>
           <Button
             variant="secondary"
-            className="h-14 px-10 text-base md:text-lg gap-2 !bg-zinc-800 !text-zinc-200 !border !border-zinc-700 hover:!bg-zinc-700"
+            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700!"
             onClick={() =>
               window.open('https://docs.stopbars.com/', '_blank', 'noopener,noreferrer')
             }
@@ -116,7 +116,7 @@ export const Hero = () => {
             })}
           </div>
 
-          <div className="mt-10 h-96 md:h-[32rem] relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900">
+          <div className="mt-10 h-96 md:h-128 relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-lg md:text-2xl font-medium text-zinc-200">
                 {selectedPreview} Placeholder

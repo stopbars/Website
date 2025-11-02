@@ -137,8 +137,8 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
                 type="submit"
                 className={`${
                   deleteConfirmation === 'DELETE' && !isDeleting
-                    ? '!bg-red-500 hover:!bg-red-600 text-white'
-                    : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                    ? 'bg-red-500! hover:bg-red-600! text-white'
+                    : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                 }`}
                 disabled={deleteConfirmation !== 'DELETE' || isDeleting}
               >
@@ -250,8 +250,8 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
                 type="submit"
                 className={`${
                   regenerateConfirmation === 'REGENERATE' && !isRegenerating
-                    ? '!bg-orange-500 hover:!bg-orange-600 text-white'
-                    : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                    ? 'bg-orange-500! hover:bg-orange-600! text-white'
+                    : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                 }`}
                 disabled={regenerateConfirmation !== 'REGENERATE' || isRegenerating}
               >
@@ -471,14 +471,14 @@ const UserManagement = () => {
         {/* Status Messages */}
         {error && (
           <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
             <p className="text-red-500">{error}</p>
           </div>
         )}
 
         {success && (
           <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
-            <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+            <Check className="w-5 h-5 text-emerald-500 shrink-0" />
             <p className="text-emerald-500">{success}</p>
           </div>
         )}

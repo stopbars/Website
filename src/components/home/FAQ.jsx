@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, MinusCircle, ArrowRight } from '../shared/Icons';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
-import { Loader } from 'lucide-react';
+import { Loader, Plus, MinusCircle, ArrowRight } from 'lucide-react';
 
 export const FAQ = () => {
   const [openFaq, setOpenFaq] = useState(null);
@@ -61,9 +60,9 @@ export const FAQ = () => {
                   >
                     <span className="font-medium pr-6">{faq.question}</span>
                     {openFaq === index ? (
-                      <MinusCircle className="h-5 w-5 text-zinc-400 flex-shrink-0" />
+                      <MinusCircle className="h-5 w-5 text-zinc-400 shrink-0" />
                     ) : (
-                      <Plus className="h-5 w-5 text-zinc-400 flex-shrink-0" />
+                      <Plus className="h-5 w-5 text-zinc-400 shrink-0" />
                     )}
                   </button>
                   <div

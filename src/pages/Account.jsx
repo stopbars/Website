@@ -672,8 +672,8 @@ const Account = () => {
                         type="submit"
                         className={`${
                           deleteConfirmation === 'DELETE' && !isDeletingAccount
-                            ? '!bg-red-500 text-white'
-                            : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                            ? 'bg-red-500! text-white'
+                            : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                         }`}
                         disabled={deleteConfirmation !== 'DELETE' || isDeletingAccount}
                       >
@@ -716,7 +716,7 @@ const Account = () => {
                   <>
                     <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg mb-6">
                       <div className="flex items-center space-x-3 mb-2">
-                        <AlertOctagon className="w-5 h-5 text-red-500 flex-shrink-0" />
+                        <AlertOctagon className="w-5 h-5 text-red-500 shrink-0" />
                         <p className="text-red-400 font-medium">Rate Limit Exceeded</p>
                       </div>
                       <p className="text-zinc-400">{regenerateError.message}</p>
@@ -778,8 +778,8 @@ const Account = () => {
                             type="submit"
                             className={`${
                               regenerateConfirmation === 'REGENERATE' && !regeneratingApiKey
-                                ? '!bg-orange-500 text-white'
-                                : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                                ? 'bg-orange-500! text-white'
+                                : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                             }`}
                             disabled={regenerateConfirmation !== 'REGENERATE' || regeneratingApiKey}
                           >

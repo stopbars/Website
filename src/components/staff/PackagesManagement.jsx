@@ -306,7 +306,7 @@ const PackagesManagement = () => {
           {success && (
             <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-sm text-emerald-400 relative">
               <div className="flex items-start gap-2">
-                <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <Check className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-medium">
                     {success.type === 'models'

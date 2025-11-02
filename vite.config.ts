@@ -1,20 +1,18 @@
 // vite.config.ts
-import { defineConfig, UserConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, UserConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // stable vendor chunk names so browser caching works across deploys
 function vendorChunkName(id: string) {
-  if (!id.includes('node_modules')) return null
-  const parts = id.split('node_modules/')[1].split('/')
-  const pkg = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]
-  return `vendor-${pkg.replace('@', '').replace('/', '-')}`
+  if (!id.includes('node_modules')) return null;
+  const parts = id.split('node_modules/')[1].split('/');
+  const pkg = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+  return `vendor-${pkg.replace('@', '').replace('/', '-')}`;
 }
 
 export default defineConfig((): UserConfig => {
   return {
-    plugins: [
-      react(),
-    ],
+    plugins: [react()],
 
     resolve: {
       dedupe: ['react', 'react-dom'],
@@ -29,8 +27,8 @@ export default defineConfig((): UserConfig => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            const v = vendorChunkName(id)
-            if (v) return v
+            const v = vendorChunkName(id);
+            if (v) return v;
           },
           chunkFileNames: 'assets/[name]-[hash].js',
           entryFileNames: 'assets/[name]-[hash].js',
@@ -64,5 +62,5 @@ export default defineConfig((): UserConfig => {
         'react-leaflet',
       ],
     },
-  }
-})
+  };
+});

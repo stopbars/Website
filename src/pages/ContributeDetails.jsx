@@ -250,7 +250,7 @@ const ContributeDetails = () => {
                             key={pkg.packageName}
                             type="button"
                             variant="outline"
-                            className={`py-2 justify-center text-sm ${sceneryName === pkg.packageName ? 'bg-zinc-800 !border-blue-400 shadow-sm' : ''}`}
+                            className={`py-2 justify-center text-sm ${sceneryName === pkg.packageName ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
                             onClick={() => {
                               setSceneryName(pkg.packageName);
                               setShowSuggestions(false);

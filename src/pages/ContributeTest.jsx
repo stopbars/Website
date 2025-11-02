@@ -247,7 +247,7 @@ const ContributeTest = () => {
                         variant="outline"
                         size="sm"
                         onClick={handleTogglePolyLines}
-                        className={`h-8 ${showPolyLines ? 'bg-zinc-800 !border-blue-400 shadow-sm' : ''}`}
+                        className={`h-8 ${showPolyLines ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
                         title="Show connecting lines between points in the same object"
                       >
                         <LineChart className="w-4 h-4 mr-1" />
@@ -259,7 +259,7 @@ const ContributeTest = () => {
                           variant="outline"
                           size="sm"
                           onClick={handleToggleRemoveAreas}
-                          className={`h-8 ${showRemoveAreas ? 'bg-zinc-800 !border-blue-400 shadow-sm' : ''}`}
+                          className={`h-8 ${showRemoveAreas ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
                           title="Show remove areas that will hide default simulator lights"
                         >
                           <SquareSlash className="w-4 h-4 mr-1" />
@@ -367,13 +367,13 @@ const ContributeTest = () => {
                 <h2 className="text-xl font-medium mb-4">Testing Guide</h2>
                 <div className="space-y-4 text-sm">
                   <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 flex-shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
                       <span className="text-xs font-medium">1</span>
                     </div>
                     <p className="text-zinc-300">Upload the XML file for your scenery package</p>
                   </div>
                   <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 flex-shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
                       <span className="text-xs font-medium">2</span>
                     </div>
                     <p className="text-zinc-300">
@@ -381,7 +381,7 @@ const ContributeTest = () => {
                     </p>
                   </div>
                   <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 flex-shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
                       <span className="text-xs font-medium">3</span>
                     </div>
                     <p className="text-zinc-300">
@@ -389,7 +389,7 @@ const ContributeTest = () => {
                     </p>
                   </div>
                   <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 flex-shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
                       <span className="text-xs font-medium">4</span>
                     </div>
                     <p className="text-zinc-300">
@@ -397,7 +397,7 @@ const ContributeTest = () => {
                     </p>
                   </div>
                   <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 flex-shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
                       <span className="text-xs font-medium">5</span>
                     </div>
                     <p className="text-zinc-300">If the XML is valid, continue to the next step</p>

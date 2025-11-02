@@ -1,4 +1,4 @@
-import { HeartHandshake, ArrowRight } from '../shared/Icons';
+import { HeartHandshake, ArrowRight } from 'lucide-react';
 
 export const DonationBanner = () => {
   return (

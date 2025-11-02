@@ -207,7 +207,7 @@ const Contact = () => {
 
             {error && (
               <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
                 <p className="text-red-500">{error}</p>
               </div>
             )}
@@ -267,7 +267,7 @@ const Contact = () => {
               {teamMembers.map((member) => (
                 <div
                   key={member.email}
-                  className="p-6 bg-gradient-to-br from-zinc-800/50 to-transparent rounded-lg border border-zinc-700/50 hover:border-zinc-600 transition-all duration-200"
+                  className="p-6 bg-linear-to-br from-zinc-800/50 to-transparent rounded-lg border border-zinc-700/50 hover:border-zinc-600 transition-all duration-200"
                 >
                   <div className="flex items-center space-x-6 mb-6">
                     <img

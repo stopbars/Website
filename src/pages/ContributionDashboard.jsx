@@ -344,7 +344,7 @@ const ContributionDashboard = () => {
                 {/* Animated underline */}
                 {tabIndicator.ready && (
                   <span
-                    className="absolute bottom-0 h-[2px] bg-blue-500 transition-all duration-300 ease-out"
+                    className="absolute bottom-0 h-0.5 bg-blue-500 transition-all duration-300 ease-out"
                     style={{ left: tabIndicator.left, width: tabIndicator.width }}
                   />
                 )}
@@ -508,7 +508,7 @@ const ContributionDashboard = () => {
                               {contribution.status === 'pending' && (
                                 <div className="flex items-center gap-2">
                                   <Button
-                                    className="!px-4 !py-2 text-sm !bg-amber-600 hover:!bg-amber-700 !text-white"
+                                    className="px-4! py-2! text-sm bg-amber-600! hover:bg-amber-700! text-white!"
                                     onClick={() =>
                                       setConfirmDelete({
                                         id: contribution.id,
@@ -542,7 +542,7 @@ const ContributionDashboard = () => {
                                     </button>
                                     <Button
                                       variant="destructive"
-                                      className="!px-4 !py-2 text-sm"
+                                      className="px-4! py-2! text-sm"
                                       onClick={() =>
                                         setConfirmDelete({
                                           id: contribution.id,
@@ -561,7 +561,7 @@ const ContributionDashboard = () => {
                                     <div className="text-xs text-zinc-400">No reason provided</div>
                                     <Button
                                       variant="destructive"
-                                      className="!px-4 !py-2 text-sm"
+                                      className="px-4! py-2! text-sm"
                                       onClick={() =>
                                         setConfirmDelete({
                                           id: contribution.id,
@@ -617,7 +617,7 @@ const ContributionDashboard = () => {
                     <span>Scenery: {viewingRejection.scenery}</span>
                   </div>
                 </div>
-                <div className="whitespace-pre-wrap break-words text-red-200">
+                <div className="whitespace-pre-wrap wrap-break-word text-red-200">
                   {viewingRejection.reason}
                 </div>
               </div>
@@ -734,9 +734,9 @@ const ContributionDashboard = () => {
                     className={`${
                       deleteConfirmation === `${confirmDelete.airport}-DELETE` && !deleting
                         ? confirmDelete.status === 'pending'
-                          ? '!bg-amber-600 hover:!bg-amber-700 text-white'
-                          : '!bg-red-500 hover:!bg-red-600 text-white'
-                        : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                          ? 'bg-amber-600! hover:bg-amber-700! text-white'
+                          : 'bg-red-500! hover:bg-red-600! text-white'
+                        : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                     }`}
                     disabled={deleteConfirmation !== `${confirmDelete.airport}-DELETE` || deleting}
                   >

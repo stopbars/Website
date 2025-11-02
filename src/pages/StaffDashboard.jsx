@@ -327,7 +327,7 @@ const StaffDashboard = () => {
         <div className="pt-32 pb-20">
           <div className="max-w-7xl mx-auto px-6">
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
               <p className="text-red-500">{error}</p>
             </div>
             <Button onClick={() => navigate('/account')} className="mt-4">
@@ -386,7 +386,7 @@ const StaffDashboard = () => {
 
           {success && (
             <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3 mb-6">
-              <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+              <Check className="w-5 h-5 text-emerald-500 shrink-0" />
               <p className="text-emerald-500">{success}</p>
             </div>
           )}
@@ -436,7 +436,7 @@ const StaffDashboard = () => {
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
                               }`}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <Icon className="w-4 h-4 shrink-0" />
                               <span className="text-sm">{tab.label}</span>
                             </button>
                           );
@@ -491,7 +491,7 @@ const StaffDashboard = () => {
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
                               }`}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <Icon className="w-4 h-4 shrink-0" />
                               <span className="text-sm">{tab.label}</span>
                             </button>
                           );
@@ -533,7 +533,7 @@ const StaffDashboard = () => {
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
                               }`}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <Icon className="w-4 h-4 shrink-0" />
                               <span className="text-sm">{tab.label}</span>
                             </button>
                           );

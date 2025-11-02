@@ -132,7 +132,7 @@ export const Toast = ({
         {/* Content */}
         <div className="flex items-start space-x-3 pr-8">
           {/* Icon */}
-          <div className={`flex-shrink-0 mt-0.5 ${currentVariant.icon}`}>
+          <div className={`shrink-0 mt-0.5 ${currentVariant.icon}`}>
             {icons[variant] || icons.default}
           </div>
 

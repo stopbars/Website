@@ -142,7 +142,7 @@ Support BARS: https://stopbars.com/donate`,
         <div className="z-40">
           <Navbar />
         </div>
-        <main className="flex-grow container mx-auto px-6 relative">{children}</main>
+        <main className="grow container mx-auto px-6 relative">{children}</main>
         <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
         <Footer onOpenConsent={() => setShowConsentBanner(true)} />
       </div>
