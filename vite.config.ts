@@ -58,7 +58,7 @@ export default defineConfig((): UserConfig => {
         'marked',
         'geolib',
         'leaflet',
-        'leaflet-geoman-free',
+        '@geoman-io/leaflet-geoman-free',
         'react-leaflet',
       ],
     },
