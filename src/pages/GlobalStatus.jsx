@@ -36,7 +36,7 @@ const GlobalStatus = () => {
       try {
         setError('');
         const [contribRes, stateRes] = await Promise.all([
-          fetch('https://v2.stopbars.com/contributions?status=approved'),
+          fetch('https://v2.stopbars.com/contributions?status=approved&simple=true'),
           fetch('https://v2.stopbars.com/state?airport=all'),
         ]);
 
