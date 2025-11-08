@@ -1471,6 +1471,9 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
 
   const registerSelect = useCallback(
     (layer, id, isNew = false) => {
+      if (creatingNew && !isNew) {
+        return;
+      }
       setSelectedId(id);
       // initialize per-object edit history
       const currentCoords = extractCoords(layer);
@@ -1587,7 +1590,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
         styleLayerByPoint(lyr, ptData, pid === id, isDeleted);
       });
     },
-    [existingMap, changeset, pushGeometryChange, extractCoords]
+    [existingMap, changeset, pushGeometryChange, extractCoords, creatingNew]
   );
 
   const handleCancelEdit = useCallback(() => {
