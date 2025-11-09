@@ -9,29 +9,20 @@ export const Footer = () => {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        // Fetch health status from the API endpoint
         const response = await fetch('https://v2.stopbars.com/health');
         const data = await response.json();
-
-        // Extract all service status values from the response object
-        // Expected format: { "database": "ok", "storage": "ok", "vatsim": "ok", "auth": "ok", "stats": "ok" }
         const services = Object.values(data);
         const okCount = services.filter((status) => status === 'ok').length;
         const totalCount = services.length;
 
-        // Determine status indicator color based on service health:
         if (okCount === totalCount) {
-          // All services are "ok" (5/5 ok, 0/5 outage) - show green
           setStatusColor('bg-green-400');
         } else if (okCount === 0) {
-          // All services are "outage" (5/5 outage) - show red
           setStatusColor('bg-red-400');
         } else {
-          // Mixed status - even just 1 service "outage" triggers orange
           setStatusColor('bg-orange-400');
         }
       } catch (error) {
-        // Invalid response from /health endpoint - show gray
         console.error('Failed to fetch status:', error);
         setStatusColor('bg-gray-400');
       }
