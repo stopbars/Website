@@ -2,7 +2,7 @@ import { HeartHandshake, ArrowRight } from 'lucide-react';
 
 export const DonationBanner = () => {
   return (
-    <section className="pt-10 pb-28">
+    <section className="pt-10 pb-40">
       <div className="max-w-5xl mx-auto px-6">
         <div className="relative overflow-hidden rounded-2xl bg-emerald-900 border border-emerald-700">
           <div className="relative px-8 py-10 text-center">
