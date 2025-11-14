@@ -27,7 +27,6 @@ const ContributeNew = lazy(() => import('./pages/ContributeNew.jsx'));
 const ContributeMap = lazy(() => import('./pages/ContributeMap.jsx'));
 const ContributeDetails = lazy(() => import('./pages/ContributeDetails.jsx'));
 const ContributeTest = lazy(() => import('./pages/ContributeTest.jsx'));
-const Divisions = lazy(() => import('./pages/Divisions.jsx'));
 const DivisionManagement = lazy(() => import('./components/divisions/DivisionManagement.jsx'));
 const NewDivision = lazy(() => import('./components/divisions/NewDivision.jsx'));
 const StaffDashboard = lazy(() => import('./pages/StaffDashboard.jsx'));
@@ -150,15 +149,6 @@ const router = createBrowserRouter([
   {
     path: '/faq',
     element: <FAQPage />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/divisions',
-    element: (
-      <ProtectedRoute>
-        <Divisions />
-      </ProtectedRoute>
-    ),
     errorElement: <RouteError />,
   },
   {
