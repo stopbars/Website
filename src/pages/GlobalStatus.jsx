@@ -6,12 +6,12 @@ import {
   Search,
   MapPin,
   Loader,
-  CircleDot,
   ArrowUpDown,
   MenuIcon,
   Square,
   Users,
-  Radio,
+  Plane,
+  X,
 } from 'lucide-react';
 import { Button } from '../components/shared/Button';
 
@@ -156,20 +156,32 @@ const GlobalStatus = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20">
+      <div className="min-h-screen pt-40 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 mb-8">
             <div>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 mb-2">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:space-x-3 mb-2">
                 <h1 className="text-3xl font-bold">Global BARS Status</h1>
-                <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full self-start mt-2 sm:mt-0">
-                  <CircleDot className="w-3 h-3 text-emerald-400" aria-hidden="true" />
+                <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full self-start mb-2 sm:mb-0 sm:mt-2">
+                  <div className="relative">
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full ${Object.keys(live).length === 0 ? 'bg-red-400' : 'bg-emerald-400'} transition-colors duration-300 shadow-lg`}
+                    ></div>
+                    <div
+                      className={`absolute inset-0 w-2.5 h-2.5 rounded-full ${Object.keys(live).length === 0 ? 'bg-red-400' : 'bg-emerald-400'} animate-pulse opacity-50`}
+                      style={{ animationDuration: '3s' }}
+                    ></div>
+                    <div
+                      className={`absolute -inset-0.5 w-3.5 h-3.5 rounded-full ${Object.keys(live).length === 0 ? 'bg-red-400' : 'bg-emerald-400'} animate-ping opacity-20`}
+                      style={{ animationDuration: '3s' }}
+                    ></div>
+                  </div>
                   <span className="text-sm text-zinc-300">
                     {Object.keys(live).length} Active Now
                   </span>
                 </div>
               </div>
-              <p className="text-zinc-400">
+              <p className="text-sm sm:text-base text-zinc-400">
                 Real-time BARS connection status across {totalAirports} airports!
               </p>
             </div>
@@ -192,69 +204,6 @@ const GlobalStatus = () => {
               >
                 <MenuIcon className="w-5 h-5" aria-hidden="true" />
               </Button>
-            </div>
-          </div>
-
-          <div className="space-y-4 mb-8">
-            <div className="w-full">
-              <div className="relative">
-                <label htmlFor="global-status-search" className="sr-only">
-                  Search airports
-                </label>
-                <Search
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5"
-                  aria-hidden="true"
-                />
-                <input
-                  id="global-status-search"
-                  type="text"
-                  placeholder="Search by ICAO or package name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label htmlFor="activity-filter" className="sr-only">
-                  Filter by activity
-                </label>
-                <select
-                  id="activity-filter"
-                  value={activityFilter}
-                  onChange={(e) => setActivityFilter(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
-                >
-                  <option value="all">All Airports</option>
-                  <option value="active">Active Airports</option>
-                  <option value="inactive">Inactive Airports</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="continent-filter" className="sr-only">
-                  Filter by continent
-                </label>
-                <select
-                  id="continent-filter"
-                  value={continentFilter}
-                  onChange={(e) => setContinentFilter(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 w-full"
-                >
-                  <option value="all">All Continents</option>
-                  <option value="North America">North America</option>
-                  <option value="South America">South America</option>
-                  <option value="Europe">Europe</option>
-                  <option value="Asia">Asia</option>
-                  <option value="Oceania">Oceania</option>
-                  <option value="Africa">Africa</option>
-                </select>
-              </div>
-
-              <div className="hidden lg:block" />
-
               <Button
                 variant="outline"
                 onClick={() =>
@@ -263,12 +212,82 @@ const GlobalStatus = () => {
                     direction: prev.direction === 'asc' ? 'desc' : 'asc',
                   }))
                 }
-                className="w-full flex justify-center items-center"
+                className="p-2"
                 aria-label="Sort by ICAO"
               >
-                <ArrowUpDown className="w-4 h-4 mr-2" aria-hidden="true" />
-                Sort by ICAO
+                <ArrowUpDown className="w-5 h-5" aria-hidden="true" />
               </Button>
+            </div>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            <div className="flex flex-col lg:flex-row gap-3">
+              <div className="flex-1">
+                <div className="relative">
+                  <label htmlFor="global-status-search" className="sr-only">
+                    Search airports
+                  </label>
+                  <Search
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="global-status-search"
+                    type="text"
+                    placeholder="Search by ICAO or package name..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-10 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer text-zinc-400 hover:text-zinc-300 transition-colors"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-5 h-5" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="w-full lg:w-48">
+                  <label htmlFor="activity-filter" className="sr-only">
+                    Filter by activity
+                  </label>
+                  <select
+                    id="activity-filter"
+                    value={activityFilter}
+                    onChange={(e) => setActivityFilter(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 w-full h-full"
+                  >
+                    <option value="all">All Airports</option>
+                    <option value="active">Active Airports</option>
+                    <option value="inactive">Inactive Airports</option>
+                  </select>
+                </div>
+
+                <div className="w-full lg:w-48">
+                  <label htmlFor="continent-filter" className="sr-only">
+                    Filter by continent
+                  </label>
+                  <select
+                    id="continent-filter"
+                    value={continentFilter}
+                    onChange={(e) => setContinentFilter(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 w-full h-full"
+                  >
+                    <option value="all">All Continents</option>
+                    <option value="North America">North America</option>
+                    <option value="South America">South America</option>
+                    <option value="Europe">Europe</option>
+                    <option value="Asia">Asia</option>
+                    <option value="Oceania">Oceania</option>
+                    <option value="Africa">Africa</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -313,7 +332,7 @@ const GlobalStatus = () => {
                             {live[icao]?.controllers || 0} Controllers
                           </div>
                           <div className="flex items-center gap-2">
-                            <Radio className="w-4 h-4 text-zinc-400" aria-hidden="true" />
+                            <Plane className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                             {live[icao]?.pilots || 0} Pilots
                           </div>
                         </div>
