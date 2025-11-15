@@ -170,7 +170,10 @@ export const Airports = () => {
                           <h3 className="text-lg font-medium">{icao}</h3>
                           {liveMap[icao] ? (
                             <div className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" style={{ animationDuration: '3s' }}></span>
+                              <span
+                                className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"
+                                style={{ animationDuration: '3s' }}
+                              ></span>
                               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-lg"></span>
                             </div>
                           ) : (

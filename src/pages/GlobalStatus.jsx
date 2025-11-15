@@ -317,11 +317,17 @@ const GlobalStatus = () => {
                               <h2 className="text-lg font-medium">{icao}</h2>
                               {live[icao] ? (
                                 <div className="relative flex h-2 w-2">
-                                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" style={{ animationDuration: '3s' }}></span>
+                                  <span
+                                    className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"
+                                    style={{ animationDuration: '3s' }}
+                                  ></span>
                                   <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-lg"></span>
                                 </div>
                               ) : (
-                                <span className="flex h-2 w-2 rounded-full bg-zinc-600" aria-hidden="true" />
+                                <span
+                                  className="flex h-2 w-2 rounded-full bg-zinc-600"
+                                  aria-hidden="true"
+                                />
                               )}
                             </div>
                             <div className="text-xs text-zinc-400">{getAirportContinent(icao)}</div>
@@ -389,11 +395,17 @@ const GlobalStatus = () => {
                                   <span className="font-medium">{icao}</span>
                                   {live[icao] ? (
                                     <div className="relative flex h-2 w-2">
-                                      <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" style={{ animationDuration: '3s' }}></span>
+                                      <span
+                                        className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"
+                                        style={{ animationDuration: '3s' }}
+                                      ></span>
                                       <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-lg"></span>
                                     </div>
                                   ) : (
-                                    <span className="flex h-2 w-2 rounded-full bg-zinc-600" aria-hidden="true" />
+                                    <span
+                                      className="flex h-2 w-2 rounded-full bg-zinc-600"
+                                      aria-hidden="true"
+                                    />
                                   )}
                                 </div>
                               </td>
