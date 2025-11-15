@@ -168,9 +168,14 @@ export const Airports = () => {
                       <div>
                         <div className="flex items-center space-x-2">
                           <h3 className="text-lg font-medium">{icao}</h3>
-                          <span
-                            className={`flex h-2 w-2 rounded-full ${liveMap[icao] ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`}
-                          />
+                          {liveMap[icao] ? (
+                            <div className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" style={{ animationDuration: '3s' }}></span>
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-lg"></span>
+                            </div>
+                          ) : (
+                            <span className="flex h-2 w-2 rounded-full bg-zinc-600" />
+                          )}
                         </div>
                         <div className="text-xs text-zinc-300">{getAirportContinent(icao)}</div>
                       </div>
