@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Toast } from '../components/shared/Toast';
 import {
   Trophy,
   Users,
@@ -58,7 +59,12 @@ const ContributionDashboard = () => {
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery }
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const [toast, setToast] = useState(null); // { type: 'success' | 'error', message }
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({
+    variant: 'success',
+    title: '',
+    description: '',
+  });
 
   // Tab underline animation refs/state
   const allTabRef = useRef(null);
@@ -716,16 +722,22 @@ const ContributionDashboard = () => {
 
                         setConfirmDelete(null);
                         setDeleteConfirmation('');
-                        setToast({ type: 'success', message: 'Contribution successfully deleted' });
+                        setToastConfig({
+                          variant: 'success',
+                          title: 'Contribution Deleted',
+                          description: 'Your contribution has been successfully deleted.',
+                        });
+                        setShowToast(true);
                       } catch (e) {
                         console.error(e);
-                        setToast({
-                          type: 'error',
-                          message: 'Failed to delete contribution, try again later',
+                        setToastConfig({
+                          variant: 'destructive',
+                          title: 'Deletion Failed',
+                          description: 'Failed to delete contribution, try again later.',
                         });
+                        setShowToast(true);
                       } finally {
                         setDeleting(false);
-                        setTimeout(() => setToast(null), 3000);
                       }
                     })();
                   }
@@ -786,17 +798,13 @@ const ContributionDashboard = () => {
         </div>
       )}
 
-      {toast && (
-        <div
-          className={`fixed bottom-8 left-8 p-4 rounded-lg z-50 animate-in fade-in slide-in-from-bottom-4 border ${
-            toast.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-              : 'bg-red-500/10 border-red-500 text-red-500'
-          }`}
-        >
-          <p>{toast.message}</p>
-        </div>
-      )}
+      <Toast
+        show={showToast}
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        onClose={() => setShowToast(false)}
+      />
     </Layout>
   );
 };
