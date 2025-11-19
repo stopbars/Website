@@ -19,13 +19,15 @@
     "leaflet-polylinedecorator": "^1.6.0",
     "lightningcss": "^1.30.2",
     "lucide-react": "^0.552.0",
+    "maplibre-gl": "^5.13.0",
     "marked": "^16.4.2",
-    "posthog-js": "^1.292.0",
+    "posthog-js": "^1.296.0",
     "prop-types": "^15.8.1",
     "react": "^19.2.0",
     "react-confetti": "^6.4.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
+    "react-map-gl": "^8.1.0",
     "react-router-dom": "^7.9.6"
   },
   "devDependencies": {
