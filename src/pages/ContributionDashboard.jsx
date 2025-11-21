@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import { Tooltip } from '../components/shared/Tooltip';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
@@ -384,21 +385,41 @@ const ContributionDashboard = () => {
                     <span>All Contributions</span>
                   </div>
                 </button>
-                <button
-                  ref={userTabRef}
-                  className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
-                    currentTab === 'user'
-                      ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
-                      : 'text-zinc-400 hover:text-zinc-200 border-transparent'
-                  } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  onClick={() => user && setCurrentTab('user')}
-                  disabled={!user}
-                >
-                  <div className="flex items-center space-x-2">
-                    <User className="w-4 h-4" />
-                    <span>Your Contributions</span>
-                  </div>
-                </button>
+                {!user ? (
+                  <Tooltip content="You must be logged in to view your contributions.">
+                    <button
+                      ref={userTabRef}
+                      className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                        currentTab === 'user'
+                          ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
+                          : 'text-zinc-400 hover:text-zinc-200 border-transparent'
+                      } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      onClick={() => user && setCurrentTab('user')}
+                      disabled={!user}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <User className="w-4 h-4" />
+                        <span>Your Contributions</span>
+                      </div>
+                    </button>
+                  </Tooltip>
+                ) : (
+                  <button
+                    ref={userTabRef}
+                    className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                      currentTab === 'user'
+                        ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
+                        : 'text-zinc-400 hover:text-zinc-200 border-transparent'
+                    } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    onClick={() => user && setCurrentTab('user')}
+                    disabled={!user}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <User className="w-4 h-4" />
+                      <span>Your Contributions</span>
+                    </div>
+                  </button>
+                )}
               </div>
 
               {/* User Contribution Summary */}

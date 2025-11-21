@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Plus, MinusCircle, ArrowRight } from 'lucide-react';
+import { Loader, Plus, Minus, ArrowRight } from 'lucide-react';
 
 export const FAQ = () => {
   const [openFaq, setOpenFaq] = useState(null);
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [contentHeights, setContentHeights] = useState([]);
+  const contentRefs = useRef([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -16,7 +18,6 @@ export const FAQ = () => {
         const response = await fetch('https://v2.stopbars.com/faqs');
         if (!response.ok) throw new Error('Failed to fetch FAQs');
         const data = await response.json();
-        // Sort by order and take first 5
         const sortedFaqs = data.faqs.sort((a, b) => a.order - b.order).slice(0, 5);
         setFaqs(sortedFaqs);
       } catch (err) {
@@ -29,6 +30,18 @@ export const FAQ = () => {
 
     fetchFaqs();
   }, []);
+
+  useEffect(() => {
+    if (!faqs.length) return;
+
+    const measureHeights = () => {
+      setContentHeights(faqs.map((_, index) => contentRefs.current[index]?.scrollHeight || 0));
+    };
+
+    measureHeights();
+    window.addEventListener('resize', measureHeights);
+    return () => window.removeEventListener('resize', measureHeights);
+  }, [faqs]);
 
   return (
     <section className="py-24 bg-zinc-900/50" id="faq">
@@ -60,17 +73,28 @@ export const FAQ = () => {
                   >
                     <span className="font-medium pr-6">{faq.question}</span>
                     {openFaq === index ? (
-                      <MinusCircle className="h-5 w-5 text-zinc-400 shrink-0" />
+                      <Minus className="h-5 w-5 text-zinc-400 shrink-0" />
                     ) : (
                       <Plus className="h-5 w-5 text-zinc-400 shrink-0" />
                     )}
                   </button>
                   <div
-                    className={`transition-all duration-400 ease-out overflow-hidden ${
-                      openFaq === index ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
+                    className={`transition-[max-height,opacity] duration-500 ease-in-out overflow-hidden ${
+                      openFaq === index ? 'opacity-100' : 'opacity-0'
                     }`}
+                    style={{
+                      maxHeight:
+                        openFaq === index && contentHeights[index]
+                          ? `${contentHeights[index]}px`
+                          : '0px',
+                    }}
                   >
-                    <div className="px-6 pb-4 text-zinc-400 border-t border-zinc-800">
+                    <div
+                      ref={(el) => {
+                        contentRefs.current[index] = el;
+                      }}
+                      className="px-6 pb-4 text-zinc-400 border-t border-zinc-800"
+                    >
                       <div className="pt-4">{faq.answer}</div>
                     </div>
                   </div>
