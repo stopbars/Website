@@ -416,14 +416,7 @@ const ContributeDetails = () => {
                         : 'Loading...'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Scenery Package</p>
-                    <p className="font-medium">
-                      {sceneryName || (
-                        <span className="text-sm font-medium">Package not selected</span>
-                      )}
-                    </p>
-                  </div>
+                  <div></div>
                 </div>
               </Card>
 
