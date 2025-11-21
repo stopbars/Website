@@ -6,15 +6,7 @@ import { Button } from '../components/shared/Button';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
 import { Toast } from '../components/shared/Toast';
 import XMLMap from '../components/shared/XMLMap';
-import {
-  ChevronRight,
-  FileUp,
-  Check,
-  Loader,
-  FileSearch,
-  LineChart,
-  SquareSlash,
-} from 'lucide-react';
+import { ChevronRight, FileUp, Check, Loader, FileSearch, Spline, X } from 'lucide-react';
 
 const ContributeTest = () => {
   const { icao } = useParams();
@@ -23,6 +15,7 @@ const ContributeTest = () => {
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [originalFileName, setOriginalFileName] = useState('');
+  const [originalFileSize, setOriginalFileSize] = useState(0);
   const [xmlData, setXmlData] = useState('');
   const [originalXmlData, setOriginalXmlData] = useState('');
   const [supportsXmlData, setSupportsXmlData] = useState('');
@@ -166,9 +159,10 @@ const ContributeTest = () => {
       // Replace visualization XML with the generated BARS XML (keep original stored separately)
       setXmlData(data.barsXml);
 
-      // Store original file name for passing forward
+      // Store original file name and size for passing forward
       if (selectedFile?.name) {
         setOriginalFileName(selectedFile.name);
+        setOriginalFileSize(selectedFile.size);
       }
 
       // Fully reset the file upload
@@ -240,34 +234,6 @@ const ContributeTest = () => {
               <Card className="p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-medium">XML Preview</h2>
-                  {/* Visualization Toggle Buttons */}
-                  {isXmlTested && (
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleTogglePolyLines}
-                        className={`h-8 ${showPolyLines ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
-                        title="Show connecting lines between points in the same object"
-                      >
-                        <LineChart className="w-4 h-4 mr-1" />
-                        <span>Toggle Poly Lines</span>
-                      </Button>
-
-                      {supportsXmlData && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleToggleRemoveAreas}
-                          className={`h-8 ${showRemoveAreas ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
-                          title="Show remove areas that will hide default simulator lights"
-                        >
-                          <SquareSlash className="w-4 h-4 mr-1" />
-                          <span>Toggle Remove Areas</span>
-                        </Button>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 {xmlData || (showRemoveAreas && supportsXmlData) ? (
@@ -296,9 +262,11 @@ const ContributeTest = () => {
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
                     isDragActive
                       ? 'border-blue-400 bg-blue-500/10'
-                      : selectedFile
+                      : isXmlTested
                         ? 'border-emerald-500/50 bg-emerald-500/5'
-                        : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
+                        : selectedFile
+                          ? 'border-emerald-500/50 bg-emerald-500/5'
+                          : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
                   }`}
                   onClick={() => fileInputRef.current.click()}
                   onDragOver={handleDragOver}
@@ -307,7 +275,17 @@ const ContributeTest = () => {
                   role="button"
                   aria-label="Upload XML file via click or drag and drop"
                 >
-                  {selectedFile ? (
+                  {isXmlTested ? (
+                    <div className="flex flex-col items-center">
+                      <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+                        <Check className="w-6 h-6 text-emerald-500" />
+                      </div>
+                      <p className="font-medium mb-1">{originalFileName || `${icao}.xml`}</p>
+                      <p className="text-sm text-zinc-400">
+                        {(originalFileSize / 1024).toFixed(1)} KB • Click to reupload
+                      </p>
+                    </div>
+                  ) : selectedFile ? (
                     <div className="flex flex-col items-center">
                       <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
                         <Check className="w-6 h-6 text-emerald-500" />
@@ -362,46 +340,125 @@ const ContributeTest = () => {
                 </Button>
               </Card>
 
-              {/* Testing Guide */}
+              {/* Map Settings */}
               <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Testing Guide</h2>
-                <div className="space-y-4 text-sm">
-                  <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
-                      <span className="text-xs font-medium">1</span>
+                <h2 className="text-xl font-medium mb-4">Map Settings</h2>
+                <div className="space-y-3">
+                  {/* Toggle Polylines Button */}
+                  <button
+                    onClick={handleTogglePolyLines}
+                    disabled={!isXmlTested}
+                    className={`w-full flex items-center p-2.5 rounded-lg border-2 transition-all cursor-pointer ${
+                      !isXmlTested
+                        ? 'opacity-40 cursor-not-allowed bg-zinc-800/30 border-zinc-700'
+                        : showPolyLines
+                          ? 'border-blue-500 bg-zinc-800/50 hover:bg-zinc-800/70'
+                          : 'border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50'
+                    }`}
+                    title="Show connecting lines between points in the same object"
+                  >
+                    {/* Icon Container */}
+                    <div
+                      className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
+                        !isXmlTested
+                          ? 'bg-zinc-700/50'
+                          : showPolyLines
+                            ? 'bg-blue-500/20'
+                            : 'bg-zinc-700/50'
+                      }`}
+                    >
+                      <Spline
+                        className={`w-4 h-4 ${
+                          !isXmlTested
+                            ? 'text-zinc-500'
+                            : showPolyLines
+                              ? 'text-blue-400'
+                              : 'text-zinc-400'
+                        }`}
+                      />
                     </div>
-                    <p className="text-zinc-300">Upload the XML file for your scenery package</p>
-                  </div>
-                  <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
-                      <span className="text-xs font-medium">2</span>
+
+                    {/* Title */}
+                    <div className="flex-1 ml-2.5 text-left">
+                      <span
+                        className={`text-sm font-medium ${!isXmlTested ? 'text-zinc-500' : 'text-white'}`}
+                      >
+                        Toggle Polylines
+                      </span>
                     </div>
-                    <p className="text-zinc-300">
-                      Click the &quot;Test XML&quot; button to validate the file
-                    </p>
-                  </div>
-                  <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
-                      <span className="text-xs font-medium">3</span>
+
+                    {/* Checkbox Container */}
+                    <div
+                      className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
+                        !isXmlTested
+                          ? 'border-zinc-600 bg-zinc-700/30'
+                          : showPolyLines
+                            ? 'border-blue-500 bg-blue-500'
+                            : 'border-zinc-500 bg-transparent'
+                      }`}
+                    >
+                      {showPolyLines && <Check className="w-3.5 h-3.5 text-white" />}
                     </div>
-                    <p className="text-zinc-300">
-                      Review the validation results and verify the points on the map
-                    </p>
-                  </div>
-                  <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
-                      <span className="text-xs font-medium">4</span>
+                  </button>
+
+                  {/* Toggle Remove Areas Button */}
+                  <button
+                    onClick={handleToggleRemoveAreas}
+                    disabled={!isXmlTested || !supportsXmlData}
+                    className={`w-full flex items-center p-2.5 rounded-lg border-2 transition-all cursor-pointer ${
+                      !isXmlTested || !supportsXmlData
+                        ? 'opacity-40 cursor-not-allowed bg-zinc-800/30 border-zinc-700'
+                        : showRemoveAreas
+                          ? 'border-blue-500 bg-zinc-800/50 hover:bg-zinc-800/70'
+                          : 'border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50'
+                    }`}
+                    title="Show remove areas that will hide default simulator lights"
+                  >
+                    {/* Icon Container */}
+                    <div
+                      className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
+                        !isXmlTested || !supportsXmlData
+                          ? 'bg-zinc-700/50'
+                          : showRemoveAreas
+                            ? 'bg-blue-500/20'
+                            : 'bg-zinc-700/50'
+                      }`}
+                    >
+                      <X
+                        className={`w-4 h-4 ${
+                          !isXmlTested || !supportsXmlData
+                            ? 'text-zinc-500'
+                            : showRemoveAreas
+                              ? 'text-blue-400'
+                              : 'text-zinc-400'
+                        }`}
+                      />
                     </div>
-                    <p className="text-zinc-300">
-                      Use visualization options to inspect your contribution
-                    </p>
-                  </div>
-                  <div className="flex">
-                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center mr-3 shrink-0 mt-0.5">
-                      <span className="text-xs font-medium">5</span>
+
+                    {/* Title */}
+                    <div className="flex-1 ml-2.5 text-left">
+                      <span
+                        className={`text-sm font-medium ${
+                          !isXmlTested || !supportsXmlData ? 'text-zinc-500' : 'text-white'
+                        }`}
+                      >
+                        Toggle Remove Areas
+                      </span>
                     </div>
-                    <p className="text-zinc-300">If the XML is valid, continue to the next step</p>
-                  </div>
+
+                    {/* Checkbox Container */}
+                    <div
+                      className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
+                        !isXmlTested || !supportsXmlData
+                          ? 'border-zinc-600 bg-zinc-700/30'
+                          : showRemoveAreas
+                            ? 'border-blue-500 bg-blue-500'
+                            : 'border-zinc-500 bg-transparent'
+                      }`}
+                    >
+                      {showRemoveAreas && <Check className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                  </button>
                 </div>
               </Card>
 
