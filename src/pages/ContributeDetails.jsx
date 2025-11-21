@@ -7,7 +7,7 @@ import { Toast } from '../components/shared/Toast';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
 import ReactConfetti from 'react-confetti';
 import { useWindowSize } from '../hooks/useWindowSize';
-import { ArrowRight, FileUp, Upload, Check, Loader, Info, Search } from 'lucide-react';
+import { ArrowRight, FileUp, Upload, Check, Loader, Info, Search, UserPen } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
 
@@ -21,6 +21,7 @@ const ContributeDetails = () => {
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [preloaded, setPreloaded] = useState(false);
+  const [airport, setAirport] = useState(null);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [errorTitle, setErrorTitle] = useState('Error');
@@ -34,6 +35,7 @@ const ContributeDetails = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { width, height } = useWindowSize();
   const [confettiRun, setConfettiRun] = useState(true);
+  const [acknowledged, setAcknowledged] = useState(false);
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -52,6 +54,28 @@ const ContributeDetails = () => {
       }
     }
   }, [location.state, preloaded, icao]);
+
+  // Fetch airport information
+  useEffect(() => {
+    const fetchAirport = async () => {
+      try {
+        const response = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAirport({
+            icao: data.icao,
+            name: data.name,
+            latitude: data.latitude,
+            longitude: data.longitude,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching airport:', error);
+      }
+    };
+
+    fetchAirport();
+  }, [icao]);
 
   // Fetch top packages when component loads
   useEffect(() => {
@@ -218,7 +242,7 @@ const ContributeDetails = () => {
   return (
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
-        <div className="max-w-3xl mx-auto px-6">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="mb-12 mt-6">
             <div className="flex items-center space-x-2 mb-1">
               <Breadcrumb>
@@ -229,87 +253,183 @@ const ContributeDetails = () => {
             </div>
           </div>
 
-          <Card className="p-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Scenery package selection */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Scenery Package</label>
-                {isLoadingPackages ? (
-                  <div className="flex items-center space-x-2 py-4">
-                    <Loader className="w-4 h-4 animate-spin text-blue-400" />
-                    <span className="text-zinc-400">Loading popular scenery packages...</span>
-                  </div>
-                ) : (
-                  <>
-                    {' '}
-                    {topPackages.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-                        {' '}
-                        {topPackages.map((pkg) => (
-                          <Button
-                            key={pkg.packageName}
-                            type="button"
-                            variant="outline"
-                            className={`py-2 justify-center text-sm ${sceneryName === pkg.packageName ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
-                            onClick={() => {
-                              setSceneryName(pkg.packageName);
-                              setShowSuggestions(false);
-                            }}
-                          >
-                            {pkg.packageName}
-                            <span className="ml-1 text-xs text-zinc-400">({pkg.count})</span>
-                          </Button>
-                        ))}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-2">
+              <Card className="p-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Scenery package selection */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Scenery Package</label>
+                    {isLoadingPackages ? (
+                      <div className="flex items-center space-x-2 py-4">
+                        <Loader className="w-4 h-4 animate-spin text-blue-400" />
+                        <span className="text-zinc-400">Loading popular scenery packages...</span>
                       </div>
+                    ) : (
+                      <>
+                        {topPackages.length > 0 && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                            {topPackages.map((pkg) => (
+                              <Button
+                                key={pkg.packageName}
+                                type="button"
+                                variant="outline"
+                                className={`py-2 justify-center text-sm ${sceneryName === pkg.packageName ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
+                                onClick={() => {
+                                  setSceneryName(pkg.packageName);
+                                  setShowSuggestions(false);
+                                }}
+                              >
+                                {pkg.packageName}
+                                <span className="ml-1 text-xs text-zinc-400">({pkg.count})</span>
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="relative">
+                          <div className="flex items-center relative">
+                            <input
+                              type="text"
+                              value={sceneryName}
+                              onChange={handleSceneryNameChange}
+                              onFocus={() =>
+                                sceneryName.length > 1 &&
+                                setSuggestions(
+                                  allPackages
+                                    .filter((pkg) =>
+                                      pkg.toLowerCase().includes(sceneryName.toLowerCase())
+                                    )
+                                    .slice(0, 6)
+                                ) &&
+                                setShowSuggestions(true)
+                              }
+                              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                              placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
+                              className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                            />
+                            <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
+                          </div>
+                          {showSuggestions && suggestions.length > 0 && (
+                            <ul className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg max-h-60 overflow-auto">
+                              {suggestions.map((suggestion, index) => (
+                                <li
+                                  key={index}
+                                  className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
+                                  onClick={() => selectSuggestion(suggestion)}
+                                >
+                                  {suggestion}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <p className="mt-3 text-xs text-blue-400">
+                            <Info className="inline-block w-3 h-3 mr-1" />
+                            If your scenery package isn&apos;t listed, simply type the name and
+                            submit
+                          </p>
+                        </div>
+                      </>
                     )}
-                    <div className="relative">
-                      <div className="flex items-center relative">
-                        <input
-                          type="text"
-                          value={sceneryName}
-                          onChange={handleSceneryNameChange}
-                          onFocus={() =>
-                            sceneryName.length > 1 &&
-                            setSuggestions(
-                              allPackages
-                                .filter((pkg) =>
-                                  pkg.toLowerCase().includes(sceneryName.toLowerCase())
-                                )
-                                .slice(0, 6)
-                            ) &&
-                            setShowSuggestions(true)
-                          }
-                          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                          placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
-                          className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                  </div>
+
+                  {/* Additional notes */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Additional Notes</label>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Any additional notes for the approval team."
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-[100px] resize-none"
+                    ></textarea>
+                  </div>
+
+                  {/* Contribution Acknowledgement */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setAcknowledged(!acknowledged)}
+                      className={`w-full flex items-start p-4 rounded-xl border transition-all duration-200 ${
+                        acknowledged
+                          ? 'border-emerald-500/60 bg-emerald-500/5 shadow-sm shadow-emerald-500/10'
+                          : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600 hover:bg-zinc-800/60'
+                      }`}
+                    >
+                      {/* Icon Container */}
+                      <div
+                        className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                          acknowledged ? 'bg-emerald-500/15' : 'bg-zinc-700/40'
+                        }`}
+                      >
+                        <UserPen
+                          className={`w-5 h-5 ${acknowledged ? 'text-emerald-400' : 'text-zinc-400'}`}
                         />
-                        <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
                       </div>
-                      {showSuggestions && suggestions.length > 0 && (
-                        <ul className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg max-h-60 overflow-auto">
-                          {suggestions.map((suggestion, index) => (
-                            <li
-                              key={index}
-                              className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
-                              onClick={() => selectSuggestion(suggestion)}
-                            >
-                              {suggestion}
-                            </li>
-                          ))}
-                        </ul>
-                      )}{' '}
-                      <p className="mt-3 text-xs text-blue-400">
-                        <Info className="inline-block w-3 h-3 mr-1" />
-                        If your scenery package isn&apos;t listed, simply type the name and submit
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
+
+                      {/* Content */}
+                      <div className="flex-1 mx-4 text-left">
+                        <span className="text-sm font-semibold block mb-1.5 text-white">
+                          Contribution Acknowledgement
+                        </span>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          By submitting this contribution, you agree that you have followed the
+                          contribution guide, to create the best possible, tested, and working
+                          contribution you can submit, verifying no issues occur within the
+                          submission, and that this work is your own and is linked to your BARS
+                          account.
+                        </p>
+                      </div>
+
+                      {/* Checkbox Container */}
+                      <div
+                        className={`shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
+                          acknowledged
+                            ? 'border-emerald-500 bg-emerald-500 shadow-sm'
+                            : 'border-zinc-600 bg-transparent'
+                        }`}
+                      >
+                        {acknowledged && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+                      </div>
+                    </button>
+                  </div>
+                </form>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              {/* Contribution Summary */}
+              <Card className="p-6">
+                <h2 className="text-xl font-medium mb-4">Contribution Summary</h2>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-zinc-400">ICAO Code</p>
+                    <p className="font-medium">{icao.toUpperCase()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-zinc-400">Airport Name</p>
+                    <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-zinc-400">Location</p>
+                    <p className="font-medium">
+                      {airport
+                        ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
+                        : 'Loading...'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-zinc-400">Scenery Package</p>
+                    <p className="font-medium">
+                      {sceneryName || (
+                        <span className="text-sm font-medium">Package not selected</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </Card>
 
               {/* XML File */}
-              <div>
-                <label className="block text-sm font-medium mb-2">XML File</label>
+              <Card className="p-6">
+                <h2 className="text-xl font-medium mb-4">XML File</h2>
                 <div
                   className={`border-2 border-dashed rounded-lg p-6 text-center ${
                     selectedFile
@@ -337,41 +457,28 @@ const ContributeDetails = () => {
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Additional notes */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Additional Notes</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Any additional notes for the approval team."
-                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-[100px]"
-                ></textarea>
-              </div>
+              </Card>
 
               {/* Submit button */}
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  disabled={isSubmitting || !selectedFile || !sceneryName}
-                  className="min-w-[150px]"
-                >
-                  {isSubmitting ? (
-                    <div className="flex items-center justify-center">
-                      <Loader className="w-4 h-4 mr-2 animate-spin" />
-                      <span>Submitting...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center">
-                      <Upload className="w-4 h-4 mr-2" />
-                      <span>Submit Contribution</span>
-                    </div>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </Card>
+              <Button
+                onClick={handleSubmit}
+                disabled={isSubmitting || !selectedFile || !sceneryName || !acknowledged}
+                className={`w-full ${isSubmitting || !selectedFile || !sceneryName || !acknowledged ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center justify-center">
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    <span>Submitting...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center">
+                    <Upload className="w-4 h-4 mr-2" />
+                    <span>Submit Contribution</span>
+                  </div>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
