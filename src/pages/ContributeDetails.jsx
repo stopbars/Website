@@ -305,6 +305,7 @@ const ContributeDetails = () => {
                               }
                               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                               placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
+                              maxLength={64}
                               className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
                             />
                             <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
@@ -339,6 +340,7 @@ const ContributeDetails = () => {
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Any additional notes for the approval team."
+                      maxLength={1000}
                       className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-[100px] resize-none"
                     ></textarea>
                   </div>
