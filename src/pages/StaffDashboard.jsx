@@ -311,7 +311,7 @@ const StaffDashboard = () => {
     return (
       <Layout>
         <div className="pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
+          <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
             <div className="flex items-center justify-center h-64">
               <Loader className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
@@ -325,9 +325,9 @@ const StaffDashboard = () => {
     return (
       <Layout>
         <div className="pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
+          <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
               <p className="text-red-500">{error}</p>
             </div>
             <Button onClick={() => navigate('/account')} className="mt-4">
@@ -342,7 +342,7 @@ const StaffDashboard = () => {
   return (
     <Layout>
       <div className="pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold mb-2">Staff Dashboard</h1>
@@ -386,7 +386,7 @@ const StaffDashboard = () => {
 
           {success && (
             <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3 mb-6">
-              <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+              <Check className="w-5 h-5 text-emerald-500 shrink-0" />
               <p className="text-emerald-500">{success}</p>
             </div>
           )}
@@ -436,7 +436,7 @@ const StaffDashboard = () => {
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
                               }`}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <Icon className="w-4 h-4 shrink-0" />
                               <span className="text-sm">{tab.label}</span>
                             </button>
                           );
@@ -491,7 +491,7 @@ const StaffDashboard = () => {
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
                               }`}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <Icon className="w-4 h-4 shrink-0" />
                               <span className="text-sm">{tab.label}</span>
                             </button>
                           );
@@ -533,7 +533,7 @@ const StaffDashboard = () => {
                                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800/70'
                               }`}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <Icon className="w-4 h-4 shrink-0" />
                               <span className="text-sm">{tab.label}</span>
                             </button>
                           );

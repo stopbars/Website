@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '../shared/Button';
 
@@ -12,6 +12,27 @@ const previewOptions = [
 
 export const Hero = () => {
   const [selectedPreview, setSelectedPreview] = useState(previewOptions[0]);
+  const [downloadInfo, setDownloadInfo] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const url = 'https://v2.stopbars.com/releases/latest?product=Installer';
+
+    (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (mounted) setDownloadInfo(json);
+      } catch (err) {
+        console.error('Failed to fetch latest installer release:', err);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <section
@@ -29,13 +50,40 @@ export const Hero = () => {
           integrated with both default and major third-party sceneries.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button variant="primary" className="h-14 px-10 text-base md:text-lg gap-2">
+          <Button
+            variant="primary"
+            className="h-14 px-10 text-base md:text-lg gap-2"
+            onClick={async () => {
+              const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
+              const downloadUrl = downloadInfo?.downloadUrl;
+
+              try {
+                if (navigator && typeof navigator.sendBeacon === 'function') {
+                  try {
+                    navigator.sendBeacon(trackingUrl, '');
+                  } catch {
+                    await fetch(trackingUrl, { method: 'POST', keepalive: true });
+                  }
+                } else {
+                  await fetch(trackingUrl, { method: 'POST', keepalive: true });
+                }
+              } catch {
+                console.warn('Download tracking failed');
+              }
+              try {
+                window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+              } catch {
+                window.location.href = downloadUrl;
+              }
+            }}
+            aria-label="Download BARS"
+          >
             Download
             <ChevronRight className="w-4 h-4" aria-hidden="true" />
           </Button>
           <Button
             variant="secondary"
-            className="h-14 px-10 text-base md:text-lg gap-2 !bg-zinc-800 !text-zinc-200 !border !border-zinc-700 hover:!bg-zinc-700 focus:!bg-zinc-700"
+            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700!"
             onClick={() =>
               window.open('https://docs.stopbars.com/', '_blank', 'noopener,noreferrer')
             }
@@ -55,9 +103,9 @@ export const Hero = () => {
                   key={option}
                   type="button"
                   onClick={() => setSelectedPreview(option)}
-                  className={`px-5 py-2.5 rounded-full text-sm md:text-base border transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:ring-white/60 ${
+                  className={`px-5 py-2.5 rounded-full text-sm md:text-base border transition-colors duration-300 cursor-pointer ${
                     isSelected
-                      ? 'bg-white text-black border-white shadow-lg shadow-white/10'
+                      ? 'bg-white text-black border-white'
                       : 'bg-zinc-900/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
                   }`}
                   aria-pressed={isSelected}
@@ -68,7 +116,7 @@ export const Hero = () => {
             })}
           </div>
 
-          <div className="mt-10 h-96 md:h-[32rem] relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900">
+          <div className="mt-10 h-96 md:h-128 relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-lg md:text-2xl font-medium text-zinc-200">
                 {selectedPreview} Placeholder

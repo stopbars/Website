@@ -9,29 +9,20 @@ export const Footer = () => {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        // Fetch health status from the API endpoint
         const response = await fetch('https://v2.stopbars.com/health');
         const data = await response.json();
-
-        // Extract all service status values from the response object
-        // Expected format: { "database": "ok", "storage": "ok", "vatsim": "ok", "auth": "ok", "stats": "ok" }
         const services = Object.values(data);
         const okCount = services.filter((status) => status === 'ok').length;
         const totalCount = services.length;
 
-        // Determine status indicator color based on service health:
         if (okCount === totalCount) {
-          // All services are "ok" (5/5 ok, 0/5 outage) - show green
           setStatusColor('bg-green-400');
         } else if (okCount === 0) {
-          // All services are "outage" (5/5 outage) - show red
           setStatusColor('bg-red-400');
         } else {
-          // Mixed status - even just 1 service "outage" triggers orange
           setStatusColor('bg-orange-400');
         }
       } catch (error) {
-        // Invalid response from /health endpoint - show gray
         console.error('Failed to fetch status:', error);
         setStatusColor('bg-gray-400');
       }
@@ -161,22 +152,22 @@ export const Footer = () => {
                 </a>
               </li>
               <li>
-                <a
-                  href="https://status.stopbars.com/maintenance"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
-                >
-                  Maintenance
-                </a>
-              </li>
-              <li>
                 <Link
                   to="/contact"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
-                  Contact Us
+                  Contact
                 </Link>
+              </li>
+              <li>
+                <a
+                  href="https://discord.gg/7EhmtwKWzs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
+                >
+                  Community
+                </a>
               </li>
               <li>
                 <a
@@ -191,17 +182,19 @@ export const Footer = () => {
             </ul>
           </div>
 
-          {/* Organization Section */}
+          {/* Company Section */}
           <div className="col-span-1">
-            <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Organization</h3>
+            <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Company</h3>
             <ul className="space-y-3 md:space-y-3">
               <li>
-                <Link
-                  to="/divisions"
+                <a
+                  href="https://opencollective.com/stopbars/"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
-                  Divisions
-                </Link>
+                  Donate
+                </a>
               </li>
               <li>
                 <Link
@@ -222,7 +215,7 @@ export const Footer = () => {
               <li>
                 <button
                   onClick={handleManageCookies}
-                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors text-left"
+                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors text-left cursor-pointer"
                 >
                   Manage Cookies
                 </button>

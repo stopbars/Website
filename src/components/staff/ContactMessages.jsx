@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import {
   AlertTriangle,
@@ -65,11 +64,11 @@ const DeleteConfirmationModal = ({ message, onCancel, onConfirmDelete, isDeletin
             <p className="text-zinc-200 mb-3">You are about to delete this message:</p>
             <div className="space-y-2">
               <div className="flex items-center space-x-2 text-red-200">
-                <Mail className="w-4 h-4 flex-shrink-0" />
+                <Mail className="w-4 h-4 shrink-0" />
                 <span className="text-sm truncate">{message.email || 'Unknown sender'}</span>
               </div>
               <div className="flex items-start space-x-2 text-red-200">
-                <MessageSquare className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
                 <span className="text-sm leading-relaxed">{message.subject || '(No subject)'}</span>
               </div>
             </div>
@@ -83,7 +82,7 @@ const DeleteConfirmationModal = ({ message, onCancel, onConfirmDelete, isDeletin
           <div className="flex space-x-3 pt-2">
             <Button
               onClick={onConfirmDelete}
-              className="!bg-red-500 hover:!bg-red-600 text-white"
+              className="bg-red-500! hover:bg-red-600! text-white"
               disabled={isDeleting}
             >
               {isDeleting ? (
@@ -259,170 +258,181 @@ export default function ContactMessages() {
   }
 
   return (
-    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">Contact Messages</h1>
-        <div className="text-sm bg-zinc-500/20 text-zinc-400 px-3 py-1 rounded-full">
-          {messages.length} Total Messages
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Contact Messages</h2>
+          <p className="text-sm text-zinc-400 mt-1">View and respond to user messages</p>
         </div>
+        <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+          <MessageSquare className="w-4 h-4 mr-2 text-zinc-400" />
+          {messages.length} messages
+        </span>
       </div>
 
-      <div className="space-y-6 mt-2">
-        {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded flex items-center gap-2 text-sm text-red-400">
-            <AlertTriangle className="w-4 h-4" /> {error}
-          </div>
-        )}
-        {success && (
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded text-sm text-emerald-400 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4" /> {success}
-          </div>
-        )}
+      {/* Status Messages */}
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
+      {success && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <p className="text-sm text-emerald-400">{success}</p>
+        </div>
+      )}
 
-        {/* Controls removed per request */}
-
-        <div className="grid grid-cols-12 gap-6">
-          {/* List */}
-          <div className="col-span-5 space-y-3 max-h-[600px] overflow-y-auto pr-1">
-            {filteredMessages.length === 0 && (
-              <Card className="p-6 text-sm text-zinc-400 text-center">
-                No messages match current filters.
-              </Card>
-            )}
-            {filteredMessages.map((msg) => {
+      {/* Message Grid */}
+      <div className="grid grid-cols-12 gap-6">
+        {/* List */}
+        <div className="col-span-12 lg:col-span-5 space-y-3 max-h-[600px] overflow-y-auto pr-1">
+          {filteredMessages.length === 0 ? (
+            <div className="p-8 text-center border border-dashed border-zinc-700/50 rounded-xl bg-zinc-800/20">
+              <Mail className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
+              <p className="text-zinc-400 text-sm">No messages found</p>
+            </div>
+          ) : (
+            filteredMessages.map((msg) => {
               const created = new Date(
                 msg.createdAt || msg.created || msg.submittedAt || msg.timestamp || Date.now()
               );
               return (
-                <Card
+                <div
                   key={msg.id}
                   onClick={() => setSelectedId(msg.id)}
-                  className={`p-4 cursor-pointer transition-all duration-200 ${selectedId === msg.id ? 'border-blue-500 bg-blue-500/5' : 'hover:border-zinc-700'} relative`}
+                  className={`p-4 bg-zinc-900/50 border rounded-xl cursor-pointer transition-all duration-200 ${
+                    selectedId === msg.id
+                      ? 'border-blue-500/50 bg-blue-500/5 shadow-lg shadow-blue-500/5'
+                      : 'border-zinc-800 hover:border-zinc-700'
+                  }`}
                 >
                   <div className="flex justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Mail className="w-4 h-4 text-zinc-400" />
-                        <p className="font-medium text-sm truncate">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Mail className="w-4 h-4 text-zinc-500 shrink-0" />
+                        <p className="font-medium text-sm text-white truncate">
                           {msg.subject || '(No subject)'}
                         </p>
                       </div>
-                      <p className="text-xs text-zinc-400 truncate mb-1">
+                      <p className="text-xs text-zinc-400 truncate mb-1.5">
                         {msg.email || msg.from || 'Unknown sender'}
                       </p>
-                      <p className="text-xs text-zinc-500 line-clamp-2 mb-4">
+                      <p className="text-xs text-zinc-500 line-clamp-2 mb-3">
                         {msg.message || msg.body || ''}
                       </p>
                       <div className="flex items-center justify-between">
                         <StatusBadge status={msg.status || 'pending'} />
-                        <span className="text-[11px] text-zinc-500">
+                        <span className="text-xs text-zinc-500">
                           {created.toLocaleDateString()}{' '}
                           {created.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                     </div>
                   </div>
-                </Card>
+                </div>
               );
-            })}
-          </div>
-          {/* Detail */}
-          <div className="col-span-7">
-            {selectedMessage ? (
-              <Card className="p-6 space-y-5">
-                {/* Header with subject & status */}
-                <div className="flex items-start justify-between gap-4 w-full">
-                  <div className="min-w-0">
-                    <h3 className="text-xl font-semibold mb-2">
-                      {selectedMessage.subject || 'No subject'}
-                    </h3>
-                    {selectedMessage.email && (
-                      <p className="text-sm text-zinc-300 mb-1 truncate max-w-[420px]">
-                        {selectedMessage.name || selectedMessage.fullName || selectedMessage.email}
-                      </p>
-                    )}
-                    <p className="text-xs text-zinc-500">
-                      Received {new Date(selectedMessage.createdAt || Date.now()).toLocaleString()}
+            })
+          )}
+        </div>
+        {/* Detail */}
+        <div className="col-span-12 lg:col-span-7">
+          {selectedMessage ? (
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-5">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-semibold text-white mb-2">
+                    {selectedMessage.subject || 'No subject'}
+                  </h3>
+                  {selectedMessage.email && (
+                    <p className="text-sm text-zinc-300 truncate">
+                      {selectedMessage.name || selectedMessage.fullName || selectedMessage.email}
                     </p>
-                  </div>
-                  <StatusBadge status={selectedMessage.status || 'pending'} />
-                </div>
-
-                {/* Action bar full width */}
-                <div className="flex gap-2 items-center w-full">
-                  {STATUSES.filter((s) => s !== (selectedMessage.status || 'pending')).map((s) => (
-                    <Button
-                      key={s}
-                      size="xs"
-                      variant="outline"
-                      disabled={updatingStatusId === selectedMessage.id}
-                      onClick={() => updateStatus(selectedMessage.id, s)}
-                      className="text-xs whitespace-nowrap"
-                    >
-                      {updatingStatusId === selectedMessage.id ? (
-                        <Loader className="w-3 h-3 animate-spin" />
-                      ) : (
-                        s.charAt(0).toUpperCase() + s.slice(1)
-                      )}
-                    </Button>
-                  ))}
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() => {
-                      if (selectedMessage.email) {
-                        navigator.clipboard.writeText(selectedMessage.email).catch(() => {});
-                        window.open('https://mail.stopbars.com', '_blank', 'noopener');
-                        setSuccess('Email copied & ZoHo opened');
-                      }
-                    }}
-                    className="text-xs whitespace-nowrap border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                  >
-                    <ExternalLink className="w-3 h-3 mr-1" />
-                    Reply
-                  </Button>
-                  <Button
-                    size="xs"
-                    onClick={() => setDeletingMessage(selectedMessage)}
-                    disabled={isDeletingMessage}
-                    className="text-xs flex items-center gap-1 whitespace-nowrap !bg-red-500/10 hover:!bg-red-500/20 border border-red-500/30 text-red-300 hover:text-red-200 transition"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Delete
-                  </Button>
-                </div>
-
-                <div className="border border-zinc-800 rounded-lg p-4 bg-zinc-900/60 max-h-[360px] overflow-y-auto">
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {selectedMessage.message || selectedMessage.body || '(No message content)'}
+                  )}
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Received {new Date(selectedMessage.createdAt || Date.now()).toLocaleString()}
                   </p>
                 </div>
+                <StatusBadge status={selectedMessage.status || 'pending'} />
+              </div>
 
-                {(selectedMessage.error || selectedMessage.failedReason) && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 flex items-center gap-2">
-                    <XCircle className="w-4 h-4" />{' '}
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2">
+                {STATUSES.filter((s) => s !== (selectedMessage.status || 'pending')).map((s) => (
+                  <button
+                    key={s}
+                    disabled={updatingStatusId === selectedMessage.id}
+                    onClick={() => updateStatus(selectedMessage.id, s)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 disabled:opacity-50 transition-all"
+                  >
+                    {updatingStatusId === selectedMessage.id ? (
+                      <Loader className="w-3 h-3 animate-spin" />
+                    ) : null}
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    if (selectedMessage.email) {
+                      navigator.clipboard.writeText(selectedMessage.email).catch(() => {});
+                      window.open('https://mail.stopbars.com', '_blank', 'noopener');
+                      setSuccess('Email copied & ZoHo opened');
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Reply
+                </button>
+                <button
+                  onClick={() => setDeletingMessage(selectedMessage)}
+                  disabled={isDeletingMessage}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-all"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete
+                </button>
+              </div>
+
+              {/* Message Content */}
+              <div className="bg-zinc-800/30 border border-zinc-700/30 rounded-lg p-4 max-h-[360px] overflow-y-auto">
+                <p className="whitespace-pre-wrap text-sm text-zinc-300 leading-relaxed">
+                  {selectedMessage.message || selectedMessage.body || '(No message content)'}
+                </p>
+              </div>
+
+              {(selectedMessage.error || selectedMessage.failedReason) && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span className="text-xs text-red-400">
                     {selectedMessage.error || selectedMessage.failedReason}
-                  </div>
-                )}
-              </Card>
-            ) : (
-              <Card className="p-6 text-center text-sm text-zinc-400 flex items-center justify-center h-full min-h-[300px]">
-                Select a message to view its details.
-              </Card>
-            )}
-          </div>
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 flex items-center justify-center min-h-[300px]">
+              <div className="text-center">
+                <Mail className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
+                <p className="text-sm text-zinc-400">Select a message to view details</p>
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* Delete Confirmation Modal */}
-        {deletingMessage && (
-          <DeleteConfirmationModal
-            message={deletingMessage}
-            onCancel={cancelDelete}
-            onConfirmDelete={() => deleteMessage(deletingMessage.id)}
-            isDeleting={isDeletingMessage}
-          />
-        )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deletingMessage && (
+        <DeleteConfirmationModal
+          message={deletingMessage}
+          onCancel={cancelDelete}
+          onConfirmDelete={() => deleteMessage(deletingMessage.id)}
+          isDeleting={isDeletingMessage}
+        />
+      )}
     </div>
   );
 }

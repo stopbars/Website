@@ -414,7 +414,7 @@ const TilePrefetch = () => {
       <div className="space-y-6">
         <section className="bg-zinc-900 border border-zinc-700 rounded p-4 space-y-3">
           <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[240px]">
+            <div className="flex-1 min-w-60">
               <label className="block text-xs uppercase tracking-wide text-zinc-400 mb-1">
                 ICAO Code(s)
               </label>

@@ -18,22 +18,47 @@ export const Toast = ({
     setTimeout(() => {
       setIsVisible(false);
       if (onClose) onClose();
-    }, 300); // Wait for exit animation
+    }, 500); // Wait for exit animation
   }, [onClose]);
 
   useEffect(() => {
-    if (show) {
-      setIsVisible(true);
-      setIsAnimating(true);
+    if (!show) return undefined;
 
-      // Auto-dismiss after duration
-      const timer = setTimeout(() => {
+    let animationDelay;
+    let autoDismiss;
+    const opener = setTimeout(() => {
+      setIsVisible(true);
+      animationDelay = setTimeout(() => {
+        setIsAnimating(true);
+      }, 50);
+      autoDismiss = setTimeout(() => {
         handleClose();
       }, duration);
+    }, 0);
 
-      return () => clearTimeout(timer);
-    }
+    return () => {
+      clearTimeout(opener);
+      if (animationDelay) clearTimeout(animationDelay);
+      if (autoDismiss) clearTimeout(autoDismiss);
+    };
   }, [show, duration, handleClose]);
+
+  useEffect(() => {
+    if (show) return undefined;
+
+    let finalizeTimer;
+    const hideTimer = setTimeout(() => {
+      setIsAnimating(false);
+      finalizeTimer = setTimeout(() => {
+        setIsVisible(false);
+      }, 500);
+    }, 0);
+
+    return () => {
+      clearTimeout(hideTimer);
+      if (finalizeTimer) clearTimeout(finalizeTimer);
+    };
+  }, [show]);
 
   if (!isVisible) return null;
 
@@ -79,14 +104,20 @@ export const Toast = ({
     <div
       className={`
         fixed bottom-4 left-4 z-50 max-w-sm w-full
-        transform transition-all duration-300 ease-in-out
-        ${isAnimating ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'}
+        transform transition-all duration-500 ease-out
+        ${
+          isAnimating
+            ? 'translate-x-0 opacity-100 scale-100'
+            : '-translate-x-full opacity-0 scale-95'
+        }
       `}
     >
       <div
         className={`
           ${currentVariant.container}
           border rounded-xl p-5 relative
+          transform transition-all duration-500 ease-out
+          ${isAnimating ? 'translate-y-0 scale-100' : 'translate-y-2 scale-98'}
         `}
       >
         {/* Close button */}
@@ -101,7 +132,7 @@ export const Toast = ({
         {/* Content */}
         <div className="flex items-start space-x-3 pr-8">
           {/* Icon */}
-          <div className={`flex-shrink-0 mt-0.5 ${currentVariant.icon}`}>
+          <div className={`shrink-0 mt-0.5 ${currentVariant.icon}`}>
             {icons[variant] || icons.default}
           </div>
 

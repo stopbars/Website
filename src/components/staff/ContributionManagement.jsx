@@ -892,25 +892,29 @@ const ContributionManagement = () => {
   const paginatedContributions = contributions;
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      {' '}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">Contribution Management</h1>
-        <div className="text-sm bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full">
-          {pendingCount || '0'} Pending Contributions
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Contribution Management</h2>
+          <p className="text-zinc-400 text-sm mt-1">Review and manage user contributions</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full text-sm font-medium">
+            {pendingCount || '0'} Pending Contribution{pendingCount !== 1 ? 's' : ''}
+          </span>
         </div>
       </div>
       {/* Status messages */}
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-          <p className="text-red-500">{error}</p>
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+          <p className="text-red-400">{error}</p>
         </div>
       )}
       {success && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
-          <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-          <p className="text-emerald-500">{success}</p>
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3">
+          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+          <p className="text-emerald-400">{success}</p>
         </div>
       )}{' '}
       <div className="grid grid-cols-1 gap-6">
@@ -921,15 +925,16 @@ const ContributionManagement = () => {
               <RefreshCw className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
           ) : paginatedContributions.length === 0 ? (
-            <Card className="p-6">
-              <div className="text-center text-zinc-400 py-8">No pending contributions found.</div>
+            <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-8 text-center">
+              <Upload className="w-12 h-12 text-zinc-500 mx-auto mb-3" />
+              <p className="text-zinc-400">No pending contributions found.</p>
             </Card>
           ) : (
             <>
               {paginatedContributions.map((contribution) => (
                 <Card
                   key={contribution.id}
-                  className={`p-4 hover:border-zinc-700 transition-all duration-200 cursor-pointer ${
+                  className={`bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-all duration-200 cursor-pointer ${
                     selectedContribution?.id === contribution.id ? 'border-blue-500' : ''
                   }`}
                   onClick={() => handleContributionSelect(contribution)}

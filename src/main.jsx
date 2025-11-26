@@ -1,42 +1,50 @@
-import { StrictMode } from 'react';
+import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import './styles/globals.css';
-
-// PostHog
-import { PostHogProvider } from 'posthog-js/react';
-
-// Pages
-import Home from './pages/Home.jsx';
-import Account from './pages/Account.jsx';
-import Privacy from './pages/Privacy.jsx';
-import Terms from './pages/Terms.jsx';
-import FAQPage from './pages/FAQs.jsx';
-import GlobalStatus from './pages/GlobalStatus.jsx';
-import Changelog from './pages/Changelog.jsx';
-import Contact from './pages/Contact.jsx';
-import About from './pages/About.jsx';
-import Credits from './pages/Credits.jsx';
-import NotFound from './pages/NotFound.jsx';
-import Banned from './pages/Banned.jsx';
-import DivisionAirportManager from './pages/DivisionAirportManager.jsx';
-import DebugGenerator from './pages/DebugGenerator.jsx';
-import ContributionDashboard from './pages/ContributionDashboard.jsx';
-import ContributeNew from './pages/ContributeNew.jsx';
-import ContributeMap from './pages/ContributeMap.jsx';
-import ContributeDetails from './pages/ContributeDetails.jsx';
-import ContributeTest from './pages/ContributeTest.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
-import Divisions from './pages/Divisions.jsx';
-import DivisionManagement from './components/divisions/DivisionManagement';
-import NewDivision from './components/divisions/NewDivision';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
-import { AuthCallback } from './components/auth/AuthCallback';
-import { DiscordRedirect } from './components/shared/DiscordRedirect';
-import { DocsRedirect } from './components/shared/DocsRedirect';
-import StaffDashboard from './pages/StaffDashboard.jsx';
 import { ErrorBoundary, RouteError } from './components/shared/ErrorBoundary';
 import { PostHogConsentBootstrap } from './components/shared/PostHogConsentBootstrap';
+import Home from './pages/Home.jsx';
+import { Loader } from 'lucide-react';
+
+const Account = lazy(() => import('./pages/Account.jsx'));
+const Privacy = lazy(() => import('./pages/Privacy.jsx'));
+const Terms = lazy(() => import('./pages/Terms.jsx'));
+const FAQPage = lazy(() => import('./pages/FAQs.jsx'));
+const GlobalStatus = lazy(() => import('./pages/GlobalStatus.jsx'));
+const Changelog = lazy(() => import('./pages/Changelog.jsx'));
+const Contact = lazy(() => import('./pages/Contact.jsx'));
+const About = lazy(() => import('./pages/About.jsx'));
+const Credits = lazy(() => import('./pages/Credits.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
+const Banned = lazy(() => import('./pages/Banned.jsx'));
+const DivisionAirportManager = lazy(() => import('./pages/DivisionAirportManager.jsx'));
+const DebugGenerator = lazy(() => import('./pages/DebugGenerator.jsx'));
+const ContributionDashboard = lazy(() => import('./pages/ContributionDashboard.jsx'));
+const ContributeNew = lazy(() => import('./pages/ContributeNew.jsx'));
+const ContributeMap = lazy(() => import('./pages/ContributeMap.jsx'));
+const ContributeDetails = lazy(() => import('./pages/ContributeDetails.jsx'));
+const ContributeTest = lazy(() => import('./pages/ContributeTest.jsx'));
+const DivisionManagement = lazy(() => import('./components/divisions/DivisionManagement.jsx'));
+const NewDivision = lazy(() => import('./components/divisions/NewDivision.jsx'));
+const StaffDashboard = lazy(() => import('./pages/StaffDashboard.jsx'));
+const AuthCallback = lazy(() =>
+  import('./components/auth/AuthCallback.jsx').then((module) => ({
+    default: module.AuthCallback,
+  }))
+);
+const DiscordRedirect = lazy(() =>
+  import('./components/shared/DiscordRedirect.jsx').then((module) => ({
+    default: module.DiscordRedirect,
+  }))
+);
+const DocsRedirect = lazy(() =>
+  import('./components/shared/DocsRedirect.jsx').then((module) => ({
+    default: module.DocsRedirect,
+  }))
+);
 
 const router = createBrowserRouter([
   {
@@ -144,15 +152,6 @@ const router = createBrowserRouter([
     errorElement: <RouteError />,
   },
   {
-    path: '/divisions',
-    element: (
-      <ProtectedRoute>
-        <Divisions />
-      </ProtectedRoute>
-    ),
-    errorElement: <RouteError />,
-  },
-  {
     path: '/divisions/new',
     element: (
       <ProtectedRoute>
@@ -205,26 +204,22 @@ const router = createBrowserRouter([
   },
 ]);
 
+const suspenseFallback = (
+  <div className="flex h-screen items-center justify-center bg-zinc-950 text-zinc-200">
+    <Loader className="h-10 w-10 animate-spin" aria-label="Loading" />
+  </div>
+);
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <PostHogProvider
-      apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY}
-      options={{
-        api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
-        defaults: '2025-05-24',
-        debug: import.meta.env.MODE === 'development',
-        opt_out_capturing_by_default: true,
-        autocapture: false,
-        capture_exceptions: false,
-        persistence: 'memory',
-      }}
-    >
+    <PostHogConsentBootstrap>
       <AuthProvider>
-        <PostHogConsentBootstrap />
         <ErrorBoundary>
-          <RouterProvider router={router} />
+          <Suspense fallback={suspenseFallback}>
+            <RouterProvider router={router} />
+          </Suspense>
         </ErrorBoundary>
       </AuthProvider>
-    </PostHogProvider>
+    </PostHogConsentBootstrap>
   </StrictMode>
 );

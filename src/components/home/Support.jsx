@@ -1,5 +1,4 @@
-import { FileText, AlertCircle, ArrowRight } from '../shared/Icons';
-import { Check, Copy, MessageSquareMore } from 'lucide-react';
+import { Check, Copy, MessageSquareMore, FileText, AlertCircle, ArrowRight } from 'lucide-react';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { useState } from 'react';

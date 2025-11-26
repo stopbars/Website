@@ -1,15 +1,26 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Toast } from '../components/shared/Toast';
 import { AlertCircle, Search, Loader, BookOpen, ChevronRight } from 'lucide-react';
 
 const ContributeNew = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [icao, setIcao] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState('');
+  const [showToast, setShowToast] = useState(false);
+
+  // Check for error in navigation state on mount
+  useEffect(() => {
+    if (location.state?.error === 'airport_load_failed') {
+      setShowToast(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -111,6 +122,15 @@ const ContributeNew = () => {
           </Card>
         </div>
       </div>
+
+      {/* Toast for error messages */}
+      <Toast
+        title="Error Loading Airport"
+        description="Failed to load airport data, please try again."
+        variant="destructive"
+        show={showToast}
+        onClose={() => setShowToast(false)}
+      />
     </Layout>
   );
 };

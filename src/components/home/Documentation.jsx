@@ -1,5 +1,4 @@
-import { ArrowRight } from '../shared/Icons';
-import { Github, PlaneTakeoff } from 'lucide-react';
+import { Github, PlaneTakeoff, ArrowRight } from 'lucide-react';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
@@ -32,19 +31,19 @@ export const Documentation = () => {
 
             <ul className="space-y-2 mb-6 text-sm">
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Map airport lighting positions
               </li>
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Expand airport and scenery compatibility
               </li>
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Simple submission process
               </li>
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Improve ground operations globally
               </li>
             </ul>
@@ -69,19 +68,19 @@ export const Documentation = () => {
 
             <ul className="space-y-2 mb-6 text-sm">
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Speed up development cycles
               </li>
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Anyone can contribute improvements
               </li>
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Ship more features to the community
               </li>
               <li className="flex items-center text-zinc-300">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 flex-shrink-0"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3 shrink-0"></div>
                 Enhance BARS faster together
               </li>
             </ul>

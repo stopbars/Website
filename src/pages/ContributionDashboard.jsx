@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import { Tooltip } from '../components/shared/Tooltip';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Toast } from '../components/shared/Toast';
 import {
   Trophy,
   Users,
@@ -27,6 +29,24 @@ const ContributionDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const vatsimToken = getVatsimToken();
+  const vatsimUserId = useMemo(() => {
+    if (!vatsimToken) {
+      return null;
+    }
+    try {
+      const segments = vatsimToken.split('.');
+      if (segments.length < 2) {
+        throw new Error('Malformed JWT');
+      }
+      const normalized = segments[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+      const payload = JSON.parse(atob(padded));
+      return payload?.sub ?? null;
+    } catch (err) {
+      console.error('Failed to decode VATSIM token', err);
+      return null;
+    }
+  }, [vatsimToken]);
 
   const [loading, setLoading] = useState(true);
   const [, setError] = useState(null);
@@ -40,7 +60,12 @@ const ContributionDashboard = () => {
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery }
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const [toast, setToast] = useState(null); // { type: 'success' | 'error', message }
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({
+    variant: 'success',
+    title: '',
+    description: '',
+  });
 
   // Tab underline animation refs/state
   const allTabRef = useRef(null);
@@ -120,7 +145,7 @@ const ContributionDashboard = () => {
 
         // Fetch all approved contributions
         const contributionsResponse = await fetch(
-          'https://v2.stopbars.com/contributions?status=approved&limit=100'
+          'https://v2.stopbars.com/contributions?status=approved'
         );
         if (!contributionsResponse.ok) {
           throw new Error('Failed to fetch contributions');
@@ -154,12 +179,10 @@ const ContributionDashboard = () => {
 
         // User contributions (if user is logged in)
         let userContribsArray = [];
-        if (user) {
-          const userResponse = await fetch('https://v2.stopbars.com/contributions/user', {
-            headers: {
-              'X-Vatsim-Token': vatsimToken,
-            },
-          });
+        if (vatsimUserId) {
+          const userResponse = await fetch(
+            `https://v2.stopbars.com/contributions?user=${encodeURIComponent(vatsimUserId)}&summary=true`
+          );
 
           if (userResponse.ok) {
             const userData = await userResponse.json();
@@ -206,7 +229,7 @@ const ContributionDashboard = () => {
     };
 
     fetchData();
-  }, [user, vatsimToken]);
+  }, [vatsimToken, vatsimUserId]);
   const handleDownload = async (airportCode, sceneryId) => {
     try {
       // Fetch the specific contribution
@@ -344,7 +367,7 @@ const ContributionDashboard = () => {
                 {/* Animated underline */}
                 {tabIndicator.ready && (
                   <span
-                    className="absolute bottom-0 h-[2px] bg-blue-500 transition-all duration-300 ease-out"
+                    className="absolute bottom-0 h-0.5 bg-blue-500 transition-all duration-300 ease-out"
                     style={{ left: tabIndicator.left, width: tabIndicator.width }}
                   />
                 )}
@@ -362,21 +385,41 @@ const ContributionDashboard = () => {
                     <span>All Contributions</span>
                   </div>
                 </button>
-                <button
-                  ref={userTabRef}
-                  className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
-                    currentTab === 'user'
-                      ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
-                      : 'text-zinc-400 hover:text-zinc-200 border-transparent'
-                  } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  onClick={() => user && setCurrentTab('user')}
-                  disabled={!user}
-                >
-                  <div className="flex items-center space-x-2">
-                    <User className="w-4 h-4" />
-                    <span>Your Contributions</span>
-                  </div>
-                </button>
+                {!user ? (
+                  <Tooltip content="You must be logged in to view your contributions.">
+                    <button
+                      ref={userTabRef}
+                      className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                        currentTab === 'user'
+                          ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
+                          : 'text-zinc-400 hover:text-zinc-200 border-transparent'
+                      } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      onClick={() => user && setCurrentTab('user')}
+                      disabled={!user}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <User className="w-4 h-4" />
+                        <span>Your Contributions</span>
+                      </div>
+                    </button>
+                  </Tooltip>
+                ) : (
+                  <button
+                    ref={userTabRef}
+                    className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                      currentTab === 'user'
+                        ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
+                        : 'text-zinc-400 hover:text-zinc-200 border-transparent'
+                    } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    onClick={() => user && setCurrentTab('user')}
+                    disabled={!user}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <User className="w-4 h-4" />
+                      <span>Your Contributions</span>
+                    </div>
+                  </button>
+                )}
               </div>
 
               {/* User Contribution Summary */}
@@ -508,7 +551,7 @@ const ContributionDashboard = () => {
                               {contribution.status === 'pending' && (
                                 <div className="flex items-center gap-2">
                                   <Button
-                                    className="!px-4 !py-2 text-sm !bg-amber-600 hover:!bg-amber-700 !text-white"
+                                    className="px-4! py-2! text-sm bg-amber-600! hover:bg-amber-700! text-white!"
                                     onClick={() =>
                                       setConfirmDelete({
                                         id: contribution.id,
@@ -542,7 +585,7 @@ const ContributionDashboard = () => {
                                     </button>
                                     <Button
                                       variant="destructive"
-                                      className="!px-4 !py-2 text-sm"
+                                      className="px-4! py-2! text-sm"
                                       onClick={() =>
                                         setConfirmDelete({
                                           id: contribution.id,
@@ -561,7 +604,7 @@ const ContributionDashboard = () => {
                                     <div className="text-xs text-zinc-400">No reason provided</div>
                                     <Button
                                       variant="destructive"
-                                      className="!px-4 !py-2 text-sm"
+                                      className="px-4! py-2! text-sm"
                                       onClick={() =>
                                         setConfirmDelete({
                                           id: contribution.id,
@@ -617,7 +660,7 @@ const ContributionDashboard = () => {
                     <span>Scenery: {viewingRejection.scenery}</span>
                   </div>
                 </div>
-                <div className="whitespace-pre-wrap break-words text-red-200">
+                <div className="whitespace-pre-wrap wrap-break-word text-red-200">
                   {viewingRejection.reason}
                 </div>
               </div>
@@ -700,16 +743,22 @@ const ContributionDashboard = () => {
 
                         setConfirmDelete(null);
                         setDeleteConfirmation('');
-                        setToast({ type: 'success', message: 'Contribution successfully deleted' });
+                        setToastConfig({
+                          variant: 'success',
+                          title: 'Contribution Deleted',
+                          description: 'Your contribution has been successfully deleted.',
+                        });
+                        setShowToast(true);
                       } catch (e) {
                         console.error(e);
-                        setToast({
-                          type: 'error',
-                          message: 'Failed to delete contribution, try again later',
+                        setToastConfig({
+                          variant: 'destructive',
+                          title: 'Deletion Failed',
+                          description: 'Failed to delete contribution, try again later.',
                         });
+                        setShowToast(true);
                       } finally {
                         setDeleting(false);
-                        setTimeout(() => setToast(null), 3000);
                       }
                     })();
                   }
@@ -734,9 +783,9 @@ const ContributionDashboard = () => {
                     className={`${
                       deleteConfirmation === `${confirmDelete.airport}-DELETE` && !deleting
                         ? confirmDelete.status === 'pending'
-                          ? '!bg-amber-600 hover:!bg-amber-700 text-white'
-                          : '!bg-red-500 hover:!bg-red-600 text-white'
-                        : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                          ? 'bg-amber-600! hover:bg-amber-700! text-white'
+                          : 'bg-red-500! hover:bg-red-600! text-white'
+                        : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                     }`}
                     disabled={deleteConfirmation !== `${confirmDelete.airport}-DELETE` || deleting}
                   >
@@ -770,17 +819,13 @@ const ContributionDashboard = () => {
         </div>
       )}
 
-      {toast && (
-        <div
-          className={`fixed bottom-8 left-8 p-4 rounded-lg z-50 animate-in fade-in slide-in-from-bottom-4 border ${
-            toast.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-              : 'bg-red-500/10 border-red-500 text-red-500'
-          }`}
-        >
-          <p>{toast.message}</p>
-        </div>
-      )}
+      <Toast
+        show={showToast}
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        onClose={() => setShowToast(false)}
+      />
     </Layout>
   );
 };

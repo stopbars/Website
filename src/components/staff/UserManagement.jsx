@@ -6,6 +6,7 @@ import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import {
   User,
+  Users,
   Search,
   Mail,
   AlertTriangle,
@@ -137,8 +138,8 @@ const DeleteConfirmationModal = ({ user, onCancel, onConfirmDelete, isDeleting }
                 type="submit"
                 className={`${
                   deleteConfirmation === 'DELETE' && !isDeleting
-                    ? '!bg-red-500 hover:!bg-red-600 text-white'
-                    : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                    ? 'bg-red-500! hover:bg-red-600! text-white'
+                    : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                 }`}
                 disabled={deleteConfirmation !== 'DELETE' || isDeleting}
               >
@@ -250,8 +251,8 @@ const RegenerateTokenModal = ({ user, onCancel, onConfirmRegenerate, isRegenerat
                 type="submit"
                 className={`${
                   regenerateConfirmation === 'REGENERATE' && !isRegenerating
-                    ? '!bg-orange-500 hover:!bg-orange-600 text-white'
-                    : '!bg-zinc-700 !text-zinc-400 cursor-not-allowed'
+                    ? 'bg-orange-500! hover:bg-orange-600! text-white'
+                    : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
                 }`}
                 disabled={regenerateConfirmation !== 'REGENERATE' || isRegenerating}
               >
@@ -442,149 +443,157 @@ const UserManagement = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      {/* Header and Search */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <div className="flex items-center space-x-3 mb-4 md:mb-0">
-          <h1 className="text-2xl font-bold">User Management</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">User Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Manage user accounts and permissions</p>
+        </div>
+        <div className="flex items-center gap-3">
           {!loading && (
-            <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs font-medium">
+            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+              <Users className="w-4 h-4 mr-2 text-zinc-400" />
               {totalUsers} users
             </span>
           )}
-        </div>
-        <div className="flex items-center space-x-4">
           <div className="relative">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
               placeholder="Search users..."
               value={searchTerm}
               onChange={handleSearch}
-              className="pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 w-64"
+              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-64 transition-all"
             />
           </div>
         </div>
       </div>
 
-      <div className="space-y-6">
-        {/* Status Messages */}
-        {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-            <p className="text-red-500">{error}</p>
-          </div>
-        )}
+      {/* Status Messages */}
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
 
-        {success && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
-            <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-            <p className="text-emerald-500">{success}</p>
-          </div>
-        )}
+      {success && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
+          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+          <p className="text-sm text-emerald-400">{success}</p>
+        </div>
+      )}
 
-        {/* Users List */}
+      {/* Users List */}
+      <div className="space-y-4">
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <Loader className="w-8 h-8 animate-spin text-zinc-400" />
+            <Loader className="w-6 h-6 animate-spin text-zinc-400" />
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredUsers.length === 0 && (
-                <div className="col-span-full p-6 text-center text-zinc-400 border border-dashed border-zinc-700 rounded-lg">
-                  No users found.
+                <div className="col-span-full p-8 text-center border border-dashed border-zinc-700/50 rounded-xl bg-zinc-800/20">
+                  <User className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
+                  <p className="text-zinc-400 text-sm">No users found</p>
                 </div>
               )}
               {filteredUsers.map((user) => (
-                <Card key={user.id} className="p-4 hover:border-zinc-700 transition-colors">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-3">
-                        <User className="w-6 h-6 text-zinc-400" />
-                        <h3 className="font-medium truncate text-base">
-                          {user.full_name || 'Not Set'}
-                        </h3>
+                <Card
+                  key={user.id}
+                  className="p-5 hover:border-zinc-600/50 transition-all duration-200 hover:bg-zinc-800/30"
+                >
+                  <div className="space-y-4">
+                    {/* User Header */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+                          <User className="w-5 h-5 text-zinc-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-medium text-white truncate">
+                            {user.full_name || 'Not Set'}
+                          </h3>
+                          <p className="text-xs text-zinc-500">ID: {user.id}</p>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <Button
-                          variant="outline"
+                      <div className="flex items-center gap-1">
+                        <button
                           onClick={() => setRegeneratingUser(user)}
-                          className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-orange-400 hover:bg-orange-500/10 transition-colors"
+                          title="Regenerate API Token"
                         >
-                          <KeyRound className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="outline"
+                          <KeyRound className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => setDeletingUser(user)}
-                          className="px-1.5 py-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Delete User"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        Account ID: {user.id || 'Not set'}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
+
+                    {/* Role Badge */}
+                    <div>
                       {user.is_staff && user.role && user.role.toLowerCase() !== 'user' ? (
-                        <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <ShieldCheck className="w-3 h-3" />
+                          {formatRole(user.role)}
+                        </span>
                       ) : (
-                        <Shield className="w-3.5 h-3.5 text-zinc-400" />
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
+                          <Shield className="w-3 h-3" />
+                          User
+                        </span>
                       )}
-                      <span className="text-xs text-zinc-300">
-                        Role: {user.is_staff ? formatRole(user.role) : 'User'}
-                      </span>
                     </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <Mail className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">Email: {user.email}</span>
+
+                    {/* User Details */}
+                    <div className="space-y-2 pt-2 border-t border-zinc-800">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail className="w-3.5 h-3.5 text-zinc-500" />
+                        <span className="text-zinc-300 truncate">{user.email}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <IdCard className="w-3.5 h-3.5 text-zinc-500" />
+                        <span className="text-zinc-300">VATSIM: {user.vatsim_id || 'Not set'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Globe className="w-3.5 h-3.5 text-zinc-500" />
+                        <span className="text-zinc-300">
+                          {user.region?.name || user.region?.id || 'No region'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Map className="w-3.5 h-3.5 text-zinc-500" />
+                        <span className="text-zinc-300">
+                          {user.division?.name || user.division?.id || 'No division'}
+                        </span>
+                      </div>
+                      {(user.subdivision?.name || user.subdivision?.id) && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <MapPin className="w-3.5 h-3.5 text-zinc-500" />
+                          <span className="text-zinc-300">
+                            {user.subdivision?.name || user.subdivision?.id}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        VATSIM ID: {user.vatsim_id || 'Not set'}
-                      </span>
-                    </div>
-                    {/* Region / Division / Subdivision */}
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <Globe className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        Region: {user.region?.name || user.region?.id || 'Not set'}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <Map className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        Division: {user.division?.name || user.division?.id || 'Not set'}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        Subdivision: {user.subdivision?.name || user.subdivision?.id || 'None'}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <IdCard className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        Display Name: {getDisplayName(user)}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2 mb-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        Created: {formatLocalDateTime(user.created_at)}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs text-zinc-300">
-                        Last Login: {formatLocalDateTime(user.last_login)}
-                      </span>
+
+                    {/* Timestamps */}
+                    <div className="flex items-center justify-between pt-3 border-t border-zinc-800 text-xs text-zinc-500">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3 h-3" />
+                        <span>{formatLocalDateTime(user.created_at)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" />
+                        <span>{formatLocalDateTime(user.last_login)}</span>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -612,28 +621,27 @@ const UserManagement = () => {
             )}
 
             {/* Pagination Controls */}
-            <div className="flex items-center justify-between mt-6">
-              <Button
-                variant="outline"
+            <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
+              <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1.5 text-sm"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronLeft className="w-3.5 h-3.5 mr-1.5" />
+                <ChevronLeft className="w-4 h-4" />
                 Previous
-              </Button>
+              </button>
               <span className="text-sm text-zinc-400">
-                Page {currentPage} of {totalPages}
+                Page <span className="font-medium text-zinc-300">{currentPage}</span> of{' '}
+                <span className="font-medium text-zinc-300">{totalPages}</span>
               </span>
-              <Button
-                variant="outline"
+              <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="px-3 py-1.5 text-sm"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Next
-                <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
-              </Button>
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </>
         )}
