@@ -103,36 +103,58 @@ const PendingAirportRequests = ({ onCountChange }) => {
     }
   };
 
-  if (loading) return <p className="text-zinc-400">Loading requests...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
-  if (!requests?.length) return <p className="text-zinc-400">No pending airport requests found.</p>;
+  if (loading)
+    return (
+      <div className="text-center py-8 text-zinc-400">
+        <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50 animate-pulse" />
+        <p>Loading requests...</p>
+      </div>
+    );
+  if (error)
+    return (
+      <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
+        {error}
+      </div>
+    );
+  if (!requests?.length)
+    return (
+      <div className="text-center py-8 text-zinc-500">
+        <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <p>No pending airport requests found.</p>
+      </div>
+    );
 
   return (
     <div className="space-y-4">
       {requests.map((request) => (
         <div
           key={request.id}
-          className="flex items-center justify-between p-4 border border-zinc-800 rounded-lg"
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl gap-4 hover:bg-zinc-800/70 transition-colors"
         >
-          <div>
+          <div className="space-y-1">
             <h3 className="text-lg font-semibold text-white flex items-center">
-              <MapPin className="w-5 h-5 mr-2 text-zinc-400" />
-              {request.icao} - {divisions[request.division_id]}
+              <MapPin className="w-5 h-5 mr-2 text-blue-400" />
+              <span className="font-mono">{request.icao}</span>
+              <span className="mx-2 text-zinc-600">•</span>
+              <span className="text-zinc-300 font-normal">{divisions[request.division_id]}</span>
             </h3>
-            <p className="text-zinc-400">Requested by: {request.requested_by}</p>
-            <p className="text-zinc-400 text-sm">{new Date(request.created_at).toLocaleString()}</p>
+            <p className="text-zinc-400 text-sm">
+              Requested by: <span className="text-zinc-300">{request.requested_by}</span>
+            </p>
+            <p className="text-zinc-500 text-xs">{new Date(request.created_at).toLocaleString()}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <Button
               onClick={() => handleApprove(request.division_id, request.id, true)}
-              className="bg-green-600 hover:bg-green-500 hover:text-white"
+              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white"
             >
               <Check className="w-4 h-4 mr-2" />
               Approve
             </Button>
             <Button
               onClick={() => handleApprove(request.division_id, request.id, false)}
-              className="bg-red-600 hover:bg-red-500 hover:text-white"
+              variant="destructive"
+              className="flex-1 sm:flex-initial"
             >
               <X className="w-4 h-4 mr-2" />
               Reject
@@ -152,16 +174,21 @@ const AirportManagement = () => {
   const [pendingCount, setPendingCount] = useState(0);
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">Airport Management</h1>
-        <div className="text-sm bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full">
-          {pendingCount || '0'} Pending Requests
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Airport Management</h2>
+          <p className="text-zinc-400 text-sm mt-1">Review and approve airport requests</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full text-sm font-medium">
+            {pendingCount || '0'} Pending Request{pendingCount !== 1 ? 's' : ''}
+          </span>
         </div>
       </div>
 
       <div className="space-y-4">
-        <Card className="p-6">
+        <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
           <PendingAirportRequests onCountChange={setPendingCount} />
         </Card>
       </div>

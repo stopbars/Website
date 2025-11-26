@@ -193,15 +193,26 @@ const VatSysProfiles = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <Card className="mb-6">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-white">vatSys Profiles</h2>
+          <p className="text-zinc-400 text-sm mt-1">Upload and manage vatSys profile XMLs</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm font-medium">
+            {profiles.length} Profile{profiles.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileUp className="w-5 h-5 text-blue-400" /> vatSys Profiles
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold text-white">
+            <FileUp className="w-5 h-5 text-blue-400" /> Upload Profile
           </CardTitle>
           <p className="text-sm text-zinc-400 leading-relaxed">
-            Upload and manage vatSys profile XMLs. Filenames determine identity; uploading the same
-            name replaces the existing profile.
+            Filenames determine identity; uploading the same name replaces the existing profile.
           </p>
           <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex gap-2 items-start">
             <Info className="w-4 h-4 mt-0.5" />
@@ -394,22 +405,19 @@ const VatSysProfiles = () => {
           </div>
 
           {error && (
-            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-sm text-red-400">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
-              <span>{error}</span>
-              <button onClick={clearStatus} className="ml-auto text-red-400/70 hover:text-red-300">
+            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400">
+              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+              <span className="flex-1">{error}</span>
+              <button onClick={clearStatus} className="text-red-400/70 hover:text-red-300">
                 <X className="w-4 h-4" />
               </button>
             </div>
           )}
           {success && (
-            <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start gap-2 text-sm text-emerald-400">
-              <Check className="w-4 h-4 mt-0.5" />
-              <span>{success}</span>
-              <button
-                onClick={clearStatus}
-                className="ml-auto text-emerald-400/70 hover:text-emerald-300"
-              >
+            <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-400">
+              <Check className="w-5 h-5 mt-0.5 shrink-0" />
+              <span className="flex-1">{success}</span>
+              <button onClick={clearStatus} className="text-emerald-400/70 hover:text-emerald-300">
                 <X className="w-4 h-4" />
               </button>
             </div>

@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Button } from '../shared/Button';
-import { Card } from '../shared/Card';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { AlertTriangle, CheckCircle2, Loader2, Trash2, Eraser, Sparkles } from 'lucide-react';
 
@@ -115,7 +113,7 @@ export default function CacheManagement() {
   const Badge = ({ children, onClick }) => (
     <button
       onClick={onClick}
-      className="text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition border border-zinc-700"
+      className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 transition-all border border-zinc-700/50 hover:border-zinc-600"
       type="button"
     >
       {children}
@@ -128,30 +126,36 @@ export default function CacheManagement() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold mb-1">Cache Management</h2>
-        <p className="text-zinc-400">Lead developer tools for cache management.</p>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Cache Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Purge cache keys and namespaces</p>
+        </div>
       </div>
 
+      {/* Result Message */}
       {result && (
         <div
-          className={`p-3 rounded-lg border flex items-start space-x-3 ${
+          className={`p-4 rounded-lg border flex items-start gap-3 ${
             result.type === 'success'
               ? 'bg-emerald-500/10 border-emerald-500/20'
               : 'bg-red-500/10 border-red-500/20'
           }`}
         >
           {result.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
           ) : (
-            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
           )}
-          <div className="flex-1">
-            <p className={result.type === 'success' ? 'text-emerald-400' : 'text-red-400'}>
+          <div className="flex-1 min-w-0">
+            <p
+              className={`text-sm ${result.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}
+            >
               {result.message}
             </p>
             {result.details && (
-              <pre className="mt-2 text-xs text-zinc-400 whitespace-pre-wrap break-all max-h-40 overflow-auto bg-black/20 p-2 rounded">
+              <pre className="mt-3 text-xs text-zinc-400 whitespace-pre-wrap break-all max-h-40 overflow-auto bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
                 {JSON.stringify(result.details, null, 2)}
               </pre>
             )}
@@ -159,41 +163,53 @@ export default function CacheManagement() {
         </div>
       )}
 
+      {/* Cards Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-4 space-y-4">
-          <div>
-            <h3 className="font-medium">Purge Cache Key</h3>
-            <p className="text-sm text-zinc-400">
-              Delete a specific cache entry by key within a required namespace.
-            </p>
+        {/* Purge Cache Key */}
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <Trash2 className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="font-medium text-white">Purge Cache Key</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">Delete a specific cache entry by key</p>
+            </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Key</label>
+              <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+                Key
+              </label>
               <input
                 type="text"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 placeholder="e.g. /airports?icao=YSSY"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Namespace</label>
+              <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+                Namespace
+              </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={namespace}
                   onChange={(e) => setNamespace(e.target.value)}
                   placeholder="e.g. airports"
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
                 />
-                <Button onClick={() => setNamespace('')} variant="secondary">
+                <button
+                  onClick={() => setNamespace('')}
+                  className="px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
+                >
                   Clear
-                </Button>
+                </button>
               </div>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-3">
                 {KNOWN_NAMESPACES.map((ns) => (
                   <Badge key={ns} onClick={() => setNamespace(ns)}>
                     {ns}
@@ -201,53 +217,60 @@ export default function CacheManagement() {
                 ))}
               </div>
             </div>
+            <button
+              onClick={handlePurgeKey}
+              disabled={loading || !key || !namespace}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              Purge Key
+            </button>
+          </div>
+        </div>
+
+        {/* Purge Namespace */}
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <Eraser className="w-4 h-4 text-blue-400" />
+            </div>
             <div>
-              <Button onClick={handlePurgeKey} disabled={loading || !key || !namespace}>
-                {loading ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Purging…
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2">
-                    <Trash2 className="w-4 h-4" /> Purge Key
-                  </span>
-                )}
-              </Button>
+              <h3 className="font-medium text-white">Purge Namespace</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">Invalidate all entries in a namespace</p>
             </div>
           </div>
-        </Card>
 
-        <Card className="p-4 space-y-4">
-          <div>
-            <h3 className="font-medium">Purge Namespace</h3>
-            <p className="text-sm text-zinc-400">
-              Bump version for a namespace to invalidate all its entries.
-            </p>
-          </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Namespace</label>
+              <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+                Namespace
+              </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={namespace}
                   onChange={(e) => setNamespace(e.target.value)}
                   placeholder="e.g. points"
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
                 />
-                <Button onClick={handlePurgeNamespace} disabled={loading}>
+                <button
+                  onClick={handlePurgeNamespace}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                >
                   {loading ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" /> Purging…
-                    </span>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <span className="inline-flex items-center gap-2">
-                      <Eraser className="w-4 h-4" /> Purge Namespace
-                    </span>
+                    <Eraser className="w-4 h-4" />
                   )}
-                </Button>
+                  Purge
+                </button>
               </div>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-3">
                 {KNOWN_NAMESPACES.map((ns) => (
                   <Badge key={ns} onClick={() => setNamespace(ns)}>
                     {ns}
@@ -256,34 +279,37 @@ export default function CacheManagement() {
               </div>
             </div>
           </div>
-        </Card>
+        </div>
       </div>
 
-      <Card className="p-4">
+      {/* Purge ALL */}
+      <div className="bg-zinc-900/50 border border-red-500/20 rounded-xl p-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-medium">Purge ALL Namespaces</h3>
-            <p className="text-sm text-zinc-400">
-              Bump versions for all known namespaces. Use with care.
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+              <Sparkles className="w-4 h-4 text-red-400" />
+            </div>
+            <div>
+              <h3 className="font-medium text-white">Purge ALL Namespaces</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Bump versions for all known namespaces. Use with care.
+              </p>
+            </div>
           </div>
-          <Button
+          <button
             onClick={handlePurgeAll}
             disabled={loading}
-            className="bg-red-600 hover:bg-red-500"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
           >
             {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Purging…
-              </span>
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <span className="inline-flex items-center gap-2">
-                <Sparkles className="w-4 h-4" /> Purge ALL
-              </span>
+              <Sparkles className="w-4 h-4" />
             )}
-          </Button>
+            Purge ALL
+          </button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

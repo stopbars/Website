@@ -19,6 +19,11 @@ body {
   color: white;
 }
 
+/* Ensure all clickable buttons have pointer cursor */
+button {
+  cursor: pointer;
+}
+
 .markdown-preview h1 {
   font-size: 1.6rem; /* ~text-2xl */
   line-height: 1.25;

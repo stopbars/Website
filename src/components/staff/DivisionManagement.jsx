@@ -383,8 +383,8 @@ const DivisionManagement = () => {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-4 max-w-4xl">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
           <div className="animate-pulse bg-zinc-700 h-8 w-48 rounded mb-4 md:mb-0"></div>
           <div className="animate-pulse bg-zinc-700 h-9 w-32 rounded-lg"></div>
         </div>
@@ -428,28 +428,36 @@ const DivisionManagement = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">Division Management</h1>
-        <Button onClick={() => navigate('/divisions/new')} className="text-sm px-4 py-2">
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
-          Create Division
-        </Button>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Division Management</h2>
+          <p className="text-zinc-400 text-sm mt-1">Manage organizational divisions</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm font-medium">
+            {divisions.length} Division{divisions.length !== 1 ? 's' : ''}
+          </span>
+          <Button onClick={() => navigate('/divisions/new')}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Division
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-4">
         {/* Status Messages */}
         {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-            <p className="text-red-500">{error}</p>
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+            <p className="text-red-400">{error}</p>
           </div>
         )}
 
         {success && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center space-x-3">
-            <Check className="w-5 h-5 text-emerald-500 shrink-0" />
-            <p className="text-emerald-500">{success}</p>
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3">
+            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+            <p className="text-emerald-400">{success}</p>
           </div>
         )}
 
@@ -462,22 +470,27 @@ const DivisionManagement = () => {
               const airports = divisionAirports[division.id] || [];
 
               return (
-                <Card key={division.id} className="p-6">
+                <Card
+                  key={division.id}
+                  className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-4">
                         <div>
-                          <div className="flex items-center space-x-1">
+                          <div className="flex items-center gap-2">
                             <h4 className="text-xl font-semibold text-white">{division.name}</h4>
-                            <span className="text-sm text-zinc-400 opacity-70">#{division.id}</span>
+                            <span className="text-sm text-zinc-500">#{division.id}</span>
                           </div>
-                          <p className="text-zinc-400 text-sm">{formatDate(division.created_at)}</p>
+                          <p className="text-zinc-400 text-sm mt-1">
+                            {formatDate(division.created_at)}
+                          </p>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-2">
                           <Button
                             onClick={() => toggleDivisionExpansion(division.id)}
-                            variant="secondary"
-                            className="px-2 py-2"
+                            variant="outline"
+                            className="p-2"
                           >
                             {isExpanded ? (
                               <ChevronUp className="w-4 h-4" />
@@ -487,15 +500,15 @@ const DivisionManagement = () => {
                           </Button>
                           <Button
                             onClick={() => setEditingDivision(division)}
-                            variant="secondary"
-                            className="text-orange-400 hover:bg-orange-500/10 px-2 py-2"
+                            variant="outline"
+                            className="p-2 text-amber-400 hover:bg-amber-500/10"
                           >
                             <Edit className="w-4 h-4" />
                           </Button>
                           <Button
                             onClick={() => setDeletingDivision(division)}
-                            variant="secondary"
-                            className="text-red-400 px-2 py-2"
+                            variant="outline"
+                            className="p-2 text-red-400 hover:bg-red-500/10"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -610,8 +623,8 @@ const DivisionManagement = () => {
             })}
           </div>
         ) : (
-          <Card className="p-8 text-center">
-            <TowerControl className="w-12 h-12 text-zinc-400 mx-auto mb-4" />
+          <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-8 text-center">
+            <TowerControl className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
             <h4 className="text-lg font-semibold text-white mb-2">No divisions found</h4>
             <p className="text-zinc-400 mb-4">Create your first division to get started</p>
             <Button onClick={() => navigate('/divisions/new')}>

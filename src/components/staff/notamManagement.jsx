@@ -17,7 +17,6 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { Button } from '../shared/Button';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import DOMPurify from 'dompurify';
 
@@ -349,270 +348,263 @@ const NotamManagement = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">NOTAM Management</h1>
-        <div className="flex items-center space-x-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">NOTAM Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Update and publish website notices</p>
+        </div>
+        <div className="flex items-center gap-3">
           {!isEditing && !isAdding && (
             <>
-              <Button
+              <button
                 onClick={handleStartAdd}
-                variant="outline"
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
               >
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="w-4 h-4" />
                 New NOTAM
-              </Button>
+              </button>
               {notamData?.notam && (
-                <Button
+                <button
                   onClick={handleStartEdit}
-                  variant="outline"
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
                 >
-                  <Edit className="w-4 h-4 mr-2" />
+                  <Edit className="w-4 h-4" />
                   Edit Current
-                </Button>
+                </button>
               )}
             </>
           )}
           {(isEditing || isAdding) && (
-            <div className="flex items-center space-x-2">
-              <Button
+            <div className="flex items-center gap-2">
+              <button
                 onClick={handleSave}
-                variant="outline"
-                className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
-                  (isAdding && newContent.trim().length < 5) ||
-                  (isEditing && !hasEditChanges) ||
-                  saving
-                    ? 'opacity-50 cursor-not-allowed hover:bg-transparent!'
-                    : ''
-                }`}
                 disabled={
                   (isAdding && newContent.trim().length < 5) ||
                   (isEditing && !hasEditChanges) ||
                   saving
                 }
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
               >
                 {saving ? (
                   <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader className="w-4 h-4 animate-spin" />
                     Saving...
                   </>
                 ) : isAdding ? (
                   <>
-                    <Send className="w-4 h-4 mr-2" />
+                    <Send className="w-4 h-4" />
                     Publish
                   </>
                 ) : (
                   <>
-                    <HardDriveDownload className="w-4 h-4 mr-2" />
+                    <HardDriveDownload className="w-4 h-4" />
                     Save
                   </>
                 )}
-              </Button>
-              <Button
+              </button>
+              <button
                 onClick={handleCancel}
-                variant="outline"
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all"
               >
-                <X className="w-4 h-4 mr-2" />
+                <X className="w-4 h-4" />
                 Cancel
-              </Button>
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="space-y-6">
-        {/* Success Message */}
-        {saveSuccess && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-emerald-400 font-medium">NOTAM Updated Successfully</p>
-              <p className="text-emerald-300/80 text-sm mt-1">
-                The endpoint may take a short time to update. Users will see changes after 1 hour
-                when their cache expires and the navbar fetches from the API. Your NOTAM in the
-                navbar will be updated, but NOTAM Management will show outdated data until the
-                endpoint updates.
-              </p>
-            </div>
-            <button
-              onClick={() => setSaveSuccess(false)}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
+      {/* Success Message */}
+      {saveSuccess && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-emerald-400 font-medium">NOTAM Updated Successfully</p>
+            <p className="text-xs text-emerald-400/70 mt-1">
+              The endpoint may take a short time to update. Users will see changes after cache
+              expires.
+            </p>
           </div>
-        )}
+          <button
+            onClick={() => setSaveSuccess(false)}
+            className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
-        {/* Add New NOTAM Section */}
-        {isAdding && (
-          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium text-white">Add New NOTAM</h3>
+      {/* Add New NOTAM Section */}
+      {isAdding && (
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <Plus className="w-4 h-4 text-blue-400" />
             </div>
-
-            <div className="space-y-6">
-              {/* Content Section */}
-              <div>
-                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                  <FileText className="w-4 h-4" />
-                  <span>Content</span>
-                </label>
-                <textarea
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full h-24 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 resize-none text-white placeholder-zinc-500"
-                />
-              </div>
-
-              {/* Type Section */}
-              <div>
-                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                  <Tag className="w-4 h-4" />
-                  <span>Type</span>
-                </label>
-                {renderTypeDropdown(
-                  newType,
-                  setNewType,
-                  showNewTypeDropdown,
-                  setShowNewTypeDropdown
-                )}
-              </div>
-
-              {/* Preview Section */}
-              <div>
-                <div className="flex items-center space-x-2 mb-2">
-                  <Eye className="w-4 h-4 text-zinc-400" />
-                  <label className="text-sm font-medium text-zinc-300">Preview</label>
-                </div>
-                <div className="h-24 border border-zinc-700 rounded-lg overflow-hidden">
-                  {newContent ? (
-                    <div
-                      className={`p-4 h-full ${getNotamTypeStyles(newType).bg} ${getNotamTypeStyles(newType).border} border`}
-                    >
-                      <div
-                        className={`${getNotamTypeStyles(newType).text} font-medium text-sm overflow-auto`}
-                        dangerouslySetInnerHTML={{ __html: parseNotamLinks(newContent) }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="p-4 h-full bg-zinc-800/50 flex items-center justify-center">
-                      <p className="text-zinc-500 text-sm">Preview will appear here...</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <h3 className="font-medium text-white">Add New NOTAM</h3>
           </div>
-        )}
 
-        {/* Edit Existing NOTAM Section */}
-        {isEditing && notamData?.notam && (
-          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium text-white">Edit Current NOTAM</h3>
+          <div className="space-y-5">
+            {/* Content */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <FileText className="w-4 h-4 text-zinc-400" />
+                Content
+              </label>
+              <textarea
+                value={newContent}
+                onChange={(e) => setNewContent(e.target.value)}
+                className="w-full h-24 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                placeholder="Enter NOTAM content..."
+              />
             </div>
 
-            <div className="space-y-6">
-              {/* Content Section */}
-              <div>
-                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                  <FileText className="w-4 h-4" />
-                  <span>Content</span>
-                </label>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-24 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 resize-none text-white"
-                />
-              </div>
+            {/* Type */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <Tag className="w-4 h-4 text-zinc-400" />
+                Type
+              </label>
+              {renderTypeDropdown(newType, setNewType, showNewTypeDropdown, setShowNewTypeDropdown)}
+            </div>
 
-              {/* Type Section */}
-              <div>
-                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                  <Tag className="w-4 h-4" />
-                  <span>Type</span>
-                </label>
-                {renderTypeDropdown(editType, setEditType, showTypeDropdown, setShowTypeDropdown)}
-              </div>
-
-              {/* Preview Section */}
-              <div>
-                <div className="flex items-center space-x-2 mb-2">
-                  <Eye className="w-4 h-4 text-zinc-400" />
-                  <label className="text-sm font-medium text-zinc-300">Preview</label>
-                </div>
-                <div className="h-24 border border-zinc-700 rounded-lg overflow-hidden">
+            {/* Preview */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <Eye className="w-4 h-4 text-zinc-400" />
+                Preview
+              </label>
+              <div className="h-24 border border-zinc-700/50 rounded-lg overflow-hidden">
+                {newContent ? (
                   <div
-                    className={`p-4 h-full ${getNotamTypeStyles(editType).bg} ${getNotamTypeStyles(editType).border} border`}
+                    className={`p-4 h-full ${getNotamTypeStyles(newType).bg} border-b ${getNotamTypeStyles(newType).border}`}
                   >
                     <div
-                      className={`${getNotamTypeStyles(editType).text} font-medium text-sm overflow-auto`}
-                      dangerouslySetInnerHTML={{
-                        __html: DOMPurify.sanitize(parseNotamLinks(editContent)),
-                      }}
+                      className={`${getNotamTypeStyles(newType).text} text-sm font-medium overflow-auto`}
+                      dangerouslySetInnerHTML={{ __html: parseNotamLinks(newContent) }}
                     />
                   </div>
-                </div>
+                ) : (
+                  <div className="p-4 h-full bg-zinc-800/30 flex items-center justify-center">
+                    <p className="text-zinc-500 text-sm">Preview will appear here...</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Current NOTAM Display */}
-        {!isEditing && !isAdding && (
-          <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <h3 className="text-lg font-medium text-zinc-300">Current NOTAM:</h3>
-              {notamData?.notam && renderTypeTag(notamData.type)}
+      {/* Edit Existing NOTAM Section */}
+      {isEditing && notamData?.notam && (
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <Edit className="w-4 h-4 text-amber-400" />
+            </div>
+            <h3 className="font-medium text-white">Edit Current NOTAM</h3>
+          </div>
+
+          <div className="space-y-5">
+            {/* Content */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <FileText className="w-4 h-4 text-zinc-400" />
+                Content
+              </label>
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full h-24 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+              />
             </div>
 
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-                <span className="ml-2 text-zinc-400">Loading NOTAM...</span>
-              </div>
-            ) : error ? (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-                <p className="text-red-400">{error}</p>
-              </div>
-            ) : notamData?.notam ? (
-              <div className="space-y-4">
+            {/* Type */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <Tag className="w-4 h-4 text-zinc-400" />
+                Type
+              </label>
+              {renderTypeDropdown(editType, setEditType, showTypeDropdown, setShowTypeDropdown)}
+            </div>
+
+            {/* Preview */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <Eye className="w-4 h-4 text-zinc-400" />
+                Preview
+              </label>
+              <div className="h-24 border border-zinc-700/50 rounded-lg overflow-hidden">
                 <div
-                  className={`p-4 rounded-lg border ${getNotamTypeStyles(notamData.type).bg} ${getNotamTypeStyles(notamData.type).border} relative`}
+                  className={`p-4 h-full ${getNotamTypeStyles(editType).bg} border-b ${getNotamTypeStyles(editType).border}`}
                 >
-                  <button
-                    onClick={copyNotamToClipboard}
-                    className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded cursor-pointer"
-                    title="Copy NOTAM to clipboard"
-                  >
-                    {copied ? (
-                      <Check className="w-4.5 h-4.5 text-green-400" />
-                    ) : (
-                      <Copy className="w-4.5 h-4.5" />
-                    )}
-                  </button>
                   <div
-                    className={`${getNotamTypeStyles(notamData.type).text} font-medium pr-8`}
-                    dangerouslySetInnerHTML={{ __html: parseNotamLinks(notamData.notam) }}
+                    className={`${getNotamTypeStyles(editType).text} text-sm font-medium overflow-auto`}
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(parseNotamLinks(editContent)),
+                    }}
                   />
                 </div>
               </div>
-            ) : (
-              <div className="p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Info className="w-5 h-5 text-zinc-400 shrink-0" />
-                  <p className="text-zinc-400">No NOTAM currently active</p>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Current NOTAM Display */}
+      {!isEditing && !isAdding && (
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-zinc-800 border border-zinc-700">
+                <MessageSquareWarning className="w-4 h-4 text-zinc-400" />
+              </div>
+              <h3 className="font-medium text-white">Current NOTAM</h3>
+            </div>
+            {notamData?.notam && renderTypeTag(notamData.type)}
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader className="w-5 h-5 animate-spin text-zinc-400" />
+              <span className="ml-2 text-sm text-zinc-400">Loading NOTAM...</span>
+            </div>
+          ) : error ? (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
+          ) : notamData?.notam ? (
+            <div
+              className={`p-4 rounded-lg border-b ${getNotamTypeStyles(notamData.type).bg} ${getNotamTypeStyles(notamData.type).border} relative`}
+            >
+              <button
+                onClick={copyNotamToClipboard}
+                className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors"
+                title="Copy NOTAM to clipboard"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </button>
+              <div
+                className={`${getNotamTypeStyles(notamData.type).text} text-sm font-medium pr-10`}
+                dangerouslySetInnerHTML={{ __html: parseNotamLinks(notamData.notam) }}
+              />
+            </div>
+          ) : (
+            <div className="p-6 bg-zinc-800/30 border border-zinc-700/30 border-dashed rounded-lg text-center">
+              <Info className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
+              <p className="text-sm text-zinc-400">No NOTAM currently active</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

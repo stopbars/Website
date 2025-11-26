@@ -311,7 +311,7 @@ const StaffDashboard = () => {
     return (
       <Layout>
         <div className="pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
+          <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
             <div className="flex items-center justify-center h-64">
               <Loader className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
@@ -325,7 +325,7 @@ const StaffDashboard = () => {
     return (
       <Layout>
         <div className="pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6">
+          <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
               <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
               <p className="text-red-500">{error}</p>
@@ -342,7 +342,7 @@ const StaffDashboard = () => {
   return (
     <Layout>
       <div className="pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold mb-2">Staff Dashboard</h1>

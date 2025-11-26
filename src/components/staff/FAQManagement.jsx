@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Card } from '../shared/Card';
-import { Button } from '../shared/Button';
 import {
   HelpCircle,
   AlertTriangle,
@@ -375,113 +373,116 @@ const FAQManagement = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">FAQ Management</h1>
-        <div className="flex items-center space-x-3">
-          <Button
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">FAQ Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Manage frequently asked questions</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {faqs.length > 0 && (
+            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+              <HelpCircle className="w-4 h-4 mr-2 text-zinc-400" />
+              {faqs.length} FAQs
+            </span>
+          )}
+          <button
             onClick={() => setIsAdding(true)}
-            variant="outline"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
           >
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-4 h-4" />
             Add FAQ
-          </Button>
+          </button>
         </div>
       </div>
 
       <div className="space-y-6">
         {/* Status Messages */}
         {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-            <p className="text-red-500">{error}</p>
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+            <p className="text-sm text-red-400">{error}</p>
           </div>
         )}
 
         {success && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
-            <Check className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-emerald-400 font-medium">{success}</p>
-            </div>
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
+            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+            <p className="text-sm text-emerald-400">{success}</p>
           </div>
         )}
 
         {/* Add FAQ Form */}
         {isAdding && (
-          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium text-white">Add New FAQ</h3>
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <Plus className="w-4 h-4 text-blue-400" />
+              </div>
+              <h3 className="font-medium text-white">Add New FAQ</h3>
             </div>
 
-            <div className="space-y-6">
-              {/* Question Section */}
+            <div className="space-y-5">
+              {/* Question */}
               <div>
-                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                  <FileQuestion className="w-4 h-4" />
-                  <span>Question</span>
+                <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                  <FileQuestion className="w-4 h-4 text-zinc-400" />
+                  Question
                 </label>
                 <input
                   type="text"
                   value={newFaq.question}
                   onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 text-white placeholder-zinc-500"
+                  className="w-full px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
                   placeholder="Enter the FAQ question..."
                 />
               </div>
 
-              {/* Answer Section */}
+              {/* Answer */}
               <div>
-                <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Answer</span>
+                <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                  <MessageSquare className="w-4 h-4 text-zinc-400" />
+                  Answer
                 </label>
                 <textarea
                   value={newFaq.answer}
                   onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
-                  className="w-full h-32 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 resize-none text-white placeholder-zinc-500"
+                  className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
                   placeholder="Enter the FAQ answer..."
                 />
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center space-x-3 pt-2">
-                <Button
+              {/* Actions */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
                   onClick={handleAddFaq}
-                  variant="outline"
-                  className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
-                    !newFaq.question.trim() || !newFaq.answer.trim() || isPublishing
-                      ? 'opacity-50 cursor-not-allowed hover:bg-transparent!'
-                      : ''
-                  }`}
                   disabled={!newFaq.question.trim() || !newFaq.answer.trim() || isPublishing}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
                 >
                   {isPublishing ? (
                     <>
-                      <Loader className="w-4 h-4 mr-2 animate-spin" />
+                      <Loader className="w-4 h-4 animate-spin" />
                       Saving...
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4 mr-2" />
+                      <Send className="w-4 h-4" />
                       Publish
                     </>
                   )}
-                </Button>
-                <Button
-                  variant="outline"
+                </button>
+                <button
                   onClick={() => {
                     setIsAdding(false);
                     setNewFaq({ question: '', answer: '' });
                   }}
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                   disabled={isPublishing}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
                 >
-                  <X className="w-4 h-4 mr-2" />
+                  <X className="w-4 h-4" />
                   Cancel
-                </Button>
+                </button>
               </div>
             </div>
           </div>
@@ -490,127 +491,115 @@ const FAQManagement = () => {
         {/* FAQs List */}
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <RefreshCw className="w-8 h-8 animate-spin text-zinc-400" />
+            <RefreshCw className="w-6 h-6 animate-spin text-zinc-400" />
           </div>
         ) : faqs.length === 0 ? (
-          <div className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-            <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+          <div className="p-12 bg-zinc-800/30 border border-zinc-700/30 border-dashed rounded-xl text-center">
+            <HelpCircle className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
-            <p className="text-zinc-500 mb-6">
+            <p className="text-zinc-500 text-sm max-w-sm mx-auto">
               Get started by creating your first FAQ to help users find answers to common questions.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
             {faqs.map((faq, index) => (
-              <Card key={faq.id} className="p-6 transition-all duration-200">
+              <div
+                key={faq.id}
+                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700/50 transition-all"
+              >
                 {editingFaq === faq.id ? (
                   // Edit Mode
-                  <div className="space-y-6">
-                    <div className="mb-4">
-                      <h3 className="text-lg font-medium text-white">Edit FAQ</h3>
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                        <Edit2 className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <h3 className="font-medium text-white">Edit FAQ</h3>
                     </div>
 
-                    <div className="space-y-6">
-                      {/* Question Section */}
-                      <div>
-                        <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                          <FileQuestion className="w-4 h-4" />
-                          <span>Question</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={editForm.question}
-                          onChange={(e) => setEditForm({ ...editForm, question: e.target.value })}
-                          className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 text-white"
-                        />
-                      </div>
+                    {/* Question */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                        <FileQuestion className="w-4 h-4 text-zinc-400" />
+                        Question
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.question}
+                        onChange={(e) => setEditForm({ ...editForm, question: e.target.value })}
+                        className="w-full px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                      />
+                    </div>
 
-                      {/* Answer Section */}
-                      <div>
-                        <label className="flex items-center space-x-2 text-sm font-medium mb-2 text-zinc-300">
-                          <MessageSquare className="w-4 h-4" />
-                          <span>Answer</span>
-                        </label>
-                        <textarea
-                          value={editForm.answer}
-                          onChange={(e) => setEditForm({ ...editForm, answer: e.target.value })}
-                          className="w-full h-32 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600 resize-none text-white"
-                        />
-                      </div>
+                    {/* Answer */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                        <MessageSquare className="w-4 h-4 text-zinc-400" />
+                        Answer
+                      </label>
+                      <textarea
+                        value={editForm.answer}
+                        onChange={(e) => setEditForm({ ...editForm, answer: e.target.value })}
+                        className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                      />
+                    </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center space-x-3 pt-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => handleUpdateFaq(faq.id)}
-                          disabled={
-                            !editForm.question.trim() ||
-                            !editForm.answer.trim() ||
-                            !hasEditChanges() ||
-                            isSaving
-                          }
-                          className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${
-                            !editForm.question.trim() ||
-                            !editForm.answer.trim() ||
-                            !hasEditChanges() ||
-                            isSaving
-                              ? 'opacity-50 cursor-not-allowed hover:bg-zinc-800! hover:border-zinc-700!'
-                              : ''
-                          }`}
-                        >
-                          {isSaving ? (
-                            <>
-                              <Loader className="w-4 h-4 animate-spin mr-2" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4 mr-2" /> Save
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setEditingFaq(null);
-                            setEditForm({ question: '', answer: '' });
-                            setOriginalEditForm({ question: '', answer: '' });
-                          }}
-                          className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                          disabled={isSaving}
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          Cancel
-                        </Button>
-                      </div>
+                    {/* Actions */}
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        onClick={() => handleUpdateFaq(faq.id)}
+                        disabled={
+                          !editForm.question.trim() ||
+                          !editForm.answer.trim() ||
+                          !hasEditChanges() ||
+                          isSaving
+                        }
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader className="w-4 h-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            Save
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingFaq(null);
+                          setEditForm({ question: '', answer: '' });
+                          setOriginalEditForm({ question: '', answer: '' });
+                        }}
+                        disabled={isSaving}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
+                      >
+                        <X className="w-4 h-4" />
+                        Cancel
+                      </button>
                     </div>
                   </div>
                 ) : (
                   // View Mode
                   <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-4 flex-1">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
                         {faqs.length > 1 && (
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <span
-                              className={`text-sm font-mono transition-colors ${
-                                recentlyMovedFaq === faq.id ? 'text-green-400' : 'text-zinc-400'
-                              }`}
+                              className={`text-xs font-mono px-2 py-1 rounded-md bg-zinc-800 border border-zinc-700 transition-colors ${recentlyMovedFaq === faq.id ? 'text-emerald-400 border-emerald-500/30' : 'text-zinc-500'}`}
                             >
                               #{index + 1}
                             </span>
-                            <div className="flex flex-col space-y-1">
+                            <div className="flex flex-col gap-0.5">
                               <button
                                 onClick={() => handleMoveFaqUp(faq, index)}
                                 disabled={index === 0}
-                                className={`p-1 rounded ${
-                                  index === 0
-                                    ? 'text-zinc-600 cursor-not-allowed'
-                                    : recentlyMovedFaq === faq.id && moveDirection === 'up'
-                                      ? 'text-green-400'
-                                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                                } transition-colors`}
+                                className={`p-1 rounded-md ${index === 0 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'up' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
                                 title="Move up"
                               >
                                 <ChevronUp className="w-4 h-4" />
@@ -618,13 +607,7 @@ const FAQManagement = () => {
                               <button
                                 onClick={() => handleMoveFaqDown(faq, index)}
                                 disabled={index === faqs.length - 1}
-                                className={`p-1 rounded ${
-                                  index === faqs.length - 1
-                                    ? 'text-zinc-600 cursor-not-allowed'
-                                    : recentlyMovedFaq === faq.id && moveDirection === 'down'
-                                      ? 'text-green-400'
-                                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                                } transition-colors`}
+                                className={`p-1 rounded-md ${index === faqs.length - 1 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'down' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
                                 title="Move down"
                               >
                                 <ChevronDown className="w-4 h-4" />
@@ -632,43 +615,35 @@ const FAQManagement = () => {
                             </div>
                           </div>
                         )}
-                        <h3 className="font-medium text-zinc-100">{faq.question}</h3>
+                        <h3 className="font-medium text-white leading-relaxed">{faq.question}</h3>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
                           onClick={() => {
                             setEditingFaq(faq.id);
-                            setEditForm({
-                              question: faq.question,
-                              answer: faq.answer,
-                            });
-                            setOriginalEditForm({
-                              question: faq.question,
-                              answer: faq.answer,
-                            });
+                            setEditForm({ question: faq.question, answer: faq.answer });
+                            setOriginalEditForm({ question: faq.question, answer: faq.answer });
                           }}
-                          className="px-2 py-2"
+                          className="p-2 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                           title="Edit FAQ"
                         >
                           <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
+                        </button>
+                        <button
                           onClick={() => setDeletingFaq(faq)}
-                          className="px-2 py-2 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                          className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Delete FAQ"
                         >
                           <Trash2 className="w-4 h-4" />
-                        </Button>
+                        </button>
                       </div>
                     </div>
-                    <p className="text-zinc-400 whitespace-pre-wrap leading-relaxed">
+                    <p className="text-zinc-400 text-sm leading-relaxed whitespace-pre-wrap pl-0">
                       {faq.answer}
                     </p>
                   </div>
                 )}
-              </Card>
+              </div>
             ))}
           </div>
         )}

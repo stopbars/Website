@@ -661,45 +661,30 @@ const ReleaseManagement = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 pt-2 pb-4 max-w-4xl">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold mb-4 md:mb-0">Release Management</h1>
-        <div className="flex items-center space-x-3">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Release Management</h2>
+          <p className="text-zinc-400 text-sm mt-1">Publish and manage product releases</p>
+        </div>
+        <div className="flex items-center gap-3">
           {!isAdding && !isUpdating && (
             <>
-              <Button
-                onClick={handleStartAdd}
-                variant="outline"
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              >
+              <Button onClick={handleStartAdd}>
                 <Plus className="w-4 h-4 mr-2" />
                 New Release
               </Button>
-              <Button
-                onClick={handleStartUpdate}
-                variant="outline"
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              >
+              <Button onClick={handleStartUpdate} variant="outline">
                 <Edit className="w-4 h-4 mr-2" />
                 Edit Changelog
               </Button>
             </>
           )}
           {(isAdding || isUpdating) && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <Button
                 onClick={isAdding ? () => openConfirm() : submitChangelogUpdate}
-                variant="outline"
-                className={`border-zinc-700 text-zinc-300 hover:bg-zinc-800 ${(() => {
-                  const needsFile = product !== 'SimConnect.NET';
-                  return (isAdding && (!version.trim() || (needsFile && !file))) ||
-                    (isUpdating && (!editReleaseId.trim() || !newChangelog.trim())) ||
-                    uploading ||
-                    updating
-                    ? 'opacity-50 cursor-not-allowed hover:bg-transparent!'
-                    : '';
-                })()}`}
                 disabled={(() => {
                   const needsFile = product !== 'SimConnect.NET';
                   return (
@@ -727,12 +712,7 @@ const ReleaseManagement = () => {
                   </>
                 )}
               </Button>
-              <Button
-                onClick={handleCancel}
-                variant="outline"
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                disabled={uploading || updating}
-              >
+              <Button onClick={handleCancel} variant="outline" disabled={uploading || updating}>
                 <X className="w-4 h-4 mr-2" />
                 Cancel
               </Button>
@@ -744,7 +724,7 @@ const ReleaseManagement = () => {
       <div className="space-y-6">
         {/* Success Messages */}
         {uploadSuccess && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
             <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-emerald-400 font-medium">Release Published Successfully</p>
@@ -762,7 +742,7 @@ const ReleaseManagement = () => {
         )}
 
         {updateSuccess && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start space-x-3">
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
             <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-emerald-400 font-medium">Changelog Updated Successfully</p>
@@ -781,9 +761,12 @@ const ReleaseManagement = () => {
 
         {/* Add New Release Section */}
         {isAdding && (
-          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl">
             <div className="mb-4">
-              <h3 className="text-lg font-medium text-white">Create New Release</h3>
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Package className="w-5 h-5 text-blue-400" />
+                Create New Release
+              </h3>
             </div>
 
             <form
@@ -1035,9 +1018,12 @@ const ReleaseManagement = () => {
 
         {/* Edit Changelog Section */}
         {isUpdating && (
-          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+          <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl">
             <div className="mb-4">
-              <h3 className="text-lg font-medium text-white">Edit Changelog</h3>
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Edit className="w-5 h-5 text-blue-400" />
+                Edit Changelog
+              </h3>
             </div>
             <form onSubmit={submitChangelogUpdate} className="space-y-6">
               {/* Release ID */}
@@ -1126,13 +1112,13 @@ const ReleaseManagement = () => {
 
         {/* Existing Releases Section */}
         {!isAdding && !isUpdating && (
-          <div className="mt-8">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-2">
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-blue-400" />
-                <h3 className="text-lg font-medium text-zinc-300">Existing Releases</h3>
+                <h3 className="text-lg font-semibold text-white">Existing Releases</h3>
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 {renderFilterDropdown(
                   productFilter,
                   setProductFilter,
@@ -1141,7 +1127,7 @@ const ReleaseManagement = () => {
                 )}
               </div>
             </div>
-            <Card className="p-6 bg-zinc-900/40 border-zinc-800 space-y-4">
+            <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-4">
               {releasesError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
                   <AlertTriangle className="w-4 h-4 mt-0.5" />
@@ -1149,57 +1135,60 @@ const ReleaseManagement = () => {
                 </div>
               )}
 
-              <div className="overflow-x-auto -mx-2">
-                <table className="min-w-full text-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full">
                   <thead>
-                    <tr className="text-left text-zinc-400 border-b border-zinc-800">
-                      <th className="py-2 px-2 font-medium">ID</th>
-                      <th className="py-2 px-2 font-medium">Product</th>
-                      <th className="py-2 px-2 font-medium">Version</th>
-                      <th className="py-2 px-2 font-medium">Uploaded</th>
-                      <th className="py-2 px-2 font-medium">Changelog</th>
-                      <th className="py-2 px-2 font-medium">Actions</th>
+                    <tr className="text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
+                      <th className="py-3 px-4">ID</th>
+                      <th className="py-3 px-4">Product</th>
+                      <th className="py-3 px-4">Version</th>
+                      <th className="py-3 px-4">Uploaded</th>
+                      <th className="py-3 px-4">Changelog</th>
+                      <th className="py-3 px-4">Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-zinc-800">
                     {releasesLoading ? (
                       <tr>
                         <td colSpan={6} className="py-8 text-center text-zinc-500">
-                          Loading...
+                          <Loader className="w-6 h-6 mx-auto animate-spin mb-2" />
+                          Loading releases...
                         </td>
                       </tr>
                     ) : releases.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-8 text-center text-zinc-500">
+                          <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
                           No releases found.
                         </td>
                       </tr>
                     ) : (
                       releases.slice(0, 50).map((rel) => (
-                        <tr
-                          key={rel.id}
-                          className="border-b border-zinc-800/50 hover:bg-zinc-800/40"
-                        >
-                          <td className="py-2 px-2 text-zinc-300">{rel.id}</td>
-                          <td className="py-2 px-2 text-zinc-300">{rel.product}</td>
-                          <td className="py-2 px-2 text-zinc-300">{rel.version}</td>
-                          <td className="py-2 px-2 text-zinc-400 whitespace-nowrap">
+                        <tr key={rel.id} className="hover:bg-zinc-800/50 transition-colors">
+                          <td className="py-3 px-4 font-mono text-zinc-300">{rel.id}</td>
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center rounded-full bg-blue-500/20 text-blue-400 px-3 py-1 text-xs font-medium">
+                              {rel.product}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-mono text-white">{rel.version}</td>
+                          <td className="py-3 px-4 text-zinc-400 whitespace-nowrap">
                             {rel.created_at ? new Date(rel.created_at).toLocaleDateString() : '-'}
                           </td>
-                          <td className="py-2 px-2 text-zinc-400 truncate max-w-[180px]">
+                          <td className="py-3 px-4 text-zinc-400 truncate max-w-[180px]">
                             {rel.changelog ? (
                               rel.changelog.slice(0, 60)
                             ) : (
                               <span className="italic text-zinc-600">(none)</span>
                             )}
                           </td>
-                          <td className="py-2 px-2">
+                          <td className="py-3 px-4">
                             <button
                               onClick={() => {
                                 handleStartUpdate();
                                 handleSelectRelease(rel);
                               }}
-                              className="p-1.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:text-blue-200 transition w-8 h-8 flex items-center justify-center"
+                              className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:text-blue-300 transition-all"
                               title="Edit changelog"
                               aria-label={`Edit changelog for release ${rel.id}`}
                             >
