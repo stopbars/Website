@@ -21,7 +21,7 @@
     "lucide-react": "^0.552.0",
     "maplibre-gl": "^5.13.0",
     "marked": "^16.4.2",
-    "posthog-js": "^1.296.0",
+    "posthog-js": "^1.298.1",
     "prop-types": "^15.8.1",
     "react": "^19.2.0",
     "react-confetti": "^6.4.0",
