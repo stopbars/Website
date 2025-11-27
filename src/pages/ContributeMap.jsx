@@ -5,7 +5,16 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
-import { AlertCircle, ChevronRight, CopyIcon, Info, Loader, Check, Layers } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronRight,
+  CopyIcon,
+  Info,
+  Loader,
+  Check,
+  Layers,
+  FileCode2,
+} from 'lucide-react';
 import Map, {
   Source,
   Layer,
@@ -1195,6 +1204,23 @@ const ContributeMap = () => {
                   </p>
                 </div>
               )}
+
+              {/* XML Generator Tool */}
+              <Card className="p-4">
+                <button
+                  onClick={() => navigate(`/contribute/generator/${icao}`)}
+                  className="w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <FileCode2 className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="ml-3 text-left">
+                    <p className="text-sm font-medium text-white">XML Generator</p>
+                    <p className="text-xs text-zinc-400">Generate draft contribution XML</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-zinc-500 ml-auto" />
+                </button>
+              </Card>
 
               {/* Continue button (disabled when no Division points) */}
               <Button
