@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
-import { Select } from '../components/shared/Select';
+import { Dropdown } from '../components/shared/Dropdown';
 import { Loader, AlertTriangle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -290,38 +290,15 @@ const Changelog = () => {
 
             {/* Filter Dropdown */}
             <div className="w-56 mt-1">
-              <Select
-                value={currentFilterLabel()}
-                onValueChange={(val) =>
-                  handleSelectFilter(val === currentFilterLabel() ? '__all__' : val)
-                }
+              <Dropdown
+                options={[
+                  { value: '__all__', label: 'All Products' },
+                  ...filterOptions.map((opt) => ({ value: opt.id, label: opt.label })),
+                ]}
+                value={activeFilters.length === 0 ? '__all__' : activeFilters[0]}
+                onChange={handleSelectFilter}
                 placeholder="All Products"
-              >
-                {({ active, onSelect }) => (
-                  <ul className="py-1 text-sm text-zinc-200">
-                    <li>
-                      <button
-                        type="button"
-                        onClick={() => onSelect('__all__')}
-                        className={`flex w-full items-center px-3 py-2 rounded-md text-left hover:bg-zinc-800 ${active === 'All Products' ? 'bg-zinc-800 text-white' : 'text-zinc-300'}`}
-                      >
-                        All Products
-                      </button>
-                    </li>
-                    {filterOptions.map((opt) => (
-                      <li key={opt.id}>
-                        <button
-                          type="button"
-                          onClick={() => onSelect(opt.id)}
-                          className={`flex w-full items-center px-3 py-2 rounded-md text-left hover:bg-zinc-800 ${active === opt.label ? 'bg-zinc-800 text-white' : 'text-zinc-300'}`}
-                        >
-                          {opt.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Select>
+              />
             </div>
           </div>
 

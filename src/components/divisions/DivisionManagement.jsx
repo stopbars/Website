@@ -4,6 +4,7 @@ import { Layout } from '../layout/Layout';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { Dialog } from '../shared/Dialog';
+import { Dropdown } from '../shared/Dropdown';
 import {
   Plus,
   UserX,
@@ -442,15 +443,15 @@ const DivisionManagement = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-2">Role</label>
-              <select
+              <Dropdown
+                options={[
+                  { value: 'nav_member', label: 'Nav Member' },
+                  { value: 'nav_head', label: 'Nav Head' },
+                ]}
                 value={newMemberRole}
-                onChange={(e) => setNewMemberRole(e.target.value)}
-                className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                onChange={(value) => setNewMemberRole(value)}
                 disabled={addingMember}
-              >
-                <option value="nav_member">Nav Member</option>
-                <option value="nav_head">Nav Head</option>
-              </select>
+              />
             </div>
           </div>
           <div className="flex gap-3 pt-2">

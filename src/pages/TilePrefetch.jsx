@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Rectangle, Polygon } from 'react-leaflet';
+import { Dropdown } from '../components/shared/Dropdown';
 import 'leaflet/dist/leaflet.css';
 
 /*
@@ -482,16 +483,16 @@ const TilePrefetch = () => {
               <label className="block text-xs uppercase tracking-wide text-zinc-400 mb-1">
                 Order
               </label>
-              <select
+              <Dropdown
+                options={[
+                  { value: 'high-first', label: 'High → Low' },
+                  { value: 'low-first', label: 'Low → High' },
+                ]}
                 value={fetchOrder}
+                onChange={(value) => setFetchOrder(value)}
                 disabled={globalStatus === 'running'}
-                onChange={(e) => setFetchOrder(e.target.value)}
-                className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs"
-                title="Choose whether to prefetch higher zooms first or lower zooms first"
-              >
-                <option value="high-first">High → Low</option>
-                <option value="low-first">Low → High</option>
-              </select>
+                className="text-xs"
+              />
             </div>
             <label className="flex items-center gap-1 text-[10px] cursor-pointer select-none mt-4">
               <input
