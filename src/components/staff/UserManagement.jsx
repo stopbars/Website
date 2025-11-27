@@ -31,17 +31,6 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 
 const USERS_PER_PAGE = 6;
 
-// Helper to format role strings (e.g. "LEAD_DEVELOPER" -> "Lead Developer")
-const formatRole = (role) => {
-  if (!role) return '';
-  return role
-    .replace(/_/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-};
-
 // Helper function to calculate display name based on display mode
 const getDisplayName = (user) => {
   if (!user.full_name) return 'Not set';
@@ -539,10 +528,10 @@ const UserManagement = () => {
 
                     {/* Role Badge */}
                     <div>
-                      {user.is_staff && user.role && user.role.toLowerCase() !== 'user' ? (
+                      {user.is_staff ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
                           <ShieldCheck className="w-3 h-3" />
-                          {formatRole(user.role)}
+                          Staff
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
