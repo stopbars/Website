@@ -254,9 +254,9 @@ const ContributeDetails = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
             <div className="lg:col-span-2">
-              <Card className="p-6">
+              <Card className="p-6 h-full">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Scenery package selection */}
                   <div>
@@ -434,62 +434,69 @@ const ContributeDetails = () => {
               </Card>
             </div>
 
-            <div className="space-y-6">
-              {/* Airport Information */}
-              <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Airport Information</h2>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-zinc-400">ICAO Code</p>
-                    <p className="font-medium">{icao.toUpperCase()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Airport Name</p>
-                    <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Location</p>
-                    <p className="font-medium">
-                      {airport
-                        ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
-                        : 'Loading...'}
-                    </p>
-                  </div>
-                  <div></div>
-                </div>
-              </Card>
-
-              {/* XML File */}
-              <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">XML File</h2>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center ${
-                    selectedFile
-                      ? 'border-emerald-500/50 bg-emerald-500/5'
-                      : 'border-zinc-600 bg-zinc-800/50'
-                  }`}
-                >
-                  {selectedFile ? (
-                    <div className="flex flex-col items-center">
-                      <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
-                        <Check className="w-6 h-6 text-emerald-500" />
-                      </div>
-                      <p className="font-medium mb-1">{selectedFile.name}</p>
-                      <p className="text-sm text-zinc-400">
-                        {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous step
+            <div className="flex flex-col justify-between space-y-6">
+              <div className="space-y-6 flex-1 flex flex-col">
+                {/* Airport Information */}
+                <Card className="p-6">
+                  <h2 className="text-xl font-medium mb-4">Airport Information</h2>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-zinc-400">ICAO Code</p>
+                      <p className="font-medium">{icao.toUpperCase()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-zinc-400">Airport Name</p>
+                      <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-zinc-400">Location</p>
+                      <p className="font-medium">
+                        {airport
+                          ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
+                          : 'Loading...'}
                       </p>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center">
-                      <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
-                        <FileUp className="w-6 h-6 text-zinc-400" />
-                      </div>
-                      <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
-                      <p className="text-sm text-zinc-500">Please go back and test your XML file</p>
+                    <div></div>
+                  </div>
+                </Card>
+
+                {/* XML File */}
+                <Card className="p-6 flex-1 flex flex-col">
+                  <h2 className="text-xl font-medium mb-4">XML File</h2>
+                  <div className="flex-1 flex items-center">
+                    <div
+                      className={`w-full border-2 border-dashed rounded-lg p-6 text-center ${
+                        selectedFile
+                          ? 'border-emerald-500/50 bg-emerald-500/5'
+                          : 'border-zinc-600 bg-zinc-800/50'
+                      }`}
+                    >
+                      {selectedFile ? (
+                        <div className="flex flex-col items-center">
+                          <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+                            <Check className="w-6 h-6 text-emerald-500" />
+                          </div>
+                          <p className="font-medium mb-1">{selectedFile.name}</p>
+                          <p className="text-sm text-zinc-400">
+                            {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous
+                            step
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
+                            <FileUp className="w-6 h-6 text-zinc-400" />
+                          </div>
+                          <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
+                          <p className="text-sm text-zinc-500">
+                            Please go back and test your XML file
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </Card>
+                  </div>
+                </Card>
+              </div>
 
               {/* Submit button */}
               <Button
