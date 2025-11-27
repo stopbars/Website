@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import useSearchQuery from '../../hooks/useSearchQuery';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
@@ -25,6 +26,7 @@ import {
   Globe,
   Map,
   MapPin,
+  Ban,
 } from 'lucide-react';
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import { getVatsimToken } from '../../utils/cookieUtils';
@@ -293,7 +295,12 @@ const UserManagement = () => {
   const [regeneratingUser, setRegeneratingUser] = useState(null);
   const [isRegeneratingToken, setIsRegeneratingToken] = useState(false);
   const [totalUsers, setTotalUsers] = useState(0);
-  // Removed list view; only card view is supported now
+  const navigate = useNavigate();
+
+  const handleBanUser = (vatsimId) => {
+    if (!vatsimId) return;
+    navigate(`/staff?tool=banManagement&vatsimId=${vatsimId}`);
+  };
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -515,6 +522,13 @@ const UserManagement = () => {
                           title="Regenerate API Token"
                         >
                           <KeyRound className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleBanUser(user.vatsim_id)}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Ban User"
+                        >
+                          <Ban className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setDeletingUser(user)}

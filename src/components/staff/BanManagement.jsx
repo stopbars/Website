@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import {
@@ -17,6 +18,7 @@ const API_BASE = 'https://v2.stopbars.com';
 
 export default function BanManagement() {
   const token = getVatsimToken();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [bans, setBans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -27,6 +29,21 @@ export default function BanManagement() {
   const [vatsimId, setVatsimId] = useState('');
   const [reason, setReason] = useState('');
   const [expiresAtLocal, setExpiresAtLocal] = useState(''); // datetime-local string
+
+  useEffect(() => {
+    const urlVatsimId = searchParams.get('vatsimId');
+    if (urlVatsimId) {
+      setVatsimId(urlVatsimId);
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          params.delete('vatsimId');
+          return params;
+        },
+        { replace: true }
+      );
+    }
+  }, [searchParams, setSearchParams]);
 
   const headers = useMemo(
     () => ({
