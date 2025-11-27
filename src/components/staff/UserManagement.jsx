@@ -596,7 +596,7 @@ const UserManagement = () => {
                           <span>{formatLocalDateTime(user.created_at)}</span>
                         </div>
                       </Tooltip>
-                      <Tooltip content="Last login">
+                      <Tooltip content="Last Login">
                         <div className="flex items-center gap-1.5">
                           <Clock className="w-3 h-3" />
                           <span>{formatLocalDateTime(user.last_login)}</span>
