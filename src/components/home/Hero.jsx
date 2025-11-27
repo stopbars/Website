@@ -52,7 +52,7 @@ export const Hero = () => {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
             variant="primary"
-            className="h-14 px-10 text-base md:text-lg gap-2"
+            className="h-14 px-10 text-base md:text-lg gap-2 transition-all duration-200 hover:scale-[1.02] hover:brightness-110"
             onClick={async () => {
               const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
               const downloadUrl = downloadInfo?.downloadUrl;
@@ -83,7 +83,7 @@ export const Hero = () => {
           </Button>
           <Button
             variant="secondary"
-            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700!"
+            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-all duration-200 hover:scale-[1.02]"
             onClick={() =>
               window.open('https://docs.stopbars.com/', '_blank', 'noopener,noreferrer')
             }
