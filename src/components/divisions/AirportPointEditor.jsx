@@ -2356,9 +2356,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                     <Dropdown
                       options={COLORS.map((c) => ({ value: c, label: formatLabel(c) }))}
                       value={formState.color}
-                      onChange={(color) =>
-                        setFormState((s) => ({ ...s, color: color || 'green' }))
-                      }
+                      onChange={(color) => setFormState((s) => ({ ...s, color: color || 'green' }))}
                     />
                   </div>
                 )}
