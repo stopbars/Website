@@ -5,6 +5,7 @@ import useSearchQuery from '../../hooks/useSearchQuery';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
+import { Tooltip } from '../shared/Tooltip';
 import {
   User,
   Users,
@@ -589,14 +590,18 @@ const UserManagement = () => {
 
                     {/* Timestamps */}
                     <div className="flex items-center justify-between pt-3 border-t border-zinc-800 text-xs text-zinc-500">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3 h-3" />
-                        <span>{formatLocalDateTime(user.created_at)}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-3 h-3" />
-                        <span>{formatLocalDateTime(user.last_login)}</span>
-                      </div>
+                      <Tooltip content="Created at">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3 h-3" />
+                          <span>{formatLocalDateTime(user.created_at)}</span>
+                        </div>
+                      </Tooltip>
+                      <Tooltip content="Last login">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatLocalDateTime(user.last_login)}</span>
+                        </div>
+                      </Tooltip>
                     </div>
                   </div>
                 </Card>
