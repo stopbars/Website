@@ -218,7 +218,6 @@ export const Dialog = ({
   onSubmit,
 }) => {
   const dialogRef = useRef(null);
-  const previousActiveElement = useRef(null);
 
   const resolvedTitleColor = titleColor || iconColor;
   const iconColorScheme = colorClasses[iconColor] || colorClasses.zinc;
@@ -261,20 +260,6 @@ export const Dialog = ({
 
   useEffect(() => {
     if (open) {
-      const previousBodyOverflow = document.body.style.overflow;
-      const previousHtmlOverflow = document.documentElement.style.overflow;
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-
-      return () => {
-        document.body.style.overflow = previousBodyOverflow;
-        document.documentElement.style.overflow = previousHtmlOverflow;
-      };
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (open) {
       document.addEventListener('keydown', handleKeyDown);
       return () => {
         document.removeEventListener('keydown', handleKeyDown);
@@ -284,8 +269,6 @@ export const Dialog = ({
 
   useEffect(() => {
     if (open) {
-      previousActiveElement.current = document.activeElement;
-
       const timer = setTimeout(() => {
         if (dialogRef.current && !dialogRef.current.contains(document.activeElement)) {
           dialogRef.current.focus();
@@ -294,9 +277,6 @@ export const Dialog = ({
 
       return () => {
         clearTimeout(timer);
-        if (previousActiveElement.current) {
-          previousActiveElement.current.focus();
-        }
       };
     }
   }, [open]);
