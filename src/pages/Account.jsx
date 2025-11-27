@@ -602,11 +602,7 @@ const Account = () => {
                     <h3 className="font-medium text-red-400">Sign Out</h3>
                     <p className="text-sm text-zinc-400">End your current session</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    className="border-red-500/20 text-red-500 hover:bg-red-500/10"
-                    onClick={logout}
-                  >
+                  <Button variant="outline" onClick={logout}>
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign Out
                   </Button>
@@ -619,11 +615,7 @@ const Account = () => {
                       Permanently delete your BARS account and all stored data.
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    className="border-red-500/20 text-red-500 hover:bg-red-500/10"
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                  >
+                  <Button variant="outline" onClick={() => setIsDeleteDialogOpen(true)}>
                     <OctagonAlert className="w-4 h-4 mr-2" />
                     Delete Account
                   </Button>

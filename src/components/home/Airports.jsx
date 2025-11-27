@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
-import { Signal, ChevronLeft, ChevronRight, Users, Radio, MapPin } from 'lucide-react';
+import { Signal, ChevronLeft, ChevronRight, Users, Plane, MapPin } from 'lucide-react';
 import { Card } from '../shared/Card';
 
 const ITEMS_PER_PAGE = 6;
@@ -192,7 +192,7 @@ export const Airports = () => {
                         {liveMap[icao]?.controllers || 0} Controllers
                       </div>
                       <div className="flex items-center gap-2">
-                        <Radio className="w-4 h-4 text-zinc-400" />
+                        <Plane className="w-4 h-4 text-zinc-400" />
                         {liveMap[icao]?.pilots || 0} Pilots
                       </div>
                     </div>

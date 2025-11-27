@@ -7,7 +7,7 @@ import { Toast } from '../components/shared/Toast';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
 import ReactConfetti from 'react-confetti';
 import { useWindowSize } from '../hooks/useWindowSize';
-import { ArrowRight, FileUp, Upload, Check, Loader, Info, Search, UserPen } from 'lucide-react';
+import { ArrowRight, FileUp, Upload, Check, Loader, Search, UserPen, Plus } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
 
@@ -203,7 +203,8 @@ const ContributeDetails = () => {
           numberOfPieces={700}
           recycle={false}
           run={confettiRun}
-          tweenDuration={2000}
+          tweenDuration={1000}
+          initialVelocityY={20}
           onConfettiComplete={() => setConfettiRun(false)}
           style={{
             position: 'fixed',
@@ -221,8 +222,8 @@ const ContributeDetails = () => {
               <div className="mx-auto w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
                 <Check className="w-8 h-8 text-emerald-500" />
               </div>
-              <h1 className="text-2xl font-bold mb-2">Submission Successful</h1>
-              <p className="text-zinc-400 mb-6">
+              <h1 className="text-2xl font-bold mb-6">Submission Successful</h1>
+              <p className="text-zinc-400 mb-8">
                 Thank you for contributing to BARS! Your submission for {icao} will be reviewed by
                 our team.
               </p>
@@ -261,31 +262,40 @@ const ContributeDetails = () => {
                   <div>
                     <label className="block text-sm font-medium mb-2">Scenery Package</label>
                     {isLoadingPackages ? (
-                      <div className="flex items-center space-x-2 py-4">
-                        <Loader className="w-4 h-4 animate-spin text-blue-400" />
-                        <span className="text-zinc-400">Loading popular scenery packages...</span>
-                      </div>
+                      <>
+                        <div className="relative">
+                          <div className="flex items-center relative">
+                            <input
+                              type="text"
+                              disabled
+                              placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
+                              className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg opacity-50 cursor-not-allowed"
+                            />
+                            <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
+                          </div>
+                        </div>
+
+                        {/* Skeleton for Top Packages */}
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          {[...Array(6)].map((_, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/30 animate-pulse"
+                            >
+                              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                                <div className="shrink-0 w-6 h-6 rounded-full bg-zinc-700/50"></div>
+                                <div className="h-[18px] bg-zinc-700/50 rounded flex-1 max-w-[60%]"></div>
+                              </div>
+                              <div className="text-right ml-2 shrink-0 space-y-1">
+                                <div className="h-[18px] w-8 bg-zinc-700/50 rounded ml-auto"></div>
+                                <div className="h-3.5 w-16 bg-zinc-700/50 rounded"></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
                     ) : (
                       <>
-                        {topPackages.length > 0 && (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-                            {topPackages.map((pkg) => (
-                              <Button
-                                key={pkg.packageName}
-                                type="button"
-                                variant="outline"
-                                className={`py-2 justify-center text-sm ${sceneryName === pkg.packageName ? 'bg-zinc-800 border-blue-400! shadow-sm' : ''}`}
-                                onClick={() => {
-                                  setSceneryName(pkg.packageName);
-                                  setShowSuggestions(false);
-                                }}
-                              >
-                                {pkg.packageName}
-                                <span className="ml-1 text-xs text-zinc-400">({pkg.count})</span>
-                              </Button>
-                            ))}
-                          </div>
-                        )}
                         <div className="relative">
                           <div className="flex items-center relative">
                             <input
@@ -323,12 +333,39 @@ const ContributeDetails = () => {
                               ))}
                             </ul>
                           )}
-                          <p className="mt-3 text-xs text-blue-400">
-                            <Info className="inline-block w-3 h-3 mr-1" />
-                            If your scenery package isn&apos;t listed, simply type the name and
-                            submit
-                          </p>
                         </div>
+
+                        {/* Top Packages */}
+                        {topPackages.length > 0 && (
+                          <div className="mt-4 grid grid-cols-2 gap-2">
+                            {topPackages.map((pkg, index) => (
+                              <button
+                                key={index}
+                                type="button"
+                                onClick={() => {
+                                  setSceneryName(pkg.packageName);
+                                  setShowSuggestions(false);
+                                }}
+                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800/70 transition-colors cursor-pointer"
+                              >
+                                <div className="flex items-center space-x-3 min-w-0">
+                                  <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-blue-500/20">
+                                    <Plus className="w-3.5 h-3.5 text-blue-400" />
+                                  </div>
+                                  <div className="font-medium text-left text-sm truncate">
+                                    {pkg.packageName}
+                                  </div>
+                                </div>
+                                <div className="text-right ml-2 shrink-0">
+                                  <div className="font-semibold text-sm">{pkg.count}</div>
+                                  <div className="text-xs text-zinc-400">
+                                    contribution{pkg.count !== 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -398,9 +435,9 @@ const ContributeDetails = () => {
             </div>
 
             <div className="space-y-6">
-              {/* Contribution Summary */}
+              {/* Airport Information */}
               <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Contribution Summary</h2>
+                <h2 className="text-xl font-medium mb-4">Airport Information</h2>
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm text-zinc-400">ICAO Code</p>
