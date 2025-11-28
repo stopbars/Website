@@ -5,6 +5,7 @@ import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { Dialog } from '../shared/Dialog';
 import { Dropdown } from '../shared/Dropdown';
+import { Toast } from '../shared/Toast';
 import {
   Plus,
   UserX,
@@ -13,7 +14,6 @@ import {
   SquarePen,
   AlertOctagon,
   Loader,
-  AlertTriangle,
   User,
   Shield,
 } from 'lucide-react';
@@ -26,7 +26,6 @@ const DivisionManagement = () => {
   const [members, setMembers] = useState([]);
   const [airports, setAirports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showAddAirport, setShowAddAirport] = useState(false);
   const [newMemberCid, setNewMemberCid] = useState('');
@@ -39,6 +38,14 @@ const DivisionManagement = () => {
   const [removingMember, setRemovingMember] = useState(false);
   const token = getVatsimToken();
   const [currentUserId, setCurrentUserId] = useState(null);
+
+  // Toast state
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({
+    variant: 'success',
+    title: '',
+    description: '',
+  });
 
   // Helper function to get status color
   const getStatusColor = (status) => {
@@ -93,7 +100,12 @@ const DivisionManagement = () => {
         const airportsData = await airportsResponse.json();
         setAirports(airportsData);
       } catch (err) {
-        setError(err.message);
+        setToastConfig({
+          variant: 'destructive',
+          title: 'Error',
+          description: err.message || 'Failed to load division data.',
+        });
+        setShowToast(true);
       } finally {
         setLoading(false);
       }
@@ -121,10 +133,26 @@ const DivisionManagement = () => {
 
       const newMember = await response.json();
       setMembers([...members, newMember]);
+      const addedCid = newMemberCid;
       setNewMemberCid('');
+      setNewMemberRole('nav_member');
       setShowAddMember(false);
+      setToastConfig({
+        variant: 'success',
+        title: `${addedCid} Added`,
+        description: 'The member has been added to the division.',
+      });
+      setShowToast(true);
     } catch (err) {
-      setError(err.message);
+      setShowAddMember(false);
+      setNewMemberCid('');
+      setNewMemberRole('nav_member');
+      setToastConfig({
+        variant: 'destructive',
+        title: 'Failed to Add Member',
+        description: err.message || 'An error occurred while adding the member.',
+      });
+      setShowToast(true);
     } finally {
       setAddingMember(false);
     }
@@ -146,8 +174,21 @@ const DivisionManagement = () => {
       setMembers(members.filter((m) => m.vatsim_id !== memberId));
       setShowRemoveConfirm(false);
       setMemberToRemove(null);
+      setToastConfig({
+        variant: 'success',
+        title: `${memberId} Removed`,
+        description: 'The member has been removed from the division.',
+      });
+      setShowToast(true);
     } catch (err) {
-      setError(err.message);
+      setShowRemoveConfirm(false);
+      setMemberToRemove(null);
+      setToastConfig({
+        variant: 'destructive',
+        title: 'Failed to Remove Member',
+        description: err.message || 'An error occurred while removing the member.',
+      });
+      setShowToast(true);
     } finally {
       setRemovingMember(false);
     }
@@ -197,10 +238,24 @@ const DivisionManagement = () => {
 
       const newAirport = await response.json();
       setAirports([...airports, newAirport]);
+      const requestedIcao = newAirportIcao.toUpperCase();
       setNewAirportIcao('');
       setShowAddAirport(false);
+      setToastConfig({
+        variant: 'success',
+        title: `${requestedIcao} Requested`,
+        description: 'The airport request has been submitted.',
+      });
+      setShowToast(true);
     } catch (err) {
-      setError(err.message);
+      setShowAddAirport(false);
+      setNewAirportIcao('');
+      setToastConfig({
+        variant: 'destructive',
+        title: 'Failed to Request Airport',
+        description: err.message || 'An error occurred while requesting the airport.',
+      });
+      setShowToast(true);
     } finally {
       setAddingAirport(false);
     }
@@ -224,20 +279,6 @@ const DivisionManagement = () => {
             <h1 className="text-2xl font-bold text-white">{division?.name}</h1>
             <p className="text-sm text-zinc-400 mt-1">Division Management</p>
           </div>
-
-          {/* Status Messages */}
-          {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3 mb-6">
-              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-              <p className="text-sm text-red-400">{error}</p>
-              <button
-                onClick={() => setError(null)}
-                className="ml-auto text-red-400 hover:text-red-300"
-              >
-                ×
-              </button>
-            </div>
-          )}
 
           <div className="space-y-6">
             {/* Members Section */}
@@ -408,7 +449,6 @@ const DivisionManagement = () => {
         icon={Users}
         iconColor="blue"
         title="Add Member"
-        description="Add a new member to this division by entering their VATSIM CID."
         showCloseButton={!addingMember}
         closeOnBackdrop={!addingMember}
         closeOnEscape={!addingMember}
@@ -454,7 +494,7 @@ const DivisionManagement = () => {
               />
             </div>
           </div>
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-2 justify-end">
             <Button type="submit" disabled={addingMember || !newMemberCid}>
               {addingMember ? (
                 <>
@@ -494,7 +534,6 @@ const DivisionManagement = () => {
         icon={TowerControl}
         iconColor="blue"
         title="Request Airport"
-        description="Request to add an airport to this division. The airport must exist in the system."
         showCloseButton={!addingAirport}
         closeOnBackdrop={!addingAirport}
         closeOnEscape={!addingAirport}
@@ -503,9 +542,7 @@ const DivisionManagement = () => {
       >
         <form onSubmit={handleAddAirport} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
-              Airport ICAO Code
-            </label>
+            <label className="block text-sm font-medium text-zinc-300 mb-2">Airport ICAO</label>
             <input
               type="text"
               value={newAirportIcao}
@@ -513,7 +550,6 @@ const DivisionManagement = () => {
               className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all uppercase"
               maxLength={4}
               pattern="[A-Za-z]{4}"
-              placeholder="e.g. KLAX"
               autoFocus
               required
               disabled={addingAirport}
@@ -522,7 +558,7 @@ const DivisionManagement = () => {
               Enter the 4-letter ICAO code for the airport.
             </p>
           </div>
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-2 justify-end">
             <Button type="submit" disabled={addingAirport || newAirportIcao.length !== 4}>
               {addingAirport ? (
                 <>
@@ -558,73 +594,36 @@ const DivisionManagement = () => {
         icon={AlertOctagon}
         iconColor="red"
         title="Remove Member"
+        description="This action cannot be undone. The user will immediately lose all access to the division and must be manually added at a later date if needed."
         showCloseButton={!removingMember}
         closeOnBackdrop={!removingMember}
         closeOnEscape={!removingMember}
         isLoading={removingMember}
         maxWidth="md"
-      >
-        <div className="space-y-4">
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-zinc-200">You are about to remove:</p>
-            {memberToRemove && (
-              <div className="mt-2">
-                <div className="flex items-center space-x-2 text-red-200">
-                  <User className="w-4 h-4" />
-                  <span>{memberToRemove.display_name}</span>
-                </div>
-                {memberToRemove.vatsim_id &&
-                  String(memberToRemove.display_name) !== String(memberToRemove.vatsim_id) && (
-                    <div className="flex items-center space-x-2 text-red-200/80 mt-1">
-                      <span className="text-sm font-mono ml-6">{memberToRemove.vatsim_id}</span>
-                    </div>
-                  )}
-                <div className="flex items-center space-x-2 text-red-200/80 mt-1">
-                  <Shield className="w-4 h-4" />
-                  <span className="text-sm">
-                    {memberToRemove.role
-                      .split('_')
-                      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                      .join(' ')}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
+        buttons={[
+          {
+            label: 'Remove',
+            variant: 'destructive',
+            icon: UserX,
+            loadingLabel: 'Removing...',
+            requiresValidation: true,
+            onClick: () => handleRemoveMember(memberToRemove?.vatsim_id),
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: cancelRemoveMember,
+          },
+        ]}
+      />
 
-          <p className="text-zinc-300">
-            This action cannot be undone. The user will immediately lose all access to the division.
-          </p>
-
-          <div className="flex space-x-3 mt-6">
-            <Button
-              onClick={() => handleRemoveMember(memberToRemove?.vatsim_id)}
-              variant="destructive"
-              disabled={removingMember}
-            >
-              {removingMember ? (
-                <>
-                  <Loader className="w-4 h-4 mr-2 animate-spin" />
-                  Removing...
-                </>
-              ) : (
-                <>
-                  <UserX className="w-4 h-4 mr-2" />
-                  Remove Member
-                </>
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={cancelRemoveMember}
-              disabled={removingMember}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+      <Toast
+        show={showToast}
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        onClose={() => setShowToast(false)}
+      />
     </Layout>
   );
 };
