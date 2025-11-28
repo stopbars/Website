@@ -648,7 +648,7 @@ const ContributionDashboard = () => {
         }}
         icon={AlertCircle}
         iconColor={confirmDelete?.status === 'pending' ? 'orange' : 'red'}
-        title="Confirm Contribution Deletion"
+        title="Contribution Deletion"
         description="All contribution and scenery data will be permanently deleted and will no longer be available for approval. This action cannot be undone."
         isLoading={deleting}
         closeOnBackdrop={!deleting}
