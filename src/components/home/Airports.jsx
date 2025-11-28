@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
-import { Signal, ChevronLeft, ChevronRight, Users, Plane, MapPin } from 'lucide-react';
+import { ExternalLink, ChevronLeft, ChevronRight, Users, Plane, MapPin } from 'lucide-react';
 import { Card } from '../shared/Card';
 
 const ITEMS_PER_PAGE = 6;
@@ -147,8 +147,8 @@ export const Airports = () => {
             onClick={() => navigate('/status')}
             className="flex items-center self-start sm:self-center"
           >
-            <Signal className="w-4 h-4 mr-2" />
             Global Status Page
+            <ExternalLink className="w-4 h-4 ml-2" />
           </Button>
         </div>
 
