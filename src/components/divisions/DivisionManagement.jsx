@@ -449,7 +449,6 @@ const DivisionManagement = () => {
         icon={Users}
         iconColor="blue"
         title="Add Member"
-        showCloseButton={!addingMember}
         closeOnBackdrop={!addingMember}
         closeOnEscape={!addingMember}
         isLoading={addingMember}
@@ -534,7 +533,6 @@ const DivisionManagement = () => {
         icon={TowerControl}
         iconColor="blue"
         title="Request Airport"
-        showCloseButton={!addingAirport}
         closeOnBackdrop={!addingAirport}
         closeOnEscape={!addingAirport}
         isLoading={addingAirport}
@@ -595,7 +593,6 @@ const DivisionManagement = () => {
         iconColor="red"
         title="Remove Member"
         description="This action cannot be undone. The user will immediately lose all access to the division and must be manually added at a later date if needed."
-        showCloseButton={!removingMember}
         closeOnBackdrop={!removingMember}
         closeOnEscape={!removingMember}
         isLoading={removingMember}
