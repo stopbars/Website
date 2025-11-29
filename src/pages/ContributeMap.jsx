@@ -1187,26 +1187,9 @@ const ContributeMap = () => {
                 </div>
               </Card>
 
-              {points.length === 0 ? (
-                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
-                  <p className="text-sm text-amber-400">
-                    This airport currently has no lighting points submitted by the owning Division.
-                    Please check back later, or contact the Division for support.
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
-                  <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
-                  <p className="text-sm text-blue-400">
-                    These are the existing mapped points for this airport, set by the Division. Your
-                    contribution will add support for a specific simulator scenery package.
-                  </p>
-                </div>
-              )}
-
               {/* XML Generator Tool */}
-              <Card className="p-4">
+              <Card className="p-6">
+                <h2 className="text-xl font-medium mb-4">XML Generator</h2>
                 <button
                   onClick={() => navigate(`/contribute/generator/${icao}`)}
                   className="w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
@@ -1215,14 +1198,33 @@ const ContributeMap = () => {
                     <FileCode2 className="w-5 h-5 text-emerald-400" />
                   </div>
                   <div className="ml-3 text-left">
-                    <p className="text-sm font-medium text-white">XML Generator</p>
-                    <p className="text-xs text-zinc-400">Generate draft contribution XML</p>
+                    <p className="text-sm font-medium text-white">Generate Draft Contribution</p>
+                    <p className="text-xs text-zinc-400">
+                      Create an XML file for your contribution
+                    </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-zinc-500 ml-auto" />
                 </button>
               </Card>
 
-              {/* Continue button (disabled when no Division points) */}
+              {points.length === 0 ? (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
+                  <p className="text-sm text-amber-400">
+                    This airport currently has no lighting points submitted by the owning Division.
+                    Please check back later, or contact the Division for support.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
+                  <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
+                  <p className="text-sm text-blue-400">
+                    These are the existing mapped points for this airport, set by the Division. Your
+                    contribution will add support for a specific simulator scenery package.
+                  </p>
+                </div>
+              )}
+
               <Button
                 onClick={points.length === 0 ? undefined : handleContinue}
                 disabled={points.length === 0}
