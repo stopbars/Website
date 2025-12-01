@@ -20,7 +20,7 @@
     "lightningcss": "^1.30.2",
     "lucide-react": "^0.552.0",
     "maplibre-gl": "^5.13.0",
-    "marked": "^16.4.2",
+    "marked": "^17.0.1",
     "posthog-js": "^1.296.0",
     "prop-types": "^15.8.1",
     "react": "^19.2.0",
