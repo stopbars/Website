@@ -11,7 +11,7 @@ import {
   UserX,
   TowerControl,
   Users,
-  SquarePen,
+  Settings,
   AlertOctagon,
   Loader,
   User,
@@ -411,7 +411,7 @@ const DivisionManagement = () => {
                               className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                               title="Manage Airport"
                             >
-                              <SquarePen className="w-4 h-4" />
+                              <Settings className="w-4 h-4" />
                             </button>
                           )}
                         </div>

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { formatLocalDateTime } from '../../utils/dateUtils';
+import { Dialog } from '../shared/Dialog';
 import {
   AlertTriangle,
+  AlertOctagon,
   Ban as BanIcon,
   Check,
   Loader,
@@ -11,7 +13,6 @@ import {
   Trash2,
   UserX,
   FileText,
-  X,
 } from 'lucide-react';
 
 const API_BASE = 'https://v2.stopbars.com';
@@ -24,6 +25,8 @@ export default function BanManagement() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [viewingReason, setViewingReason] = useState(null); // { targetId, reason }
+  const [removingBan, setRemovingBan] = useState(null); // targetId to remove
+  const [isRemovingBan, setIsRemovingBan] = useState(false);
 
   // New ban form
   const [vatsimId, setVatsimId] = useState('');
@@ -116,15 +119,13 @@ export default function BanManagement() {
     }
   };
 
-  const handleRemoveBan = async (targetId) => {
-    if (!targetId) return;
-    const confirmed = window.confirm(`Remove ban for ${targetId}?`);
-    if (!confirmed) return;
+  const handleRemoveBan = async () => {
+    if (!removingBan) return;
     setError(null);
     setSuccess(null);
     try {
-      setLoading(true);
-      const res = await fetch(`${API_BASE}/bans/${encodeURIComponent(targetId)}`, {
+      setIsRemovingBan(true);
+      const res = await fetch(`${API_BASE}/bans/${encodeURIComponent(removingBan)}`, {
         method: 'DELETE',
         headers,
       });
@@ -133,11 +134,12 @@ export default function BanManagement() {
         throw new Error(data?.error || `${res.status} ${res.statusText}`);
       }
       setSuccess('Ban removed');
+      setRemovingBan(null);
       await fetchBans();
     } catch (e) {
       setError(e.message || 'Failed to remove ban');
     } finally {
-      setLoading(false);
+      setIsRemovingBan(false);
     }
   };
 
@@ -197,7 +199,7 @@ export default function BanManagement() {
               <FileText className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleRemoveBan(String(targetId))}
+              onClick={() => setRemovingBan(String(targetId))}
               className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
               title="Remove Ban"
             >
@@ -353,36 +355,47 @@ export default function BanManagement() {
           </table>
         </div>
       </div>
-      {viewingReason && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                  <FileText className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white">Ban Reason</h3>
-                  <p className="text-xs text-zinc-500">CID: {viewingReason.targetId}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setViewingReason(null)}
-                className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
-              <p className="text-sm text-zinc-300 leading-relaxed">
-                {viewingReason?.reason?.trim() ? viewingReason.reason : 'No reason provided'}
-              </p>
-            </div>
-          </div>
+      <Dialog
+        open={!!viewingReason}
+        onClose={() => setViewingReason(null)}
+        icon={FileText}
+        iconColor="blue"
+        title="Ban Reason"
+        maxWidth="md"
+      >
+        <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4">
+          <p className="text-sm text-zinc-300 leading-relaxed">
+            {viewingReason?.reason?.trim() ? viewingReason.reason : 'No reason provided'}
+          </p>
         </div>
-      )}
+      </Dialog>
+
+      <Dialog
+        open={!!removingBan}
+        onClose={() => setRemovingBan(null)}
+        icon={AlertOctagon}
+        iconColor="red"
+        title="Remove Ban"
+        description={`This action will remove the ban and allow ${removingBan} to access and use all BARS services again.`}
+        isLoading={isRemovingBan}
+        closeOnBackdrop={!isRemovingBan}
+        closeOnEscape={!isRemovingBan}
+        buttons={[
+          {
+            label: 'Remove Ban',
+            variant: 'destructive',
+            icon: Trash2,
+            loadingLabel: 'Removing...',
+            onClick: handleRemoveBan,
+            disabled: isRemovingBan,
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: () => setRemovingBan(null),
+          },
+        ]}
+      ></Dialog>
     </div>
   );
 }

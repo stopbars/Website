@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { Button } from '../shared/Button';
+import { Dialog } from '../shared/Dialog';
 import {
   AlertTriangle,
   Loader,
@@ -48,74 +48,6 @@ const StatusBadge = ({ status }) => {
 
 StatusBadge.propTypes = {
   status: PropTypes.string,
-};
-
-const DeleteConfirmationModal = ({ message, onCancel, onConfirmDelete, isDeleting }) => {
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-        <div className="flex items-center space-x-3 mb-6">
-          <AlertOctagon className="w-6 h-6 text-red-500" />
-          <h3 className="text-xl font-bold text-red-500">Delete Message</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-zinc-200 mb-3">You are about to delete this message:</p>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2 text-red-200">
-                <Mail className="w-4 h-4 shrink-0" />
-                <span className="text-sm truncate">{message.email || 'Unknown sender'}</span>
-              </div>
-              <div className="flex items-start space-x-2 text-red-200">
-                <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
-                <span className="text-sm leading-relaxed">{message.subject || '(No subject)'}</span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-zinc-300">
-            This action cannot be undone. The message will be permanently removed from the database,
-            all associated data will be lost.
-          </p>
-
-          <div className="flex space-x-3 pt-2">
-            <Button
-              onClick={onConfirmDelete}
-              className="bg-red-500! hover:bg-red-600! text-white"
-              disabled={isDeleting}
-            >
-              {isDeleting ? (
-                <>
-                  <Loader className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete Message
-                </>
-              )}
-            </Button>
-            <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-DeleteConfirmationModal.propTypes = {
-  message: PropTypes.shape({
-    id: PropTypes.number.isRequired,
-    email: PropTypes.string,
-    subject: PropTypes.string,
-  }).isRequired,
-  onCancel: PropTypes.func.isRequired,
-  onConfirmDelete: PropTypes.func.isRequired,
-  isDeleting: PropTypes.bool.isRequired,
 };
 
 export default function ContactMessages() {
@@ -425,14 +357,48 @@ export default function ContactMessages() {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {deletingMessage && (
-        <DeleteConfirmationModal
-          message={deletingMessage}
-          onCancel={cancelDelete}
-          onConfirmDelete={() => deleteMessage(deletingMessage.id)}
-          isDeleting={isDeletingMessage}
-        />
-      )}
+      <Dialog
+        open={!!deletingMessage}
+        onClose={cancelDelete}
+        icon={AlertOctagon}
+        iconColor="red"
+        title="Delete Message"
+        description="This action cannot be undone. The message will be permanently removed from the database, all associated data will be lost."
+        isLoading={isDeletingMessage}
+        closeOnBackdrop={!isDeletingMessage}
+        closeOnEscape={!isDeletingMessage}
+        buttons={[
+          {
+            label: 'Delete Message',
+            variant: 'destructive',
+            icon: Trash2,
+            loadingLabel: 'Deleting...',
+            onClick: () => deleteMessage(deletingMessage?.id),
+            disabled: isDeletingMessage,
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: cancelDelete,
+          },
+        ]}
+      >
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
+          <p className="text-zinc-200 mb-3">You are about to delete this message:</p>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 text-red-200">
+              <Mail className="w-4 h-4 shrink-0" />
+              <span className="text-sm truncate">{deletingMessage?.email || 'Unknown sender'}</span>
+            </div>
+            <div className="flex items-start space-x-2 text-red-200">
+              <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
+              <span className="text-sm leading-relaxed">
+                {deletingMessage?.subject || '(No subject)'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }
