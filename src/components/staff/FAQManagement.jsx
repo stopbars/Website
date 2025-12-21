@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import PropTypes from 'prop-types';
+import { Dialog } from '../shared/Dialog';
 import {
   HelpCircle,
   AlertTriangle,
@@ -19,69 +19,6 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { Button } from '../shared/Button';
-
-const DeleteFAQModal = ({ faq, onConfirm, onCancel, isDeleting }) => {
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-        <div className="flex items-center space-x-3 mb-6">
-          <AlertOctagon className="w-6 h-6 text-red-500" />
-          <h3 className="text-xl font-bold text-red-500">Delete FAQ</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-zinc-200 mb-3">You are about to delete the FAQ for:</p>
-            <div className="space-y-3">
-              <div className="flex items-start space-x-2 text-red-200">
-                <FileQuestion className="w-4 h-4 mt-0.5 shrink-0" />
-                <p className="text-sm leading-relaxed">{faq.question}</p>
-              </div>
-              <div className="flex items-start space-x-2 text-red-200">
-                <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
-                <p className="text-sm leading-relaxed">{faq.answer}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex space-x-3 pt-2">
-            <Button
-              onClick={onConfirm}
-              className="bg-red-500! hover:bg-red-600! text-white"
-              disabled={isDeleting}
-            >
-              {isDeleting ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete FAQ
-                </>
-              )}
-            </Button>
-            <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-DeleteFAQModal.propTypes = {
-  faq: PropTypes.shape({
-    question: PropTypes.string.isRequired,
-    answer: PropTypes.string.isRequired,
-  }).isRequired,
-  onConfirm: PropTypes.func.isRequired,
-  onCancel: PropTypes.func.isRequired,
-  isDeleting: PropTypes.bool.isRequired,
-};
 
 const FAQManagement = () => {
   const [faqs, setFaqs] = useState([]);
@@ -650,14 +587,46 @@ const FAQManagement = () => {
         )}
 
         {/* Delete Confirmation Modal */}
-        {deletingFaq && (
-          <DeleteFAQModal
-            faq={deletingFaq}
-            onConfirm={() => handleDeleteFaq(deletingFaq.id)}
-            onCancel={() => setDeletingFaq(null)}
-            isDeleting={isDeleting}
-          />
-        )}
+        <Dialog
+          open={!!deletingFaq}
+          onClose={() => setDeletingFaq(null)}
+          icon={AlertOctagon}
+          iconColor="red"
+          title="Delete FAQ"
+          description="This action cannot be undone. The FAQ will be permanently removed."
+          isLoading={isDeleting}
+          closeOnBackdrop={!isDeleting}
+          closeOnEscape={!isDeleting}
+          buttons={[
+            {
+              label: 'Delete FAQ',
+              variant: 'destructive',
+              icon: Trash2,
+              loadingLabel: 'Deleting...',
+              onClick: () => handleDeleteFaq(deletingFaq?.id),
+              disabled: isDeleting,
+            },
+            {
+              label: 'Cancel',
+              variant: 'outline',
+              onClick: () => setDeletingFaq(null),
+            },
+          ]}
+        >
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
+            <p className="text-zinc-200 mb-3">You are about to delete the FAQ for:</p>
+            <div className="space-y-3">
+              <div className="flex items-start space-x-2 text-red-200">
+                <FileQuestion className="w-4 h-4 mt-0.5 shrink-0" />
+                <p className="text-sm leading-relaxed">{deletingFaq?.question}</p>
+              </div>
+              <div className="flex items-start space-x-2 text-red-200">
+                <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
+                <p className="text-sm leading-relaxed">{deletingFaq?.answer}</p>
+              </div>
+            </div>
+          </div>
+        </Dialog>
       </div>
     </div>
   );

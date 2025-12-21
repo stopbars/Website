@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '../shared/Button';
 
@@ -13,7 +13,9 @@ const previewOptions = [
 export const Hero = () => {
   const [selectedPreview, setSelectedPreview] = useState(previewOptions[0]);
   const [downloadInfo, setDownloadInfo] = useState(null);
-  const [downloadUnavailable, setDownloadUnavailable] = useState(false);
+  const cardRef = useRef(null);
+  const [cardTransform, setCardTransform] = useState('');
+  const [cardGlow, setCardGlow] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
     let mounted = true;
@@ -57,12 +59,7 @@ export const Hero = () => {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
             variant="primary"
-            disabled={downloadUnavailable}
-            className={`h-14 px-10 text-base md:text-lg gap-2 transition-all duration-200 hover:scale-[1.02] hover:brightness-110 ${
-              downloadUnavailable
-                ? 'opacity-60 cursor-not-allowed hover:scale-100 hover:brightness-100'
-                : ''
-            }`}
+            className="h-14 px-10 text-base md:text-lg gap-2"
             onClick={async () => {
               if (downloadUnavailable) return;
               const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
@@ -94,7 +91,7 @@ export const Hero = () => {
           </Button>
           <Button
             variant="secondary"
-            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-all duration-200 hover:scale-[1.02]"
+            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700!"
             onClick={() =>
               window.open('https://docs.stopbars.com/', '_blank', 'noopener,noreferrer')
             }
@@ -127,7 +124,47 @@ export const Hero = () => {
             })}
           </div>
 
-          <div className="mt-10 h-96 md:h-128 relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
+          <div
+            ref={cardRef}
+            className="mt-10 h-96 md:h-128 relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900 transition-transform duration-200 ease-out cursor-pointer"
+            style={{
+              transform: cardTransform,
+              transformStyle: 'preserve-3d',
+              perspective: '1000px',
+            }}
+            onMouseMove={(e) => {
+              const card = cardRef.current;
+              if (!card) return;
+              const rect = card.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const y = e.clientY - rect.top;
+              const cx = rect.width / 2;
+              const cy = rect.height / 2;
+
+              const nx = (x - cx) / cx;
+              const ny = (y - cy) / cy;
+
+              const dist = Math.sqrt(nx * nx + ny * ny);
+              const falloff = Math.max(0, 1 - dist * 0.6);
+
+              const rx = ny * -4 * falloff;
+              const ry = nx * 4 * falloff;
+              setCardTransform(
+                `perspective(1000px) rotateX(${rx}deg) rotateY(${ry}deg) scale3d(1.01, 1.01, 1.01)`
+              );
+              setCardGlow({ x: (x / rect.width) * 100, y: (y / rect.height) * 100 });
+            }}
+            onMouseLeave={() => {
+              setCardTransform('perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)');
+              setCardGlow({ x: 50, y: 50 });
+            }}
+          >
+            <div
+              className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+              style={{
+                background: `radial-gradient(circle at ${cardGlow.x}% ${cardGlow.y}%, rgba(255,255,255,0.15) 0%, transparent 50%)`,
+              }}
+            />
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-lg md:text-2xl font-medium text-zinc-200">
                 {selectedPreview} Placeholder

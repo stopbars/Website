@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
+import { Dialog } from '../shared/Dialog';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   Upload,
   Image as ImageIcon,
-  RefreshCw,
   Check,
   AlertTriangle,
   History,
@@ -1210,140 +1210,131 @@ const ReleaseManagement = () => {
       </div>
 
       {/* Confirmation Modal */}
-      {confirmOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
-              <div>
-                <h3 className="text-lg font-semibold mb-1">Confirm Release Publication</h3>
-              </div>
+      <Dialog
+        open={confirmOpen}
+        onClose={() => {
+          setConfirmOpen(false);
+          setPendingUploadData(null);
+        }}
+        icon={AlertTriangle}
+        iconColor="orange"
+        title="Confirm Release Publication"
+        isLoading={uploading}
+        closeOnBackdrop={!uploading}
+        closeOnEscape={!uploading}
+        maxWidth="2xl"
+        buttons={[
+          {
+            label: 'Publish',
+            variant: 'primary',
+            icon: Send,
+            loadingLabel: 'Publishing...',
+            onClick: executeUpload,
+            disabled: uploading,
+            className: 'bg-amber-600 hover:bg-amber-500',
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            icon: X,
+            onClick: () => {
+              setConfirmOpen(false);
+              setPendingUploadData(null);
+            },
+          },
+        ]}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left side - Release Details */}
+          <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 flex flex-col justify-center">
+            <div className="flex items-center space-x-2 mb-3">
+              <Package className="w-4 h-4 text-zinc-400" />
+              <h4 className="font-medium text-zinc-200">Release Details</h4>
             </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left side - Release Details */}
-              <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 flex flex-col justify-center">
-                <div className="flex items-center space-x-2 mb-3">
-                  <Package className="w-4 h-4 text-zinc-400" />
-                  <h4 className="font-medium text-zinc-200">Release Details</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Product:</span>
+                <span className="font-medium">{product}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Version:</span>
+                <span className="font-medium">{version || '—'}</span>
+              </div>
+              {product === 'SimConnect.NET' ? (
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">File:</span>
+                  <span className="font-medium">External (NuGet)</span>
                 </div>
-                <div className="space-y-2">
+              ) : (
+                <>
                   <div className="flex justify-between">
-                    <span className="text-zinc-400">Product:</span>
-                    <span className="font-medium">{product}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Version:</span>
-                    <span className="font-medium">{version || '—'}</span>
-                  </div>
-                  {product === 'SimConnect.NET' ? (
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">File:</span>
-                      <span className="font-medium">External (NuGet)</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-400">
-                          {product === 'Installer' ? 'Installer File:' : 'ZIP File:'}
-                        </span>
-                        <span className="font-medium truncate max-w-[200px]" title={file?.name}>
-                          {file?.name}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-400">
-                          {product === 'Installer' ? 'File Size:' : 'ZIP Size:'}
-                        </span>
-                        <span className="font-medium">
-                          {file ? (file.size / (1024 * 1024)).toFixed(2) + ' MB' : '—'}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Promo Image:</span>
-                    <span className="font-medium truncate max-w-[200px]" title={image?.name}>
-                      {image ? image.name : '(none)'}
+                    <span className="text-zinc-400">
+                      {product === 'Installer' ? 'Installer File:' : 'ZIP File:'}
+                    </span>
+                    <span className="font-medium truncate max-w-[200px]" title={file?.name}>
+                      {file?.name}
                     </span>
                   </div>
-                  {image && (
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Image Size:</span>
-                      <span className="font-medium">
-                        {(image.size / (1024 * 1024)).toFixed(2)} MB
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed mt-4 mb-2">
-                  Releases cannot be deleted once created. Please review all details carefully
-                  before confirming. Double-check you selected the correct build file (
-                  {product === 'Installer'
-                    ? '.exe'
-                    : product === 'SimConnect.NET'
-                      ? 'external NuGet version'
-                      : '.zip'}
-                  ) and optional image. Mistakes require publishing a new release; this one will
-                  remain immutable.
-                </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">
+                      {product === 'Installer' ? 'File Size:' : 'ZIP Size:'}
+                    </span>
+                    <span className="font-medium">
+                      {file ? (file.size / (1024 * 1024)).toFixed(2) + ' MB' : '—'}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Promo Image:</span>
+                <span className="font-medium truncate max-w-[200px]" title={image?.name}>
+                  {image ? image.name : '(none)'}
+                </span>
               </div>
-
-              {/* Right side - Changelog Preview */}
-              <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
-                <div className="flex items-center space-x-2 mb-3">
-                  <Eye className="w-4 h-4 text-zinc-400" />
-                  <h4 className="font-medium text-zinc-200">Changelog Preview</h4>
+              {image && (
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Image Size:</span>
+                  <span className="font-medium">{(image.size / (1024 * 1024)).toFixed(2)} MB</span>
                 </div>
-                <div className="max-h-64 overflow-y-auto border border-zinc-700 rounded p-3 bg-zinc-900/60 text-xs">
-                  <article className="markdown-preview prose-invert prose-xs max-w-none">
-                    <div
-                      dangerouslySetInnerHTML={{
-                        __html: renderMarkdown(changelog || '*No changelog provided*'),
-                      }}
-                    />
-                  </article>
-                </div>
-              </div>
+              )}
             </div>
+            <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed mt-4 mb-2">
+              Releases cannot be deleted once created. Please review all details carefully before
+              confirming. Double-check you selected the correct build file (
+              {product === 'Installer'
+                ? '.exe'
+                : product === 'SimConnect.NET'
+                  ? 'external NuGet version'
+                  : '.zip'}
+              ) and optional image. Mistakes require publishing a new release; this one will remain
+              immutable.
+            </div>
+          </div>
 
-            {uploadError && (
-              <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
-                {uploadError}
-              </div>
-            )}
-            <div className="flex justify-end gap-3 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setConfirmOpen(false);
-                  setPendingUploadData(null);
-                }}
-                disabled={uploading}
-              >
-                <X className="w-4 h-4 mr-1" /> Cancel
-              </Button>
-              <Button
-                onClick={executeUpload}
-                disabled={uploading}
-                className="bg-amber-600 hover:bg-amber-500"
-              >
-                {uploading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Publishing...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" />
-                    Publish
-                  </>
-                )}
-              </Button>
+          {/* Right side - Changelog Preview */}
+          <div className="space-y-3 text-sm bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
+            <div className="flex items-center space-x-2 mb-3">
+              <Eye className="w-4 h-4 text-zinc-400" />
+              <h4 className="font-medium text-zinc-200">Changelog Preview</h4>
+            </div>
+            <div className="max-h-64 overflow-y-auto border border-zinc-700 rounded p-3 bg-zinc-900/60 text-xs">
+              <article className="markdown-preview prose-invert prose-xs max-w-none">
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: renderMarkdown(changelog || '*No changelog provided*'),
+                  }}
+                />
+              </article>
             </div>
           </div>
         </div>
-      )}
+
+        {uploadError && (
+          <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400 mt-4">
+            {uploadError}
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 };
