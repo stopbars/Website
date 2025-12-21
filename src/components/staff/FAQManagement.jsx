@@ -19,6 +19,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
+import { Button } from '../shared/Button';
 
 const FAQManagement = () => {
   const [faqs, setFaqs] = useState([]);

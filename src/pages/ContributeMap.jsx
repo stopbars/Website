@@ -623,6 +623,20 @@ const SATELLITE_STYLE = {
   ],
 };
 
+const INTERACTIVE_LAYER_IDS = [
+  'lower-lines-outline-layer',
+  'lower-lines-top-layer',
+  'lower-lines-bottom-layer',
+  'upper-lines-outline-layer',
+  'upper-lines-top-layer',
+  'upper-lines-bottom-layer',
+  'lower-caps-layer',
+  'upper-caps-layer',
+];
+
+const CLICK_RADIUS_PX = 10;
+const TOUCH_RADIUS_PX = 14;
+
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -844,13 +858,23 @@ const ContributeMap = () => {
     setActivePointId(point.id);
   }, []);
 
-  const handleLineClick = useCallback((e) => {
-    if (e.features && e.features.length > 0) {
-      const feature = e.features[0];
-      const pointId = feature.properties.id;
-      setActivePointId(pointId);
-    }
-  }, []);
+  const handleLineClick = useCallback(
+    (e) => {
+      const eventFeatures = Array.isArray(e?.features) ? e.features : [];
+      const queriedFeatures =
+        mapRef.current?.queryRenderedFeatures(e.point, { layers: INTERACTIVE_LAYER_IDS }) || [];
+
+      const feature = [...eventFeatures, ...queriedFeatures].find((f) => f?.properties?.id);
+
+      if (feature?.properties?.id) {
+        setActivePointId(feature.properties.id);
+        return true;
+      }
+
+      return false;
+    },
+    [mapRef]
+  );
 
   const handleContinue = () => {
     navigate(`/contribute/test/${icao}`);
@@ -943,18 +967,11 @@ const ContributeMap = () => {
                   onStyleData={(e) => addCapIcons(e.target)}
                   mapStyle={mapStyle}
                   style={{ width: '100%', height: '100%' }}
-                  interactiveLayerIds={[
-                    'lower-lines-outline-layer',
-                    'lower-lines-top-layer',
-                    'lower-lines-bottom-layer',
-                    'upper-lines-outline-layer',
-                    'upper-lines-top-layer',
-                    'upper-lines-bottom-layer',
-                  ]}
+                  interactiveLayerIds={INTERACTIVE_LAYER_IDS}
+                  clickRadius={CLICK_RADIUS_PX}
+                  touchRadius={TOUCH_RADIUS_PX}
                   onClick={(e) => {
-                    if (e.features && e.features.length > 0) {
-                      handleLineClick(e);
-                    } else {
+                    if (!handleLineClick(e)) {
                       setActivePointId(null);
                     }
                   }}
