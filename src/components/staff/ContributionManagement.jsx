@@ -792,6 +792,7 @@ ReviewModal.propTypes = {
     packageName: PropTypes.string.isRequired,
     userId: PropTypes.string.isRequired,
     userDisplayName: PropTypes.string,
+    simulator: PropTypes.string,
     submittedXml: PropTypes.string.isRequired,
     notes: PropTypes.string,
     submissionDate: PropTypes.string.isRequired,
