@@ -549,6 +549,16 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                     )}
                   </div>
                   <div>
+                    <p className="text-sm text-zinc-400">Simulator</p>
+                    <p className="font-semibold">
+                      {contribution.simulator === 'msfs2024'
+                        ? 'MSFS 2024'
+                        : contribution.simulator === 'msfs2020'
+                          ? 'MSFS 2020'
+                          : contribution.simulator || 'Not specified'}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-sm text-zinc-400">Submitted By</p>
                     <p className="font-semibold">
                       {contribution.userDisplayName || contribution.userId}
@@ -948,6 +958,21 @@ const ContributionManagement = () => {
 
                       <p className="text-sm text-zinc-400 mb-2">
                         Package: <span className="text-zinc-300">{contribution.packageName}</span>
+                        {contribution.simulator && (
+                          <span
+                            className={`ml-2 text-xs px-2 py-0.5 rounded-full border ${
+                              contribution.simulator === 'msfs2024'
+                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                            }`}
+                          >
+                            {contribution.simulator === 'msfs2024'
+                              ? 'MSFS 2024'
+                              : contribution.simulator === 'msfs2020'
+                                ? 'MSFS 2020'
+                                : contribution.simulator}
+                          </span>
+                        )}
                       </p>
 
                       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
