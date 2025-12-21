@@ -165,6 +165,7 @@ const ContributionDashboard = () => {
           acc[airport].contributions.push({
             id: contribution.id,
             scenery: contribution.packageName,
+            simulator: contribution.simulator,
             status: contribution.status,
             lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
             rejectionReason: contribution.rejectionReason,
@@ -200,6 +201,7 @@ const ContributionDashboard = () => {
               acc[airport].contributions.push({
                 id: contribution.id,
                 scenery: contribution.packageName,
+                simulator: contribution.simulator,
                 status: contribution.status,
                 lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
                 rejectionReason: contribution.rejectionReason,
@@ -514,7 +516,24 @@ const ContributionDashboard = () => {
                               }`}
                             >
                               <div className="space-y-1">
-                                <div className="font-medium">{contribution.scenery}</div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{contribution.scenery}</span>
+                                  {contribution.simulator && (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full border ${
+                                        contribution.simulator === 'msfs2024'
+                                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                          : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                      }`}
+                                    >
+                                      {contribution.simulator === 'msfs2024'
+                                        ? 'MSFS 2024'
+                                        : contribution.simulator === 'msfs2020'
+                                          ? 'MSFS 2020'
+                                          : contribution.simulator}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center space-x-2">
                                   <div className="text-xs text-zinc-400">
                                     Last updated: {contribution.lastUpdated}

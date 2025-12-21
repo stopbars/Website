@@ -36,6 +36,7 @@ const ContributeDetails = () => {
   const { width, height } = useWindowSize();
   const [confettiRun, setConfettiRun] = useState(true);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [simulator, setSimulator] = useState('msfs2024');
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -90,7 +91,7 @@ const ContributeDetails = () => {
 
         if (response.ok) {
           const data = await response.json();
-          setTopPackages(data.slice(0, 6)); // Get top 6 packages
+          setTopPackages(data.slice(0, 4)); // Get top 4 packages
           setAllPackages(data.map((pkg) => pkg.packageName));
         }
       } catch (error) {
@@ -151,6 +152,13 @@ const ContributeDetails = () => {
       return;
     }
 
+    if (!simulator) {
+      setErrorTitle('Error');
+      setError('Please select a simulator');
+      setShowErrorToast(true);
+      return;
+    }
+
     setError('');
     setShowErrorToast(false);
     setIsSubmitting(true);
@@ -165,6 +173,7 @@ const ContributeDetails = () => {
       const payload = {
         airportIcao: icao,
         packageName: sceneryName,
+        simulator: simulator,
         submittedXml: fileContent,
         notes: notes || undefined,
       };
@@ -179,8 +188,17 @@ const ContributeDetails = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to submit contribution');
+        if (response.status === 429) {
+          throw new Error('You are being rate limited, please try again shortly.');
+        }
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to submit contribution');
+        } else {
+          const errorText = await response.text();
+          throw new Error(errorText || 'Failed to submit contribution');
+        }
       }
 
       setSubmissionSuccess(true);
@@ -254,9 +272,9 @@ const ContributeDetails = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-              <Card className="p-6 h-full">
+              <Card className="p-6">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Scenery package selection */}
                   <div>
@@ -277,7 +295,7 @@ const ContributeDetails = () => {
 
                         {/* Skeleton for Top Packages */}
                         <div className="mt-4 grid grid-cols-2 gap-2">
-                          {[...Array(6)].map((_, index) => (
+                          {[...Array(4)].map((_, index) => (
                             <div
                               key={index}
                               className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/30 animate-pulse"
@@ -370,6 +388,35 @@ const ContributeDetails = () => {
                     )}
                   </div>
 
+                  {/* Simulator selection */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Simulator</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSimulator('msfs2024')}
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 ${
+                          simulator === 'msfs2024'
+                            ? 'border-blue-500 bg-blue-500/10 text-white'
+                            : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+                        }`}
+                      >
+                        <span className="font-medium">MSFS 2024</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSimulator('msfs2020')}
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 ${
+                          simulator === 'msfs2020'
+                            ? 'border-purple-500 bg-purple-500/10 text-white'
+                            : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+                        }`}
+                      >
+                        <span className="font-medium">MSFS 2020</span>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Additional notes */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Additional Notes</label>
@@ -434,75 +481,69 @@ const ContributeDetails = () => {
               </Card>
             </div>
 
-            <div className="flex flex-col justify-between space-y-6">
-              <div className="space-y-6 flex-1 flex flex-col">
-                {/* Airport Information */}
-                <Card className="p-6">
-                  <h2 className="text-xl font-medium mb-4">Airport Information</h2>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-zinc-400">ICAO Code</p>
-                      <p className="font-medium">{icao.toUpperCase()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-400">Airport Name</p>
-                      <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-400">Location</p>
-                      <p className="font-medium">
-                        {airport
-                          ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
-                          : 'Loading...'}
+            <div className="flex flex-col space-y-6">
+              {/* Airport Information */}
+              <Card className="p-6">
+                <h2 className="text-xl font-medium mb-4">Airport Information</h2>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-zinc-400">ICAO Code</p>
+                    <p className="font-medium">{icao.toUpperCase()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-zinc-400">Airport Name</p>
+                    <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-zinc-400">Location</p>
+                    <p className="font-medium">
+                      {airport
+                        ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
+                        : 'Loading...'}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* XML File */}
+              <Card className="p-6">
+                <h2 className="text-xl font-medium mb-4">XML File</h2>
+                <div
+                  className={`w-full border-2 border-dashed rounded-lg p-6 text-center ${
+                    selectedFile
+                      ? 'border-emerald-500/50 bg-emerald-500/5'
+                      : 'border-zinc-600 bg-zinc-800/50'
+                  }`}
+                >
+                  {selectedFile ? (
+                    <div className="flex flex-col items-center">
+                      <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+                        <Check className="w-6 h-6 text-emerald-500" />
+                      </div>
+                      <p className="font-medium mb-1">{selectedFile.name}</p>
+                      <p className="text-sm text-zinc-400">
+                        {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous step
                       </p>
                     </div>
-                    <div></div>
-                  </div>
-                </Card>
-
-                {/* XML File */}
-                <Card className="p-6 flex-1 flex flex-col">
-                  <h2 className="text-xl font-medium mb-4">XML File</h2>
-                  <div className="flex-1 flex items-center">
-                    <div
-                      className={`w-full border-2 border-dashed rounded-lg p-6 text-center ${
-                        selectedFile
-                          ? 'border-emerald-500/50 bg-emerald-500/5'
-                          : 'border-zinc-600 bg-zinc-800/50'
-                      }`}
-                    >
-                      {selectedFile ? (
-                        <div className="flex flex-col items-center">
-                          <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
-                            <Check className="w-6 h-6 text-emerald-500" />
-                          </div>
-                          <p className="font-medium mb-1">{selectedFile.name}</p>
-                          <p className="text-sm text-zinc-400">
-                            {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous
-                            step
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center">
-                          <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
-                            <FileUp className="w-6 h-6 text-zinc-400" />
-                          </div>
-                          <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
-                          <p className="text-sm text-zinc-500">
-                            Please go back and test your XML file
-                          </p>
-                        </div>
-                      )}
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
+                        <FileUp className="w-6 h-6 text-zinc-400" />
+                      </div>
+                      <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
+                      <p className="text-sm text-zinc-500">Please go back and test your XML file</p>
                     </div>
-                  </div>
-                </Card>
-              </div>
+                  )}
+                </div>
+              </Card>
 
               {/* Submit button */}
               <Button
                 onClick={handleSubmit}
-                disabled={isSubmitting || !selectedFile || !sceneryName || !acknowledged}
-                className={`w-full ${isSubmitting || !selectedFile || !sceneryName || !acknowledged ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={
+                  isSubmitting || !selectedFile || !sceneryName || !simulator || !acknowledged
+                }
+                className={`w-full ${isSubmitting || !selectedFile || !sceneryName || !simulator || !acknowledged ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 {isSubmitting ? (
                   <div className="flex items-center justify-center">
