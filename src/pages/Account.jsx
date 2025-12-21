@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Dialog } from '../components/shared/Dialog';
 import {
   User,
   LogOut,
@@ -17,6 +18,7 @@ import {
   RefreshCcw,
   Building2,
   Loader,
+  Trash2,
 } from 'lucide-react';
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -32,7 +34,6 @@ const Account = () => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [regeneratingApiKey, setRegeneratingApiKey] = useState(false);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
-  const [regenerateError, setRegenerateError] = useState(null);
   const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
   const [userDivisions, setUserDivisions] = useState([]);
   const [displayMode, setDisplayMode] = useState(user?.display_mode ?? 0);
@@ -602,11 +603,7 @@ const Account = () => {
                     <h3 className="font-medium text-red-400">Sign Out</h3>
                     <p className="text-sm text-zinc-400">End your current session</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    className="border-red-500/20 text-red-500 hover:bg-red-500/10"
-                    onClick={logout}
-                  >
+                  <Button variant="outline" onClick={logout}>
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign Out
                   </Button>
@@ -619,11 +616,7 @@ const Account = () => {
                       Permanently delete your BARS account and all stored data.
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    className="border-red-500/20 text-red-500 hover:bg-red-500/10"
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                  >
+                  <Button variant="outline" onClick={() => setIsDeleteDialogOpen(true)}>
                     <OctagonAlert className="w-4 h-4 mr-2" />
                     Delete Account
                   </Button>
@@ -632,189 +625,90 @@ const Account = () => {
             </Card>
           </div>
 
-          {isDeleteDialogOpen && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-              <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-                <div className="flex items-center space-x-3 mb-6">
-                  <AlertOctagon className="w-6 h-6 text-red-500" />
-                  <h3 className="text-xl font-semibold text-red-500">Delete Account</h3>
-                </div>
-
-                <div className="space-y-4">
-                  <p className="text-zinc-300">
-                    This action cannot be undone. This will permanently delete your account and
-                    remove all associated data.
-                  </p>
-
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (deleteConfirmation === 'DELETE' && !isDeletingAccount) {
-                        handleDeleteAccount();
-                      }
-                    }}
-                  >
-                    <div>
-                      <label className="block text-sm font-medium mb-2 text-zinc-300">
-                        Type DELETE to confirm:
-                      </label>
-                      <input
-                        type="text"
-                        value={deleteConfirmation}
-                        onChange={(e) => setDeleteConfirmation(e.target.value)}
-                        onPaste={(e) => e.preventDefault()}
-                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
-                        disabled={isDeletingAccount}
-                      />
-                    </div>
-                    <div className="flex space-x-3 mt-6">
-                      <Button
-                        type="submit"
-                        className={`${
-                          deleteConfirmation === 'DELETE' && !isDeletingAccount
-                            ? 'bg-red-500! text-white'
-                            : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
-                        }`}
-                        disabled={deleteConfirmation !== 'DELETE' || isDeletingAccount}
-                      >
-                        {isDeletingAccount ? (
-                          <>
-                            <Loader className="w-4 h-4 mr-2 animate-spin" />
-                            Deleting...
-                          </>
-                        ) : (
-                          'Delete'
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setDeleteConfirmation('');
-                          setIsDeleteDialogOpen(false);
-                        }}
-                        className="hover:bg-zinc-800"
-                        disabled={isDeletingAccount}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          )}
-          {isRegenerateDialogOpen && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-              <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-                <div className="flex items-center space-x-3 mb-6">
-                  <RefreshCcw className="w-6 h-6 text-orange-400" />
-                  <h3 className="text-xl font-semibold text-orange-400">Regenerate API Token</h3>
-                </div>
-
-                {regenerateError ? (
-                  <>
-                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg mb-6">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <AlertOctagon className="w-5 h-5 text-red-500 shrink-0" />
-                        <p className="text-red-400 font-medium">Rate Limit Exceeded</p>
-                      </div>
-                      <p className="text-zinc-400">{regenerateError.message}</p>
-                      {regenerateError.retryAfter && (
-                        <div className="mt-3 pt-3 border-t border-red-500/20 text-zinc-400 text-sm">
-                          <span>You can try again in: </span>
-                          <span className="font-mono text-red-400">
-                            {Math.floor(regenerateError.retryAfter / 3600)} hours,{' '}
-                            {Math.floor((regenerateError.retryAfter % 3600) / 60)} minutes
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setRegenerateError(null);
-                          setIsRegenerateDialogOpen(false);
-                        }}
-                        className="hover:bg-zinc-800"
-                      >
-                        Close
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="space-y-4">
-                      <p className="text-zinc-300">
-                        This action cannot be undone, your current key will stop working
-                        immediately, and all services using it will need to be updated with the new
-                        key.
-                      </p>
-
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (regenerateConfirmation === 'REGENERATE') {
-                            handleRegenerateApiKey();
-                          }
-                        }}
-                      >
-                        <div>
-                          <label className="block text-sm font-medium mb-2 text-zinc-300">
-                            Type REGENERATE to confirm:
-                          </label>
-                          <input
-                            type="text"
-                            value={regenerateConfirmation}
-                            onChange={(e) => setRegenerateConfirmation(e.target.value)}
-                            onPaste={(e) => e.preventDefault()}
-                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-orange-500"
-                            disabled={regeneratingApiKey}
-                          />
-                        </div>
-                        <div className="flex space-x-3 mt-6">
-                          <Button
-                            type="submit"
-                            className={`${
-                              regenerateConfirmation === 'REGENERATE' && !regeneratingApiKey
-                                ? 'bg-orange-500! text-white'
-                                : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
-                            }`}
-                            disabled={regenerateConfirmation !== 'REGENERATE' || regeneratingApiKey}
-                          >
-                            {regeneratingApiKey ? (
-                              <>
-                                <Loader className="w-4 h-4 mr-2 animate-spin" />
-                                Regenerating...
-                              </>
-                            ) : (
-                              <>
-                                <RefreshCcw className="w-4 h-4 mr-2" />
-                                Regenerate Token
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              setRegenerateConfirmation('');
-                              setIsRegenerateDialogOpen(false);
-                            }}
-                            className="hover:bg-zinc-800"
-                            disabled={regeneratingApiKey}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </form>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+          <Dialog
+            open={isDeleteDialogOpen}
+            onClose={() => {
+              setDeleteConfirmation('');
+              setIsDeleteDialogOpen(false);
+            }}
+            icon={AlertOctagon}
+            iconColor="red"
+            title="Delete Account"
+            description="This action cannot be undone. This will permanently delete your account and remove all associated data."
+            isLoading={isDeletingAccount}
+            closeOnBackdrop={!isDeletingAccount}
+            closeOnEscape={!isDeletingAccount}
+            onSubmit={handleDeleteAccount}
+            fields={[
+              {
+                type: 'confirmation',
+                label: 'Type DELETE to confirm:',
+                confirmText: 'DELETE',
+                value: deleteConfirmation,
+                onChange: setDeleteConfirmation,
+              },
+            ]}
+            buttons={[
+              {
+                label: 'Delete',
+                type: 'submit',
+                variant: 'destructive',
+                icon: Trash2,
+                loadingLabel: 'Deleting...',
+                requiresValidation: true,
+              },
+              {
+                label: 'Cancel',
+                variant: 'outline',
+                onClick: () => {
+                  setDeleteConfirmation('');
+                  setIsDeleteDialogOpen(false);
+                },
+              },
+            ]}
+          />
+          <Dialog
+            open={isRegenerateDialogOpen}
+            onClose={() => {
+              setRegenerateConfirmation('');
+              setIsRegenerateDialogOpen(false);
+            }}
+            icon={RefreshCcw}
+            iconColor="orange"
+            title="Regenerate API Token"
+            description="This action cannot be undone, your current key will stop working immediately, and all services using it will need to be updated with the new key."
+            isLoading={regeneratingApiKey}
+            closeOnBackdrop={!regeneratingApiKey}
+            closeOnEscape={!regeneratingApiKey}
+            onSubmit={handleRegenerateApiKey}
+            fields={[
+              {
+                type: 'confirmation',
+                label: 'Type REGENERATE to confirm:',
+                confirmText: 'REGENERATE',
+                value: regenerateConfirmation,
+                onChange: setRegenerateConfirmation,
+              },
+            ]}
+            buttons={[
+              {
+                label: 'Regenerate Token',
+                type: 'submit',
+                variant: 'primary',
+                icon: RefreshCcw,
+                loadingLabel: 'Regenerating...',
+                requiresValidation: true,
+              },
+              {
+                label: 'Cancel',
+                variant: 'outline',
+                onClick: () => {
+                  setRegenerateConfirmation('');
+                  setIsRegenerateDialogOpen(false);
+                },
+              },
+            ]}
+          />
         </div>
       </div>
 

@@ -27,6 +27,7 @@ const ContributeNew = lazy(() => import('./pages/ContributeNew.jsx'));
 const ContributeMap = lazy(() => import('./pages/ContributeMap.jsx'));
 const ContributeDetails = lazy(() => import('./pages/ContributeDetails.jsx'));
 const ContributeTest = lazy(() => import('./pages/ContributeTest.jsx'));
+const XMLGenerator = lazy(() => import('./pages/XMLGenerator.jsx'));
 const DivisionManagement = lazy(() => import('./components/divisions/DivisionManagement.jsx'));
 const NewDivision = lazy(() => import('./components/divisions/NewDivision.jsx'));
 const StaffDashboard = lazy(() => import('./pages/StaffDashboard.jsx'));
@@ -144,6 +145,11 @@ const router = createBrowserRouter([
   {
     path: '/contribute/details/:icao',
     element: <ContributeDetails />,
+    errorElement: <RouteError />,
+  },
+  {
+    path: '/contribute/generator/:icao?',
+    element: <XMLGenerator />,
     errorElement: <RouteError />,
   },
   {

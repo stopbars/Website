@@ -2,15 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
-import {
-  AlertTriangle,
-  Loader,
-  Trash2,
-  UserPlus,
-  Lock,
-  ChevronDown,
-  UserCheck,
-} from 'lucide-react';
+import { Dropdown } from '../shared/Dropdown';
+import { AlertTriangle, Loader, Trash2, UserPlus, Lock, UserCheck } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
 const ROLE_OPTIONS = [
@@ -40,7 +33,6 @@ export default function StaffManagement() {
   const [form, setForm] = useState({ vatsimId: '', role: 'PRODUCT_MANAGER' });
   const [submitting, setSubmitting] = useState(false);
   const [, setRefreshing] = useState(false);
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
   const apiBase = 'https://v2.stopbars.com';
 
@@ -139,60 +131,6 @@ export default function StaffManagement() {
     }
   };
 
-  // Render custom role dropdown
-  const renderRoleDropdown = (currentRole, setRole, isOpen, setIsOpen) => {
-    const currentOption = ROLE_OPTIONS.find((opt) => opt.value === currentRole);
-
-    return (
-      <div className="relative">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsOpen(!isOpen);
-          }}
-          className="flex items-center justify-between w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white transition-all duration-200 hover:border-zinc-600"
-        >
-          <span className="transition-colors duration-200">
-            {currentOption?.label || currentRole}
-          </span>
-          <ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
-            {ROLE_OPTIONS.map((option, index) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setRole(option.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full px-4 py-2.5 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
-                  currentRole === option.value
-                    ? 'bg-zinc-700 text-blue-400'
-                    : 'text-white hover:text-zinc-100'
-                }`}
-                style={{
-                  animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both',
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-40">
@@ -249,12 +187,11 @@ export default function StaffManagement() {
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-2">Role</label>
-              {renderRoleDropdown(
-                form.role,
-                (role) => setForm((f) => ({ ...f, role })),
-                showRoleDropdown,
-                setShowRoleDropdown
-              )}
+              <Dropdown
+                options={ROLE_OPTIONS}
+                value={form.role}
+                onChange={(role) => setForm((f) => ({ ...f, role }))}
+              />
             </div>
             <div className="flex gap-2">
               <Button

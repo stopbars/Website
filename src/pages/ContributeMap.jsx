@@ -5,7 +5,16 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
-import { AlertCircle, ChevronRight, CopyIcon, Info, Loader, Check, Layers } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronRight,
+  CopyIcon,
+  Info,
+  Loader,
+  Check,
+  Layers,
+  FileCode2,
+} from 'lucide-react';
 import Map, {
   Source,
   Layer,
@@ -614,6 +623,20 @@ const SATELLITE_STYLE = {
   ],
 };
 
+const INTERACTIVE_LAYER_IDS = [
+  'lower-lines-outline-layer',
+  'lower-lines-top-layer',
+  'lower-lines-bottom-layer',
+  'upper-lines-outline-layer',
+  'upper-lines-top-layer',
+  'upper-lines-bottom-layer',
+  'lower-caps-layer',
+  'upper-caps-layer',
+];
+
+const CLICK_RADIUS_PX = 10;
+const TOUCH_RADIUS_PX = 14;
+
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -835,13 +858,23 @@ const ContributeMap = () => {
     setActivePointId(point.id);
   }, []);
 
-  const handleLineClick = useCallback((e) => {
-    if (e.features && e.features.length > 0) {
-      const feature = e.features[0];
-      const pointId = feature.properties.id;
-      setActivePointId(pointId);
-    }
-  }, []);
+  const handleLineClick = useCallback(
+    (e) => {
+      const eventFeatures = Array.isArray(e?.features) ? e.features : [];
+      const queriedFeatures =
+        mapRef.current?.queryRenderedFeatures(e.point, { layers: INTERACTIVE_LAYER_IDS }) || [];
+
+      const feature = [...eventFeatures, ...queriedFeatures].find((f) => f?.properties?.id);
+
+      if (feature?.properties?.id) {
+        setActivePointId(feature.properties.id);
+        return true;
+      }
+
+      return false;
+    },
+    [mapRef]
+  );
 
   const handleContinue = () => {
     navigate(`/contribute/test/${icao}`);
@@ -934,18 +967,11 @@ const ContributeMap = () => {
                   onStyleData={(e) => addCapIcons(e.target)}
                   mapStyle={mapStyle}
                   style={{ width: '100%', height: '100%' }}
-                  interactiveLayerIds={[
-                    'lower-lines-outline-layer',
-                    'lower-lines-top-layer',
-                    'lower-lines-bottom-layer',
-                    'upper-lines-outline-layer',
-                    'upper-lines-top-layer',
-                    'upper-lines-bottom-layer',
-                  ]}
+                  interactiveLayerIds={INTERACTIVE_LAYER_IDS}
+                  clickRadius={CLICK_RADIUS_PX}
+                  touchRadius={TOUCH_RADIUS_PX}
                   onClick={(e) => {
-                    if (e.features && e.features.length > 0) {
-                      handleLineClick(e);
-                    } else {
+                    if (!handleLineClick(e)) {
                       setActivePointId(null);
                     }
                   }}
@@ -1178,8 +1204,28 @@ const ContributeMap = () => {
                 </div>
               </Card>
 
+              {/* XML Generator Tool */}
+              <Card className="p-6">
+                <h2 className="text-xl font-medium mb-4">XML Generator</h2>
+                <button
+                  onClick={() => navigate(`/contribute/generator/${icao}`)}
+                  className="w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <FileCode2 className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="ml-3 text-left">
+                    <p className="text-sm font-medium text-white">Generate Draft Contribution</p>
+                    <p className="text-xs text-zinc-400">
+                      Create an XML file for your contribution
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-zinc-500 ml-auto" />
+                </button>
+              </Card>
+
               {points.length === 0 ? (
-                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
                   <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
                   <p className="text-sm text-amber-400">
                     This airport currently has no lighting points submitted by the owning Division.
@@ -1187,7 +1233,7 @@ const ContributeMap = () => {
                   </p>
                 </div>
               ) : (
-                <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
+                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
                   <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
                   <p className="text-sm text-blue-400">
                     These are the existing mapped points for this airport, set by the Division. Your
@@ -1196,7 +1242,6 @@ const ContributeMap = () => {
                 </div>
               )}
 
-              {/* Continue button (disabled when no Division points) */}
               <Button
                 onClick={points.length === 0 ? undefined : handleContinue}
                 disabled={points.length === 0}

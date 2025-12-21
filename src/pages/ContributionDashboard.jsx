@@ -6,6 +6,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
+import { Dialog } from '../components/shared/Dialog';
 import {
   Trophy,
   Users,
@@ -16,7 +17,6 @@ import {
   Plus,
   Loader,
   AlertOctagon,
-  X,
   Trash2,
   AlertCircle,
   TowerControl,
@@ -165,6 +165,7 @@ const ContributionDashboard = () => {
           acc[airport].contributions.push({
             id: contribution.id,
             scenery: contribution.packageName,
+            simulator: contribution.simulator,
             status: contribution.status,
             lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
             rejectionReason: contribution.rejectionReason,
@@ -200,6 +201,7 @@ const ContributionDashboard = () => {
               acc[airport].contributions.push({
                 id: contribution.id,
                 scenery: contribution.packageName,
+                simulator: contribution.simulator,
                 status: contribution.status,
                 lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
                 rejectionReason: contribution.rejectionReason,
@@ -304,7 +306,11 @@ const ContributionDashboard = () => {
                 Help expand the BARS network by contributing your own airport mappings
               </p>
             </div>
-            <Button onClick={handleContributeClick} className="flex items-center space-x-2">
+            <Button
+              onClick={handleContributeClick}
+              disabled
+              className="flex items-center space-x-2 opacity-60 cursor-not-allowed"
+            >
               <Plus className="w-4 h-4" />
               <span>Contribute New Airport</span>
             </Button>
@@ -514,7 +520,24 @@ const ContributionDashboard = () => {
                               }`}
                             >
                               <div className="space-y-1">
-                                <div className="font-medium">{contribution.scenery}</div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{contribution.scenery}</span>
+                                  {contribution.simulator && (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full border ${
+                                        contribution.simulator === 'msfs2024'
+                                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                          : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                      }`}
+                                    >
+                                      {contribution.simulator === 'msfs2024'
+                                        ? 'MSFS 2024'
+                                        : contribution.simulator === 'msfs2020'
+                                          ? 'MSFS 2020'
+                                          : contribution.simulator}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center space-x-2">
                                   <div className="text-xs text-zinc-400">
                                     Last updated: {contribution.lastUpdated}
@@ -631,193 +654,110 @@ const ContributionDashboard = () => {
         </div>
       </div>
 
-      {viewingRejection && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <AlertOctagon className="w-6 h-6 text-red-500" />
-                <h3 className="text-xl font-semibold text-red-500">Rejection Reason</h3>
-              </div>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setViewingRejection(null)}
-                className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg max-h-64 overflow-y-auto">
-                <div className="space-y-2 mb-3">
-                  <div className="flex items-center space-x-2 text-red-200">
-                    <TowerControl className="w-4 h-4" />
-                    <span>ICAO: {viewingRejection.airport}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-red-200">
-                    <Box className="w-4 h-4" />
-                    <span>Scenery: {viewingRejection.scenery}</span>
-                  </div>
-                </div>
-                <div className="whitespace-pre-wrap wrap-break-word text-red-200">
-                  {viewingRejection.reason}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={!!viewingRejection}
+        onClose={() => setViewingRejection(null)}
+        icon={AlertOctagon}
+        iconColor="red"
+        title="Rejection Reason"
+        description={viewingRejection?.reason}
+      />
 
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in zoom-in-95">
-          <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-            <div className="flex items-center space-x-3 mb-6">
-              <AlertCircle
-                className={`w-6 h-6 ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}
-              />
-              <h3
-                className={`text-xl font-bold ${confirmDelete.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}
-              >
-                Confirm Contribution Deletion
-              </h3>
-            </div>
-            <div className="space-y-4">
-              <div
-                className={`p-4 rounded-lg ${confirmDelete.status === 'pending' ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-red-500/10 border border-red-500/20'}`}
-              >
-                <p className="text-zinc-200 mb-3">
-                  You are about to delete the following contribution:
-                </p>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2 text-zinc-200">
-                    <TowerControl className="w-4 h-4" />
-                    <span>ICAO: {confirmDelete.airport}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-zinc-200">
-                    <Box className="w-4 h-4" />
-                    <span>Scenery: {confirmDelete.scenery}</span>
-                  </div>
-                </div>
-              </div>
-              <p className="text-zinc-300">
-                All contribution and scenery data will be permanently deleted and will no longer be
-                available for approval. This action cannot be undone.
-              </p>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const expectedConfirmation = `${confirmDelete.airport}-DELETE`;
-                  if (deleteConfirmation === expectedConfirmation) {
-                    (async () => {
-                      if (!confirmDelete) return;
-                      try {
-                        setDeleting(true);
-                        const response = await fetch(
-                          `https://v2.stopbars.com/contributions/${confirmDelete.id}`,
-                          {
-                            method: 'DELETE',
-                            headers: {
-                              'X-Vatsim-Token': vatsimToken,
-                            },
-                          }
-                        );
-                        if (!response.ok) {
-                          throw new Error('Delete failed');
-                        }
+      <Dialog
+        open={!!confirmDelete}
+        onClose={() => {
+          setConfirmDelete(null);
+          setDeleteConfirmation('');
+        }}
+        icon={AlertCircle}
+        iconColor={confirmDelete?.status === 'pending' ? 'orange' : 'red'}
+        title="Contribution Deletion"
+        description="All contribution and scenery data will be permanently deleted and will no longer be available for approval. This action cannot be undone."
+        isLoading={deleting}
+        closeOnBackdrop={!deleting}
+        closeOnEscape={!deleting}
+        onSubmit={async () => {
+          if (!confirmDelete) return;
+          try {
+            setDeleting(true);
+            const response = await fetch(
+              `https://v2.stopbars.com/contributions/${confirmDelete.id}`,
+              {
+                method: 'DELETE',
+                headers: {
+                  'X-Vatsim-Token': vatsimToken,
+                },
+              }
+            );
+            if (!response.ok) {
+              throw new Error('Delete failed');
+            }
 
-                        setUserContributions((prev) =>
-                          prev
-                            .map((group) =>
-                              group.airport === confirmDelete.airport
-                                ? {
-                                    ...group,
-                                    contributions: group.contributions.filter(
-                                      (c) => c.id !== confirmDelete.id
-                                    ),
-                                  }
-                                : group
-                            )
-                            .filter((group) => group.contributions.length > 0)
-                        );
-
-                        setConfirmDelete(null);
-                        setDeleteConfirmation('');
-                        setToastConfig({
-                          variant: 'success',
-                          title: 'Contribution Deleted',
-                          description: 'Your contribution has been successfully deleted.',
-                        });
-                        setShowToast(true);
-                      } catch (e) {
-                        console.error(e);
-                        setToastConfig({
-                          variant: 'destructive',
-                          title: 'Deletion Failed',
-                          description: 'Failed to delete contribution, try again later.',
-                        });
-                        setShowToast(true);
-                      } finally {
-                        setDeleting(false);
+            setUserContributions((prev) =>
+              prev
+                .map((group) =>
+                  group.airport === confirmDelete.airport
+                    ? {
+                        ...group,
+                        contributions: group.contributions.filter((c) => c.id !== confirmDelete.id),
                       }
-                    })();
-                  }
-                }}
-              >
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-zinc-300">
-                    Type {confirmDelete.airport}-DELETE to confirm:
-                  </label>
-                  <input
-                    type="text"
-                    value={deleteConfirmation}
-                    onChange={(e) => setDeleteConfirmation(e.target.value)}
-                    onPaste={(e) => e.preventDefault()}
-                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
-                    disabled={deleting}
-                  />
-                </div>
-                <div className="flex space-x-3 mt-6">
-                  <Button
-                    type="submit"
-                    className={`${
-                      deleteConfirmation === `${confirmDelete.airport}-DELETE` && !deleting
-                        ? confirmDelete.status === 'pending'
-                          ? 'bg-amber-600! hover:bg-amber-700! text-white'
-                          : 'bg-red-500! hover:bg-red-600! text-white'
-                        : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
-                    }`}
-                    disabled={deleteConfirmation !== `${confirmDelete.airport}-DELETE` || deleting}
-                  >
-                    {deleting ? (
-                      <>
-                        <Loader className="w-4 h-4 mr-2 animate-spin" />
-                        Deleting...
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete Contribution
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setConfirmDelete(null);
-                      setDeleteConfirmation('');
-                    }}
-                    disabled={deleting}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+                    : group
+                )
+                .filter((group) => group.contributions.length > 0)
+            );
+
+            setConfirmDelete(null);
+            setDeleteConfirmation('');
+            setToastConfig({
+              variant: 'success',
+              title: 'Contribution Deleted',
+              description: 'Your contribution has been successfully deleted.',
+            });
+            setShowToast(true);
+          } catch (e) {
+            console.error(e);
+            setToastConfig({
+              variant: 'destructive',
+              title: 'Deletion Failed',
+              description: 'Failed to delete contribution, try again later.',
+            });
+            setShowToast(true);
+          } finally {
+            setDeleting(false);
+          }
+        }}
+        fields={
+          confirmDelete
+            ? [
+                {
+                  type: 'confirmation',
+                  label: `Type ${confirmDelete.airport}-DELETE to confirm:`,
+                  confirmText: `${confirmDelete.airport}-DELETE`,
+                  value: deleteConfirmation,
+                  onChange: setDeleteConfirmation,
+                },
+              ]
+            : []
+        }
+        buttons={[
+          {
+            label: 'Delete',
+            type: 'submit',
+            variant: confirmDelete?.status === 'pending' ? 'primary' : 'destructive',
+            icon: Trash2,
+            loadingLabel: 'Deleting...',
+            requiresValidation: true,
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: () => {
+              setConfirmDelete(null);
+              setDeleteConfirmation('');
+            },
+          },
+        ]}
+      />
 
       <Toast
         show={showToast}

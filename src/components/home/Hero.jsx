@@ -13,6 +13,7 @@ const previewOptions = [
 export const Hero = () => {
   const [selectedPreview, setSelectedPreview] = useState(previewOptions[0]);
   const [downloadInfo, setDownloadInfo] = useState(null);
+  const [downloadAvailable, setDownloadAvailable] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -21,11 +22,18 @@ export const Hero = () => {
     (async () => {
       try {
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          if (mounted) setDownloadAvailable(false);
+          throw new Error(`HTTP ${res.status}`);
+        }
         const json = await res.json();
-        if (mounted) setDownloadInfo(json);
+        if (mounted) {
+          setDownloadInfo(json);
+          setDownloadAvailable(true);
+        }
       } catch (err) {
         console.error('Failed to fetch latest installer release:', err);
+        if (mounted) setDownloadAvailable(false);
       }
     })();
 
@@ -52,7 +60,12 @@ export const Hero = () => {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
             variant="primary"
-            className="h-14 px-10 text-base md:text-lg gap-2"
+            className={`h-14 px-10 text-base md:text-lg gap-2 transition-all duration-200 ${
+              downloadAvailable
+                ? 'hover:scale-[1.02] hover:brightness-110'
+                : 'opacity-50 cursor-not-allowed'
+            }`}
+            disabled={!downloadAvailable}
             onClick={async () => {
               const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
               const downloadUrl = downloadInfo?.downloadUrl;
@@ -83,7 +96,7 @@ export const Hero = () => {
           </Button>
           <Button
             variant="secondary"
-            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700!"
+            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-all duration-200 hover:scale-[1.02]"
             onClick={() =>
               window.open('https://docs.stopbars.com/', '_blank', 'noopener,noreferrer')
             }

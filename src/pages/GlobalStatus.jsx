@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
+import { Dropdown } from '../components/shared/Dropdown';
 import {
   Search,
   MapPin,
@@ -256,36 +257,34 @@ const GlobalStatus = () => {
                   <label htmlFor="activity-filter" className="sr-only">
                     Filter by activity
                   </label>
-                  <select
-                    id="activity-filter"
+                  <Dropdown
+                    options={[
+                      { value: 'all', label: 'All Airports' },
+                      { value: 'active', label: 'Active Airports' },
+                      { value: 'inactive', label: 'Inactive Airports' },
+                    ]}
                     value={activityFilter}
-                    onChange={(e) => setActivityFilter(e.target.value)}
-                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 w-full h-full"
-                  >
-                    <option value="all">All Airports</option>
-                    <option value="active">Active Airports</option>
-                    <option value="inactive">Inactive Airports</option>
-                  </select>
+                    onChange={(value) => setActivityFilter(value)}
+                  />
                 </div>
 
                 <div className="w-full lg:w-48">
                   <label htmlFor="continent-filter" className="sr-only">
                     Filter by continent
                   </label>
-                  <select
-                    id="continent-filter"
+                  <Dropdown
+                    options={[
+                      { value: 'all', label: 'All Continents' },
+                      { value: 'North America', label: 'North America' },
+                      { value: 'South America', label: 'South America' },
+                      { value: 'Europe', label: 'Europe' },
+                      { value: 'Asia', label: 'Asia' },
+                      { value: 'Oceania', label: 'Oceania' },
+                      { value: 'Africa', label: 'Africa' },
+                    ]}
                     value={continentFilter}
-                    onChange={(e) => setContinentFilter(e.target.value)}
-                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 w-full h-full"
-                  >
-                    <option value="all">All Continents</option>
-                    <option value="North America">North America</option>
-                    <option value="South America">South America</option>
-                    <option value="Europe">Europe</option>
-                    <option value="Asia">Asia</option>
-                    <option value="Oceania">Oceania</option>
-                    <option value="Africa">Africa</option>
-                  </select>
+                    onChange={(value) => setContinentFilter(value)}
+                  />
                 </div>
               </div>
             </div>

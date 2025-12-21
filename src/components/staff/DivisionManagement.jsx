@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
+import { Dialog } from '../shared/Dialog';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   Plus,
@@ -20,193 +20,6 @@ import {
   IdCard,
 } from 'lucide-react';
 
-const DeleteConfirmationModal = ({ division, onCancel, onConfirmDelete, isDeleting }) => {
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (deleteConfirmation === 'DELETE') {
-      onConfirmDelete();
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-        <div className="flex items-center space-x-3 mb-6">
-          <AlertOctagon className="w-6 h-6 text-red-500" />
-          <h3 className="text-xl font-bold text-red-500">Delete Division</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-zinc-200">You are about to delete the division:</p>
-            <div className="mt-2">
-              <div className="flex items-center space-x-2 text-red-200">
-                <Building2 className="w-4 h-4" />
-                <span>{division.name}</span>
-              </div>
-              <div className="flex items-center space-x-2 text-red-200 mt-1">
-                <IdCard className="w-4 h-4" />
-                <span className="text-sm">Division ID: {division.id}</span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-zinc-300">
-            This action cannot be undone. All associated data including managed points, requested
-            airports, division members, will be permanently deleted.
-          </p>
-
-          <form onSubmit={handleSubmit}>
-            <div>
-              <label className="block text-sm font-medium mb-2 text-zinc-300">
-                Type DELETE to confirm:
-              </label>
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                onPaste={(e) => e.preventDefault()}
-                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
-                disabled={isDeleting}
-              />
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <Button
-                type="submit"
-                className={`${
-                  deleteConfirmation === 'DELETE' && !isDeleting
-                    ? 'bg-red-500! hover:bg-red-600! text-white'
-                    : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
-                }`}
-                disabled={deleteConfirmation !== 'DELETE' || isDeleting}
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Division
-                  </>
-                )}
-              </Button>
-              <Button type="button" variant="outline" onClick={onCancel} disabled={isDeleting}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-DeleteConfirmationModal.propTypes = {
-  division: PropTypes.shape({
-    id: PropTypes.number.isRequired,
-    name: PropTypes.string.isRequired,
-  }).isRequired,
-  onCancel: PropTypes.func.isRequired,
-  onConfirmDelete: PropTypes.func.isRequired,
-  isDeleting: PropTypes.bool.isRequired,
-};
-
-const EditDivisionModal = ({ division, onCancel, onConfirmEdit, isEditing }) => {
-  const [newDivisionName, setNewDivisionName] = useState('');
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (newDivisionName.trim() && newDivisionName.trim() !== division.name) {
-      onConfirmEdit(newDivisionName.trim());
-    }
-  };
-
-  const isValidName = newDivisionName.trim() && newDivisionName.trim() !== division.name;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full mx-4 border border-zinc-800">
-        <div className="flex items-center space-x-3 mb-6">
-          <Edit className="w-6 h-6 text-orange-300" />
-          <h3 className="text-xl font-bold text-orange-300">Edit Division Name</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-            <p className="text-zinc-200">You are about to edit the division name for:</p>
-            <div className="mt-2">
-              <div className="flex items-center space-x-2 text-orange-200">
-                <Building2 className="w-4 h-4" />
-                <span>{division.name}</span>
-              </div>
-              <div className="flex items-center space-x-2 text-orange-200 mt-1">
-                <IdCard className="w-4 h-4" />
-                <span className="text-sm">Division ID: {division.id}</span>
-              </div>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit}>
-            <div>
-              <label className="block text-sm font-medium mb-2 text-zinc-300">
-                New Division Name:
-              </label>
-              <input
-                type="text"
-                value={newDivisionName}
-                onChange={(e) => setNewDivisionName(e.target.value)}
-                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-orange-500"
-                disabled={isEditing}
-                placeholder="Enter new division name"
-              />
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <Button
-                type="submit"
-                className={`${
-                  isValidName && !isEditing
-                    ? 'bg-orange-500! hover:bg-orange-600! text-white'
-                    : 'bg-zinc-700! text-zinc-400! cursor-not-allowed'
-                }`}
-                disabled={!isValidName || isEditing}
-              >
-                {isEditing ? (
-                  <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Rename Division
-                  </>
-                )}
-              </Button>
-              <Button type="button" variant="outline" onClick={onCancel} disabled={isEditing}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-EditDivisionModal.propTypes = {
-  division: PropTypes.shape({
-    id: PropTypes.number.isRequired,
-    name: PropTypes.string.isRequired,
-  }).isRequired,
-  onCancel: PropTypes.func.isRequired,
-  onConfirmEdit: PropTypes.func.isRequired,
-  isEditing: PropTypes.bool.isRequired,
-};
-
 const DivisionManagement = () => {
   const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -218,8 +31,10 @@ const DivisionManagement = () => {
   const [loadingDetails, setLoadingDetails] = useState({});
   const [deletingDivision, setDeletingDivision] = useState(null);
   const [isDeletingDivision, setIsDeletingDivision] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [editingDivision, setEditingDivision] = useState(null);
   const [isEditingDivision, setIsEditingDivision] = useState(false);
+  const [newDivisionName, setNewDivisionName] = useState('');
   const navigate = useNavigate();
   const token = getVatsimToken();
 
@@ -335,6 +150,7 @@ const DivisionManagement = () => {
 
   const cancelDelete = () => {
     setDeletingDivision(null);
+    setDeleteConfirmation('');
     setError('');
   };
 
@@ -368,6 +184,7 @@ const DivisionManagement = () => {
 
       setSuccess('Division name updated successfully');
       setEditingDivision(null);
+      setNewDivisionName('');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.message);
@@ -378,6 +195,7 @@ const DivisionManagement = () => {
 
   const cancelEdit = () => {
     setEditingDivision(null);
+    setNewDivisionName('');
     setError('');
   };
 
@@ -636,24 +454,107 @@ const DivisionManagement = () => {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {deletingDivision && (
-        <DeleteConfirmationModal
-          division={deletingDivision}
-          onCancel={cancelDelete}
-          onConfirmDelete={() => handleDeleteDivision(deletingDivision.id)}
-          isDeleting={isDeletingDivision}
-        />
-      )}
+      <Dialog
+        open={!!deletingDivision}
+        onClose={cancelDelete}
+        icon={AlertOctagon}
+        iconColor="red"
+        title="Delete Division"
+        description="This action cannot be undone. All associated data including managed points, requested airports, division members, will be permanently deleted."
+        isLoading={isDeletingDivision}
+        closeOnBackdrop={!isDeletingDivision}
+        closeOnEscape={!isDeletingDivision}
+        onSubmit={() => handleDeleteDivision(deletingDivision?.id)}
+        fields={[
+          {
+            type: 'confirmation',
+            label: 'Type DELETE to confirm:',
+            confirmText: 'DELETE',
+            value: deleteConfirmation,
+            onChange: setDeleteConfirmation,
+          },
+        ]}
+        buttons={[
+          {
+            label: 'Delete Division',
+            type: 'submit',
+            variant: 'destructive',
+            icon: Trash2,
+            loadingLabel: 'Deleting...',
+            requiresValidation: true,
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: cancelDelete,
+          },
+        ]}
+      >
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
+          <p className="text-zinc-200">You are about to delete the division:</p>
+          <div className="mt-2">
+            <div className="flex items-center space-x-2 text-red-200">
+              <Building2 className="w-4 h-4" />
+              <span>{deletingDivision?.name}</span>
+            </div>
+            <div className="flex items-center space-x-2 text-red-200 mt-1">
+              <IdCard className="w-4 h-4" />
+              <span className="text-sm">Division ID: {deletingDivision?.id}</span>
+            </div>
+          </div>
+        </div>
+      </Dialog>
 
       {/* Edit Division Modal */}
-      {editingDivision && (
-        <EditDivisionModal
-          division={editingDivision}
-          onCancel={cancelEdit}
-          onConfirmEdit={(newName) => handleEditDivision(editingDivision.id, newName)}
-          isEditing={isEditingDivision}
-        />
-      )}
+      <Dialog
+        open={!!editingDivision}
+        onClose={cancelEdit}
+        icon={Edit}
+        iconColor="orange"
+        title="Edit Division Name"
+        isLoading={isEditingDivision}
+        closeOnBackdrop={!isEditingDivision}
+        closeOnEscape={!isEditingDivision}
+        onSubmit={() => handleEditDivision(editingDivision?.id, newDivisionName.trim())}
+        fields={[
+          {
+            type: 'text',
+            label: 'New Division Name:',
+            placeholder: 'Enter new division name',
+            value: newDivisionName,
+            onChange: setNewDivisionName,
+          },
+        ]}
+        buttons={[
+          {
+            label: 'Rename Division',
+            type: 'submit',
+            variant: 'primary',
+            icon: Edit,
+            loadingLabel: 'Updating...',
+            disabled: !newDivisionName.trim() || newDivisionName.trim() === editingDivision?.name,
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: cancelEdit,
+          },
+        ]}
+      >
+        <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg mb-4">
+          <p className="text-zinc-200">You are about to edit the division name for:</p>
+          <div className="mt-2">
+            <div className="flex items-center space-x-2 text-orange-200">
+              <Building2 className="w-4 h-4" />
+              <span>{editingDivision?.name}</span>
+            </div>
+            <div className="flex items-center space-x-2 text-orange-200 mt-1">
+              <IdCard className="w-4 h-4" />
+              <span className="text-sm">Division ID: {editingDivision?.id}</span>
+            </div>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };

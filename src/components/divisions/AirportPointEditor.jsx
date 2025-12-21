@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaf
 import L from 'leaflet';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { X } from 'lucide-react';
+import { Dropdown } from '../shared/Dropdown';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
@@ -2287,12 +2288,11 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
                     Object Type
                   </label>
-                  <select
-                    className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+                  <Dropdown
+                    options={POINT_TYPES.map((t) => ({ value: t, label: formatLabel(t) }))}
                     value={formState.type}
-                    onChange={(e) =>
+                    onChange={(newType) =>
                       setFormState((s) => {
-                        const newType = e.target.value;
                         let next = { ...s, type: newType };
                         if (newType === 'stopbar') {
                           if (!next.directionality) next.directionality = 'uni-directional';
@@ -2310,13 +2310,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                         return next;
                       })
                     }
-                  >
-                    {POINT_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {formatLabel(t)}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
@@ -2339,12 +2333,11 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                     <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
                       Directionality
                     </label>
-                    <select
-                      className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+                    <Dropdown
+                      options={DIRECTIONALITY.map((d) => ({ value: d, label: formatLabel(d) }))}
                       value={formState.directionality}
-                      onChange={(e) =>
+                      onChange={(nextDir) =>
                         setFormState((s) => {
-                          const nextDir = e.target.value;
                           const next = { ...s, directionality: nextDir };
                           if (s.type === 'stopbar' && nextDir === 'bi-directional' && s.elevated) {
                             next.elevated = false;
@@ -2352,13 +2345,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                           return next;
                         })
                       }
-                    >
-                      {DIRECTIONALITY.map((d) => (
-                        <option key={d} value={d}>
-                          {formatLabel(d)}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                 )}
                 {formState.type === 'taxiway' && (
@@ -2366,19 +2353,11 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                     <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
                       Color
                     </label>
-                    <select
-                      className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
+                    <Dropdown
+                      options={COLORS.map((c) => ({ value: c, label: formatLabel(c) }))}
                       value={formState.color}
-                      onChange={(e) =>
-                        setFormState((s) => ({ ...s, color: e.target.value || 'green' }))
-                      }
-                    >
-                      {COLORS.map((c) => (
-                        <option key={c} value={c}>
-                          {formatLabel(c)}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(color) => setFormState((s) => ({ ...s, color: color || 'green' }))}
+                    />
                   </div>
                 )}
                 {formState.type === 'stopbar' && (
