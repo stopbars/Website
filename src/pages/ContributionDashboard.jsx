@@ -306,7 +306,11 @@ const ContributionDashboard = () => {
                 Help expand the BARS network by contributing your own airport mappings
               </p>
             </div>
-            <Button onClick={handleContributeClick} className="flex items-center space-x-2">
+            <Button
+              onClick={handleContributeClick}
+              disabled
+              className="flex items-center space-x-2 opacity-60 cursor-not-allowed"
+            >
               <Plus className="w-4 h-4" />
               <span>Contribute New Airport</span>
             </Button>

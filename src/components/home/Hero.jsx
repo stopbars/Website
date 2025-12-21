@@ -13,6 +13,7 @@ const previewOptions = [
 export const Hero = () => {
   const [selectedPreview, setSelectedPreview] = useState(previewOptions[0]);
   const [downloadInfo, setDownloadInfo] = useState(null);
+  const [downloadUnavailable, setDownloadUnavailable] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -21,6 +22,10 @@ export const Hero = () => {
     (async () => {
       try {
         const res = await fetch(url);
+        if (res.status === 404) {
+          if (mounted) setDownloadUnavailable(true);
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         if (mounted) setDownloadInfo(json);
@@ -52,8 +57,14 @@ export const Hero = () => {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
             variant="primary"
-            className="h-14 px-10 text-base md:text-lg gap-2 transition-all duration-200 hover:scale-[1.02] hover:brightness-110"
+            disabled={downloadUnavailable}
+            className={`h-14 px-10 text-base md:text-lg gap-2 transition-all duration-200 hover:scale-[1.02] hover:brightness-110 ${
+              downloadUnavailable
+                ? 'opacity-60 cursor-not-allowed hover:scale-100 hover:brightness-100'
+                : ''
+            }`}
             onClick={async () => {
+              if (downloadUnavailable) return;
               const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
               const downloadUrl = downloadInfo?.downloadUrl;
 
