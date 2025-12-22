@@ -302,10 +302,10 @@ const ContributeDetails = () => {
                             >
                               <div className="flex items-center space-x-3 min-w-0 flex-1">
                                 <div className="shrink-0 w-6 h-6 rounded-full bg-zinc-700/50"></div>
-                                <div className="h-[18px] bg-zinc-700/50 rounded flex-1 max-w-[60%]"></div>
+                                <div className="h-4.5 bg-zinc-700/50 rounded flex-1 max-w-[60%]"></div>
                               </div>
                               <div className="text-right ml-2 shrink-0 space-y-1">
-                                <div className="h-[18px] w-8 bg-zinc-700/50 rounded ml-auto"></div>
+                                <div className="h-4.5 w-8 bg-zinc-700/50 rounded ml-auto"></div>
                                 <div className="h-3.5 w-16 bg-zinc-700/50 rounded"></div>
                               </div>
                             </div>
@@ -425,7 +425,7 @@ const ContributeDetails = () => {
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Any additional notes for the approval team."
                       maxLength={1000}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-[100px] resize-none"
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-25 resize-none"
                     ></textarea>
                   </div>
 
