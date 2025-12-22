@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { X } from 'lucide-react';
+import { X, ExternalLink } from 'lucide-react';
 import { Dropdown } from '../shared/Dropdown';
+import { Layout } from '../layout/Layout';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
@@ -1172,6 +1173,7 @@ const emptyFormState = {
 };
 
 const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = 'dynamic' }) => {
+  const navigate = useNavigate();
   const [remotePoints, setRemotePoints] = useState(null); // null = not loaded
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteError, setRemoteError] = useState(null);
@@ -1179,6 +1181,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const fetchInFlightRef = useRef(false);
   const { airportId } = useParams();
   const icao = (airportId || '').toUpperCase();
+  const isEuroscopeOnly = useMemo(() => {
+    const prefixes = ['K', 'M', 'Y', 'N', 'A'];
+    const first = icao?.[0];
+    if (!first) return false;
+    return !prefixes.includes(first);
+  }, [icao]);
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
   const [airportMeta, setAirportMeta] = useState(null);
   const [airportMetaError, setAirportMetaError] = useState(null);
@@ -1189,7 +1197,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const attemptedFallbackRef = useRef(false); // prevent infinite loop
 
   useEffect(() => {
-    if (!icao) return;
+    if (!icao || isEuroscopeOnly) return;
     let aborted = false;
     const fetchAirport = async () => {
       try {
@@ -1211,7 +1219,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     return () => {
       aborted = true;
     };
-  }, [icao]);
+  }, [icao, isEuroscopeOnly]);
   const [changeset, setChangeset] = useState(defaultChangeset);
   const [selectedId, setSelectedId] = useState(null);
   const [formState, setFormState] = useState(emptyFormState);
@@ -1390,7 +1398,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
 
   const triggerFetchPoints = useCallback(
     async (force = false) => {
-      if (!icao) return;
+      if (!icao || isEuroscopeOnly) return;
       if (fetchInFlightRef.current && !force) return; // already fetching
       if (!force && remotePoints !== null) return; // already loaded
       fetchInFlightRef.current = true;
@@ -1418,7 +1426,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
         fetchInFlightRef.current = false;
       }
     },
-    [icao, remotePoints]
+    [icao, remotePoints, isEuroscopeOnly]
   );
 
   useEffect(() => {
@@ -1976,7 +1984,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
 
   const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
-    if (!icao) return;
+    if (!icao || isEuroscopeOnly) return;
     let aborted = false;
     const fetchAirport = async () => {
       try {
@@ -1998,7 +2006,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     return () => {
       aborted = true;
     };
-  }, [icao, refreshTick]);
+  }, [icao, refreshTick, isEuroscopeOnly]);
 
   const BoundsController = ({ bounds, suppressClamp }) => {
     const map = useMap();
@@ -2062,6 +2070,47 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     }
     return height;
   }, [height]);
+
+  if (isEuroscopeOnly) {
+    const euroscopeUrl = `https://euroscope.stopbars.com?icao=${encodeURIComponent(icao)}`;
+    return (
+      <Layout>
+        <div className="min-h-[70vh] pt-28 pb-16 flex items-center justify-center">
+          <div className="container mx-auto px-4 max-w-208">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-xl p-12 text-center flex flex-col gap-5">
+              <div className="space-y-2">
+                <h1 className="text-2xl font-semibold text-white tracking-tight">
+                  Use the EuroScope Editor
+                </h1>
+                <p className="text-sm text-zinc-300">
+                  This airport is managed via EuroScope. To edit BARS object data for {icao}, please
+                  use the EuroScope editor.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-sm text-white transition-colors"
+                >
+                  Go Back
+                </button>
+                <a
+                  href={euroscopeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white transition-colors shadow inline-flex items-center justify-center gap-2"
+                >
+                  Open EuroScope Editor
+                  <ExternalLink className="w-4 h-4" aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <div className="flex flex-col px-4 py-6 lg:px-8 pt-16" style={{ height: resolvedHeightValue }}>

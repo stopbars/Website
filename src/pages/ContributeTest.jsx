@@ -244,7 +244,7 @@ const ContributeTest = () => {
                     showRemoveAreas={showRemoveAreas}
                   />
                 ) : (
-                  <div className="h-[500px] flex items-center justify-center bg-zinc-800/30 rounded-lg">
+                  <div className="h-125 flex items-center justify-center bg-zinc-800/30 rounded-lg">
                     <div className="text-center text-zinc-400">
                       <FileSearch className="w-12 h-12 mx-auto mb-3 opacity-50" />
                       <p>Upload an XML file to preview</p>

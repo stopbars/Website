@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -23,6 +23,7 @@ import {
 import { formatDateAccordingToLocale } from '../utils/dateUtils';
 import { getVatsimToken } from '../utils/cookieUtils';
 import { Toast } from '../components/shared/Toast';
+import { Tooltip } from '../components/shared/Tooltip';
 
 const Account = () => {
   const { user, loading, logout, setUser, refreshUserData } = useAuth();
@@ -47,6 +48,13 @@ const Account = () => {
   const [showDeleteSuccessToast, setShowDeleteSuccessToast] = useState(false);
   const [showDeleteErrorToast, setShowDeleteErrorToast] = useState(false);
   const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
+  const [cidCopied, setCidCopied] = useState(false);
+  const [hideEmail, setHideEmail] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const stored = window.localStorage?.getItem('bars_hide_email');
+    return stored === 'true';
+  });
+  const cidCopyTimeoutRef = useRef(null);
   const displayModeRequestRef = useRef({ id: 0, controller: null });
   const refreshDebounceRef = useRef(null);
 
@@ -136,6 +144,20 @@ const Account = () => {
     return name || id || '—';
   };
 
+  const scrambleEmail = (email) => {
+    if (!email) return '—';
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    return email
+      .split('')
+      .map((c) => (c === '@' || c === '.' ? c : chars[Math.floor(Math.random() * chars.length)]))
+      .join('');
+  };
+
+  const scrambledEmail = useMemo(() => {
+    if (!user?.email || !hideEmail) return null;
+    return scrambleEmail(user.email);
+  }, [user?.email, hideEmail]);
+
   const handleCopyApiKey = async () => {
     try {
       await navigator.clipboard.writeText(user?.api_key);
@@ -143,6 +165,18 @@ const Account = () => {
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error('Failed to copy API key:', err);
+    }
+  };
+
+  const handleCopyVatsimCid = async () => {
+    if (!user?.vatsim_id) return;
+    try {
+      await navigator.clipboard.writeText(String(user.vatsim_id));
+      setCidCopied(true);
+      if (cidCopyTimeoutRef.current) clearTimeout(cidCopyTimeoutRef.current);
+      cidCopyTimeoutRef.current = setTimeout(() => setCidCopied(false), 1500);
+    } catch (err) {
+      console.error('Failed to copy CID:', err);
     }
   };
 
@@ -342,8 +376,17 @@ const Account = () => {
         clearTimeout(refreshDebounceRef.current);
         refreshDebounceRef.current = null;
       }
+      if (cidCopyTimeoutRef.current) {
+        clearTimeout(cidCopyTimeoutRef.current);
+      }
     };
   }, []);
+
+  // Restore and persist the email visibility preference
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage?.setItem('bars_hide_email', hideEmail ? 'true' : 'false');
+  }, [hideEmail]);
 
   if (loading) {
     return (
@@ -407,7 +450,7 @@ const Account = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => setShowApiKey(!showApiKey)}
-                        className="min-w-[90px] shrink-0 hover:bg-zinc-800"
+                        className="min-w-22.5 shrink-0 hover:bg-zinc-800"
                       >
                         {showApiKey ? (
                           <>
@@ -425,7 +468,7 @@ const Account = () => {
                         variant="outline"
                         size="sm"
                         onClick={handleCopyApiKey}
-                        className={`min-w-[100px] ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
+                        className={`min-w-25 ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
                       >
                         {copySuccess ? (
                           <>
@@ -441,7 +484,7 @@ const Account = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => setIsRegenerateDialogOpen(true)}
-                        className="min-w-[130px] hover:bg-zinc-800 text-blue-400 border-blue-500/20"
+                        className="min-w-32.5 hover:bg-zinc-800 text-blue-400 border-blue-500/20"
                       >
                         <RefreshCcw className="w-4 h-4 mr-2" /> Regenerate
                       </Button>
@@ -454,20 +497,56 @@ const Account = () => {
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-6">
-                  {[
-                    { label: 'VATSIM CID', value: user?.vatsim_id },
-                    { label: 'Email', value: user?.email },
-                  ].map((field) => (
-                    <div
-                      key={field.label}
-                      className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50"
-                    >
-                      <label className="text-sm font-medium text-zinc-400 block mb-1">
-                        {field.label}
-                      </label>
-                      <p className="font-medium">{field.value}</p>
+                  {/* VATSIM CID */}
+                  <div className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
+                    <label className="text-sm font-medium text-zinc-400 block mb-1">
+                      VATSIM CID
+                    </label>
+                    <div className="relative inline-block h-6 min-w-18 overflow-hidden align-middle">
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={user?.vatsim_id ? handleCopyVatsimCid : undefined}
+                        onKeyDown={(e) => {
+                          if (!user?.vatsim_id) return;
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleCopyVatsimCid();
+                          }
+                        }}
+                        className={`absolute left-0 top-0 inline-flex items-center font-medium transition-all duration-200 ${cidCopied ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'} ${user?.vatsim_id ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900' : ''}`}
+                      >
+                        {user?.vatsim_id || '—'}
+                      </span>
+                      <span
+                        className={`absolute left-0 top-0 inline-flex items-center font-medium text-green-400 transition-all duration-200 pointer-events-none ${cidCopied ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+                      >
+                        Copied!
+                      </span>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Email */}
+                  <div className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <label className="text-sm font-medium text-zinc-400 block mb-1">Email</label>
+                      <p
+                        className={`font-medium break-all ${hideEmail ? 'blur-[3px] select-none' : ''}`}
+                      >
+                        {hideEmail ? scrambledEmail : user?.email || '—'}
+                      </p>
+                    </div>
+                    <Tooltip content={hideEmail ? 'Show email' : 'Hide email'}>
+                      <button
+                        type="button"
+                        onClick={() => setHideEmail((prev) => !prev)}
+                        className="shrink-0 text-zinc-400 hover:text-zinc-200 transition-colors p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                        aria-label={hideEmail ? 'Show email' : 'Hide email'}
+                      >
+                        {hideEmail ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+                    </Tooltip>
+                  </div>
                 </div>
 
                 <div className="bg-zinc-900/50 rounded-lg border border-zinc-800/50">
