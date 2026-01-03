@@ -1208,8 +1208,17 @@ const ContributeMap = () => {
               <Card className="p-6">
                 <h2 className="text-xl font-medium mb-4">XML Generator</h2>
                 <button
-                  onClick={() => navigate(`/contribute/generator/${icao}`)}
-                  className="w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                  onClick={
+                    points.length === 0
+                      ? undefined
+                      : () => navigate(`/contribute/generator/${icao}`)
+                  }
+                  disabled={points.length === 0}
+                  className={`w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 transition-all ${
+                    points.length === 0
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:bg-zinc-800 hover:border-zinc-600'
+                  }`}
                 >
                   <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
                     <FileCode2 className="w-5 h-5 text-emerald-400" />

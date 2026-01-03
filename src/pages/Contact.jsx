@@ -11,34 +11,14 @@ import {
   MessagesSquare,
   Copy,
   ArrowRight,
-  Users,
   ChevronDown,
 } from 'lucide-react';
 
-const teamMembers = [
-  {
-    name: 'Edward M',
-    role: 'Lead Developer',
-    email: 'edward@stopbars.com',
-    image: '/EdwardPFP.png',
-  },
-  {
-    name: 'Charlie H',
-    role: 'Product Manager',
-    email: 'charlie@stopbars.com',
-    image: '/CharliePFP.png',
-  },
-];
-
 const topicOptions = [
   'Technical Support',
-  'VATSIM Division',
   'Bug Report',
   'Feature Request',
-  'Security Concern',
-  'Partnership Inquiry',
-  'Legal Inquiry',
-  'Media Request',
+  'VATSIM Division',
   'Other',
 ];
 
@@ -197,48 +177,46 @@ const Contact = () => {
         <div className="max-w-4xl mx-auto px-6">
           {/* Header */}
           <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold mb-4">We&apos;re Here to Help</h1>
-            <p className="text-xl text-zinc-400">Get in touch with our team</p>
+            <h1 className="text-4xl font-bold mb-4">Get In Touch</h1>
+            <p className="text-zinc-400">
+              Have a question or feedback? We&apos;d love to hear from you.
+            </p>
           </div>
 
           {/* Contact Form */}
-          <Card className="p-8 mb-12">
-            <h2 className="text-2xl font-semibold mb-6">Send us a message</h2>
-
+          <Card className="p-6 mb-12">
             {error && (
-              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-                <p className="text-red-500">{error}</p>
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-red-500 text-sm">{error}</p>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  What do you need help with?
-                </label>
+                <label className="block text-sm font-medium mb-1.5 text-zinc-300">Topic</label>
                 {renderTopicDropdown()}
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Your Email Address</label>
+                <label className="block text-sm font-medium mb-1.5 text-zinc-300">Email</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-sm"
                   placeholder="you@example.com"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Message</label>
+                <label className="block text-sm font-medium mb-1.5 text-zinc-300">Message</label>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-[200px]"
-                  placeholder="Describe in detail what you need help with..."
+                  className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 min-h-[120px] text-sm"
+                  placeholder="How can we help?"
                   required
                 />
               </div>
@@ -254,48 +232,6 @@ const Contact = () => {
                 )}
               </Button>
             </form>
-          </Card>
-
-          {/* Team Members */}
-          <Card className="p-8 mb-12">
-            <div className="flex items-center space-x-3 mb-8">
-              <Users className="w-6 h-6 text-zinc-400" />
-              <h2 className="text-2xl font-semibold">Meet the Team</h2>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8">
-              {teamMembers.map((member) => (
-                <div
-                  key={member.email}
-                  className="p-6 bg-linear-to-br from-zinc-800/50 to-transparent rounded-lg border border-zinc-700/50 hover:border-zinc-600 transition-all duration-200"
-                >
-                  <div className="flex items-center space-x-6 mb-6">
-                    <img
-                      src={member.image}
-                      alt={member.name}
-                      className="w-16 h-16 rounded-full border-2 border-zinc-700"
-                    />
-                    <div>
-                      <h3 className="font-medium text-xl text-white">{member.name}</h3>
-                      <p className="text-zinc-400">{member.role}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-zinc-900/80 rounded-lg hover:bg-zinc-900 transition-colors">
-                    <span className="text-zinc-300 font-mono text-sm">{member.email}</span>
-                    <button
-                      onClick={() => handleCopyEmail(member.email)}
-                      className="text-zinc-400 hover:text-white transition-colors p-2 hover:bg-zinc-800 rounded-lg"
-                    >
-                      {copiedEmail === member.email ? (
-                        <Check className="w-4 h-4 text-emerald-400" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
           </Card>
 
           {/* Additional Support Options */}

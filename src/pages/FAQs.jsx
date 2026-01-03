@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -14,6 +14,19 @@ const FAQPage = () => {
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [filteredFaqs, setFilteredFaqs] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const lastUpdated = useMemo(() => {
+    if (faqs.length === 0) return null;
+    const mostRecent = faqs.reduce((latest, faq) => {
+      const faqDate = new Date(faq.updated_at);
+      return faqDate > latest ? faqDate : latest;
+    }, new Date(faqs[0].updated_at));
+    return mostRecent.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }, [faqs]);
 
   // Scroll to top when page changes
   useEffect(() => {
@@ -70,13 +83,11 @@ const FAQPage = () => {
       <div className="min-h-screen pt-40 pb-20">
         <div className="max-w-4xl mx-auto px-6">
           {/* Header Section */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
-            <p className="text-zinc-400 max-w-2xl mx-auto">
-              Find answers to common questions about BARS. Our team is always happy to help!
-              Can&apos;t find what you&apos;re looking for? Feel free to reach out or join our
-              Discord community for support.
-            </p>
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold mb-3">Frequently Asked Questions</h1>
+            {lastUpdated && (
+              <span className="text-sm text-zinc-500">Last Updated: {lastUpdated}</span>
+            )}
           </div>
 
           {/* Search Bar */}
