@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
-import { Check, X, MapPin } from 'lucide-react';
+import { Check, X, MapPin, Loader } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 // Inlined PendingAirportRequests component
@@ -106,7 +106,7 @@ const PendingAirportRequests = ({ onCountChange }) => {
   if (loading)
     return (
       <div className="text-center py-8 text-zinc-400">
-        <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50 animate-pulse" />
+        <Loader className="w-12 h-12 mx-auto mb-3 opacity-50 animate-spin" />
         <p>Loading requests...</p>
       </div>
     );
@@ -144,21 +144,20 @@ const PendingAirportRequests = ({ onCountChange }) => {
             <p className="text-zinc-500 text-xs">{new Date(request.created_at).toLocaleString()}</p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button
+            <button
               onClick={() => handleApprove(request.division_id, request.id, true)}
-              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all"
             >
-              <Check className="w-4 h-4 mr-2" />
+              <Check className="w-4 h-4" />
               Approve
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={() => handleApprove(request.division_id, request.id, false)}
-              variant="destructive"
-              className="flex-1 sm:flex-initial"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all"
             >
-              <X className="w-4 h-4 mr-2" />
+              <X className="w-4 h-4" />
               Reject
-            </Button>
+            </button>
           </div>
         </div>
       ))}
@@ -175,14 +174,15 @@ const AirportManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-white">Airport Management</h2>
-          <p className="text-zinc-400 text-sm mt-1">Review and approve airport requests</p>
+          <h2 className="text-xl font-semibold text-white">Airport Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Review and approve airport requests</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full text-sm font-medium">
-            {pendingCount || '0'} Pending Request{pendingCount !== 1 ? 's' : ''}
+          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+            <MapPin className="w-4 h-4 mr-2 text-zinc-400" />
+            {pendingCount || '0'} pending request{pendingCount !== 1 ? 's' : ''}
           </span>
         </div>
       </div>

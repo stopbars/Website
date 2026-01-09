@@ -19,6 +19,7 @@ const topicOptions = [
   'Bug Report',
   'Feature Request',
   'VATSIM Division',
+  'Trust and Safety',
   'Other',
 ];
 

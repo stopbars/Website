@@ -14,6 +14,7 @@ import {
   Loader,
   CheckCircle,
   XCircle,
+  FileText,
 } from 'lucide-react';
 import XMLMap from '../shared/XMLMap';
 import { getVatsimToken } from '../../utils/cookieUtils';
@@ -812,8 +813,6 @@ const ContributionManagement = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedContribution, setSelectedContribution] = useState(null);
   const [,] = useState('pending');
-  // Track only pending count (stats endpoint removed)
-  const [pendingCount, setPendingCount] = useState(0);
   // eslint-disable-next-line no-empty-pattern
   const [] = useState(false);
   const [, setActivePoints] = useState([]);
@@ -838,7 +837,6 @@ const ContributionManagement = () => {
       const data = await response.json();
       setContributions(data.contributions);
       setTotalPages(Math.ceil(data.totalCount / CONTRIBUTIONS_PER_PAGE));
-      setPendingCount(data.totalCount || 0);
       setLoading(false);
     } catch (err) {
       setError(err.message);
@@ -904,14 +902,15 @@ const ContributionManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-white">Contribution Management</h2>
-          <p className="text-zinc-400 text-sm mt-1">Review and manage user contributions</p>
+          <h2 className="text-xl font-semibold text-white">Contribution Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Review and manage user contributions</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full text-sm font-medium">
-            {pendingCount || '0'} Pending Contribution{pendingCount !== 1 ? 's' : ''}
+          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+            <FileText className="w-4 h-4 mr-2 text-zinc-400" />
+            {contributions.length} pending contribution{contributions.length !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
@@ -952,16 +951,16 @@ const ContributionManagement = () => {
                 >
                   <div className="flex flex-col sm:flex-row justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold">{contribution.airportIcao}</h3>
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold">{contribution.airportIcao}</h3>
                         {renderStatusBadge(contribution.status)}
                       </div>
 
-                      <p className="text-sm text-zinc-400 mb-2">
+                      <p className="text-base text-zinc-400 mb-3">
                         Package: <span className="text-zinc-300">{contribution.packageName}</span>
                         {contribution.simulator && (
                           <span
-                            className={`ml-2 text-xs px-2 py-0.5 rounded-full border ${
+                            className={`ml-2 text-sm px-2 py-0.5 rounded-full border ${
                               contribution.simulator === 'msfs2024'
                                 ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                                 : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
@@ -976,7 +975,7 @@ const ContributionManagement = () => {
                         )}
                       </p>
 
-                      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                         <p className="text-zinc-400">
                           Submitted by:{' '}
                           <span className="text-zinc-300">
@@ -1009,8 +1008,7 @@ const ContributionManagement = () => {
                           handleReview(contribution);
                         }}
                         disabled={loading}
-                        variant={contribution.status === 'pending' ? 'default' : 'outline'}
-                        size="sm"
+                        variant={contribution.status === 'pending' ? 'primary' : 'outline'}
                       >
                         <Eye className="w-4 h-4 mr-2" />
                         {contribution.status === 'pending' ? 'Review' : 'View'}

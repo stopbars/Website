@@ -3,7 +3,7 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
 import { Dropdown } from '../shared/Dropdown';
-import { AlertTriangle, Loader, Trash2, UserPlus, Lock, UserCheck } from 'lucide-react';
+import { AlertTriangle, Loader, Trash2, UserPlus, Lock, UserCheck, Users } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
 const ROLE_OPTIONS = [
@@ -142,14 +142,15 @@ export default function StaffManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-white">Staff Management</h2>
-          <p className="text-zinc-400 text-sm mt-1">Manage staff roles and permissions</p>
+          <h2 className="text-xl font-semibold text-white">Staff Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Manage staff roles and permissions</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm font-medium">
-            {staff.length} Staff Member{staff.length !== 1 ? 's' : ''}
+          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+            <Users className="w-4 h-4 mr-2 text-zinc-400" />
+            {staff.length} staff member{staff.length !== 1 ? 's' : ''}
           </span>
         </div>
       </div>

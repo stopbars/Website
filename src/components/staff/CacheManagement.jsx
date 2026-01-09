@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { AlertTriangle, CheckCircle2, Loader2, Trash2, Eraser, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Trash2, Eraser, Bomb } from 'lucide-react';
 
 const API_BASE = 'https://v2.stopbars.com';
 
@@ -287,7 +287,7 @@ export default function CacheManagement() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-              <Sparkles className="w-4 h-4 text-red-400" />
+              <Bomb className="w-4 h-4 text-red-400" />
             </div>
             <div>
               <h3 className="font-medium text-white">Purge ALL Namespaces</h3>
@@ -301,11 +301,7 @@ export default function CacheManagement() {
             disabled={loading}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
           >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bomb className="w-4 h-4" />}
             Purge ALL
           </button>
         </div>

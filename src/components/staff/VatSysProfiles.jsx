@@ -196,8 +196,8 @@ const VatSysProfiles = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
         <div>
-          <h2 className="text-2xl font-bold text-white">vatSys Profiles</h2>
-          <p className="text-zinc-400 text-sm mt-1">Upload and manage vatSys profile XMLs</p>
+          <h2 className="text-xl font-semibold text-white">vatSys Profiles</h2>
+          <p className="text-sm text-zinc-400 mt-1">Upload and manage vatSys profile XMLs</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm font-medium">
