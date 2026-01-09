@@ -17,6 +17,7 @@ import {
   Building2,
   AlertOctagon,
   Check,
+  Settings,
   IdCard,
 } from 'lucide-react';
 
@@ -315,6 +316,13 @@ const DivisionManagement = () => {
                             ) : (
                               <ChevronDown className="w-4 h-4" />
                             )}
+                          </Button>
+                          <Button
+                            onClick={() => navigate(`/divisions/${division.id}/manage`)}
+                            variant="outline"
+                            className="p-2 text-blue-400 hover:bg-blue-500/10"
+                          >
+                            <Settings className="w-4 h-4" />
                           </Button>
                           <Button
                             onClick={() => setEditingDivision(division)}
