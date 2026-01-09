@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
-import { Button } from '../shared/Button';
+import { Toast } from '../shared/Toast';
 import { Check, X, MapPin, Loader } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 // Inlined PendingAirportRequests component
-const PendingAirportRequests = ({ onCountChange }) => {
+const PendingAirportRequests = ({ onCountChange, onToast }) => {
   const [requests, setRequests] = useState([]);
   const [divisions, setDivisions] = useState({});
   const [loading, setLoading] = useState(true);
@@ -73,7 +73,7 @@ const PendingAirportRequests = ({ onCountChange }) => {
     fetchRequests();
   }, [fetchRequests]);
 
-  const handleApprove = async (divisionId, airportId, approved) => {
+  const handleApprove = async (divisionId, airportId, icao, approved) => {
     try {
       const response = await fetch(
         `https://v2.stopbars.com/divisions/${divisionId}/airports/${airportId}/approve`,
@@ -98,8 +98,27 @@ const PendingAirportRequests = ({ onCountChange }) => {
         }
         return updatedRequests;
       });
+
+      // Show success toast
+      if (onToast) {
+        onToast({
+          title: approved ? `${icao} Approved` : `${icao} Rejected`,
+          description: approved
+            ? `Airport ${icao} has been successfully approved.`
+            : `Airport ${icao} has been rejected.`,
+          variant: 'success',
+        });
+      }
     } catch (err) {
       setError(err.message);
+      // Show error toast
+      if (onToast) {
+        onToast({
+          title: 'Error',
+          description: err.message,
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -145,14 +164,14 @@ const PendingAirportRequests = ({ onCountChange }) => {
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <button
-              onClick={() => handleApprove(request.division_id, request.id, true)}
+              onClick={() => handleApprove(request.division_id, request.id, request.icao, true)}
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all"
             >
               <Check className="w-4 h-4" />
               Approve
             </button>
             <button
-              onClick={() => handleApprove(request.division_id, request.id, false)}
+              onClick={() => handleApprove(request.division_id, request.id, request.icao, false)}
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all"
             >
               <X className="w-4 h-4" />
@@ -167,10 +186,20 @@ const PendingAirportRequests = ({ onCountChange }) => {
 
 PendingAirportRequests.propTypes = {
   onCountChange: PropTypes.func,
+  onToast: PropTypes.func,
 };
 
 const AirportManagement = () => {
   const [pendingCount, setPendingCount] = useState(0);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (toastData) => {
+    setToast({ ...toastData, show: true });
+  };
+
+  const handleToastClose = () => {
+    setToast(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -189,9 +218,20 @@ const AirportManagement = () => {
 
       <div className="space-y-4">
         <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <PendingAirportRequests onCountChange={setPendingCount} />
+          <PendingAirportRequests onCountChange={setPendingCount} onToast={showToast} />
         </Card>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <Toast
+          title={toast.title}
+          description={toast.description}
+          variant={toast.variant}
+          show={toast.show}
+          onClose={handleToastClose}
+        />
+      )}
     </div>
   );
 };
