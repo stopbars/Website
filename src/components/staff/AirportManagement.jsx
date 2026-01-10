@@ -11,6 +11,7 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
   const [divisions, setDivisions] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [loadingState, setLoadingState] = useState({ id: null, action: null });
   const token = getVatsimToken();
 
   const fetchRequests = useCallback(async () => {
@@ -74,6 +75,7 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
   }, [fetchRequests]);
 
   const handleApprove = async (divisionId, airportId, icao, approved) => {
+    setLoadingState({ id: airportId, action: approved ? 'approve' : 'reject' });
     try {
       const response = await fetch(
         `https://v2.stopbars.com/divisions/${divisionId}/airports/${airportId}/approve`,
@@ -119,6 +121,8 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
           variant: 'destructive',
         });
       }
+    } finally {
+      setLoadingState({ id: null, action: null });
     }
   };
 
@@ -165,16 +169,26 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
           <div className="flex gap-2 w-full sm:w-auto">
             <button
               onClick={() => handleApprove(request.division_id, request.id, request.icao, true)}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all"
+              disabled={loadingState.id === request.id}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Check className="w-4 h-4" />
+              {loadingState.id === request.id && loadingState.action === 'approve' ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4" />
+              )}
               Approve
             </button>
             <button
               onClick={() => handleApprove(request.division_id, request.id, request.icao, false)}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all"
+              disabled={loadingState.id === request.id}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <X className="w-4 h-4" />
+              {loadingState.id === request.id && loadingState.action === 'reject' ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : (
+                <X className="w-4 h-4" />
+              )}
               Reject
             </button>
           </div>
