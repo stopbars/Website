@@ -2,8 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
+import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import { Dropdown } from '../shared/Dropdown';
-import { AlertTriangle, Loader, Trash2, UserPlus, Lock, UserCheck, Users } from 'lucide-react';
+import { Loader, Trash2, UserPlus, UserCheck, Users, AlertOctagon } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
 const ROLE_OPTIONS = [
@@ -28,18 +30,22 @@ export default function StaffManagement() {
   const token = getVatsimToken();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const [form, setForm] = useState({ vatsimId: '', role: 'PRODUCT_MANAGER' });
   const [submitting, setSubmitting] = useState(false);
   const [, setRefreshing] = useState(false);
 
-  const apiBase = 'https://v2.stopbars.com';
+  // Dialog states
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [removingMember, setRemovingMember] = useState(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
-  const clearMessages = () => {
-    setError(null);
-    setSuccess(null);
-  };
+  // Toast states
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const apiBase = 'https://v2.stopbars.com';
 
   const fetchStaff = useCallback(async () => {
     if (!token) return;
@@ -56,7 +62,8 @@ export default function StaffManagement() {
       const data = await res.json();
       setStaff(ensureArray(data.staff));
     } catch (e) {
-      setError(e.message || 'Error fetching staff');
+      setErrorMessage(e.message || 'Error fetching staff');
+      setShowErrorToast(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -72,14 +79,18 @@ export default function StaffManagement() {
     setForm((f) => ({ ...f, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const openAddDialog = (e) => {
     e.preventDefault();
     if (!form.vatsimId.trim()) {
-      setError('VATSIM CID is required');
+      setErrorMessage('VATSIM CID is required');
+      setShowErrorToast(true);
       return;
     }
+    setIsAddDialogOpen(true);
+  };
+
+  const handleSubmit = async () => {
     setSubmitting(true);
-    clearMessages();
     try {
       const res = await fetch(`${apiBase}/staff/manage`, {
         method: 'POST',
@@ -94,21 +105,29 @@ export default function StaffManagement() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to add/update staff');
       }
-      // We ignore the single-object response and just re-fetch canonical list
       await res.json().catch(() => ({}));
-      setSuccess('Staff member saved successfully');
+      setSuccessMessage('Staff member added successfully');
+      setShowSuccessToast(true);
       setForm({ vatsimId: '', role: form.role });
+      setIsAddDialogOpen(false);
       await fetchStaff();
     } catch (e) {
-      setError(e.message || 'Failed to save staff');
+      setErrorMessage(e.message || 'Failed to save staff');
+      setShowErrorToast(true);
+      setIsAddDialogOpen(false);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (vatsimId) => {
-    if (!window.confirm(`Remove staff member ${vatsimId}?`)) return;
-    clearMessages();
+  const cancelAdd = () => {
+    setIsAddDialogOpen(false);
+  };
+
+  const handleDelete = async () => {
+    if (!removingMember) return;
+    setIsRemoving(true);
+    const vatsimId = removingMember.vatsim_id || removingMember.vatsimId;
     try {
       const res = await fetch(`${apiBase}/staff/manage/${vatsimId}`, {
         method: 'DELETE',
@@ -121,14 +140,24 @@ export default function StaffManagement() {
       }
       const data = await res.json();
       if (data.success) {
-        setSuccess('Staff member removed');
+        setSuccessMessage('Staff member removed successfully');
+        setShowSuccessToast(true);
+        setRemovingMember(null);
         fetchStaff();
       } else {
-        setError('Remove unsuccessful');
+        throw new Error('Remove unsuccessful');
       }
     } catch (e) {
-      setError(e.message || 'Failed to remove staff');
+      setErrorMessage(e.message || 'Failed to remove staff');
+      setShowErrorToast(true);
+      setRemovingMember(null);
+    } finally {
+      setIsRemoving(false);
     }
+  };
+
+  const cancelRemove = () => {
+    setRemovingMember(null);
   };
 
   if (loading) {
@@ -140,142 +169,225 @@ export default function StaffManagement() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Staff Management</h2>
-          <p className="text-sm text-zinc-400 mt-1">Manage staff roles and permissions</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
-            <Users className="w-4 h-4 mr-2 text-zinc-400" />
-            {staff.length} staff member{staff.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
+    <>
+      {/* Toast Notifications - rendered outside main container to prevent layout shifts */}
+      <Toast
+        title="Success"
+        description={successMessage}
+        variant="success"
+        show={showSuccessToast}
+        onClose={() => setShowSuccessToast(false)}
+      />
+      <Toast
+        title="Error"
+        description={errorMessage}
+        variant="destructive"
+        show={showErrorToast}
+        onClose={() => setShowErrorToast(false)}
+      />
 
       <div className="space-y-6">
-        {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400">
-            <AlertTriangle className="w-5 h-5 shrink-0" />
-            <span>{error}</span>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Staff Management</h2>
+            <p className="text-sm text-zinc-400 mt-1">Manage staff roles and permissions</p>
           </div>
-        )}
-        {success && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3 text-emerald-400">
-            <UserCheck className="w-5 h-5 shrink-0" />
-            <span>{success}</span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+              <Users className="w-4 h-4 mr-2 text-zinc-400" />
+              {staff.length} staff member{staff.length !== 1 ? 's' : ''}
+            </span>
           </div>
-        )}
+        </div>
 
-        {/* Add / Update Form */}
-        <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-blue-400" /> Add Staff Member
-          </h3>
-          <form onSubmit={handleSubmit} className="grid md:grid-cols-4 gap-4 items-end">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-zinc-400 mb-2">VATSIM CID</label>
-              <input
-                type="text"
-                name="vatsimId"
-                value={form.vatsimId}
-                onChange={handleInputChange}
-                placeholder="e.g., 1234567"
-                className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-zinc-500 transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">Role</label>
-              <Dropdown
-                options={ROLE_OPTIONS}
-                value={form.role}
-                onChange={(role) => setForm((f) => ({ ...f, role }))}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="submit"
-                disabled={submitting}
-                className="flex-1 flex items-center justify-center gap-2"
-              >
-                {submitting ? (
-                  <Loader className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Lock className="w-4 h-4" />
-                )}
-                Save
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setForm({ vatsimId: '', role: 'PRODUCT_MANAGER' })}
-                disabled={submitting}
-              >
-                Reset
-              </Button>
-            </div>
-          </form>
-        </Card>
+        <div className="space-y-6">
+          {/* Add / Update Form */}
+          <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
+            <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-blue-400" />
+              Add Staff Member
+            </h3>
+            <form onSubmit={openAddDialog} className="grid md:grid-cols-4 gap-4 items-end">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-400 mb-2">VATSIM CID</label>
+                <input
+                  type="text"
+                  name="vatsimId"
+                  value={form.vatsimId}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 1234567"
+                  className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-zinc-500 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Role</label>
+                <Dropdown
+                  options={ROLE_OPTIONS}
+                  value={form.role}
+                  onChange={(role) => setForm((f) => ({ ...f, role }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 flex items-center justify-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setForm({ vatsimId: '', role: 'PRODUCT_MANAGER' })}
+                  disabled={submitting}
+                >
+                  Reset
+                </Button>
+              </div>
+            </form>
+          </Card>
 
-        {/* Staff List */}
-        <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-emerald-400" /> Current Staff
-          </h3>
-          {staff.length === 0 ? (
-            <div className="text-center py-8 text-zinc-500">
-              <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No staff members found.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
-                    <th className="py-3 px-4">VATSIM CID</th>
-                    <th className="py-3 px-4">Name</th>
-                    <th className="py-3 px-4">Role</th>
-                    <th className="py-3 px-4 w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800">
-                  {staff.map((member, idx) => (
-                    <tr
-                      key={member.vatsim_id || member.vatsimId || member.user_id || idx}
-                      className="hover:bg-zinc-800/50 transition-colors"
-                    >
-                      <td className="py-3 px-4 font-mono text-zinc-300">
-                        {member.vatsim_id || member.vatsimId || '—'}
-                      </td>
-                      <td className="py-3 px-4 text-white">
-                        {member.name || member.full_name || '—'}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center rounded-full bg-blue-500/20 text-blue-400 px-3 py-1 text-xs font-medium">
-                          {member.role || member.staff_role || 'UNKNOWN'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        {(member.vatsim_id || member.vatsimId) && (
-                          <button
-                            onClick={() => handleDelete(member.vatsim_id || member.vatsimId)}
-                            className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-all"
-                            title="Remove staff member"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </td>
+          {/* Staff List */}
+          <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
+            <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-emerald-400" />
+              Current Staff
+            </h3>
+            {staff.length === 0 ? (
+              <div className="text-center py-8 text-zinc-500">
+                <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No staff members found.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
+                      <th className="py-3 px-4">VATSIM CID</th>
+                      <th className="py-3 px-4">Name</th>
+                      <th className="py-3 px-4">Role</th>
+                      <th className="py-3 px-4 w-24">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800">
+                    {staff.map((member, idx) => (
+                      <tr
+                        key={member.vatsim_id || member.vatsimId || member.user_id || idx}
+                        className="hover:bg-zinc-800/50 transition-colors"
+                      >
+                        <td className="py-3 px-4 font-mono text-zinc-300">
+                          {member.vatsim_id || member.vatsimId || '—'}
+                        </td>
+                        <td className="py-3 px-4 text-white">
+                          {member.name || member.full_name || '—'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center rounded-full bg-blue-500/20 text-blue-400 px-3 py-1 text-xs font-medium">
+                            {member.role || member.staff_role || 'UNKNOWN'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {(member.vatsim_id || member.vatsimId) && (
+                            <button
+                              onClick={() => setRemovingMember(member)}
+                              className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-all"
+                              title="Remove staff member"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Add Staff Dialog */}
+        <Dialog
+          open={isAddDialogOpen}
+          onClose={cancelAdd}
+          icon={UserPlus}
+          iconColor="blue"
+          title="Add Staff Member"
+          description="Grant staff access and permissions to the specified VATSIM user."
+          isLoading={submitting}
+          closeOnBackdrop={!submitting}
+          closeOnEscape={!submitting}
+          buttons={[
+            {
+              label: submitting ? 'Adding...' : 'Add Staff Member',
+              variant: 'primary',
+              icon: submitting ? Loader : UserPlus,
+              disabled: submitting,
+              onClick: handleSubmit,
+              className: submitting ? '[&>svg]:animate-spin' : '',
+            },
+            {
+              label: 'Cancel',
+              variant: 'outline',
+              onClick: cancelAdd,
+              disabled: submitting,
+            },
+          ]}
+        >
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-4">
+            <p className="text-zinc-200 mb-2">You are about to add:</p>
+            <div className="space-y-1">
+              <p className="text-blue-200 font-medium">{form.vatsimId}</p>
+              <p className="text-blue-200">
+                {ROLE_OPTIONS.find((r) => r.value === form.role)?.label || form.role}
+              </p>
             </div>
-          )}
-        </Card>
+          </div>
+        </Dialog>
+
+        {/* Remove Staff Dialog */}
+        <Dialog
+          open={!!removingMember}
+          onClose={cancelRemove}
+          icon={AlertOctagon}
+          iconColor="red"
+          title="Remove Staff Member"
+          description="Revoke staff access and permissions from the specified user."
+          isLoading={isRemoving}
+          closeOnBackdrop={!isRemoving}
+          closeOnEscape={!isRemoving}
+          buttons={[
+            {
+              label: isRemoving ? 'Removing...' : 'Remove Staff Member',
+              variant: 'destructive',
+              icon: isRemoving ? Loader : Trash2,
+              disabled: isRemoving,
+              onClick: handleDelete,
+              className: isRemoving ? '[&>svg]:animate-spin' : '',
+            },
+            {
+              label: 'Cancel',
+              variant: 'outline',
+              onClick: cancelRemove,
+              disabled: isRemoving,
+            },
+          ]}
+        >
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
+            <p className="text-zinc-200 mb-2">You are about to remove:</p>
+            <div className="space-y-1">
+              <p className="text-red-200 font-medium">
+                {removingMember?.name || removingMember?.full_name || '—'}
+              </p>
+              <p className="text-red-200">
+                {removingMember?.role || removingMember?.staff_role || '—'}
+              </p>
+            </div>
+          </div>
+        </Dialog>
       </div>
-    </div>
+    </>
   );
 }

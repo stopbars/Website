@@ -30,11 +30,11 @@ export const DonationBanner = () => {
                 href="https://opencollective.com/stopbars"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group inline-flex items-center justify-center px-7 py-3 text-base font-semibold rounded-md text-white bg-emerald-700 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-900 transition-transform duration-200 hover:scale-[1.02] shadow-lg shadow-emerald-900/30"
+                className="inline-flex items-center justify-center px-7 py-3 text-base font-semibold rounded-md text-white bg-emerald-700 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-900 transition-colors duration-200 shadow-lg shadow-emerald-900/30"
                 aria-label="Support BARS with a donation on Open Collective"
               >
                 Support BARS
-                <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
+                <ArrowRight className="ml-2 w-5 h-5" />
               </a>
             </div>
           </div>
