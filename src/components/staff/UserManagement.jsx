@@ -141,20 +141,20 @@ const UserManagement = () => {
     try {
       setLoading(true);
       const token = getVatsimToken();
-      const response = await fetch(
-        `https://v2.stopbars.com/staff/users?page=${currentPage}&limit=${USERS_PER_PAGE}`,
-        {
-          headers: { 'X-Vatsim-Token': token },
-        }
-      );
+      const response = await fetch('https://v2.stopbars.com/staff/users', {
+        headers: { 'X-Vatsim-Token': token },
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch users');
       }
 
       const data = await response.json();
-      setUsers(data.users);
-      setTotalUsers(data.total);
+      const allUsers = Array.isArray(data) ? data : data.users || [];
+      const total = Array.isArray(data) ? data.length : (data.total ?? allUsers.length);
+
+      setUsers(allUsers);
+      setTotalUsers(total);
     } catch (err) {
       setErrorMessage('Failed to load users. Please try again.');
       setShowErrorToast(true);
@@ -162,11 +162,11 @@ const UserManagement = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage]);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
-  }, [currentPage, fetchUsers]);
+  }, [fetchUsers]);
   // No edit functionality needed
 
   const handleDeleteUser = async (userId) => {
@@ -268,7 +268,15 @@ const UserManagement = () => {
             user.subdivision.id.toLowerCase().includes(searchTerm.toLowerCase()))))
   );
 
-  const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * USERS_PER_PAGE,
+    currentPage * USERS_PER_PAGE
+  );
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
@@ -318,7 +326,7 @@ const UserManagement = () => {
                   <p className="text-zinc-400 text-sm">No users found</p>
                 </div>
               )}
-              {filteredUsers.map((user) => (
+              {paginatedUsers.map((user) => (
                 <Card
                   key={user.id}
                   className="p-5 hover:border-zinc-600/50 transition-all duration-200 hover:bg-zinc-800/30"
