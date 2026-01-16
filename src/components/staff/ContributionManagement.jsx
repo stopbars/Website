@@ -2,10 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
+import { Dialog } from '../shared/Dialog';
 import {
-  AlertTriangle,
   Check,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
   Upload,
@@ -15,8 +14,11 @@ import {
   CheckCircle,
   XCircle,
   FileText,
+  SquarePen,
+  Copy,
 } from 'lucide-react';
 import XMLMap from '../shared/XMLMap';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 const CONTRIBUTIONS_PER_PAGE = 5;
@@ -141,11 +143,10 @@ UploadContribution.propTypes = {
   onUpload: PropTypes.func.isRequired,
 };
 
-// New Review Modal component with map and XML upload
-const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
+const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) => {
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
   const [, setMapCenter] = useState([0, 0]);
   const [mapZoom] = useState(15);
   const [parsedLights, setParsedLights] = useState([]);
@@ -155,6 +156,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
   const [generatedFiles, setGeneratedFiles] = useState(null);
   const [isEditingPackage, setIsEditingPackage] = useState(false);
   const [updatedPackageName, setUpdatedPackageName] = useState(contribution.packageName);
+  const [notesCopied, setNotesCopied] = useState(false);
 
   useEffect(() => {
     // Set initial map center based on airport coordinates
@@ -176,6 +178,15 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
 
     fetchAirportData();
   }, [contribution.airportIcao]);
+
+  // Auto-generate points when entering step 2
+  useEffect(() => {
+    if (step === 2 && !generatedFiles && !isGenerating) {
+      generateLightsFromXML();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, generatedFiles, isGenerating]);
+
   (xmlString) => {
     try {
       const parser = new DOMParser();
@@ -294,7 +305,10 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       return [...polygonFeatures, ...removeAreas];
     } catch (error) {
       console.error('Error parsing XML:', error);
-      setError("Failed to parse XML file. Please ensure it's a valid format.");
+      onError({
+        title: 'Parse Error',
+        description: "Failed to parse XML file. Please ensure it's a valid format.",
+      });
       return [];
     }
   };
@@ -354,13 +368,15 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       return allLights;
     } catch (error) {
       console.error('Error parsing generated XML:', error);
-      setError('Failed to parse the generated XML file.');
+      onError({
+        title: 'Parse Error',
+        description: 'Failed to parse the generated XML file.',
+      });
       return [];
     }
   };
   const generateLightsFromXML = async () => {
     setIsGenerating(true);
-    setError('');
 
     try {
       // Create a FormData object and append the XML
@@ -397,13 +413,16 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       }
     } catch (error) {
       console.error('Error generating lights:', error);
-      setError(error.message);
+      onError({
+        title: 'Generation Failed',
+        description: error.message,
+      });
     } finally {
       setIsGenerating(false);
     }
   };
   const handleApprove = async () => {
-    setLoading(true);
+    setIsApproving(true);
     try {
       const token = getVatsimToken();
 
@@ -433,18 +452,16 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       onApprove();
       onClose();
     } catch (error) {
-      setError(`Error approving contribution: ${error.message}`);
+      onError({
+        title: 'Approval Failed',
+        description: error.message,
+      });
     } finally {
-      setLoading(false);
+      setIsApproving(false);
     }
   };
   const handleReject = async () => {
-    if (!rejectionReason.trim()) {
-      setError('Please provide a reason for rejection');
-      return;
-    }
-
-    setLoading(true);
+    setIsRejecting(true);
     try {
       const token = getVatsimToken();
 
@@ -475,40 +492,56 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
       onReject();
       onClose();
     } catch (error) {
-      setError(`Error rejecting contribution: ${error.message}`);
+      onError({
+        title: 'Rejection Failed',
+        description: error.message,
+      });
     } finally {
-      setLoading(false);
+      setIsRejecting(false);
     }
   };
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-4">
-      <div className="bg-zinc-900 p-5 rounded-xl max-w-3xl w-full mx-4 border border-zinc-800 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">Review Contribution</h2>
-          <div className="flex items-center space-x-3">
-            <span className="text-sm bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full">
-              {contribution.airportIcao}
-            </span>
-            <span className="text-sm bg-zinc-800 px-3 py-1 rounded-full">
-              {new Date(contribution.submissionDate).toLocaleDateString()}
-            </span>
-          </div>
-        </div>
-
+    <>
+      <Dialog
+        open={true}
+        onClose={onClose}
+        icon={Eye}
+        iconColor="blue"
+        title="Review Contribution"
+        maxWidth="2xl"
+        isLoading={isApproving || isRejecting}
+        closeOnBackdrop={!isApproving && !isRejecting}
+        closeOnEscape={!isApproving && !isRejecting}
+      >
         {/* Stepper */}
         <div className="flex items-center mb-6">
           <div
-            className={`flex items-center justify-center w-8 h-8 rounded-full 
-            ${step >= 1 ? 'bg-blue-500' : 'bg-zinc-700'}`}
+            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-300
+          ${step >= 1 ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}
           >
-            <span>1</span>
+            1
           </div>
-          <div className={`flex-1 h-1 mx-2 ${step >= 2 ? 'bg-blue-500' : 'bg-zinc-700'}`}></div>
+          <div className="flex-1 h-0.5 mx-3 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className={`h-full bg-blue-500 transition-all duration-300 ${step >= 2 ? 'w-full' : 'w-0'}`}
+            />
+          </div>
           <div
-            className={`flex items-center justify-center w-8 h-8 rounded-full 
-            ${step >= 2 ? 'bg-blue-500' : 'bg-zinc-700'}`}
+            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-300
+          ${step >= 2 ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}
           >
-            <span>2</span>
+            2
+          </div>
+          <div className="flex-1 h-0.5 mx-3 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className={`h-full bg-blue-500 transition-all duration-300 ${step >= 3 ? 'w-full' : 'w-0'}`}
+            />
+          </div>
+          <div
+            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-300
+          ${step >= 3 ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}
+          >
+            3
           </div>
         </div>
 
@@ -516,175 +549,187 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
         <div className="mb-6">
           {step === 1 && (
             <div className="space-y-6">
-              {' '}
-              <div className="bg-zinc-800/50 p-4 rounded-lg">
-                <h3 className="text-lg font-medium mb-4">Contribution Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-zinc-800/50 p-5 rounded-lg">
+                <h3 className="text-lg font-medium mb-5">Contribution Details</h3>
+
+                {/* Row 1: Airport ICAO | Simulator */}
+                <div className="grid grid-cols-2 gap-6 mb-5">
                   <div>
-                    <p className="text-sm text-zinc-400">Airport ICAO</p>
-                    <p className="font-semibold">{contribution.airportIcao}</p>
+                    <p className="text-sm text-zinc-400 mb-1">Airport ICAO</p>
+                    <p className="font-semibold text-white">{contribution.airportIcao}</p>
                   </div>
                   <div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-zinc-400">Package Name</p>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        className="text-xs text-blue-400 hover:text-blue-300"
+                    <p className="text-sm text-zinc-400 mb-1">Simulator</p>
+                    <span
+                      className={`inline-flex text-sm px-2.5 py-1 rounded-full border font-medium ${
+                        contribution.simulator === 'msfs2024'
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                          : contribution.simulator === 'msfs2020'
+                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                            : 'bg-zinc-700 text-zinc-300 border-zinc-600'
+                      }`}
+                    >
+                      {contribution.simulator === 'msfs2024'
+                        ? 'MSFS 2024'
+                        : contribution.simulator === 'msfs2020'
+                          ? 'MSFS 2020'
+                          : contribution.simulator || 'Not specified'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Row 2: Package | Submitted By */}
+                <div className="grid grid-cols-2 gap-6 mb-5">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm text-zinc-400">Package</p>
+                      <button
+                        className="text-blue-400 hover:text-blue-300 transition-colors"
                         onClick={() => setIsEditingPackage(!isEditingPackage)}
+                        title={isEditingPackage ? 'Finish editing' : 'Edit package name'}
                       >
-                        {isEditingPackage ? 'Cancel' : 'Edit'}
-                      </Button>
+                        {isEditingPackage ? (
+                          <XCircle className="w-3.5 h-3.5" />
+                        ) : (
+                          <SquarePen className="w-3.5 h-3.5" />
+                        )}
+                      </button>
                     </div>
                     {isEditingPackage ? (
                       <input
                         type="text"
                         value={updatedPackageName}
                         onChange={(e) => setUpdatedPackageName(e.target.value)}
-                        className="w-full px-2 py-1 bg-zinc-700 border border-zinc-600 rounded focus:outline-none focus:border-blue-500 font-semibold"
+                        className="w-full px-3 py-1.5 bg-zinc-700 border border-zinc-600 rounded-lg focus:outline-none focus:border-blue-500 text-white"
                       />
                     ) : (
-                      <p className="font-semibold">
+                      <p className="font-semibold text-white">
                         {updatedPackageName || contribution.packageName}
                       </p>
                     )}
                   </div>
                   <div>
-                    <p className="text-sm text-zinc-400">Simulator</p>
-                    <p className="font-semibold">
-                      {contribution.simulator === 'msfs2024'
-                        ? 'MSFS 2024'
-                        : contribution.simulator === 'msfs2020'
-                          ? 'MSFS 2020'
-                          : contribution.simulator || 'Not specified'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Submitted By</p>
-                    <p className="font-semibold">
+                    <p className="text-sm text-zinc-400 mb-1">Submitted By</p>
+                    <p className="font-semibold text-white">
                       {contribution.userDisplayName || contribution.userId}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Date</p>
-                    <p className="font-semibold">
-                      {new Date(contribution.submissionDate).toLocaleString()}
-                    </p>
-                  </div>
                 </div>
 
-                {contribution.notes && (
-                  <div className="mt-4">
-                    <p className="text-sm text-zinc-400">Notes</p>
-                    <p className="bg-zinc-900 p-3 rounded mt-1 text-sm">{contribution.notes}</p>
-                  </div>
-                )}
-              </div>
-              <div className="bg-zinc-800/50 p-4 rounded-lg">
-                {' '}
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">XML Visualization</h3>
-                  <div>
-                    <Button
-                      onClick={generateLightsFromXML}
-                      variant="default"
-                      size="sm"
-                      disabled={isGenerating}
-                    >
-                      {isGenerating ? (
-                        <>
-                          <Loader className="w-4 h-4 mr-2 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          Generate Points
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                {/* Row 3: Date */}
+                <div className="mb-5">
+                  <p className="text-sm text-zinc-400 mb-1">Date</p>
+                  <p className="font-semibold text-white">
+                    {new Date(contribution.submissionDate).toLocaleString()}
+                  </p>
                 </div>
-                <div className="h-[400px] w-full bg-zinc-900 rounded-lg overflow-hidden">
-                  {generatedFiles && generatedFiles.barsXml ? (
-                    <XMLMap xmlData={generatedFiles.barsXml} height="400px" />
-                  ) : (
-                    <div className="flex items-center justify-center h-full bg-zinc-800/30">
-                      <p className="text-zinc-400">
-                        {isGenerating
-                          ? 'Generating map data...'
-                          : 'Click "Generate Points" to visualize the XML data'}
+
+                {/* Row 4: Notes */}
+                <div>
+                  <p className="text-sm text-zinc-400 mb-1">Notes</p>
+                  {contribution.notes ? (
+                    <div className="relative">
+                      <p className="bg-zinc-900/50 p-3 pr-10 rounded-lg text-sm text-zinc-300 border border-zinc-700/50">
+                        {contribution.notes}
                       </p>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(contribution.notes);
+                          setNotesCopied(true);
+                          setTimeout(() => setNotesCopied(false), 2000);
+                        }}
+                        className="absolute top-2 right-2 p-1.5 rounded-md hover:bg-zinc-700/50 transition-colors"
+                        title="Copy notes"
+                      >
+                        {notesCopied ? (
+                          <Check className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-zinc-400 hover:text-zinc-300" />
+                        )}
+                      </button>
                     </div>
+                  ) : (
+                    <p className="text-sm text-zinc-500 italic">No notes provided</p>
                   )}
                 </div>
-                {parsedLights.length > 0 && (
-                  <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex justify-between items-center">
-                    <p className="text-blue-400 text-sm">
-                      {parsedLights.length} lights visualized
-                      {generatedFiles && ' (generated)'}
-                    </p>
-
-                    {generatedFiles && (
-                      <div className="flex space-x-2">
-                        <Button
-                          onClick={() => {
-                            // Format the XML before downloading
-                            const formatXML = (xml) => {
-                              let formatted = '';
-                              const reg = /(>)(<)(\/*)/g;
-                              xml = xml.replace(reg, '$1\r\n$2$3');
-                              let pad = 0;
-                              xml.split('\r\n').forEach((node) => {
-                                let indent = 0;
-                                if (node.match(/.+<\/\w[^>]*>$/)) {
-                                  indent = 0;
-                                } else if (node.match(/^<\/\w/)) {
-                                  if (pad !== 0) pad -= 1;
-                                } else if (node.match(/^<\w[^>]*[^/]>.*$/)) {
-                                  indent = 1;
-                                } else {
-                                  indent = 0;
-                                }
-                                let padding = '';
-                                for (let i = 0; i < pad; i++) padding += '  ';
-                                formatted += padding + node + '\r\n';
-                                pad += indent;
-                              });
-                              return formatted;
-                            };
-
-                            const formattedXML = formatXML(generatedFiles.barsXml);
-                            const blob = new Blob([formattedXML], { type: 'application/xml' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${contribution.airportIcao}_bars_contribution.xml`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                          }}
-                          variant="outline"
-                          size="sm"
-                        >
-                          <FileUp className="w-4 h-4 mr-2" />
-                          Download Generated XML
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {error && (
-                  <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <p className="text-red-500 text-sm">{error}</p>
-                  </div>
-                )}
               </div>
             </div>
           )}
 
           {step === 2 && (
+            <div className="space-y-6">
+              <div className="bg-zinc-800/50 p-4 rounded-lg">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-medium">XML Visualization</h3>
+                    {parsedLights.length > 0 && (
+                      <span className="text-sm text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+                        {parsedLights.length} lights
+                      </span>
+                    )}
+                  </div>
+                  {generatedFiles && (
+                    <Button
+                      onClick={() => {
+                        // Format the XML before downloading
+                        const formatXML = (xml) => {
+                          let formatted = '';
+                          const reg = /(>)(<)(\/*)/g;
+                          xml = xml.replace(reg, '$1\r\n$2$3');
+                          let pad = 0;
+                          xml.split('\r\n').forEach((node) => {
+                            let indent = 0;
+                            if (node.match(/.+<\/\w[^>]*>$/)) {
+                              indent = 0;
+                            } else if (node.match(/^<\/\w/)) {
+                              if (pad !== 0) pad -= 1;
+                            } else if (node.match(/^<\w[^>]*[^/]>.*$/)) {
+                              indent = 1;
+                            } else {
+                              indent = 0;
+                            }
+                            let padding = '';
+                            for (let i = 0; i < pad; i++) padding += '  ';
+                            formatted += padding + node + '\r\n';
+                            pad += indent;
+                          });
+                          return formatted;
+                        };
+
+                        const formattedXML = formatXML(generatedFiles.barsXml);
+                        const blob = new Blob([formattedXML], { type: 'application/xml' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${contribution.airportIcao}_BARS_Contribution.xml`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <FileUp className="w-4 h-4 mr-2" />
+                      Download XML
+                    </Button>
+                  )}
+                </div>
+                <div className="h-[400px] w-full bg-zinc-900 rounded-lg overflow-hidden">
+                  {generatedFiles && generatedFiles.barsXml ? (
+                    <XMLMap xmlData={generatedFiles.barsXml} height="400px" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full bg-zinc-800/30">
+                      <Loader className="w-8 h-8 animate-spin text-blue-500 mb-3" />
+                      <p className="text-zinc-400">Generating map data...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 gap-8">
                 <div className="space-y-3 border border-emerald-500/20 p-4 rounded-lg bg-emerald-500/10">
@@ -692,15 +737,16 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                     <CheckCircle className="w-5 h-5 mr-2" />
                     Approve Contribution
                   </h4>
-                  <p className="text-sm text-zinc-300">
-                    Approving this contribution will make these lights available in the BARS system.
+                  <p className="text-sm text-zinc-300 mb-1">
+                    Approving this contribution will make this airport contribution available in
+                    BARS.
                   </p>
                   <Button
                     onClick={handleApprove}
-                    disabled={loading}
+                    disabled={isApproving || isRejecting}
                     className="bg-emerald-600 hover:bg-emerald-500 w-full"
                   >
-                    {loading ? (
+                    {isApproving ? (
                       <div className="flex items-center justify-center">
                         <Loader className="w-4 h-4 mr-2 animate-spin" />
                         <span>Processing...</span>
@@ -719,44 +765,40 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
                     <XCircle className="w-5 h-5 mr-2" />
                     Reject Contribution
                   </h4>
-                  <div>
-                    <label className="block text-sm font-medium mb-2 text-zinc-300">
-                      Reason for Rejection
-                    </label>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleReject();
+                    }}
+                  >
                     <textarea
                       value={rejectionReason}
                       onChange={(e) => setRejectionReason(e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800/50 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500"
+                      className="w-full px-4 py-2 bg-zinc-800/50 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500 resize-none mb-3"
                       placeholder="Explain why this contribution is being rejected..."
                       rows={3}
                       required
                     />
-                  </div>
-                  <Button
-                    onClick={handleReject}
-                    disabled={loading || !rejectionReason.trim()}
-                    className="bg-red-600 hover:bg-red-500 w-full"
-                  >
-                    {loading ? (
-                      <div className="flex items-center justify-center">
-                        <Loader className="w-4 h-4 mr-2 animate-spin" />
-                        <span>Processing...</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center">
-                        <XCircle className="w-4 h-4 mr-2" />
-                        <span>Reject</span>
-                      </div>
-                    )}
-                  </Button>
+                    <Button
+                      type="submit"
+                      disabled={isApproving || isRejecting}
+                      className="bg-emerald-600 hover:bg-emerald-500 w-full"
+                    >
+                      {isRejecting ? (
+                        <div className="flex items-center justify-center">
+                          <Loader className="w-4 h-4 mr-2 animate-spin" />
+                          <span>Processing...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center">
+                          <XCircle className="w-4 h-4 mr-2" />
+                          <span>Reject</span>
+                        </div>
+                      )}
+                    </Button>
+                  </form>
                 </div>
               </div>
-
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                  <p className="text-red-500 text-sm">{error}</p>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -774,15 +816,15 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject }) => {
             </Button>
           )}
 
-          {step === 1 && (
-            <Button onClick={() => setStep(2)}>
+          {step < 3 && (
+            <Button onClick={() => setStep(step + 1)}>
               Next
               <ChevronRight className="w-4 h-4 ml-2" />
             </Button>
           )}
         </div>
-      </div>
-    </div>
+      </Dialog>
+    </>
   );
 };
 
@@ -801,20 +843,22 @@ ReviewModal.propTypes = {
   onClose: PropTypes.func.isRequired,
   onApprove: PropTypes.func.isRequired,
   onReject: PropTypes.func.isRequired,
+  onError: PropTypes.func.isRequired,
 };
 
 // Main Component
 const ContributionManagement = () => {
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedContribution, setSelectedContribution] = useState(null);
-  const [,] = useState('pending');
-  // eslint-disable-next-line no-empty-pattern
-  const [] = useState(false);
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const [, setActivePoints] = useState([]);
   const [, setComparisonResults] = useState(null);
   const fetchContributions = useCallback(async () => {
@@ -839,7 +883,12 @@ const ContributionManagement = () => {
       setTotalPages(Math.ceil(data.totalCount / CONTRIBUTIONS_PER_PAGE));
       setLoading(false);
     } catch (err) {
-      setError(err.message);
+      setToast({
+        show: true,
+        title: 'Error',
+        description: err.message,
+        variant: 'destructive',
+      });
       setLoading(false);
     }
   }, [currentPage]);
@@ -853,11 +902,33 @@ const ContributionManagement = () => {
   };
 
   const handleApproval = async () => {
+    setToast({
+      show: true,
+      title: `${selectedContribution.airportIcao} Approved`,
+      description: 'The contribution has been approved successfully.',
+      variant: 'success',
+    });
     await fetchContributions();
   };
 
   const handleRejection = async () => {
+    setToast({
+      show: true,
+      title: `${selectedContribution.airportIcao} Rejected`,
+      description: 'The contribution has been rejected.',
+      variant: 'success',
+    });
     await fetchContributions();
+  };
+
+  const handleError = (error) => {
+    setSelectedContribution(null);
+    setToast({
+      show: true,
+      title: error.title,
+      description: error.description,
+      variant: 'destructive',
+    });
   };
 
   const handleContributionSelect = (contribution) => {
@@ -914,25 +985,22 @@ const ContributionManagement = () => {
           </span>
         </div>
       </div>
-      {/* Status messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-          <p className="text-red-400">{error}</p>
-        </div>
-      )}
-      {success && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3">
-          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-          <p className="text-emerald-400">{success}</p>
-        </div>
-      )}{' '}
+
+      {/* Toast notifications */}
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast({ ...toast, show: false })}
+      />
+
       <div className="grid grid-cols-1 gap-6">
         {/* Contributions list */}
         <div className="space-y-4">
           {loading && !selectedContribution ? (
             <div className="flex items-center justify-center h-64">
-              <RefreshCw className="w-8 h-8 animate-spin text-zinc-400" />
+              <Loader className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
           ) : paginatedContributions.length === 0 ? (
             <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-8 text-center">
@@ -1058,6 +1126,7 @@ const ContributionManagement = () => {
           onClose={() => setSelectedContribution(null)}
           onApprove={handleApproval}
           onReject={handleRejection}
+          onError={handleError}
         />
       )}
     </div>
