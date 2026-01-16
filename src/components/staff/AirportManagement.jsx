@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Toast } from '../shared/Toast';
-import { Check, X, MapPin, Loader } from 'lucide-react';
+import { Dialog } from '../shared/Dialog';
+import { Check, X, MapPin, Loader, Trash2, AlertOctagon } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 // Inlined PendingAirportRequests component
@@ -12,6 +13,9 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [loadingState, setLoadingState] = useState({ id: null, action: null });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [requestToDelete, setRequestToDelete] = useState(null);
+  const [deletingRequest, setDeletingRequest] = useState(false);
   const token = getVatsimToken();
 
   const fetchRequests = useCallback(async () => {
@@ -126,6 +130,65 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
     }
   };
 
+  const confirmDeleteRequest = (request) => {
+    setRequestToDelete(request);
+    setShowDeleteConfirm(true);
+  };
+
+  const cancelDeleteRequest = () => {
+    setShowDeleteConfirm(false);
+    setRequestToDelete(null);
+    setDeletingRequest(false);
+  };
+
+  const handleDeleteRequest = async (divisionId, airportId) => {
+    setDeletingRequest(true);
+    const deletedIcao = requestToDelete?.icao;
+    try {
+      const response = await fetch(
+        `https://v2.stopbars.com/divisions/${divisionId}/airports/${airportId}`,
+        {
+          method: 'DELETE',
+          headers: { 'X-Vatsim-Token': token },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete airport request');
+      }
+
+      setRequests((prevRequests) => {
+        const updatedRequests = prevRequests.filter((req) => req.id !== airportId);
+        if (onCountChange) {
+          onCountChange(updatedRequests.length);
+        }
+        return updatedRequests;
+      });
+      setShowDeleteConfirm(false);
+      setRequestToDelete(null);
+
+      if (onToast) {
+        onToast({
+          title: `${deletedIcao} Request Deleted`,
+          description: 'The airport request has been deleted.',
+          variant: 'success',
+        });
+      }
+    } catch (err) {
+      setShowDeleteConfirm(false);
+      setRequestToDelete(null);
+      if (onToast) {
+        onToast({
+          title: 'Failed to Delete Request',
+          description: err.message || 'An error occurred while deleting the airport request.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setDeletingRequest(false);
+    }
+  };
+
   if (loading)
     return (
       <div className="text-center py-8 text-zinc-400">
@@ -157,7 +220,7 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
           <div className="space-y-1">
             <h3 className="text-lg font-semibold text-white flex items-center">
               <MapPin className="w-5 h-5 mr-2 text-blue-400" />
-              <span className="font-mono">{request.icao}</span>
+              <span>{request.icao}</span>
               <span className="mx-2 text-zinc-600">•</span>
               <span className="text-zinc-300 font-normal">{divisions[request.division_id]}</span>
             </h3>
@@ -191,9 +254,45 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
               )}
               Reject
             </button>
+            <button
+              onClick={() => confirmDeleteRequest(request)}
+              disabled={loadingState.id === request.id}
+              className="p-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Delete Request"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
       ))}
+
+      {/* Delete Request Confirmation Dialog */}
+      <Dialog
+        open={showDeleteConfirm && !!requestToDelete}
+        onClose={cancelDeleteRequest}
+        icon={AlertOctagon}
+        iconColor="red"
+        title="Delete Airport Request"
+        description={`Are you sure you want to delete the request for ${requestToDelete?.icao}? This action cannot be undone.`}
+        closeOnBackdrop={!deletingRequest}
+        closeOnEscape={!deletingRequest}
+        isLoading={deletingRequest}
+        maxWidth="md"
+        buttons={[
+          {
+            label: 'Delete',
+            variant: 'destructive',
+            icon: deletingRequest ? () => <Loader className="w-4 h-4 mr-2 animate-spin" /> : Trash2,
+            loadingLabel: 'Deleting...',
+            onClick: () => handleDeleteRequest(requestToDelete?.division_id, requestToDelete?.id),
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: cancelDeleteRequest,
+          },
+        ]}
+      />
     </div>
   );
 };
