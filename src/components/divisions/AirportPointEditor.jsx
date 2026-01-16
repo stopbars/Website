@@ -7,6 +7,7 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 import { X, ExternalLink } from 'lucide-react';
 import { Dropdown } from '../shared/Dropdown';
 import { Layout } from '../layout/Layout';
+import { Toast } from '../shared/Toast';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
@@ -1178,6 +1179,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteError, setRemoteError] = useState(null);
   const [uploadState, setUploadState] = useState({ status: 'idle', message: '' }); // uploading|success|error|idle
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const fetchInFlightRef = useRef(false);
   const { airportId } = useParams();
   const icao = (airportId || '').toUpperCase();
@@ -2315,12 +2322,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               </button>
             </div>
           )}
-          {uploadState.status === 'error' && (
+          {uploadState.status === 'error' && !showToast && (
             <div className="text-[11px] text-red-300 bg-red-900/40 rounded px-2 py-1">
               {uploadState.message || 'Upload failed.'}
             </div>
           )}
-          {uploadState.status === 'success' && (
+          {uploadState.status === 'success' && !showToast && (
             <div className="text-[11px] text-emerald-300 bg-emerald-900/30 rounded px-2 py-1">
               {uploadState.message || 'Changes saved.'}
             </div>
@@ -2426,7 +2433,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                           }
                         />
                         <label htmlFor="elevated" className="text-zinc-300">
-                          Add Elevated stopbar lights?
+                          Elevated Stopbar Lights
                         </label>
                       </div>
                     )}
@@ -2583,7 +2590,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               onClick={async () => {
                 const token = getVatsimToken();
                 if (!token) {
-                  setUploadState({ status: 'error', message: 'Login required to upload.' });
+                  setToastConfig({
+                    title: 'Login Required',
+                    description: 'Please login to upload changes.',
+                    variant: 'destructive',
+                  });
+                  setShowToast(true);
                   return;
                 }
                 const payload = serializeChangeset(changeset);
@@ -2617,6 +2629,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                     throw new Error(msg || `Upload failed (${resp.status})`);
                   }
                   setUploadState({ status: 'success', message: 'Changes saved.' });
+                  setToastConfig({
+                    title: 'Changes Saved',
+                    description: 'Your changes have been successfully uploaded.',
+                    variant: 'success',
+                  });
+                  setShowToast(true);
                   // Clear local layers and refetch
                   Object.entries(featureLayerMapRef.current).forEach(([, layer]) => {
                     if (layer?.remove) layer.remove();
@@ -2627,6 +2645,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   triggerFetchPoints(true);
                 } catch (e) {
                   setUploadState({ status: 'error', message: e.message });
+                  setToastConfig({
+                    title: 'Upload Failed',
+                    description: e.message || 'An error occurred while uploading your changes.',
+                    variant: 'destructive',
+                  });
+                  setShowToast(true);
                 }
               }}
               className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 transition-colors ${uploadState.status === 'uploading' || (changeset.create.length === 0 && Object.keys(changeset.modify).length === 0 && changeset.delete.length === 0) ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
@@ -2636,6 +2660,13 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           </div>
         </div>
       </div>
+      <Toast
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        show={showToast}
+        onClose={() => setShowToast(false)}
+      />
     </div>
   );
 };

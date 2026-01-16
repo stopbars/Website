@@ -96,7 +96,7 @@ export const Hero = () => {
           </Button>
           <Button
             variant="secondary"
-            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-all duration-200 hover:scale-[1.02]"
+            className="h-14 px-10 text-base md:text-lg gap-2 bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-colors duration-200"
             onClick={() =>
               window.open('https://docs.stopbars.com/', '_blank', 'noopener,noreferrer')
             }

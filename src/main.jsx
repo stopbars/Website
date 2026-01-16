@@ -29,7 +29,6 @@ const ContributeDetails = lazy(() => import('./pages/ContributeDetails.jsx'));
 const ContributeTest = lazy(() => import('./pages/ContributeTest.jsx'));
 const XMLGenerator = lazy(() => import('./pages/XMLGenerator.jsx'));
 const DivisionManagement = lazy(() => import('./components/divisions/DivisionManagement.jsx'));
-const NewDivision = lazy(() => import('./components/divisions/NewDivision.jsx'));
 const StaffDashboard = lazy(() => import('./pages/StaffDashboard.jsx'));
 const AuthCallback = lazy(() =>
   import('./components/auth/AuthCallback.jsx').then((module) => ({
@@ -155,15 +154,6 @@ const router = createBrowserRouter([
   {
     path: '/faq',
     element: <FAQPage />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/divisions/new',
-    element: (
-      <ProtectedRoute>
-        <NewDivision />
-      </ProtectedRoute>
-    ),
     errorElement: <RouteError />,
   },
   {

@@ -9,7 +9,6 @@ import {
   Ban as BanIcon,
   Check,
   Loader,
-  Lock,
   Trash2,
   UserX,
   FileText,
@@ -296,7 +295,6 @@ export default function BanManagement() {
               disabled={loading || !vatsimId}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm whitespace-nowrap"
             >
-              {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
               Ban
             </button>
             <button

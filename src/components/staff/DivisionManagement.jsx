@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   Plus,
@@ -16,15 +17,14 @@ import {
   Loader,
   Building2,
   AlertOctagon,
-  Check,
-  IdCard,
+  Settings,
+  Layers,
 } from 'lucide-react';
 
 const DivisionManagement = () => {
   const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState('');
   const [expandedDivisions, setExpandedDivisions] = useState({});
   const [divisionMembers, setDivisionMembers] = useState({});
   const [divisionAirports, setDivisionAirports] = useState({});
@@ -35,6 +35,16 @@ const DivisionManagement = () => {
   const [editingDivision, setEditingDivision] = useState(null);
   const [isEditingDivision, setIsEditingDivision] = useState(false);
   const [newDivisionName, setNewDivisionName] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [isCreatingDivision, setIsCreatingDivision] = useState(false);
+  const [createDivisionName, setCreateDivisionName] = useState('');
+  const [createDivisionHeadCid, setCreateDivisionHeadCid] = useState('');
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const navigate = useNavigate();
   const token = getVatsimToken();
 
@@ -126,6 +136,8 @@ const DivisionManagement = () => {
     setIsDeletingDivision(true);
     setError('');
 
+    const divisionName = deletingDivision?.name;
+
     try {
       const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
         method: 'DELETE',
@@ -138,11 +150,20 @@ const DivisionManagement = () => {
       }
 
       setDivisions(divisions.filter((division) => division.id !== divisionId));
-      setSuccess('Division deleted successfully');
       setDeletingDivision(null);
-      setTimeout(() => setSuccess(''), 3000);
+      setToast({
+        show: true,
+        title: `${divisionName} Deleted`,
+        description: 'The division has been permanently deleted.',
+        variant: 'success',
+      });
     } catch (err) {
-      setError(err.message);
+      setToast({
+        show: true,
+        title: 'Failed to Delete Division',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setIsDeletingDivision(false);
     }
@@ -182,12 +203,21 @@ const DivisionManagement = () => {
         )
       );
 
-      setSuccess('Division name updated successfully');
       setEditingDivision(null);
       setNewDivisionName('');
-      setTimeout(() => setSuccess(''), 3000);
+      setToast({
+        show: true,
+        title: `${newName} Updated`,
+        description: 'The division name has been successfully changed.',
+        variant: 'success',
+      });
     } catch (err) {
-      setError(err.message);
+      setToast({
+        show: true,
+        title: 'Failed to Update Division',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setIsEditingDivision(false);
     }
@@ -196,6 +226,61 @@ const DivisionManagement = () => {
   const cancelEdit = () => {
     setEditingDivision(null);
     setNewDivisionName('');
+    setError('');
+  };
+
+  const handleCreateDivision = async () => {
+    setIsCreatingDivision(true);
+    setError('');
+
+    try {
+      const response = await fetch('https://v2.stopbars.com/divisions', {
+        method: 'POST',
+        headers: {
+          'X-Vatsim-Token': token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: createDivisionName.trim(),
+          headVatsimId: createDivisionHeadCid.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create division');
+      }
+
+      const division = await response.json();
+      const divisionName = createDivisionName.trim();
+      const headCid = createDivisionHeadCid.trim();
+      setDivisions((prev) => [...prev, division]);
+      setShowCreateDialog(false);
+      setCreateDivisionName('');
+      setCreateDivisionHeadCid('');
+      setToast({
+        show: true,
+        title: `${divisionName} Created`,
+        description: `This division has been made, with Nav Head ${headCid}.`,
+        variant: 'success',
+      });
+      navigate(`/divisions/${division.id}/manage`);
+    } catch (err) {
+      setToast({
+        show: true,
+        title: 'Failed to Create Division',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreatingDivision(false);
+    }
+  };
+
+  const cancelCreate = () => {
+    setShowCreateDialog(false);
+    setCreateDivisionName('');
+    setCreateDivisionHeadCid('');
     setError('');
   };
 
@@ -247,16 +332,17 @@ const DivisionManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-white">Division Management</h2>
-          <p className="text-zinc-400 text-sm mt-1">Manage organizational divisions</p>
+          <h2 className="text-xl font-semibold text-white">Division Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Manage, edit, and create divisions</p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm font-medium">
-            {divisions.length} Division{divisions.length !== 1 ? 's' : ''}
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+            <Layers className="w-4 h-4 mr-2 text-zinc-400" />
+            {divisions.length} division{divisions.length !== 1 ? 's' : ''}
           </span>
-          <Button onClick={() => navigate('/divisions/new')}>
+          <Button onClick={() => setShowCreateDialog(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Create Division
           </Button>
@@ -269,13 +355,6 @@ const DivisionManagement = () => {
           <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
             <p className="text-red-400">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-            <p className="text-emerald-400">{success}</p>
           </div>
         )}
 
@@ -315,6 +394,13 @@ const DivisionManagement = () => {
                             ) : (
                               <ChevronDown className="w-4 h-4" />
                             )}
+                          </Button>
+                          <Button
+                            onClick={() => navigate(`/divisions/${division.id}/manage`)}
+                            variant="outline"
+                            className="p-2 text-blue-400 hover:bg-blue-500/10"
+                          >
+                            <Settings className="w-4 h-4" />
                           </Button>
                           <Button
                             onClick={() => setEditingDivision(division)}
@@ -445,7 +531,7 @@ const DivisionManagement = () => {
             <TowerControl className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
             <h4 className="text-lg font-semibold text-white mb-2">No divisions found</h4>
             <p className="text-zinc-400 mb-4">Create your first division to get started</p>
-            <Button onClick={() => navigate('/divisions/new')}>
+            <Button onClick={() => setShowCreateDialog(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Create Division
             </Button>
@@ -497,10 +583,6 @@ const DivisionManagement = () => {
               <Building2 className="w-4 h-4" />
               <span>{deletingDivision?.name}</span>
             </div>
-            <div className="flex items-center space-x-2 text-red-200 mt-1">
-              <IdCard className="w-4 h-4" />
-              <span className="text-sm">Division ID: {deletingDivision?.id}</span>
-            </div>
           </div>
         </div>
       </Dialog>
@@ -548,13 +630,64 @@ const DivisionManagement = () => {
               <Building2 className="w-4 h-4" />
               <span>{editingDivision?.name}</span>
             </div>
-            <div className="flex items-center space-x-2 text-orange-200 mt-1">
-              <IdCard className="w-4 h-4" />
-              <span className="text-sm">Division ID: {editingDivision?.id}</span>
-            </div>
           </div>
         </div>
       </Dialog>
+
+      {/* Create Division Modal */}
+      <Dialog
+        open={showCreateDialog}
+        onClose={cancelCreate}
+        icon={Plus}
+        iconColor="blue"
+        title="Create Division"
+        isLoading={isCreatingDivision}
+        closeOnBackdrop={!isCreatingDivision}
+        closeOnEscape={!isCreatingDivision}
+        onSubmit={handleCreateDivision}
+        fields={[
+          {
+            type: 'text',
+            label: 'Division Name',
+            placeholder: 'e.g. VATxxx',
+            value: createDivisionName,
+            onChange: setCreateDivisionName,
+            autoFocus: true,
+          },
+          {
+            type: 'text',
+            label: 'Nav Head CID',
+            placeholder: 'e.g. 1234567',
+            value: createDivisionHeadCid,
+            onChange: setCreateDivisionHeadCid,
+            helperText: 'This person will be assigned as the Nav Head of the Division',
+          },
+        ]}
+        buttons={[
+          {
+            label: 'Create Division',
+            type: 'submit',
+            variant: 'primary',
+            icon: Plus,
+            loadingLabel: 'Creating...',
+            disabled: !createDivisionName.trim() || !createDivisionHeadCid.trim(),
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: cancelCreate,
+          },
+        ]}
+      />
+
+      {/* Toast Notifications */}
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast({ ...toast, show: false })}
+      />
     </div>
   );
 };

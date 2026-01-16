@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
 import { getVatsimToken } from '../../utils/cookieUtils';
@@ -20,7 +19,6 @@ import {
   ChevronDown,
   Send,
   HardDriveDownload,
-  ALargeSmall,
   Info,
 } from 'lucide-react';
 import { marked } from 'marked';
@@ -663,27 +661,24 @@ const ReleaseManagement = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-white">Release Management</h2>
-          <p className="text-zinc-400 text-sm mt-1">Publish and manage product releases</p>
+          <h2 className="text-xl font-semibold text-white">Release Management</h2>
+          <p className="text-sm text-zinc-400 mt-1">Publish and manage product releases</p>
         </div>
         <div className="flex items-center gap-3">
           {!isAdding && !isUpdating && (
-            <>
-              <Button onClick={handleStartAdd}>
-                <Plus className="w-4 h-4 mr-2" />
-                New Release
-              </Button>
-              <Button onClick={handleStartUpdate} variant="outline">
-                <Edit className="w-4 h-4 mr-2" />
-                Edit Changelog
-              </Button>
-            </>
+            <button
+              onClick={handleStartAdd}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-sm font-medium text-blue-400 hover:bg-blue-500/30 hover:border-blue-500/40 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              New Release
+            </button>
           )}
           {(isAdding || isUpdating) && (
-            <div className="flex items-center gap-2">
-              <Button
+            <div className="flex items-center gap-3">
+              <button
                 onClick={isAdding ? () => openConfirm() : submitChangelogUpdate}
                 disabled={(() => {
                   const needsFile = product !== 'SimConnect.NET';
@@ -694,34 +689,39 @@ const ReleaseManagement = () => {
                     updating
                   );
                 })()}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
               >
                 {uploading || updating ? (
                   <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader className="w-4 h-4 animate-spin" />
                     {isAdding ? 'Publishing...' : 'Saving...'}
                   </>
                 ) : isAdding ? (
                   <>
-                    <Send className="w-4 h-4 mr-2" />
+                    <Send className="w-4 h-4" />
                     Publish
                   </>
                 ) : (
                   <>
-                    <HardDriveDownload className="w-4 h-4 mr-2" />
+                    <HardDriveDownload className="w-4 h-4" />
                     Save
                   </>
                 )}
-              </Button>
-              <Button onClick={handleCancel} variant="outline" disabled={uploading || updating}>
-                <X className="w-4 h-4 mr-2" />
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={uploading || updating}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+              >
+                <X className="w-4 h-4" />
                 Cancel
-              </Button>
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Success Messages */}
         {uploadSuccess && (
           <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
@@ -811,7 +811,7 @@ const ReleaseManagement = () => {
                       setVersion(e.target.value);
                       setUploadError(''); // Clear validation errors when changing version
                     }}
-                    placeholder="2.0.1"
+                    placeholder="0.0.0"
                     className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -1032,36 +1032,13 @@ const ReleaseManagement = () => {
                   <Hash className="w-4 h-4" />
                   <span>Release ID</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editReleaseId}
-                    onChange={(e) => setEditReleaseId(e.target.value)}
-                    placeholder="e.g. 42"
-                    className="w-full pr-14 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!editReleaseId.trim()) {
-                        setUpdateError('Enter an ID to autofill');
-                        return;
-                      }
-                      const match = releases.find((r) => r.id?.toString() === editReleaseId.trim());
-                      if (match) {
-                        setNewChangelog(match.changelog || '');
-                        setUpdateError('');
-                      } else {
-                        setUpdateError('Release not found in current list (adjust filter)');
-                      }
-                    }}
-                    className="absolute inset-y-0 right-2 flex items-center justify-center px-2 text-zinc-400 hover:text-white transition-colors"
-                    title="Autofill changelog from this Release ID"
-                    aria-label="Autofill changelog"
-                  >
-                    <ALargeSmall className="w-5 h-5" />
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  value={editReleaseId}
+                  onChange={(e) => setEditReleaseId(e.target.value)}
+                  placeholder="e.g. 42"
+                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-600"
+                />
               </div>
               {/* Content */}
               <div>
@@ -1112,7 +1089,7 @@ const ReleaseManagement = () => {
 
         {/* Existing Releases Section */}
         {!isAdding && !isUpdating && (
-          <div className="mt-6">
+          <div className="mt-8">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-blue-400" />
@@ -1226,12 +1203,13 @@ const ReleaseManagement = () => {
         buttons={[
           {
             label: 'Publish',
-            variant: 'primary',
+            variant: 'secondary',
             icon: Send,
             loadingLabel: 'Publishing...',
             onClick: executeUpload,
             disabled: uploading,
-            className: 'bg-amber-600 hover:bg-amber-500',
+            className:
+              '!bg-blue-500/20 !border !border-blue-500/30 !text-blue-400 hover:!bg-blue-500/30',
           },
           {
             label: 'Cancel',
@@ -1241,6 +1219,8 @@ const ReleaseManagement = () => {
               setConfirmOpen(false);
               setPendingUploadData(null);
             },
+            className:
+              '!bg-zinc-800/50 !border !border-zinc-700/50 !text-zinc-400 hover:!bg-zinc-800 hover:!text-zinc-300',
           },
         ]}
       >

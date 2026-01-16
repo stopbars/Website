@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import useSearchQuery from '../../hooks/useSearchQuery';
 import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import { Tooltip } from '../shared/Tooltip';
 import {
   User,
   Users,
   Search,
   Mail,
-  AlertTriangle,
-  Check,
   Calendar,
   Clock,
   ChevronLeft,
@@ -20,8 +20,6 @@ import {
   Loader,
   IdCard,
   KeyRound,
-  Shield,
-  ShieldCheck,
   Globe,
   Map,
   MapPin,
@@ -31,6 +29,39 @@ import { formatLocalDateTime } from '../../utils/dateUtils';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 const USERS_PER_PAGE = 6;
+
+// Component to show truncated text with tooltip only when needed
+const TruncatedName = ({ name }) => {
+  const textRef = useRef(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  useEffect(() => {
+    const checkTruncation = () => {
+      if (textRef.current) {
+        setIsTruncated(textRef.current.scrollWidth > textRef.current.clientWidth);
+      }
+    };
+    checkTruncation();
+    window.addEventListener('resize', checkTruncation);
+    return () => window.removeEventListener('resize', checkTruncation);
+  }, [name]);
+
+  const content = (
+    <h3 ref={textRef} className="font-medium text-white truncate">
+      {name}
+    </h3>
+  );
+
+  if (isTruncated) {
+    return <Tooltip content={name}>{content}</Tooltip>;
+  }
+
+  return content;
+};
+
+TruncatedName.propTypes = {
+  name: PropTypes.string.isRequired,
+};
 
 // Helper function to calculate display name based on display mode
 const getDisplayName = (user) => {
@@ -59,9 +90,7 @@ const getDisplayName = (user) => {
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useSearchQuery();
-  const [success, setSuccess] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingUser, setDeletingUser] = useState(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
@@ -70,6 +99,15 @@ const UserManagement = () => {
   const [isRegeneratingToken, setIsRegeneratingToken] = useState(false);
   const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
   const [totalUsers, setTotalUsers] = useState(0);
+  const [copiedEmail, setCopiedEmail] = useState(null);
+  const [copiedCid, setCopiedCid] = useState(null);
+
+  // Toast states
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
   const navigate = useNavigate();
 
   const handleBanUser = (vatsimId) => {
@@ -77,41 +115,62 @@ const UserManagement = () => {
     navigate(`/staff?tool=banManagement&vatsimId=${vatsimId}`);
   };
 
+  const handleCopyEmail = async (userId, email) => {
+    if (!email) return;
+    try {
+      await navigator.clipboard.writeText(email);
+      setCopiedEmail(userId);
+      setTimeout(() => setCopiedEmail(null), 1500);
+    } catch (err) {
+      console.error('Failed to copy email:', err);
+    }
+  };
+
+  const handleCopyCid = async (userId, cid) => {
+    if (!cid) return;
+    try {
+      await navigator.clipboard.writeText(cid);
+      setCopiedCid(userId);
+      setTimeout(() => setCopiedCid(null), 1500);
+    } catch (err) {
+      console.error('Failed to copy CID:', err);
+    }
+  };
+
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const token = getVatsimToken();
-      const response = await fetch(
-        `https://v2.stopbars.com/staff/users?page=${currentPage}&limit=${USERS_PER_PAGE}`,
-        {
-          headers: { 'X-Vatsim-Token': token },
-        }
-      );
+      const response = await fetch('https://v2.stopbars.com/staff/users', {
+        headers: { 'X-Vatsim-Token': token },
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch users');
       }
 
       const data = await response.json();
-      setUsers(data.users);
-      setTotalUsers(data.total);
-      setError('');
+      const allUsers = Array.isArray(data) ? data : data.users || [];
+      const total = Array.isArray(data) ? data.length : (data.total ?? allUsers.length);
+
+      setUsers(allUsers);
+      setTotalUsers(total);
     } catch (err) {
-      setError('Failed to load users. Please try again.');
+      setErrorMessage('Failed to load users. Please try again.');
+      setShowErrorToast(true);
       console.error('Error fetching users:', err);
     } finally {
       setLoading(false);
     }
-  }, [currentPage]);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
-  }, [currentPage, fetchUsers]);
+  }, [fetchUsers]);
   // No edit functionality needed
 
   const handleDeleteUser = async (userId) => {
     setIsDeletingUser(true);
-    setError('');
 
     try {
       const token = getVatsimToken();
@@ -126,11 +185,13 @@ const UserManagement = () => {
       }
 
       setUsers(users.filter((user) => user.id !== userId));
-      setSuccess('User deleted successfully');
+      setSuccessMessage('User deleted successfully');
+      setShowSuccessToast(true);
       setDeletingUser(null);
-      setTimeout(() => setSuccess(''), 3000);
+      setDeleteConfirmation('');
     } catch (err) {
-      setError(err.message);
+      setErrorMessage(err.message);
+      setShowErrorToast(true);
     } finally {
       setIsDeletingUser(false);
     }
@@ -139,12 +200,10 @@ const UserManagement = () => {
   const cancelDelete = () => {
     setDeletingUser(null);
     setDeleteConfirmation('');
-    setError('');
   };
 
   const handleRegenerateToken = async (userId) => {
     setIsRegeneratingToken(true);
-    setError('');
 
     try {
       const token = getVatsimToken();
@@ -170,11 +229,13 @@ const UserManagement = () => {
         throw new Error(data.error || 'Failed to regenerate token');
       }
 
-      setSuccess('API token has been successfully refreshed');
+      setSuccessMessage('API token has been successfully refreshed');
+      setShowSuccessToast(true);
       setRegeneratingUser(null);
-      setTimeout(() => setSuccess(''), 3000);
+      setRegenerateConfirmation('');
     } catch (err) {
-      setError(err.message);
+      setErrorMessage(err.message);
+      setShowErrorToast(true);
     } finally {
       setIsRegeneratingToken(false);
     }
@@ -183,7 +244,6 @@ const UserManagement = () => {
   const cancelRegenerate = () => {
     setRegeneratingUser(null);
     setRegenerateConfirmation('');
-    setError('');
   };
   const filteredUsers = users.filter(
     (user) =>
@@ -208,7 +268,15 @@ const UserManagement = () => {
             user.subdivision.id.toLowerCase().includes(searchTerm.toLowerCase()))))
   );
 
-  const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * USERS_PER_PAGE,
+    currentPage * USERS_PER_PAGE
+  );
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
@@ -243,21 +311,6 @@ const UserManagement = () => {
         </div>
       </div>
 
-      {/* Status Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-400">{success}</p>
-        </div>
-      )}
-
       {/* Users List */}
       <div className="space-y-4">
         {loading ? (
@@ -273,7 +326,7 @@ const UserManagement = () => {
                   <p className="text-zinc-400 text-sm">No users found</p>
                 </div>
               )}
-              {filteredUsers.map((user) => (
+              {paginatedUsers.map((user) => (
                 <Card
                   key={user.id}
                   className="p-5 hover:border-zinc-600/50 transition-all duration-200 hover:bg-zinc-800/30"
@@ -282,13 +335,15 @@ const UserManagement = () => {
                     {/* User Header */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
-                          <User className="w-5 h-5 text-zinc-400" />
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${user.is_staff ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-zinc-800 border border-zinc-700'}`}
+                        >
+                          <User
+                            className={`w-5 h-5 ${user.is_staff ? 'text-blue-400' : 'text-zinc-400'}`}
+                          />
                         </div>
                         <div className="min-w-0">
-                          <h3 className="font-medium text-white truncate">
-                            {user.full_name || 'Not Set'}
-                          </h3>
+                          <TruncatedName name={user.full_name || 'Not Set'} />
                           <p className="text-xs text-zinc-500">ID: {user.id}</p>
                         </div>
                       </div>
@@ -317,30 +372,46 @@ const UserManagement = () => {
                       </div>
                     </div>
 
-                    {/* Role Badge */}
-                    <div>
-                      {user.is_staff ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                          <ShieldCheck className="w-3 h-3" />
-                          Staff
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
-                          <Shield className="w-3 h-3" />
-                          User
-                        </span>
-                      )}
-                    </div>
-
                     {/* User Details */}
                     <div className="space-y-2 pt-2 border-t border-zinc-800">
                       <div className="flex items-center gap-2 text-sm">
                         <Mail className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="text-zinc-300 truncate">{user.email}</span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleCopyEmail(user.id, user.email)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleCopyEmail(user.id, user.email);
+                            }
+                          }}
+                          className={`truncate cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedEmail === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                        >
+                          {user.email}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <IdCard className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="text-zinc-300">VATSIM: {user.vatsim_id || 'Not set'}</span>
+                        <span className="text-zinc-300">VATSIM: </span>
+                        {user.vatsim_id ? (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleCopyCid(user.id, user.vatsim_id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleCopyCid(user.id, user.vatsim_id);
+                              }
+                            }}
+                            className={`cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedCid === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                          >
+                            {user.vatsim_id}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-300">Not set</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <Globe className="w-3.5 h-3.5 text-zinc-500" />
@@ -366,7 +437,7 @@ const UserManagement = () => {
 
                     {/* Timestamps */}
                     <div className="flex items-center justify-between pt-3 border-t border-zinc-800 text-xs text-zinc-500">
-                      <Tooltip content="Created at">
+                      <Tooltip content="Created At">
                         <div className="flex items-center gap-1.5">
                           <Calendar className="w-3 h-3" />
                           <span>{formatLocalDateTime(user.created_at)}</span>
@@ -514,6 +585,23 @@ const UserManagement = () => {
           </>
         )}
       </div>
+
+      {/* Toast Notifications */}
+      <Toast
+        title="Success"
+        description={successMessage}
+        variant="success"
+        show={showSuccessToast}
+        onClose={() => setShowSuccessToast(false)}
+      />
+
+      <Toast
+        title="Error"
+        description={errorMessage}
+        variant="destructive"
+        show={showErrorToast}
+        onClose={() => setShowErrorToast(false)}
+      />
     </div>
   );
 };

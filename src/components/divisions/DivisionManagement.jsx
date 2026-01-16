@@ -16,6 +16,7 @@ import {
   Loader,
   User,
   Shield,
+  Trash2,
 } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
@@ -36,6 +37,9 @@ const DivisionManagement = () => {
   const [addingMember, setAddingMember] = useState(false);
   const [addingAirport, setAddingAirport] = useState(false);
   const [removingMember, setRemovingMember] = useState(false);
+  const [showDeleteAirportConfirm, setShowDeleteAirportConfirm] = useState(false);
+  const [airportToDelete, setAirportToDelete] = useState(null);
+  const [deletingAirport, setDeletingAirport] = useState(false);
   const token = getVatsimToken();
   const [currentUserId, setCurrentUserId] = useState(null);
 
@@ -203,6 +207,56 @@ const DivisionManagement = () => {
     setShowRemoveConfirm(false);
     setMemberToRemove(null);
     setRemovingMember(false);
+  };
+
+  const confirmDeleteAirport = (airport) => {
+    setAirportToDelete(airport);
+    setShowDeleteAirportConfirm(true);
+  };
+
+  const cancelDeleteAirport = () => {
+    setShowDeleteAirportConfirm(false);
+    setAirportToDelete(null);
+    setDeletingAirport(false);
+  };
+
+  const handleDeleteAirport = async (airportId) => {
+    setDeletingAirport(true);
+    const deletedIcao = airportToDelete?.icao;
+    try {
+      const response = await fetch(
+        `https://v2.stopbars.com/divisions/${divisionId}/airports/${airportId}`,
+        {
+          method: 'DELETE',
+          headers: { 'X-Vatsim-Token': token },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete airport request');
+      }
+
+      setAirports(airports.filter((a) => a.id !== airportId));
+      setShowDeleteAirportConfirm(false);
+      setAirportToDelete(null);
+      setToastConfig({
+        variant: 'success',
+        title: `${deletedIcao} Request Deleted`,
+        description: 'The airport request has been deleted.',
+      });
+      setShowToast(true);
+    } catch (err) {
+      setShowDeleteAirportConfirm(false);
+      setAirportToDelete(null);
+      setToastConfig({
+        variant: 'destructive',
+        title: 'Failed to Delete Request',
+        description: err.message || 'An error occurred while deleting the airport request.',
+      });
+      setShowToast(true);
+    } finally {
+      setDeletingAirport(false);
+    }
   };
 
   const handleAddAirport = async (e) => {
@@ -403,17 +457,28 @@ const DivisionManagement = () => {
                               Requested by: {airport.requested_by}
                             </p>
                           </div>
-                          {airport.status === 'approved' && (
-                            <button
-                              onClick={() =>
-                                navigate(`/divisions/${divisionId}/airports/${airport.icao}`)
-                              }
-                              className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                              title="Manage Airport"
-                            >
-                              <Settings className="w-4 h-4" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {airport.status === 'approved' && (
+                              <button
+                                onClick={() =>
+                                  navigate(`/divisions/${divisionId}/airports/${airport.icao}`)
+                                }
+                                className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                                title="Manage Airport"
+                              >
+                                <Settings className="w-4 h-4" />
+                              </button>
+                            )}
+                            {(airport.status === 'pending' || airport.status === 'rejected') && (
+                              <button
+                                onClick={() => confirmDeleteAirport(airport)}
+                                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                title="Delete Request"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="mt-3 pt-3 border-t border-zinc-700/50 flex items-center gap-2">
                           <div className="relative">
@@ -610,6 +675,34 @@ const DivisionManagement = () => {
             label: 'Cancel',
             variant: 'outline',
             onClick: cancelRemoveMember,
+          },
+        ]}
+      />
+
+      {/* Delete Airport Confirmation Dialog */}
+      <Dialog
+        open={showDeleteAirportConfirm && !!airportToDelete}
+        onClose={cancelDeleteAirport}
+        icon={AlertOctagon}
+        iconColor="red"
+        title="Delete Airport Request"
+        description={`Are you sure you want to delete the request for ${airportToDelete?.icao}? This action cannot be undone.`}
+        closeOnBackdrop={!deletingAirport}
+        closeOnEscape={!deletingAirport}
+        isLoading={deletingAirport}
+        maxWidth="md"
+        buttons={[
+          {
+            label: 'Delete',
+            variant: 'destructive',
+            icon: deletingAirport ? () => <Loader className="w-4 h-4 mr-2 animate-spin" /> : Trash2,
+            loadingLabel: 'Deleting...',
+            onClick: () => handleDeleteAirport(airportToDelete?.id),
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: cancelDeleteAirport,
           },
         ]}
       />

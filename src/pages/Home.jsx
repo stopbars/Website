@@ -1,6 +1,7 @@
 import { Layout } from '../components/layout/Layout';
 import { Hero } from '../components/home/Hero';
 import { DonationBanner } from '../components/home/DonationBanner';
+import { Features } from '../components/home/Features';
 import { Documentation } from '../components/home/Documentation';
 import { Airports } from '../components/home/Airports';
 import { FAQ } from '../components/home/FAQ';
@@ -19,6 +20,7 @@ const Home = () => {
     <Layout>
       <Hero />
       <DonationBanner />
+      <Features />
       <Airports />
       <Documentation />
       <FAQ />
