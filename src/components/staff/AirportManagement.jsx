@@ -2,77 +2,163 @@ import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Toast } from '../shared/Toast';
-import { Check, X, MapPin, Loader } from 'lucide-react';
+import { Dialog } from '../shared/Dialog';
+import { Check, X, MapPin, Loader, Search, Info } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
+import useSearchQuery from '../../hooks/useSearchQuery';
 
-// Inlined PendingAirportRequests component
-const PendingAirportRequests = ({ onCountChange, onToast }) => {
-  const [requests, setRequests] = useState([]);
-  const [divisions, setDivisions] = useState({});
+// Status order for sorting: pending first, then approved, then rejected
+const STATUS_ORDER = { pending: 0, approved: 1, rejected: 2 };
+
+const STATUS_COLORS = {
+  pending: 'text-orange-400',
+  approved: 'text-emerald-400',
+  rejected: 'text-red-400',
+};
+
+const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
+  const isPending = airport.status === 'pending';
+  const isApproved = airport.status === 'approved';
+
+  const handleApprove = async (approved) => {
+    onApprove(airport.division_id, airport.airport_request_id, airport.icao, approved);
+  };
+
+  return (
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl gap-4 hover:bg-zinc-800/70 transition-colors">
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold text-white flex items-center">
+          <MapPin className={`w-5 h-5 mr-2 ${STATUS_COLORS[airport.status]}`} />
+          <span>{airport.icao}</span>
+          <span className="mx-2 text-zinc-600">•</span>
+          <span className="text-zinc-300 font-normal">{airport.division_name}</span>
+          {!isPending && (
+            <>
+              <span className="mx-2 text-zinc-600">•</span>
+              <span
+                className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  isApproved ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                }`}
+              >
+                {airport.status.charAt(0).toUpperCase() + airport.status.slice(1)}
+              </span>
+            </>
+          )}
+        </h3>
+        <p className="text-zinc-400 text-sm">
+          {isApproved ? 'Approved by: ' : 'Requested by: '}
+          <span className="text-zinc-300">
+            {isApproved ? airport.approved_by : airport.requested_by}
+          </span>
+        </p>
+      </div>
+      <div className="flex gap-2 w-full sm:w-auto">
+        {isPending && (
+          <>
+            <button
+              onClick={() => handleApprove(true)}
+              disabled={loadingState.id === airport.airport_request_id}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingState.id === airport.airport_request_id &&
+              loadingState.action === 'approve' ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4" />
+              )}
+              Approve
+            </button>
+            <button
+              onClick={() => handleApprove(false)}
+              disabled={loadingState.id === airport.airport_request_id}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingState.id === airport.airport_request_id &&
+              loadingState.action === 'reject' ? (
+                <Loader className="w-4 h-4 animate-spin" />
+              ) : (
+                <X className="w-4 h-4" />
+              )}
+              Reject
+            </button>
+          </>
+        )}
+        <button
+          onClick={() => onInfoClick(airport.icao)}
+          className="inline-flex items-center justify-center p-2.5 rounded-lg bg-zinc-700/50 border border-zinc-600 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-500 transition-all"
+          title={`View ${airport.icao} info`}
+        >
+          <Info className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+AirportCard.propTypes = {
+  airport: PropTypes.shape({
+    airport_request_id: PropTypes.number.isRequired,
+    icao: PropTypes.string.isRequired,
+    status: PropTypes.string.isRequired,
+    division_id: PropTypes.number.isRequired,
+    division_name: PropTypes.string.isRequired,
+    requested_by: PropTypes.string,
+    approved_by: PropTypes.string,
+  }).isRequired,
+  onApprove: PropTypes.func.isRequired,
+  loadingState: PropTypes.shape({
+    id: PropTypes.number,
+    action: PropTypes.string,
+  }).isRequired,
+  onInfoClick: PropTypes.func.isRequired,
+};
+
+const AirportManagement = () => {
+  const [airports, setAirports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [loadingState, setLoadingState] = useState({ id: null, action: null });
+  const [searchTerm, setSearchTerm] = useSearchQuery();
+  const [toast, setToast] = useState(null);
+
+  // Info dialog state
+  const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+  const [infoLoading, setInfoLoading] = useState(false);
+  const [infoData, setInfoData] = useState(null);
+  const [infoIcao, setInfoIcao] = useState('');
+
   const token = getVatsimToken();
 
-  const fetchRequests = useCallback(async () => {
+  const fetchAirports = useCallback(async () => {
     try {
       if (!token) return;
-      // Fetch all divisions
-      const response = await fetch('https://v2.stopbars.com/divisions', {
+      setLoading(true);
+
+      const response = await fetch('https://v2.stopbars.com/staff/divisions/airports', {
         headers: { 'X-Vatsim-Token': token },
       });
 
-      if (!response.ok) throw new Error('Failed to fetch divisions');
-      const divisionsData = await response.json();
+      if (!response.ok) throw new Error('Failed to fetch division airports');
+      const data = await response.json();
 
-      // Create a map of division IDs to names
-      const divisionMap = {};
-      divisionsData.forEach((div) => {
-        divisionMap[div.id] = div.name;
+      const airportsArray = Array.isArray(data) ? data : data.airports || data.data || [];
+
+      // Sort by status: pending first, then approved, then rejected
+      const sortedAirports = [...airportsArray].sort((a, b) => {
+        return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
       });
-      setDivisions(divisionMap);
 
-      // Fetch airports for each division
-      const airportRequests = await Promise.all(
-        divisionsData.map(async (division) => {
-          const airportsResponse = await fetch(
-            `https://v2.stopbars.com/divisions/${division.id}/airports`,
-            {
-              headers: { 'X-Vatsim-Token': token },
-            }
-          );
-
-          if (!airportsResponse.ok) return [];
-          const airports = await airportsResponse.json();
-          // Filter pending airports and add division info
-          return airports
-            .filter((airport) => airport.status === 'pending')
-            .map((airport) => ({
-              ...airport,
-              division_id: division.id,
-              division_name: division.name,
-            }));
-        })
-      );
-
-      // Combine and flatten all pending airport requests
-      const allPendingRequests = airportRequests.flat();
-      setRequests(allPendingRequests);
-
-      // Notify parent component of the count
-      if (onCountChange) {
-        onCountChange(allPendingRequests.length);
-      }
+      setAirports(sortedAirports);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [token, onCountChange]);
+  }, [token]);
 
   useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
+    fetchAirports();
+  }, [fetchAirports]);
 
   const handleApprove = async (divisionId, airportId, icao, approved) => {
     setLoadingState({ id: airportId, action: approved ? 'approve' : 'reject' });
@@ -91,121 +177,46 @@ const PendingAirportRequests = ({ onCountChange, onToast }) => {
 
       if (!response.ok) throw new Error('Failed to update airport request');
 
-      // Remove the approved/rejected request from the list immediately
-      setRequests((prevRequests) => {
-        const updatedRequests = prevRequests.filter((req) => req.id !== airportId);
-        // Notify parent component of the updated count
-        if (onCountChange) {
-          onCountChange(updatedRequests.length);
-        }
-        return updatedRequests;
-      });
+      // Refetch airports to get updated data
+      await fetchAirports();
 
       // Show success toast
-      if (onToast) {
-        onToast({
-          title: approved ? `${icao} Approved` : `${icao} Rejected`,
-          description: approved
-            ? `Airport ${icao} has been successfully approved.`
-            : `Airport ${icao} has been rejected.`,
-          variant: 'success',
-        });
-      }
+      showToast({
+        title: approved ? `${icao} Approved` : `${icao} Rejected`,
+        description: approved
+          ? `Airport ${icao} has been successfully approved.`
+          : `Airport ${icao} has been rejected.`,
+        variant: 'success',
+      });
     } catch (err) {
       setError(err.message);
-      // Show error toast
-      if (onToast) {
-        onToast({
-          title: 'Error',
-          description: err.message,
-          variant: 'destructive',
-        });
-      }
+      showToast({
+        title: 'Error',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setLoadingState({ id: null, action: null });
     }
   };
 
-  if (loading)
-    return (
-      <div className="text-center py-8 text-zinc-400">
-        <Loader className="w-12 h-12 mx-auto mb-3 opacity-50 animate-spin" />
-        <p>Loading requests...</p>
-      </div>
-    );
-  if (error)
-    return (
-      <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
-        {error}
-      </div>
-    );
-  if (!requests?.length)
-    return (
-      <div className="text-center py-8 text-zinc-500">
-        <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
-        <p>No pending airport requests found.</p>
-      </div>
-    );
+  const handleInfoClick = async (icao) => {
+    setInfoIcao(icao);
+    setInfoDialogOpen(true);
+    setInfoLoading(true);
+    setInfoData(null);
 
-  return (
-    <div className="space-y-4">
-      {requests.map((request) => (
-        <div
-          key={request.id}
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl gap-4 hover:bg-zinc-800/70 transition-colors"
-        >
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold text-white flex items-center">
-              <MapPin className="w-5 h-5 mr-2 text-blue-400" />
-              <span>{request.icao}</span>
-              <span className="mx-2 text-zinc-600">•</span>
-              <span className="text-zinc-300 font-normal">{divisions[request.division_id]}</span>
-            </h3>
-            <p className="text-zinc-400 text-sm">
-              Requested by: <span className="text-zinc-300">{request.requested_by}</span>
-            </p>
-            <p className="text-zinc-500 text-xs">{new Date(request.created_at).toLocaleString()}</p>
-          </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => handleApprove(request.division_id, request.id, request.icao, true)}
-              disabled={loadingState.id === request.id}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loadingState.id === request.id && loadingState.action === 'approve' ? (
-                <Loader className="w-4 h-4 animate-spin" />
-              ) : (
-                <Check className="w-4 h-4" />
-              )}
-              Approve
-            </button>
-            <button
-              onClick={() => handleApprove(request.division_id, request.id, request.icao, false)}
-              disabled={loadingState.id === request.id}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loadingState.id === request.id && loadingState.action === 'reject' ? (
-                <Loader className="w-4 h-4 animate-spin" />
-              ) : (
-                <X className="w-4 h-4" />
-              )}
-              Reject
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-PendingAirportRequests.propTypes = {
-  onCountChange: PropTypes.func,
-  onToast: PropTypes.func,
-};
-
-const AirportManagement = () => {
-  const [pendingCount, setPendingCount] = useState(0);
-  const [toast, setToast] = useState(null);
+    try {
+      const response = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
+      if (!response.ok) throw new Error('Failed to fetch airport info');
+      const data = await response.json();
+      setInfoData(data);
+    } catch (err) {
+      setInfoData({ error: err.message });
+    } finally {
+      setInfoLoading(false);
+    }
+  };
 
   const showToast = (toastData) => {
     setToast({ ...toastData, show: true });
@@ -215,26 +226,131 @@ const AirportManagement = () => {
     setToast(null);
   };
 
+  const handleSearch = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
+  // Filter airports based on search term
+  const filteredAirports = airports.filter((airport) => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    return (
+      airport.icao.toLowerCase().includes(search) ||
+      (airport.division_name && airport.division_name.toLowerCase().includes(search)) ||
+      (airport.division_id && String(airport.division_id).includes(search)) ||
+      (airport.requested_by && airport.requested_by.toLowerCase().includes(search)) ||
+      (airport.approved_by && airport.approved_by.toLowerCase().includes(search)) ||
+      (airport.status && airport.status.toLowerCase().includes(search))
+    );
+  });
+
+  // Count pending airports
+  const pendingCount = airports.filter((a) => a.status === 'pending').length;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h2 className="text-xl font-semibold text-white">Airport Management</h2>
-          <p className="text-sm text-zinc-400 mt-1">Review and approve airport requests</p>
+          <p className="text-sm text-zinc-400 mt-1">Manage and review division airports </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
             <MapPin className="w-4 h-4 mr-2 text-zinc-400" />
-            {pendingCount || '0'} pending request{pendingCount !== 1 ? 's' : ''}
+            {pendingCount} pending
           </span>
+          <div className="relative flex-1 sm:flex-initial">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleSearch}
+              placeholder="Search airports..."
+              className="w-full sm:w-64 pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40"
+            />
+          </div>
         </div>
       </div>
 
       <div className="space-y-4">
         <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <PendingAirportRequests onCountChange={setPendingCount} onToast={showToast} />
+          {loading ? (
+            <div className="text-center py-8 text-zinc-400">
+              <Loader className="w-12 h-12 mx-auto mb-3 opacity-50 animate-spin" />
+              <p>Loading airports...</p>
+            </div>
+          ) : error ? (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
+              {error}
+            </div>
+          ) : !filteredAirports?.length ? (
+            <div className="text-center py-8 text-zinc-500">
+              <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>{searchTerm ? 'No airports match your search.' : 'No airport requests found.'}</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredAirports.map((airport) => (
+                <AirportCard
+                  key={airport.airport_request_id}
+                  airport={airport}
+                  onApprove={handleApprove}
+                  loadingState={loadingState}
+                  onInfoClick={handleInfoClick}
+                />
+              ))}
+            </div>
+          )}
         </Card>
       </div>
+
+      {/* Airport Info Dialog */}
+      <Dialog
+        open={infoDialogOpen}
+        onClose={() => setInfoDialogOpen(false)}
+        icon={MapPin}
+        iconColor="blue"
+        title={`${infoIcao} Info`}
+        description={
+          infoLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader className="w-6 h-6 animate-spin text-zinc-400" />
+            </div>
+          ) : infoData?.error ? (
+            <div className="text-red-400">{infoData.error}</div>
+          ) : infoData ? (
+            <div className="space-y-3 text-left">
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Name:</span>
+                <span className="text-white">{infoData.name || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Continent:</span>
+                <span className="text-white">{infoData.continent || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Country Code:</span>
+                <span className="text-white">{infoData.country_code || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Country Name:</span>
+                <span className="text-white">{infoData.country_name || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">Region:</span>
+                <span className="text-white">{infoData.region_name || 'N/A'}</span>
+              </div>
+            </div>
+          ) : null
+        }
+        buttons={[
+          {
+            label: 'Close',
+            variant: 'outline',
+            onClick: () => setInfoDialogOpen(false),
+          },
+        ]}
+      />
 
       {/* Toast notification */}
       {toast && (
