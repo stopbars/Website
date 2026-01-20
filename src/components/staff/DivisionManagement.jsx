@@ -90,6 +90,18 @@ const DivisionManagement = () => {
     }
   };
 
+  const getDataSubmitted = (airport) => {
+    const realValue =
+      airport?.has_objects ??
+      airport?.has_data ??
+      airport?.data_submitted ??
+      airport?.has_submission ??
+      airport?.dataSubmitted ??
+      airport?.submitted;
+
+    return Boolean(realValue);
+  };
+
   const toggleDivisionExpansion = async (divisionId) => {
     const isExpanded = expandedDivisions[divisionId];
 
@@ -365,6 +377,10 @@ const DivisionManagement = () => {
               const isLoadingDetails = loadingDetails[division.id];
               const members = divisionMembers[division.id] || [];
               const airports = divisionAirports[division.id] || [];
+              const airportsWithObjects = airports.filter(getDataSubmitted).length;
+              const objectsPercentage = airports.length
+                ? Math.round((airportsWithObjects / airports.length) * 100)
+                : 0;
 
               return (
                 <Card
@@ -479,10 +495,15 @@ const DivisionManagement = () => {
 
                               {/* Airports */}
                               <div>
-                                <h5 className="text-lg font-semibold text-white mb-3 flex items-center">
-                                  <TowerControl className="w-5 h-5 mr-2" />
-                                  Airports
-                                </h5>
+                                <div className="flex items-center justify-between mb-3">
+                                  <h5 className="text-lg font-semibold text-white flex items-center">
+                                    <TowerControl className="w-5 h-5 mr-2" />
+                                    Airports
+                                  </h5>
+                                  <span className="text-xs text-zinc-400">
+                                    {objectsPercentage}% have objects!
+                                  </span>
+                                </div>
                                 {airports.length > 0 ? (
                                   <div className="space-y-2">
                                     {airports.map((airport) => (
@@ -509,6 +530,29 @@ const DivisionManagement = () => {
                                             </div>
                                           </div>
                                         </div>
+                                        <span
+                                          className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[11px] shrink-0 ${
+                                            getDataSubmitted(airport)
+                                              ? 'text-emerald-300/80 bg-emerald-500/5'
+                                              : 'text-zinc-400/80 bg-zinc-800/40'
+                                          }`}
+                                          title={
+                                            getDataSubmitted(airport)
+                                              ? 'Some BARS objects exist'
+                                              : 'No BARS objects yet'
+                                          }
+                                        >
+                                          <span
+                                            className={`w-1.5 h-1.5 rounded-full ${
+                                              getDataSubmitted(airport)
+                                                ? 'bg-emerald-400/80'
+                                                : 'bg-zinc-500/70'
+                                            }`}
+                                          ></span>
+                                          {getDataSubmitted(airport)
+                                            ? 'Objects Added'
+                                            : 'No objects yet'}
+                                        </span>
                                       </div>
                                     ))}
                                   </div>
