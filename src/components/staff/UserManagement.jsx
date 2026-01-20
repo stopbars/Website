@@ -560,23 +560,23 @@ const UserManagement = () => {
             </Dialog>
 
             {/* Pagination Controls */}
-            <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
+            <div className="grid grid-cols-3 items-center pt-4 border-t border-zinc-800">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="justify-self-start flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
                 Previous
               </button>
-              <span className="text-sm text-zinc-400">
+              <span className="text-sm text-zinc-400 justify-self-center">
                 Page <span className="font-medium text-zinc-300">{currentPage}</span> of{' '}
                 <span className="font-medium text-zinc-300">{totalPages}</span>
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="justify-self-end flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Next
                 <ChevronRight className="w-4 h-4" />

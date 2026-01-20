@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Toast } from '../shared/Toast';
 import { Dialog } from '../shared/Dialog';
-import { Check, X, MapPin, Loader, Search, Info } from 'lucide-react';
+import { Check, X, MapPin, Loader, Search, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import useSearchQuery from '../../hooks/useSearchQuery';
 
@@ -120,6 +120,7 @@ const AirportManagement = () => {
   const [loadingState, setLoadingState] = useState({ id: null, action: null });
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [toast, setToast] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Info dialog state
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
@@ -230,6 +231,10 @@ const AirportManagement = () => {
     setSearchTerm(e.target.value);
   };
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   // Filter airports based on search term
   const filteredAirports = airports.filter((airport) => {
     if (!searchTerm) return true;
@@ -243,6 +248,20 @@ const AirportManagement = () => {
       (airport.status && airport.status.toLowerCase().includes(search))
     );
   });
+
+  const ITEMS_PER_PAGE = 10;
+  const totalItems = filteredAirports.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedAirports = filteredAirports.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   // Count pending airports
   const pendingCount = airports.filter((a) => a.status === 'pending').length;
@@ -259,14 +278,14 @@ const AirportManagement = () => {
             <MapPin className="w-4 h-4 mr-2 text-zinc-400" />
             {pendingCount} pending
           </span>
-          <div className="relative flex-1 sm:flex-initial">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
               value={searchTerm}
               onChange={handleSearch}
               placeholder="Search airports..."
-              className="w-full sm:w-64 pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40"
+              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-64 transition-all"
             />
           </div>
         </div>
@@ -290,7 +309,7 @@ const AirportManagement = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredAirports.map((airport) => (
+              {paginatedAirports.map((airport) => (
                 <AirportCard
                   key={airport.airport_request_id}
                   airport={airport}
@@ -299,6 +318,34 @@ const AirportManagement = () => {
                   onInfoClick={handleInfoClick}
                 />
               ))}
+              {totalItems > 0 && totalPages > 1 && (
+                <div className="pt-2">
+                  <div className="grid grid-cols-3 items-center">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={safePage === 1}
+                      className="justify-self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Previous
+                    </button>
+                    <span className="text-sm text-zinc-400 justify-self-center">
+                      Page <span className="font-medium text-zinc-300">{safePage}</span> of{' '}
+                      <span className="font-medium text-zinc-300">{totalPages}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={safePage === totalPages}
+                      className="justify-self-end flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </Card>
