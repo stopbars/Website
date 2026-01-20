@@ -35,7 +35,7 @@ export const Features = () => {
           <h2 className="text-3xl md:text-4xl font-bold mb-6">Core Features</h2>
           <p className="text-zinc-400 text-lg">
             BARS brings professional-grade airport lighting simulation to your flight simulator,
-            completely free and deeply integrated with VATSIM.
+            completely free and in real time with VATSIM.
           </p>
         </div>
 
@@ -50,9 +50,9 @@ export const Features = () => {
                 Realistic Stopbar Simulation
               </h3>
               <p className="text-zinc-400 text-base leading-relaxed">
-                True-to-life stopbar lighting that mirrors real-world airport operations. Red
-                illuminated bars at runway holding points provide pilots with clear visual guidance
-                during taxi.
+                True-to-life stopbar lighting that mirrors real-world airports. Red illuminated
+                stopbars at runway holding points activate and deactivate as controllers issue
+                clearances.
               </p>
             </div>
             <div className="flex-1 w-full">
@@ -73,8 +73,8 @@ export const Features = () => {
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Follow The Greens Technology</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
-                Navigate complex airport layouts with confidence. Green centerline lights illuminate
-                your assigned taxi route in real-time, guiding you from gate to runway and back.
+                Navigate complex airports realistically by following the green centerline lights,
+                guiding you the entire way just like the real-world system used at major airports.
               </p>
             </div>
             <div className="flex-1 w-full">
@@ -95,9 +95,8 @@ export const Features = () => {
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Lead-On Light Systems</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
-                Enhanced guidance during low visibility operations. Sequential flashing lights
-                create a visual pathway along your taxi route, reducing the risk of runway
-                incursions.
+                Realistic lead-on lighting that guides you onto the runway after stopbars, modeled
+                with accurate light colors and positioning.
               </p>
             </div>
             <div className="flex-1 w-full">
@@ -118,8 +117,8 @@ export const Features = () => {
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">VATSIM Integration</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
-                Seamlessly connects with VATSIM for real-time ATC coordination. Receive stopbar
-                commands and taxi clearances directly from controllers for authentic online flying.
+                Seamlessly connects with VATSIM for real-time lighting updates. Controllers manage
+                lights within your simulator in real time.
               </p>
             </div>
             <div className="flex-1 w-full">
@@ -140,8 +139,8 @@ export const Features = () => {
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Multi-Simulator Support</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
-                Compatible with Microsoft Flight Simulator and other major platforms. One solution
-                that works across your favorite simulators with consistent performance.
+                Compatible with Microsoft Flight Simulator 2020 and 2024. Designed to remain
+                lightweight for smooth performance, without impacting your frames.
               </p>
             </div>
             <div className="flex-1 w-full">
@@ -162,8 +161,9 @@ export const Features = () => {
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Global Airport Coverage</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
-                Extensive library of airports worldwide with accurate lighting configurations.
-                Community-driven contributions continuously expand coverage to new destinations.
+                Extensive library of supported airports worldwide with support through community
+                contributions, seamlessly integrated with both default and major third-party
+                scenery.
               </p>
             </div>
             <div className="flex-1 w-full">

@@ -30,28 +30,32 @@ const About = () => {
 
   return (
     <Layout>
-      <section className="pt-32 pb-20">
+      <section className="pt-38 pb-20">
         <div className="max-w-4xl mx-auto px-6">
           <div
             ref={setSectionRef(0)}
             className="space-y-6 pb-12 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
           >
-            <span className="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+            <span className="inline-block px-3 py-1.5 text-xs font-medium uppercase tracking-widest text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 rounded-md">
               About
             </span>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight">What is BARS?</h1>
             <p className="text-base md:text-lg text-zinc-400 leading-relaxed">
-              BARS is a comprehensive airport lighting simulation platform that synchronizes
-              real‑time airport lighting states between controllers and pilots on VATSIM. It brings
-              stopbars, follow‑the‑greens, gate lead‑in lighting, and runway lead‑on/off lights to
-              life while adapting to default and third‑party scenery without a restart.
+              BARS is an advanced airport lighting simulation platform that synchronizes real-time
+              airport lighting states between controllers and pilots on VATSIM. It brings stopbars,
+              follow the greens, runway lead‑on/off lights and gate lead‑in lighting to life while
+              adapting to default and third‑party scenery seamlessly, without a restart. BARS
+              supports Microsoft Flight Simulator 2020 and 2024, and is designed to remain
+              lightweight for smooth simulator performance.
             </p>
             <p className="text-zinc-400 leading-relaxed">
-              The lighting data itself is provided by VATSIM divisions. BARS uses an open
-              contribution system that lets the community map those division‑defined objects into
-              each simulator. Each object gets a unique BARS ID with metadata, and contributors
-              simply name their scenery polygons after those IDs. The system then generates the
-              correct lighting behavior automatically.
+              The project is fully open source and community driven. All our finances are completely
+              public - donations, expenses, and transactions - ensuring your support is used
+              responsibly. BARS uses an open contribution system that lets the community create
+              scenery contributions using division data, expanding global support. Each object gets
+              a unique BARS ID with metadata, and contributors simply name their scenery polygons
+              after those IDs. The system then generates the correct lighting behavior
+              automatically.
             </p>
           </div>
 
@@ -61,35 +65,38 @@ const About = () => {
           >
             <h2 className="text-2xl md:text-3xl font-semibold">Why it exists</h2>
             <p className="text-zinc-400 leading-relaxed">
-              BARS exists because there was a clear gap in controller‑driven lighting for flight
-              simulation. Real‑time, ATC‑controlled lighting synced to pilots on VATSIM simply
-              didn’t exist in a complete, end‑to‑end way. BARS was built to bring that realism to
-              life and to make ground operations feel as immersive and procedural as the real world.
+              BARS exists because there was a clear gap in advanced lighting for flight simulation.
+              Real‑time, ATC controlled lighting synced to pilots on VATSIM simply didn’t exist, and
+              was assumed to be impossible. BARS was built to bring that realism to life and to make
+              ground operations feel as immersive and realistic as the real world.
             </p>
             <p className="text-zinc-400 leading-relaxed">
-              It adds a new level of immersion when you can taxi from the gate on a live green
-              route, stop at an illuminated holding point, and proceed only when cleared. It also
-              introduces a practical safety layer to virtual operations by reinforcing correct
-              stopbar and runway entry behavior.
+              It adds a new level of realism where you can depart an airport and experience the same
+              stopbars, follow the greens, and other lighting systems found in the real world, all
+              virtually. It also introduces a practical safety layer similar to what exists at real
+              airports, bringing the same safety benefits found through using various different
+              lights.
             </p>
-            <ul className="list-disc pl-5 text-zinc-400 space-y-2">
-              <li>Stopbars and unidirectional stopbar models</li>
-              <li>Follow‑the‑greens taxi guidance</li>
-              <li>Runway lead‑on and gate lead‑in lighting</li>
-              <li>Real‑time sync via BARS Core</li>
-            </ul>
           </div>
 
           <div
             ref={setSectionRef(2)}
             className="pt-10 pb-12 border-t border-zinc-900 space-y-4 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
           >
-            <h2 className="text-2xl md:text-3xl font-semibold">History</h2>
+            <h2 className="text-2xl md:text-3xl font-semibold">Where it started</h2>
             <p className="text-zinc-400 leading-relaxed">
-              Development began in late 2024 after the idea of controller‑controlled stopbars came
-              up inside the community. The earliest prototype was a simple controller‑side preview
-              that showed state changes only inside the client. That quickly led to experiments with
-              SimConnect, object placement, and the first visible in‑sim lighting renders.
+              For years, the idea of controllers managing airport lighting directly into pilots
+              simulators through online networks like VATSIM was imagined. Decades ago, previous
+              attempts aimed to achieve this, allowing controllers to toggle stopbars on and off
+              when issuing clearances. Over time, this idea continued to be discussed on and off,
+              but was always dismissed due to how vast and technical such a project would be.
+            </p>
+            <p className="text-zinc-400 leading-relaxed">
+              Development began in late 2024 after the idea of vatSys plugin to manage stopbars came
+              up inside the community. The earliest prototype was a simple controller only plugin
+              that showed stopbar state changes only inside the client, displayed through a simple
+              ground window. That quickly led to experiments with SimConnect, object placement, and
+              the first visible in-sim lighting renders.
             </p>
             <p className="text-zinc-400 leading-relaxed">
               On January 11, 2025, the first public demo shipped in Australia, allowing pilots to
@@ -106,16 +113,16 @@ const About = () => {
             <h2 className="text-2xl md:text-3xl font-semibold">Who made BARS</h2>
             <div className="space-y-4 text-zinc-400">
               <div>
-                <p className="text-sm font-semibold text-white">Edward M (AussieScorcher)</p>
-                <p className="text-sm">Co‑founder, Lead Developer — edward@stopbars.com</p>
+                <p className="text-sm font-semibold text-white">Edward M</p>
+                <p className="text-sm">Cofounder, Lead Developer — edward@stopbars.com</p>
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">Charlie H (LlamaVert)</p>
-                <p className="text-sm">Co‑founder, Product Manager — charlie@stopbars.com</p>
+                <p className="text-sm font-semibold text-white">Charlie H</p>
+                <p className="text-sm">Cofounder, Product Manager — charlie@stopbars.com</p>
               </div>
               <div>
                 <p className="text-sm font-semibold text-white">19wintersp</p>
-                <p className="text-sm">EuroScope Plugin Maintainer — contact via Discord</p>
+                <p className="text-sm">EuroScope Plugin Manager — contact via Discord</p>
               </div>
             </div>
           </div>
@@ -126,52 +133,16 @@ const About = () => {
           >
             <h2 className="text-2xl md:text-3xl font-semibold">What’s planned</h2>
             <p className="text-zinc-400 leading-relaxed">
-              BARS v2 is a major update that rewrites the platform for real‑time performance,
-              efficiency, and long‑term scalability. It’s in active development by volunteers and is
-              expected to release in 2026.
-            </p>
-            <p className="text-sm text-zinc-400">
-              Planned improvements include expanded lighting systems, deeper simulator support,
-              improved LOD optimization, and a more responsive WebSocket‑based architecture. The
-              goal is to keep expanding realism while staying lightweight and reliable.
-            </p>
-          </div>
-
-          <div
-            ref={setSectionRef(5)}
-            className="pt-10 border-t border-zinc-900 space-y-4 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
-          >
-            <h2 className="text-2xl md:text-3xl font-semibold">Compatibility</h2>
-            <p className="text-zinc-400 leading-relaxed">
-              BARS supports Microsoft Flight Simulator 2020 and 2024 on Windows and requires .NET
-              8.0. The installer handles setup, updates, and uninstalls, and the platform is
-              designed to remain lightweight for smooth simulator performance.
+              We are continuing our mission to deliver an advanced airport lighting platform that is
+              free, realistic, open source, and accessible. Our focus is on maintaining and
+              upgrading the existing platform for future growth, stability, and financial
+              sustainability to keep BARS running for years to come.
             </p>
             <p className="text-zinc-400 leading-relaxed">
-              BARS is fully open source and community‑driven. For licensing details, please refer to
-              the official repositories. Contributions and donations help keep infrastructure and
-              development sustainable.
-            </p>
-            <p className="text-sm text-zinc-400">
-              GitHub:{' '}
-              <a
-                className="text-emerald-300 hover:text-emerald-200"
-                href="https://github.com/stopbars"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                github.com/stopbars
-              </a>
-              <span className="mx-2 text-zinc-600">•</span>
-              Support:{' '}
-              <a
-                className="text-emerald-300 hover:text-emerald-200"
-                href="https://opencollective.com/stopbars"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open Collective
-              </a>
+              Planned improvements include expanded lighting systems, deeper simulator and scenery
+              support, and improved optimization while staying lightweight for smooth simulator
+              performance. Along the way, users get to explore and gain a deeper understanding of
+              the various real-world airport lighting systems that power BARS.
             </p>
           </div>
         </div>
