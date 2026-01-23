@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { Mail, Check } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
+import { Tooltip } from '../components/shared/Tooltip';
 
 const TeamMemberCard = ({ name, role, email }) => {
   const [copied, setCopied] = useState(false);
@@ -19,13 +20,14 @@ const TeamMemberCard = ({ name, role, email }) => {
         <p className="font-medium text-white">{name}</p>
         <p className="text-sm text-zinc-400">{role}</p>
       </div>
-      <button
-        onClick={handleCopyEmail}
-        className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-        title={copied ? 'Copied!' : email}
-      >
-        {copied ? <Check className="w-5 h-5 text-emerald-400" /> : <Mail className="w-5 h-5" />}
-      </button>
+      <Tooltip content={copied ? 'Copied!' : email}>
+        <button
+          onClick={handleCopyEmail}
+          className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+        >
+          {copied ? <Check className="w-5 h-5 text-emerald-400" /> : <Mail className="w-5 h-5" />}
+        </button>
+      </Tooltip>
     </Card>
   );
 };
