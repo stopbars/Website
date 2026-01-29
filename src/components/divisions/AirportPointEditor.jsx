@@ -1186,8 +1186,70 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     variant: 'default',
   });
   const fetchInFlightRef = useRef(false);
-  const { airportId } = useParams();
+  const { airportId, divisionId } = useParams();
+  const token = getVatsimToken();
   const icao = (airportId || '').toUpperCase();
+
+  const [isLeadDev, setIsLeadDev] = useState(false);
+  const [isDivisionMember, setIsDivisionMember] = useState(false);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token || !divisionId) {
+      setPermissionsLoading(false);
+      return;
+    }
+    let aborted = false;
+    const checkPermissions = async () => {
+      try {
+        const staffResponse = await fetch('https://v2.stopbars.com/auth/is-staff', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        let leadDev = false;
+        if (staffResponse.ok) {
+          const staffData = await staffResponse.json();
+          leadDev = staffData.isStaff && staffData.role?.toLowerCase() === 'lead_developer';
+        }
+        if (!aborted) setIsLeadDev(leadDev);
+
+        const accountResponse = await fetch('https://v2.stopbars.com/auth/account', {
+          headers: { 'X-Vatsim-Token': token },
+        });
+        let currentUserId = null;
+        if (accountResponse.ok) {
+          const accountData = await accountResponse.json();
+          currentUserId = accountData.vatsim_id;
+        }
+
+        const membersResponse = await fetch(
+          `https://v2.stopbars.com/divisions/${divisionId}/members`,
+          { headers: { 'X-Vatsim-Token': token } }
+        );
+        let isMember = false;
+        if (membersResponse.ok && currentUserId) {
+          const members = await membersResponse.json();
+          isMember = members.some((m) => String(m.vatsim_id) === String(currentUserId));
+        }
+        if (!aborted) setIsDivisionMember(isMember);
+      } catch {
+        // Permission check failed, will redirect
+      } finally {
+        if (!aborted) setPermissionsLoading(false);
+      }
+    };
+    checkPermissions();
+    return () => {
+      aborted = true;
+    };
+  }, [token, divisionId]);
+
+  useEffect(() => {
+    if (permissionsLoading) return;
+    if (!isLeadDev && !isDivisionMember) {
+      navigate('/account');
+    }
+  }, [permissionsLoading, isLeadDev, isDivisionMember, navigate]);
+
   const isEuroscopeOnly = useMemo(() => {
     const prefixes = ['K', 'M', 'Y', 'N', 'A'];
     const first = icao?.[0];
@@ -2077,6 +2139,18 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     }
     return height;
   }, [height]);
+
+  if (permissionsLoading) {
+    return (
+      <Layout>
+        <div className="min-h-[70vh] pt-28 pb-16 flex items-center justify-center">
+          <div className="container mx-auto px-4 text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full mx-auto" />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   if (isEuroscopeOnly) {
     const euroscopeUrl = `https://euroscope.stopbars.com?icao=${encodeURIComponent(icao)}`;
