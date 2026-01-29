@@ -838,6 +838,7 @@ const DivisionManagement = () => {
 
   const handleAddMember = async (e) => {
     e.preventDefault();
+    if (!canManageMembers) return;
     setAddingMember(true);
     try {
       const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}/members`, {
@@ -882,6 +883,11 @@ const DivisionManagement = () => {
   };
 
   const handleRemoveMember = async (memberId) => {
+    if (!canManageMembers) return;
+    if (!memberToRemove) return;
+    const isSelf = String(currentUserId) === String(memberId);
+    if (isSelf) return;
+    if (!isLeadDev && memberToRemove.role === 'nav_head') return;
     setRemovingMember(true);
     try {
       const response = await fetch(
@@ -946,6 +952,7 @@ const DivisionManagement = () => {
   };
 
   const handleDeleteAirport = async (airportId) => {
+    if (!isDivisionMember && !isLeadDev) return;
     setDeletingAirport(true);
     const deletedIcao = airportToDelete?.icao;
     try {
