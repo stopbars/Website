@@ -500,6 +500,7 @@ const DivisionManagement = () => {
   const [deletingAirport, setDeletingAirport] = useState(false);
   const token = getVatsimToken();
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [isLeadDev, setIsLeadDev] = useState(false);
   const [showMapPreview, setShowMapPreview] = useState(false);
   const [mapAirport, setMapAirport] = useState(null);
   const [mapPoints, setMapPoints] = useState([]);
@@ -512,7 +513,18 @@ const DivisionManagement = () => {
   });
   const [mapBounds, setMapBounds] = useState(null);
 
-  // Toast state
+  const currentMemberRole = useMemo(() => {
+    if (!currentUserId) return null;
+    const match = members.find((m) => String(m.vatsim_id) === String(currentUserId));
+    return match?.role ?? null;
+  }, [members, currentUserId]);
+
+  const isNavHead = currentMemberRole === 'nav_head';
+  const isNavMember = currentMemberRole === 'nav_member';
+  const isDivisionMember = isNavHead || isNavMember;
+  const canManageMembers = isLeadDev || isNavHead;
+  const canRequestAirport = isLeadDev || isDivisionMember;
+
   const [showToast, setShowToast] = useState(false);
   const [toastConfig, setToastConfig] = useState({
     variant: 'success',
@@ -520,7 +532,6 @@ const DivisionManagement = () => {
     description: '',
   });
 
-  // Helper function to get status color
   const getStatusColor = (status) => {
     switch (status.toLowerCase()) {
       case 'approved':
@@ -559,7 +570,14 @@ const DivisionManagement = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch current user account info (only once)
+        const staffResponse = await fetch('https://v2.stopbars.com/auth/is-staff', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (staffResponse.ok) {
+          const staffData = await staffResponse.json();
+          setIsLeadDev(staffData.isStaff && staffData.role?.toLowerCase() === 'lead_developer');
+        }
+
         const accountResponse = await fetch('https://v2.stopbars.com/auth/account', {
           headers: { 'X-Vatsim-Token': token },
         });
@@ -567,14 +585,12 @@ const DivisionManagement = () => {
           const accountData = await accountResponse.json();
           setCurrentUserId(accountData.vatsim_id);
         }
-        // Fetch division details
         const divisionResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
           headers: { 'X-Vatsim-Token': token },
         });
         if (!divisionResponse.ok) throw new Error('Failed to fetch division');
         const divisionData = await divisionResponse.json();
         setDivision(divisionData);
-        // Fetch members
         const membersResponse = await fetch(
           `https://v2.stopbars.com/divisions/${divisionId}/members`,
           {
@@ -584,7 +600,6 @@ const DivisionManagement = () => {
         if (!membersResponse.ok) throw new Error('Failed to fetch members');
         const membersData = await membersResponse.json();
         setMembers(membersData);
-        // Fetch airports
         const airportsResponse = await fetch(
           `https://v2.stopbars.com/divisions/${divisionId}/airports`,
           {
@@ -606,7 +621,14 @@ const DivisionManagement = () => {
       }
     };
     if (token && divisionId) fetchData();
-  }, [token, divisionId]);
+  }, [token, divisionId, navigate]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isLeadDev && !isDivisionMember) {
+      navigate('/account');
+    }
+  }, [loading, isLeadDev, isDivisionMember, navigate]);
 
   const loadMapPreview = useCallback(async (airport) => {
     if (!airport?.icao) return;
@@ -896,6 +918,11 @@ const DivisionManagement = () => {
   };
 
   const confirmRemoveMember = (member) => {
+    if (!canManageMembers) return;
+    if (!member) return;
+    const isSelf = String(currentUserId) === String(member.vatsim_id);
+    if (isSelf) return;
+    if (!isLeadDev && member.role === 'nav_head') return;
     setMemberToRemove(member);
     setShowRemoveConfirm(true);
   };
@@ -907,6 +934,7 @@ const DivisionManagement = () => {
   };
 
   const confirmDeleteAirport = (airport) => {
+    if (!isDivisionMember && !isLeadDev) return;
     setAirportToDelete(airport);
     setShowDeleteAirportConfirm(true);
   };
@@ -958,6 +986,7 @@ const DivisionManagement = () => {
 
   const handleAddAirport = async (e) => {
     e.preventDefault();
+    if (!canRequestAirport) return;
     setAddingAirport(true);
     try {
       // First validate the airport exists
@@ -1042,7 +1071,14 @@ const DivisionManagement = () => {
                     {members.length}
                   </span>
                 </div>
-                <Button onClick={() => setShowAddMember(true)} className="shrink-0">
+                <Button
+                  onClick={() => {
+                    if (!canManageMembers) return;
+                    setShowAddMember(true);
+                  }}
+                  className="shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canManageMembers}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Member
                 </Button>
@@ -1056,62 +1092,70 @@ const DivisionManagement = () => {
                     <p className="text-zinc-400 text-sm">No members found</p>
                   </div>
                 ) : (
-                  members.map((member) => (
-                    <div
-                      key={member.id}
-                      className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-all duration-200"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
-                            <User className="w-5 h-5 text-zinc-400" />
+                  members.map((member) => {
+                    const isSelf = String(currentUserId) === String(member.vatsim_id);
+                    const removeDisabled =
+                      !canManageMembers || isSelf || (!isLeadDev && member.role === 'nav_head');
+
+                    return (
+                      <div
+                        key={member.id}
+                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-all duration-200"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+                              <User className="w-5 h-5 text-zinc-400" />
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="font-medium text-white truncate">
+                                {member.display_name}
+                              </h3>
+                              {member.vatsim_id &&
+                                String(member.display_name) !== String(member.vatsim_id) && (
+                                  <p className="text-xs text-zinc-500 font-mono">
+                                    {member.vatsim_id}
+                                  </p>
+                                )}
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <h3 className="font-medium text-white truncate">
-                              {member.display_name}
-                            </h3>
-                            {member.vatsim_id &&
-                              String(member.display_name) !== String(member.vatsim_id) && (
-                                <p className="text-xs text-zinc-500 font-mono">
-                                  {member.vatsim_id}
-                                </p>
-                              )}
-                          </div>
+                          <button
+                            onClick={() => confirmRemoveMember(member)}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              removeDisabled
+                                ? 'text-zinc-500 opacity-50 cursor-not-allowed pointer-events-none'
+                                : 'text-zinc-400 hover:text-red-400 hover:bg-red-500/10'
+                            }`}
+                            disabled={removeDisabled}
+                            title={
+                              isSelf
+                                ? 'Cannot remove yourself'
+                                : removeDisabled
+                                  ? 'No permission'
+                                  : 'Remove member'
+                            }
+                          >
+                            <UserX className="w-4 h-4" />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => confirmRemoveMember(member)}
-                          className={`p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors ${
-                            currentUserId === member.vatsim_id
-                              ? 'opacity-50 cursor-not-allowed pointer-events-none'
-                              : ''
-                          }`}
-                          disabled={currentUserId === member.vatsim_id}
-                          title={
-                            currentUserId === member.vatsim_id
-                              ? 'You cannot remove yourself'
-                              : 'Remove member'
-                          }
-                        >
-                          <UserX className="w-4 h-4" />
-                        </button>
+                        <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                              member.role === 'nav_head'
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                            }`}
+                          >
+                            <Shield className="w-3 h-3" />
+                            {member.role
+                              .split('_')
+                              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                              .join(' ')}
+                          </span>
+                        </div>
                       </div>
-                      <div className="mt-3 pt-3 border-t border-zinc-700/50">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                            member.role === 'nav_head'
-                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                          }`}
-                        >
-                          <Shield className="w-3 h-3" />
-                          {member.role
-                            .split('_')
-                            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                            .join(' ')}
-                        </span>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </Card>
@@ -1126,7 +1170,14 @@ const DivisionManagement = () => {
                     {airports.length}
                   </span>
                 </div>
-                <Button onClick={() => setShowAddAirport(true)} className="shrink-0">
+                <Button
+                  onClick={() => {
+                    if (!canRequestAirport) return;
+                    setShowAddAirport(true);
+                  }}
+                  className="shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canRequestAirport}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Request Airport
                 </Button>
@@ -1159,7 +1210,6 @@ const DivisionManagement = () => {
                               <button
                                 onClick={() => openMapPreview(airport)}
                                 className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                                title="Preview Map"
                               >
                                 <MapIcon className="w-4 h-4" />
                               </button>
@@ -1170,7 +1220,6 @@ const DivisionManagement = () => {
                                   navigate(`/divisions/${divisionId}/airports/${airport.icao}`)
                                 }
                                 className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                                title="Manage Airport"
                               >
                                 <Settings className="w-4 h-4" />
                               </button>
@@ -1178,8 +1227,12 @@ const DivisionManagement = () => {
                             {(airport.status === 'pending' || airport.status === 'rejected') && (
                               <button
                                 onClick={() => confirmDeleteAirport(airport)}
-                                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                title="Delete Request"
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  isDivisionMember || isLeadDev
+                                    ? 'text-zinc-400 hover:text-red-400 hover:bg-red-500/10'
+                                    : 'text-zinc-500 opacity-50 cursor-not-allowed pointer-events-none'
+                                }`}
+                                disabled={!isDivisionMember && !isLeadDev}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1207,11 +1260,6 @@ const DivisionManagement = () => {
                                 ? 'text-emerald-300/80 bg-emerald-500/5'
                                 : 'text-zinc-400/80 bg-zinc-800/40'
                             }`}
-                            title={
-                              getDataSubmitted(airport)
-                                ? 'Some BARS objects exist'
-                                : 'No BARS objects yet'
-                            }
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
@@ -1232,7 +1280,7 @@ const DivisionManagement = () => {
 
       {/* Add Member Dialog */}
       <Dialog
-        open={showAddMember}
+        open={showAddMember && canManageMembers}
         onClose={() => {
           setShowAddMember(false);
           setNewMemberCid('');
@@ -1286,7 +1334,11 @@ const DivisionManagement = () => {
             </div>
           </div>
           <div className="flex gap-3 pt-2 justify-end">
-            <Button type="submit" disabled={addingMember || !newMemberCid}>
+            <Button
+              type="submit"
+              disabled={addingMember || !newMemberCid || !canManageMembers}
+              className="disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               {addingMember ? (
                 <>
                   <Loader className="w-4 h-4 mr-2 animate-spin" />
@@ -1317,7 +1369,7 @@ const DivisionManagement = () => {
 
       {/* Request Airport Dialog */}
       <Dialog
-        open={showAddAirport}
+        open={showAddAirport && canRequestAirport}
         onClose={() => {
           setShowAddAirport(false);
           setNewAirportIcao('');
@@ -1379,7 +1431,7 @@ const DivisionManagement = () => {
 
       {/* Remove Member Confirmation Dialog */}
       <Dialog
-        open={showRemoveConfirm && !!memberToRemove}
+        open={showRemoveConfirm && !!memberToRemove && canManageMembers}
         onClose={cancelRemoveMember}
         icon={AlertOctagon}
         iconColor="red"
@@ -1446,7 +1498,7 @@ const DivisionManagement = () => {
         closeOnBackdrop={false}
       >
         <div className="space-y-4">
-          <div className="h-[580px] rounded-lg overflow-hidden border border-zinc-800 relative">
+          <div className="h-145 rounded-lg overflow-hidden border border-zinc-800 relative">
             {mapError && (
               <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-10">
                 <p className="text-sm text-red-400">{mapError}</p>
