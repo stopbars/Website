@@ -15,7 +15,7 @@ const TeamMemberCard = ({ name, role, email }) => {
   };
 
   return (
-    <Card className="flex items-center justify-between !p-4">
+    <Card className="flex items-center justify-between p-4!">
       <div>
         <p className="font-medium text-white">{name}</p>
         <p className="text-sm text-zinc-400">{role}</p>

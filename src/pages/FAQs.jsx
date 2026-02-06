@@ -85,9 +85,11 @@ const FAQPage = () => {
           {/* Header Section */}
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold mb-3">Frequently Asked Questions</h1>
-            {lastUpdated && (
+            {loading ? (
+              <div className="h-5 bg-zinc-700/50 rounded-md w-48 mx-auto animate-pulse mt-4"></div>
+            ) : lastUpdated ? (
               <span className="text-sm text-zinc-500">Last Updated: {lastUpdated}</span>
-            )}
+            ) : null}
           </div>
 
           {/* Search Bar */}
@@ -98,7 +100,7 @@ const FAQPage = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search FAQs..."
-                className="w-full pl-12 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-white placeholder:text-zinc-500"
+                className="w-full pl-12 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder:text-zinc-500"
               />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
             </div>
@@ -114,12 +116,19 @@ const FAQPage = () => {
               </Button>
             </Card>
           ) : loading ? (
-            <Card className="p-8">
-              <div className="flex items-center justify-center space-x-4">
-                <Loader className="w-5 h-5 animate-spin text-zinc-400" />
-                <span className="text-zinc-400">Loading FAQs...</span>
-              </div>
-            </Card>
+            <div className="space-y-6">
+              {[...Array(ITEMS_PER_PAGE)].map((_, index) => (
+                <Card key={index} className="animate-pulse">
+                  <div className="p-6">
+                    <div className="h-6 bg-zinc-700 rounded-md w-3/4 mb-4"></div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-zinc-700/70 rounded-md w-full"></div>
+                      <div className="h-4 bg-zinc-700/70 rounded-md w-4/5"></div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
           ) : filteredFaqs.length === 0 ? (
             <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
               {faqs.length === 0 ? (
@@ -135,8 +144,8 @@ const FAQPage = () => {
                   <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
                   <p className="text-zinc-500 mb-2">
-                    No FAQs found matching{' '}
-                    <span className="font-semibold text-zinc-400">&quot;{searchTerm}&quot;</span>.
+                    No results found matching{' '}
+                    <span className="font-semibold text-zinc-400">&quot;{searchTerm}&quot;</span>
                   </p>
                 </>
               )}
@@ -159,7 +168,7 @@ const FAQPage = () => {
                 <div className="mt-8 flex items-center justify-center space-x-2">
                   <Button
                     variant="secondary"
-                    className="px-3 py-2"
+                    className="px-3 py-2 flex items-center justify-center bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
                     disabled={currentPage === 1}
                   >
@@ -170,8 +179,12 @@ const FAQPage = () => {
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                       <Button
                         key={page}
-                        variant={currentPage === page ? 'primary' : 'secondary'}
-                        className="w-10 h-10"
+                        variant="secondary"
+                        className={`w-14 h-12 flex items-center justify-center border! border-zinc-700! transition-colors duration-200 ${
+                          currentPage === page
+                            ? 'bg-white! text-black! hover:bg-zinc-200!'
+                            : 'bg-zinc-800! text-zinc-200! hover:bg-zinc-700!'
+                        }`}
                         onClick={() => handlePageChange(page)}
                       >
                         {page}
@@ -181,7 +194,7 @@ const FAQPage = () => {
 
                   <Button
                     variant="secondary"
-                    className="px-3 py-2"
+                    className="px-3 py-2 flex items-center justify-center bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
                     disabled={currentPage === totalPages}
                   >
