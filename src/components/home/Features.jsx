@@ -71,7 +71,7 @@ export const Features = () => {
             className="flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
           >
             <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">Follow The Greens Technology</h3>
+              <h3 className="text-2xl md:text-3xl font-bold">Follow The Greens</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
                 Navigate complex airports realistically by following the green centerline lights,
                 guiding you the entire way just like the real-world system used at major airports.
@@ -93,7 +93,7 @@ export const Features = () => {
             className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
           >
             <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">Lead-On Light Systems</h3>
+              <h3 className="text-2xl md:text-3xl font-bold">Lead-On Lights</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
                 Realistic lead-on lighting that guides you onto the runway after stopbars, modeled
                 with accurate light colors and positioning.
@@ -171,6 +171,29 @@ export const Features = () => {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="text-lg md:text-xl font-medium text-zinc-300">
                     Global Coverage Preview
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            ref={setFeatureRef(6)}
+            className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+          >
+            <div className="flex-1 space-y-4">
+              <h3 className="text-2xl md:text-3xl font-bold">Division Management</h3>
+              <p className="text-zinc-400 text-base leading-relaxed">
+                VATSIM Divisions have full control over airport lighting data for airports within
+                their jurisdiction, created and maintained through the Division Management System,
+                this data is then used to create scenery contributions.
+              </p>
+            </div>
+            <div className="flex-1 w-full">
+              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-lg md:text-xl font-medium text-zinc-300">
+                    Division Management Preview
                   </span>
                 </div>
               </div>
