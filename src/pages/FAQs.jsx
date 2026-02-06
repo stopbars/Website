@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
-import { Search, Loader, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, HelpCircle, AlertCircle } from 'lucide-react';
 import { Button } from '../components/shared/Button';
 
 const ITEMS_PER_PAGE = 5;
@@ -68,12 +68,6 @@ const FAQPage = () => {
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentFaqs = filteredFaqs.slice(startIndex, endIndex);
 
-  const handleRetry = () => {
-    setLoading(true);
-    setError(null);
-    window.location.reload();
-  };
-
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
   };
@@ -108,12 +102,12 @@ const FAQPage = () => {
 
           {/* Main Content */}
           {error ? (
-            <Card className="p-8 text-center">
-              <p className="text-red-500 mb-4">{error}</p>
-              <Button variant="secondary" onClick={handleRetry}>
-                <Loader className="w-4 h-4 mr-2" />
-                Try Again
-              </Button>
+            <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
+              <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-zinc-300 mb-2">Failed to Load FAQs</h3>
+              <p className="text-zinc-500">
+                We couldn&apos;t load the FAQs at this time, please try again later.
+              </p>
             </Card>
           ) : loading ? (
             <div className="space-y-6">
