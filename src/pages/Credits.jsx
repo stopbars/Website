@@ -184,86 +184,89 @@ const Credits = () => {
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
               role="list"
             >
-              {contributors.map((contributor) => (
-                <li key={contributor.id} className="rounded-lg outline-none">
-                  <Card className="p-8 bg-zinc-900/80 border-zinc-700/50 hover:bg-zinc-800/80 hover:border-zinc-600/50 transition-all duration-300 group h-full">
-                    <div className="flex flex-col items-center text-center space-y-4">
-                      <a
-                        href={contributor.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block transition-transform group-hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded-full"
-                      >
-                        <img
-                          src={contributor.avatar_url}
-                          alt={`Avatar of ${contributor.login}`}
-                          width={80}
-                          height={80}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={handleImageError}
-                          className="w-20 h-20 rounded-full border-3 border-zinc-700 group-hover:border-zinc-500 transition-all cursor-pointer object-cover"
-                        />
-                      </a>
-                      <div className="space-y-2">
+              {contributors.map((contributor) => {
+                const repos = contributor.repositories ?? [];
+                return (
+                  <li key={contributor.id} className="rounded-lg outline-none">
+                    <Card className="p-8 bg-zinc-900/80 border-zinc-700/50 hover:bg-zinc-800/80 hover:border-zinc-600/50 transition-all duration-300 group h-full">
+                      <div className="flex flex-col items-center text-center space-y-4">
                         <a
                           href={contributor.html_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+                          className="block transition-transform group-hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded-full"
                         >
-                          <h3 className="text-xl font-semibold text-white group-hover:text-green-400 transition-colors cursor-pointer">
-                            {contributor.login}
-                          </h3>
+                          <img
+                            src={contributor.avatar_url}
+                            alt={`Avatar of ${contributor.login}`}
+                            width={80}
+                            height={80}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onError={handleImageError}
+                            className="w-20 h-20 rounded-full border-3 border-zinc-700 group-hover:border-zinc-500 transition-all cursor-pointer object-cover"
+                          />
                         </a>
-                        <div className="flex items-center justify-center space-x-2 text-zinc-300">
-                          <GitBranch className="w-4 h-4" aria-hidden="true" />
-                          <span className="text-lg font-medium">
-                            {contributor.contributions} contribution
-                            {contributor.contributions === 1 ? '' : 's'}
-                          </span>
-                        </div>
-                        <div className="text-sm text-zinc-400">
-                          Active in {contributor.repositories.length} repo
-                          {contributor.repositories.length !== 1 ? 's' : ''}
-                        </div>
-                      </div>
-                      <div
-                        className="w-full space-y-1 pt-2 border-t border-zinc-800"
-                        aria-label={`Top repositories for ${contributor.login}`}
-                      >
-                        <p className="text-xs text-zinc-500 mb-3">Contributions by repository:</p>
-                        {contributor.repositories
-                          .slice() // shallow copy before sort
-                          .sort((a, b) => b.contributions - a.contributions)
-                          .slice(0, 3)
-                          .map((repo) => (
-                            <div
-                              key={repo.name}
-                              className="flex items-center justify-between text-sm"
-                            >
-                              <span className="text-zinc-300 truncate" title={repo.name}>
-                                {repo.name}
-                              </span>
-                              <span
-                                className="text-zinc-500 font-medium"
-                                aria-label={`${repo.contributions} contributions in ${repo.name}`}
-                              >
-                                {repo.contributions}
-                              </span>
-                            </div>
-                          ))}
-                        {contributor.repositories.length > 3 && (
-                          <div className="text-xs text-zinc-600 pt-1">
-                            +{contributor.repositories.length - 3} more repo
-                            {contributor.repositories.length - 3 !== 1 ? 's' : ''}
+                        <div className="space-y-2">
+                          <a
+                            href={contributor.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+                          >
+                            <h3 className="text-xl font-semibold text-white group-hover:text-green-400 transition-colors cursor-pointer">
+                              {contributor.login}
+                            </h3>
+                          </a>
+                          <div className="flex items-center justify-center space-x-2 text-zinc-300">
+                            <GitBranch className="w-4 h-4" aria-hidden="true" />
+                            <span className="text-lg font-medium">
+                              {contributor.contributions} contribution
+                              {contributor.contributions === 1 ? '' : 's'}
+                            </span>
                           </div>
-                        )}
+                          <div className="text-sm text-zinc-400">
+                            Active in {repos.length} repo
+                            {repos.length !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                        <div
+                          className="w-full space-y-1 pt-2 border-t border-zinc-800"
+                          aria-label={`Top repositories for ${contributor.login}`}
+                        >
+                          <p className="text-xs text-zinc-500 mb-3">Contributions by repository:</p>
+                          {repos
+                            .slice() // shallow copy before sort
+                            .sort((a, b) => b.contributions - a.contributions)
+                            .slice(0, 3)
+                            .map((repo) => (
+                              <div
+                                key={repo.name}
+                                className="flex items-center justify-between text-sm"
+                              >
+                                <span className="text-zinc-300 truncate" title={repo.name}>
+                                  {repo.name}
+                                </span>
+                                <span
+                                  className="text-zinc-500 font-medium"
+                                  aria-label={`${repo.contributions} contributions in ${repo.name}`}
+                                >
+                                  {repo.contributions}
+                                </span>
+                              </div>
+                            ))}
+                          {repos.length > 3 && (
+                            <div className="text-xs text-zinc-600 pt-1">
+                              +{repos.length - 3} more repo
+                              {repos.length - 3 !== 1 ? 's' : ''}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                </li>
-              ))}
+                    </Card>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
