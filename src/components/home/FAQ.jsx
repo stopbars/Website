@@ -105,7 +105,7 @@ export const FAQ = () => {
             <div className="text-center">
               <Button variant="secondary" onClick={() => navigate('/faq')} className="group">
                 View All FAQs
-                <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
+                <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </div>
           </>
