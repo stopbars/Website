@@ -24,13 +24,21 @@ export default function CacheManagement() {
   const [namespace, setNamespace] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   const token = getVatsimToken();
 
   const handlePurgeKey = async () => {
     if (!key || !namespace) {
-      setToastConfig({ title: 'Error', description: 'Please enter both a cache key and a namespace.', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: 'Please enter both a cache key and a namespace.',
+        variant: 'destructive',
+      });
       setShowToast(true);
       return;
     }
@@ -48,11 +56,19 @@ export default function CacheManagement() {
       if (!response.ok) {
         throw new Error(data?.error || `${response.status} ${response.statusText}`);
       }
-      setToastConfig({ title: 'Success', description: `Purged key "${key}" in namespace "${namespace}".`, variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: `Purged key "${key}" in namespace "${namespace}".`,
+        variant: 'success',
+      });
       setShowToast(true);
       setKey('');
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to purge key', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to purge key',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setLoading(false);
@@ -61,7 +77,11 @@ export default function CacheManagement() {
 
   const handlePurgeNamespace = async () => {
     if (!namespace) {
-      setToastConfig({ title: 'Error', description: 'Please enter a namespace to purge.', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: 'Please enter a namespace to purge.',
+        variant: 'destructive',
+      });
       setShowToast(true);
       return;
     }
@@ -79,10 +99,18 @@ export default function CacheManagement() {
       if (!response.ok) {
         throw new Error(data?.error || `${response.status} ${response.statusText}`);
       }
-      setToastConfig({ title: 'Success', description: `Bumped namespace "${namespace}"`, variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: `Bumped namespace "${namespace}"`,
+        variant: 'success',
+      });
       setShowToast(true);
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to purge namespace', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to purge namespace',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setLoading(false);
@@ -103,10 +131,18 @@ export default function CacheManagement() {
       if (!response.ok) {
         throw new Error(data?.error || `${response.status} ${response.statusText}`);
       }
-      setToastConfig({ title: 'Success', description: 'Bumped all known namespaces', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'Bumped all known namespaces',
+        variant: 'success',
+      });
       setShowToast(true);
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to purge all namespaces', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to purge all namespaces',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setLoading(false);

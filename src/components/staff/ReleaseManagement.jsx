@@ -86,7 +86,11 @@ const ReleaseManagement = () => {
   const [allReleases, setAllReleases] = useState([]);
   // Toast state
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   const fetchReleases = async (selectedProduct = '') => {
     setReleasesLoading(true);
@@ -446,7 +450,11 @@ const ReleaseManagement = () => {
         }
         throw new Error(message);
       }
-      setToastConfig({ title: 'Success', description: 'Release created successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'Release created successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       resetUploadForm();
       setIsAdding(false);
@@ -531,7 +539,11 @@ const ReleaseManagement = () => {
         throw new Error(message);
       }
 
-      setToastConfig({ title: 'Success', description: 'Changelog updated successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'Changelog updated successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       fetchReleases(productFilter); // Refresh the releases list
       resetUpdateForm();
@@ -726,16 +738,6 @@ const ReleaseManagement = () => {
       </div>
 
       <div className="space-y-8">
-        {/* Toast Notifications */}
-        <Toast
-          title={toastConfig.title}
-          description={toastConfig.description}
-          variant={toastConfig.variant}
-          show={showToast}
-          onClose={() => setShowToast(false)}
-          duration={5000}
-        />
-
         {/* Toast Notifications */}
         <Toast
           title={toastConfig.title}

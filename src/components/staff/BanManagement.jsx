@@ -4,14 +4,7 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
-import {
-  AlertOctagon,
-  Ban as BanIcon,
-  Loader,
-  Trash2,
-  UserX,
-  FileText,
-} from 'lucide-react';
+import { AlertOctagon, Ban as BanIcon, Loader, Trash2, UserX, FileText } from 'lucide-react';
 
 const API_BASE = 'https://v2.stopbars.com';
 
@@ -21,12 +14,15 @@ export default function BanManagement() {
   const [bans, setBans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const [viewingReason, setViewingReason] = useState(null); // { targetId, reason }
   const [removingBan, setRemovingBan] = useState(null); // targetId to remove
   const [isRemovingBan, setIsRemovingBan] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   // New ban form
   const [vatsimId, setVatsimId] = useState('');
@@ -79,16 +75,8 @@ export default function BanManagement() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Auto-dismiss success after ~4 seconds
-  useEffect(() => {
-    if (!success) return;
-    const t = setTimeout(() => setSuccess(null), 4000);
-    return () => clearTimeout(t);
-  }, [success]);
-
   const handleCreateBan = async () => {
     setError(null);
-    setSuccess(null);
     if (!vatsimId.trim()) {
       setError('VATSIM CID is required');
       return;
@@ -107,14 +95,22 @@ export default function BanManagement() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
-      setToastConfig({ title: 'Success', description: 'Ban created/updated successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'Ban created/updated successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       setVatsimId('');
       setReason('');
       setExpiresAtLocal('');
       await fetchBans();
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to create ban', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to create ban',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setLoading(false);
@@ -124,7 +120,6 @@ export default function BanManagement() {
   const handleRemoveBan = async () => {
     if (!removingBan) return;
     setError(null);
-    setSuccess(null);
     try {
       setIsRemovingBan(true);
       const res = await fetch(`${API_BASE}/bans/${encodeURIComponent(removingBan)}`, {
@@ -140,7 +135,11 @@ export default function BanManagement() {
       setRemovingBan(null);
       await fetchBans();
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to remove ban', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to remove ban',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setIsRemovingBan(false);

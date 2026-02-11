@@ -3,16 +3,7 @@ import { Button } from '../shared/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/Card';
 import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import {
-  FileUp,
-  Trash2,
-  Globe,
-  Link as LinkIcon,
-  RefreshCw,
-  Check,
-  Info,
-  X,
-} from 'lucide-react';
+import { FileUp, Trash2, Globe, Link as LinkIcon, RefreshCw, Check, Info, X } from 'lucide-react';
 
 const MAX_BYTES = 1_000_000; // 1MB per backend
 
@@ -45,7 +36,11 @@ const VatSysProfiles = () => {
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   const token = useMemo(() => getVatsimToken(), []);
 
@@ -57,7 +52,11 @@ const VatSysProfiles = () => {
       const data = await res.json();
       setProfiles(Array.isArray(data.profiles) ? data.profiles : []);
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to load profiles', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to load profiles',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setLoading(false);
@@ -87,7 +86,11 @@ const VatSysProfiles = () => {
   const doUpload = async () => {
     if (uploading) return;
     if (!token) {
-      setToastConfig({ title: 'Error', description: 'Missing staff token', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: 'Missing staff token',
+        variant: 'destructive',
+      });
       setShowToast(true);
       return;
     }
@@ -125,14 +128,22 @@ const VatSysProfiles = () => {
         throw new Error(msg);
       }
       await res.json();
-      setToastConfig({ title: 'Success', description: 'Profile uploaded successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'Profile uploaded successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       // Optimistically refresh list
       fetchProfiles();
       setFile(null);
       setNote('');
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Upload failed', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Upload failed',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setUploading(false);
@@ -141,13 +152,21 @@ const VatSysProfiles = () => {
 
   const doDelete = async (profile) => {
     if (!token) {
-      setToastConfig({ title: 'Error', description: 'Missing staff token', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: 'Missing staff token',
+        variant: 'destructive',
+      });
       setShowToast(true);
       return;
     }
     const filename = profile.name || parseFilenameFromUrl(profile.url);
     if (!filename) {
-      setToastConfig({ title: 'Error', description: 'Could not derive filename for delete', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: 'Could not derive filename for delete',
+        variant: 'destructive',
+      });
       setShowToast(true);
       return;
     }
@@ -177,7 +196,11 @@ const VatSysProfiles = () => {
         prev.filter((p) => (p.name || parseFilenameFromUrl(p.url)) !== filename)
       );
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Delete failed', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Delete failed',
+        variant: 'destructive',
+      });
       setShowToast(true);
     }
   };
@@ -192,8 +215,6 @@ const VatSysProfiles = () => {
     if (v) return setError(v);
     setFile(f);
   };
-
-
 
   return (
     <div className="space-y-6">
@@ -406,16 +427,6 @@ const VatSysProfiles = () => {
               )}
             </div>
           </div>
-
-          {/* Toast Notifications */}
-          <Toast
-            title={toastConfig.title}
-            description={toastConfig.description}
-            variant={toastConfig.variant}
-            show={showToast}
-            onClose={() => setShowToast(false)}
-            duration={5000}
-          />
         </CardContent>
       </Card>
 

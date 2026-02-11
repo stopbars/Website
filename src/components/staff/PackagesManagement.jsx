@@ -3,15 +3,7 @@ import { Button } from '../shared/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../shared/Card';
 import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import {
-  Upload,
-  Package,
-  Check,
-  X,
-  Info,
-  FileArchive,
-  RefreshCw,
-} from 'lucide-react';
+import { Upload, Package, Check, X, Info, FileArchive, RefreshCw } from 'lucide-react';
 
 /**
  * PackagesManagement
@@ -71,7 +63,11 @@ const PackagesManagement = () => {
   const [uploading, setUploading] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   const reset = () => {
     setFile(null);
@@ -154,8 +150,13 @@ const PackagesManagement = () => {
       // Auto-clear file after success to avoid accidental reupload
       setFile(null);
       setShowMeta(true);
-      const packageTypeLabel = PACKAGE_TYPES.find((p) => p.id === selectedType)?.label || selectedType;
-      setToastConfig({ title: 'Success', description: `${packageTypeLabel} package uploaded successfully`, variant: 'success' });
+      const packageTypeLabel =
+        PACKAGE_TYPES.find((p) => p.id === selectedType)?.label || selectedType;
+      setToastConfig({
+        title: 'Success',
+        description: `${packageTypeLabel} package uploaded successfully`,
+        variant: 'success',
+      });
       setShowToast(true);
     } catch (err) {
       setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -331,35 +332,35 @@ const PackagesManagement = () => {
                 </button>
               </div>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-emerald-300/90">
-                  <div>
-                    <span className="text-emerald-400/60">Key:</span> {success.key}
-                  </div>
-                  <div>
-                    <span className="text-emerald-400/60">Size:</span> {readableSize(success.size)}
-                  </div>
-                  <div className="col-span-1 sm:col-span-2 break-all">
-                    <span className="text-emerald-400/60">SHA256:</span> {success.sha256}
-                  </div>
-                  {success.etag && (
-                    <div>
-                      <span className="text-emerald-400/60">ETag:</span> {success.etag}
-                    </div>
-                  )}
-                  {success.url && (
-                    <div className="col-span-1 sm:col-span-2 truncate">
-                      <span className="text-emerald-400/60">URL:</span>{' '}
-                      <a
-                        href={success.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline hover:text-emerald-200"
-                      >
-                        {success.url}
-                      </a>
-                    </div>
-                  )}
+                <div>
+                  <span className="text-emerald-400/60">Key:</span> {success.key}
                 </div>
+                <div>
+                  <span className="text-emerald-400/60">Size:</span> {readableSize(success.size)}
+                </div>
+                <div className="col-span-1 sm:col-span-2 break-all">
+                  <span className="text-emerald-400/60">SHA256:</span> {success.sha256}
+                </div>
+                {success.etag && (
+                  <div>
+                    <span className="text-emerald-400/60">ETag:</span> {success.etag}
+                  </div>
+                )}
+                {success.url && (
+                  <div className="col-span-1 sm:col-span-2 truncate">
+                    <span className="text-emerald-400/60">URL:</span>{' '}
+                    <a
+                      href={success.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-emerald-200"
+                    >
+                      {success.url}
+                    </a>
+                  </div>
+                )}
               </div>
+            </div>
           )}
 
           <div className="mt-10 text-[11px] text-zinc-500 leading-relaxed border-t border-zinc-800 pt-4">

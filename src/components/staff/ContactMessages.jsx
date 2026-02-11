@@ -56,17 +56,19 @@ export default function ContactMessages() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [deletingMessage, setDeletingMessage] = useState(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   const clearBanners = () => {
     setError(null);
-    setSuccess(null);
   };
 
   const fetchMessages = useCallback(async () => {
@@ -104,16 +106,6 @@ export default function ContactMessages() {
     fetchMessages();
   }, [fetchMessages]);
 
-  // Auto-dismiss success messages after 3 seconds
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => {
-        setSuccess(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success]);
-
   const filteredMessages = messages; // Direct list (already newest first)
 
   const selectedMessage = useMemo(
@@ -147,7 +139,11 @@ export default function ContactMessages() {
       setToastConfig({ title: 'Success', description: 'Status updated', variant: 'success' });
       setShowToast(true);
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to update status', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to update status',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setUpdatingStatusId(null);
@@ -171,11 +167,19 @@ export default function ContactMessages() {
       // 204 No Content expected
       setMessages((prev) => prev.filter((m) => m.id !== id));
       if (selectedId === id) setSelectedId(null);
-      setToastConfig({ title: 'Success', description: 'Message deleted successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'Message deleted successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       setDeletingMessage(null);
     } catch (e) {
-      setToastConfig({ title: 'Error', description: e.message || 'Failed to delete message', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: e.message || 'Failed to delete message',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setIsDeletingMessage(false);
@@ -312,7 +316,12 @@ export default function ContactMessages() {
                     if (selectedMessage.email) {
                       navigator.clipboard.writeText(selectedMessage.email).catch(() => {});
                       window.open('https://mail.stopbars.com', '_blank', 'noopener');
-                      setSuccess('Email copied & ZoHo opened');
+                      setToastConfig({
+                        title: 'Success',
+                        description: 'Email copied & ZoHo opened',
+                        variant: 'success',
+                      });
+                      setShowToast(true);
                     }
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"

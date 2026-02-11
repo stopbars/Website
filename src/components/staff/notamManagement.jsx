@@ -53,7 +53,11 @@ const NotamManagement = () => {
   const [hasEditChanges, setHasEditChanges] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   useEffect(() => {
     const fetchNotam = async () => {
@@ -76,8 +80,12 @@ const NotamManagement = () => {
         }
       } catch (err) {
         console.error('Error fetching NOTAM:', err);
-      setToastConfig({ title: 'Error', description: err.message || 'Failed to fetch NOTAM data', variant: 'destructive' });
-      setShowToast(true);
+        setToastConfig({
+          title: 'Error',
+          description: err.message || 'Failed to fetch NOTAM data',
+          variant: 'destructive',
+        });
+        setShowToast(true);
       } finally {
         setLoading(false);
       }
@@ -278,12 +286,20 @@ const NotamManagement = () => {
       setEditType(type);
 
       // Show success message
-      setToastConfig({ title: 'Success', description: 'NOTAM updated successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'NOTAM updated successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       setSaveSuccess(false);
     } catch (err) {
       console.error('Error saving NOTAM:', err);
-      setToastConfig({ title: 'Error', description: err.message || 'Failed to save NOTAM', variant: 'destructive' });
+      setToastConfig({
+        title: 'Error',
+        description: err.message || 'Failed to save NOTAM',
+        variant: 'destructive',
+      });
       setShowToast(true);
     } finally {
       setSaving(false);

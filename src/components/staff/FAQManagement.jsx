@@ -43,7 +43,11 @@ const FAQManagement = () => {
   const [recentlyMovedFaq, setRecentlyMovedFaq] = useState(null);
   const [moveDirection, setMoveDirection] = useState(null);
   const [showToast, setShowToast] = useState(false);
-  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
+  const [toastConfig, setToastConfig] = useState({
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   useEffect(() => {
     fetchFAQs();
@@ -96,7 +100,11 @@ const FAQManagement = () => {
 
       const data = await response.json();
       setFaqs([...faqs, data]);
-      setToastConfig({ title: 'Success', description: 'FAQ published successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'FAQ published successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       setIsAdding(false);
       setNewFaq({ question: '', answer: '' });
@@ -129,7 +137,11 @@ const FAQManagement = () => {
       const data = await response.json();
       setFaqs(faqs.map((faq) => (faq.id === faqId ? { ...faq, ...data } : faq)));
 
-      setToastConfig({ title: 'Success', description: 'FAQ updated successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'FAQ updated successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       setEditingFaq(null);
       setEditForm({ question: '', answer: '' });
@@ -158,7 +170,11 @@ const FAQManagement = () => {
       }
 
       setFaqs(faqs.filter((faq) => faq.id !== faqId));
-      setToastConfig({ title: 'Success', description: 'FAQ deleted successfully', variant: 'success' });
+      setToastConfig({
+        title: 'Success',
+        description: 'FAQ deleted successfully',
+        variant: 'success',
+      });
       setShowToast(true);
       setDeletingFaq(null);
     } catch (err) {
