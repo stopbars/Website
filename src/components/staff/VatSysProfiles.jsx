@@ -27,8 +27,6 @@ const parseFilenameFromUrl = (url) => {
 const VatSysProfiles = () => {
   const [profiles, setProfiles] = useState([]); // {icao,name,url}
   const [loading, setLoading] = useState(false);
-  const [, setError] = useState('');
-  const [, setSuccess] = useState('');
 
   const [file, setFile] = useState(null);
   const [note, setNote] = useState('');
@@ -71,9 +69,12 @@ const VatSysProfiles = () => {
     const f = e.target.files?.[0];
     if (!f) return;
     const v = validateFile(f);
-    if (v) return setError(v);
+    if (v) {
+      setToastConfig({ title: 'Error', description: v, variant: 'destructive' });
+      setShowToast(true);
+      return;
+    }
     setFile(f);
-    setError('');
   };
 
   const validateFile = (f) => {
@@ -212,7 +213,11 @@ const VatSysProfiles = () => {
     const f = e.dataTransfer.files && e.dataTransfer.files[0];
     if (!f) return;
     const v = validateFile(f);
-    if (v) return setError(v);
+    if (v) {
+      setToastConfig({ title: 'Error', description: v, variant: 'destructive' });
+      setShowToast(true);
+      return;
+    }
     setFile(f);
   };
 
@@ -404,8 +409,8 @@ const VatSysProfiles = () => {
                       <button
                         onClick={() => {
                           navigator.clipboard?.writeText(p.url);
-                          setSuccess('URL copied');
-                          setTimeout(() => setSuccess(''), 2000);
+                          setToastConfig({ title: 'Copied', description: 'URL copied', variant: 'success' });
+                          setShowToast(true);
                         }}
                         className="px-3 py-1.5 rounded-lg text-xs bg-zinc-800 border border-zinc-700 text-zinc-200 hover:bg-zinc-700 flex items-center gap-1"
                         title="Copy URL"

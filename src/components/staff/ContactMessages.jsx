@@ -55,7 +55,6 @@ export default function ContactMessages() {
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [, setError] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [deletingMessage, setDeletingMessage] = useState(null);
@@ -67,9 +66,7 @@ export default function ContactMessages() {
     variant: 'default',
   });
 
-  const clearBanners = () => {
-    setError(null);
-  };
+
 
   const fetchMessages = useCallback(async () => {
     if (!token) return;
@@ -96,7 +93,7 @@ export default function ContactMessages() {
       });
       setMessages(normalized);
     } catch (e) {
-      setError(e.message || 'Error fetching messages');
+      console.error(e.message || 'Error fetching messages');
     } finally {
       setLoading(false);
     }
@@ -115,7 +112,6 @@ export default function ContactMessages() {
 
   const updateStatus = async (id, newStatus) => {
     if (!STATUSES.includes(newStatus)) return;
-    clearBanners();
     setUpdatingStatusId(id);
     try {
       const res = await fetch(`${apiBase}/contact/${id}/status`, {
@@ -151,7 +147,6 @@ export default function ContactMessages() {
   };
 
   const deleteMessage = async (id) => {
-    clearBanners();
     setIsDeletingMessage(true);
     try {
       const res = await fetch(`${apiBase}/contact/${id}`, {

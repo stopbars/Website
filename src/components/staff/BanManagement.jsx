@@ -13,7 +13,6 @@ export default function BanManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [bans, setBans] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [, setError] = useState(null);
   const [viewingReason, setViewingReason] = useState(null); // { targetId, reason }
   const [removingBan, setRemovingBan] = useState(null); // targetId to remove
   const [isRemovingBan, setIsRemovingBan] = useState(false);
@@ -53,32 +52,28 @@ export default function BanManagement() {
 
   const fetchBans = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await fetch(`${API_BASE}/bans`, { headers });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
       setBans(Array.isArray(data?.bans) ? data.bans : []);
     } catch (e) {
-      setError(e.message || 'Failed to load bans');
+      console.error(e.message || 'Failed to load bans');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!token) {
-      setError('Authentication required.');
-      return;
-    }
+    if (!token) return;
     fetchBans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const handleCreateBan = async () => {
-    setError(null);
     if (!vatsimId.trim()) {
-      setError('VATSIM CID is required');
+      setToastConfig({ title: 'Error', description: 'VATSIM CID is required', variant: 'destructive' });
+      setShowToast(true);
       return;
     }
     const body = {
@@ -119,7 +114,6 @@ export default function BanManagement() {
 
   const handleRemoveBan = async () => {
     if (!removingBan) return;
-    setError(null);
     try {
       setIsRemovingBan(true);
       const res = await fetch(`${API_BASE}/bans/${encodeURIComponent(removingBan)}`, {

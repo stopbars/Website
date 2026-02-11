@@ -49,7 +49,6 @@ const NotamManagement = () => {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showNewTypeDropdown, setShowNewTypeDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [, setSaveSuccess] = useState(false);
   const [hasEditChanges, setHasEditChanges] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -292,7 +291,6 @@ const NotamManagement = () => {
         variant: 'success',
       });
       setShowToast(true);
-      setSaveSuccess(false);
     } catch (err) {
       console.error('Error saving NOTAM:', err);
       setToastConfig({
