@@ -3,11 +3,10 @@ import { useSearchParams } from 'react-router-dom';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import {
-  AlertTriangle,
   AlertOctagon,
   Ban as BanIcon,
-  Check,
   Loader,
   Trash2,
   UserX,
@@ -21,11 +20,13 @@ export default function BanManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [bans, setBans] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [viewingReason, setViewingReason] = useState(null); // { targetId, reason }
   const [removingBan, setRemovingBan] = useState(null); // targetId to remove
   const [isRemovingBan, setIsRemovingBan] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
 
   // New ban form
   const [vatsimId, setVatsimId] = useState('');
@@ -106,13 +107,15 @@ export default function BanManagement() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
-      setSuccess('Ban created/updated successfully');
+      setToastConfig({ title: 'Success', description: 'Ban created/updated successfully', variant: 'success' });
+      setShowToast(true);
       setVatsimId('');
       setReason('');
       setExpiresAtLocal('');
       await fetchBans();
     } catch (e) {
-      setError(e.message || 'Failed to create ban');
+      setToastConfig({ title: 'Error', description: e.message || 'Failed to create ban', variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setLoading(false);
     }
@@ -132,11 +135,13 @@ export default function BanManagement() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || `${res.status} ${res.statusText}`);
       }
-      setSuccess('Ban removed');
+      setToastConfig({ title: 'Success', description: 'Ban removed', variant: 'success' });
+      setShowToast(true);
       setRemovingBan(null);
       await fetchBans();
     } catch (e) {
-      setError(e.message || 'Failed to remove ban');
+      setToastConfig({ title: 'Error', description: e.message || 'Failed to remove ban', variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setIsRemovingBan(false);
     }
@@ -226,23 +231,15 @@ export default function BanManagement() {
         )}
       </div>
 
-      {/* Status Messages */}
-      {(error || success) && (
-        <div
-          className={`p-4 rounded-lg border flex items-center gap-3 ${
-            error ? 'bg-red-500/10 border-red-500/20' : 'bg-emerald-500/10 border-emerald-500/20'
-          }`}
-        >
-          {error ? (
-            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-          ) : (
-            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-          )}
-          <p className={`text-sm ${error ? 'text-red-400' : 'text-emerald-400'}`}>
-            {error || success}
-          </p>
-        </div>
-      )}
+      {/* Toast Notifications */}
+      <Toast
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        show={showToast}
+        onClose={() => setShowToast(false)}
+        duration={5000}
+      />
 
       {/* Create / Update Ban */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">

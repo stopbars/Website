@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   Upload,
@@ -56,14 +57,14 @@ const ReleaseManagement = () => {
   const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [uploadSuccess, setUploadSuccess] = useState('');
+  const [, setUploadSuccess] = useState('');
 
   // Changelog edit state
   const [editReleaseId, setEditReleaseId] = useState('');
   const [newChangelog, setNewChangelog] = useState('');
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState('');
-  const [updateSuccess, setUpdateSuccess] = useState('');
+  const [, setUpdateSuccess] = useState('');
 
   // Releases list state
   const [releases, setReleases] = useState([]);
@@ -83,6 +84,9 @@ const ReleaseManagement = () => {
   const [dragErrorImage, setDragErrorImage] = useState('');
   // Separate cache of all releases (unfiltered) for version hint accuracy
   const [allReleases, setAllReleases] = useState([]);
+  // Toast state
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
 
   const fetchReleases = async (selectedProduct = '') => {
     setReleasesLoading(true);
@@ -442,16 +446,17 @@ const ReleaseManagement = () => {
         }
         throw new Error(message);
       }
-      setUploadSuccess('Release created successfully');
+      setToastConfig({ title: 'Success', description: 'Release created successfully', variant: 'success' });
+      setShowToast(true);
       resetUploadForm();
       setIsAdding(false);
       fetchReleases(productFilter); // Refresh the releases list
     } catch (err) {
-      setUploadError(err.message);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setUploading(false);
       setPendingUploadData(null);
-      setTimeout(() => setUploadSuccess(''), 4000);
     }
   };
 
@@ -526,16 +531,15 @@ const ReleaseManagement = () => {
         throw new Error(message);
       }
 
-      setUpdateSuccess('Changelog updated successfully');
+      setToastConfig({ title: 'Success', description: 'Changelog updated successfully', variant: 'success' });
+      setShowToast(true);
       fetchReleases(productFilter); // Refresh the releases list
       resetUpdateForm();
     } catch (err) {
-      setUpdateError(err.message);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setUpdating(false);
-      setTimeout(() => {
-        setUpdateSuccess('');
-      }, 4000);
     }
   };
 
@@ -722,42 +726,25 @@ const ReleaseManagement = () => {
       </div>
 
       <div className="space-y-8">
-        {/* Success Messages */}
-        {uploadSuccess && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-emerald-400 font-medium">Release Published Successfully</p>
-              <p className="text-emerald-300/80 text-sm mt-1">
-                The new release has been published and is now available for download.
-              </p>
-            </div>
-            <button
-              onClick={() => setUploadSuccess('')}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        {/* Toast Notifications */}
+        <Toast
+          title={toastConfig.title}
+          description={toastConfig.description}
+          variant={toastConfig.variant}
+          show={showToast}
+          onClose={() => setShowToast(false)}
+          duration={5000}
+        />
 
-        {updateSuccess && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-emerald-400 font-medium">Changelog Updated Successfully</p>
-              <p className="text-emerald-300/80 text-sm mt-1">
-                The release changelog has been updated.
-              </p>
-            </div>
-            <button
-              onClick={() => setUpdateSuccess('')}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        {/* Toast Notifications */}
+        <Toast
+          title={toastConfig.title}
+          description={toastConfig.description}
+          variant={toastConfig.variant}
+          show={showToast}
+          onClose={() => setShowToast(false)}
+          duration={5000}
+        />
 
         {/* Add New Release Section */}
         {isAdding && (

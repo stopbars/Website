@@ -2,12 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import {
-  AlertTriangle,
   Loader,
   Trash2,
   Mail,
-  CheckCircle2,
   MessageSquare,
   XCircle,
   AlertOctagon,
@@ -56,12 +55,14 @@ export default function ContactMessages() {
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [deletingMessage, setDeletingMessage] = useState(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
 
   const clearBanners = () => {
     setError(null);
@@ -143,9 +144,11 @@ export default function ContactMessages() {
       setMessages((prev) =>
         prev.map((m) => (m.id === id ? { ...m, ...(updatedObj || {}), status: newStatus } : m))
       );
-      setSuccess('Status updated');
+      setToastConfig({ title: 'Success', description: 'Status updated', variant: 'success' });
+      setShowToast(true);
     } catch (e) {
-      setError(e.message || 'Failed to update status');
+      setToastConfig({ title: 'Error', description: e.message || 'Failed to update status', variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setUpdatingStatusId(null);
     }
@@ -168,10 +171,12 @@ export default function ContactMessages() {
       // 204 No Content expected
       setMessages((prev) => prev.filter((m) => m.id !== id));
       if (selectedId === id) setSelectedId(null);
-      setSuccess('Message deleted successfully');
+      setToastConfig({ title: 'Success', description: 'Message deleted successfully', variant: 'success' });
+      setShowToast(true);
       setDeletingMessage(null);
     } catch (e) {
-      setError(e.message || 'Failed to delete message');
+      setToastConfig({ title: 'Error', description: e.message || 'Failed to delete message', variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setIsDeletingMessage(false);
     }
@@ -203,19 +208,15 @@ export default function ContactMessages() {
         </span>
       </div>
 
-      {/* Status Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
-      {success && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-400">{success}</p>
-        </div>
-      )}
+      {/* Toast Notifications */}
+      <Toast
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        show={showToast}
+        onClose={() => setShowToast(false)}
+        duration={5000}
+      />
 
       {/* Message Grid */}
       <div className="grid grid-cols-12 gap-6">

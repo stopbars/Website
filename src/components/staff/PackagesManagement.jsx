@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Button } from '../shared/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../shared/Card';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   Upload,
   Package,
   Check,
   X,
-  AlertTriangle,
   Info,
   FileArchive,
   RefreshCw,
@@ -66,10 +66,12 @@ const PackagesManagement = () => {
   const [selectedType, setSelectedType] = useState('models');
   const [file, setFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
   const [success, setSuccess] = useState(null); // {type,key,size,sha256,url,etag}
   const [uploading, setUploading] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
 
   const reset = () => {
     setFile(null);
@@ -90,11 +92,11 @@ const PackagesManagement = () => {
     if (!f) return;
     const v = validate(f);
     if (v) {
-      setError(v);
+      setToastConfig({ title: 'Error', description: v, variant: 'destructive' });
+      setShowToast(true);
       return;
     }
     setFile(f);
-    setError('');
   };
 
   const onDrop = (e) => {
@@ -105,21 +107,21 @@ const PackagesManagement = () => {
     if (!f) return;
     const v = validate(f);
     if (v) {
-      setError(v);
+      setToastConfig({ title: 'Error', description: v, variant: 'destructive' });
+      setShowToast(true);
       return;
     }
     setFile(f);
-    setError('');
   };
 
   const handleUpload = async () => {
     if (uploading) return;
     const v = validate(file);
     if (v) {
-      setError(v);
+      setToastConfig({ title: 'Error', description: v, variant: 'destructive' });
+      setShowToast(true);
       return;
     }
-    setError('');
     setSuccess(null);
     try {
       setUploading(true);
@@ -152,9 +154,12 @@ const PackagesManagement = () => {
       // Auto-clear file after success to avoid accidental reupload
       setFile(null);
       setShowMeta(true);
-      setTimeout(() => setSuccess(null), 15000); // fade success after 15s
+      const packageTypeLabel = PACKAGE_TYPES.find((p) => p.id === selectedType)?.label || selectedType;
+      setToastConfig({ title: 'Success', description: `${packageTypeLabel} package uploaded successfully`, variant: 'success' });
+      setShowToast(true);
     } catch (err) {
-      setError(err.message);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setUploading(false);
     }
@@ -297,43 +302,35 @@ const PackagesManagement = () => {
             />
           </div>
 
-          {error && (
-            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400">
-              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
-              <span className="flex-1">{error}</span>
-              <button onClick={() => setError('')} className="text-red-400/70 hover:text-red-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          {/* Toast Notifications */}
+          <Toast
+            title={toastConfig.title}
+            description={toastConfig.description}
+            variant={toastConfig.variant}
+            show={showToast}
+            onClose={() => setShowToast(false)}
+            duration={5000}
+          />
 
-          {success && (
+          {success && showMeta && (
             <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 relative">
               <div className="flex items-start gap-3">
                 <Check className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="font-medium">
-                    {success.type === 'models'
-                      ? 'Models 2024'
-                      : success.type === 'models2020'
-                        ? 'Models 2020'
-                        : 'Removals'}{' '}
-                    package uploaded successfully
-                  </p>
+                  <p className="font-medium">Package Metadata</p>
                   <p className="text-emerald-300/80 text-[12px] mt-1">
                     SHA-256 hash computed and stored. Cached CDN copies may take a few minutes to
                     refresh.
                   </p>
                 </div>
                 <button
-                  onClick={() => setSuccess(null)}
+                  onClick={() => setShowMeta(false)}
                   className="text-emerald-400/60 hover:text-emerald-300"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              {showMeta && (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-emerald-300/90">
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-emerald-300/90">
                   <div>
                     <span className="text-emerald-400/60">Key:</span> {success.key}
                   </div>
@@ -362,14 +359,7 @@ const PackagesManagement = () => {
                     </div>
                   )}
                 </div>
-              )}
-              <button
-                onClick={() => setShowMeta(!showMeta)}
-                className="mt-3 text-xs underline decoration-dotted text-emerald-300/80 hover:text-emerald-200"
-              >
-                {showMeta ? 'Hide details' : 'Show details'}
-              </button>
-            </div>
+              </div>
           )}
 
           <div className="mt-10 text-[11px] text-zinc-500 leading-relaxed border-t border-zinc-800 pt-4">

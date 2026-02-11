@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../shared/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/Card';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   FileUp,
@@ -9,7 +10,6 @@ import {
   Link as LinkIcon,
   RefreshCw,
   Check,
-  AlertTriangle,
   Info,
   X,
 } from 'lucide-react';
@@ -36,27 +36,29 @@ const parseFilenameFromUrl = (url) => {
 const VatSysProfiles = () => {
   const [profiles, setProfiles] = useState([]); // {icao,name,url}
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [, setError] = useState('');
+  const [, setSuccess] = useState('');
 
   const [file, setFile] = useState(null);
   const [note, setNote] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
 
   const token = useMemo(() => getVatsimToken(), []);
 
   const fetchProfiles = async () => {
     setLoading(true);
-    setError('');
     try {
       const res = await fetch(`https://v2.stopbars.com/vatsys/profiles`);
       if (!res.ok) throw new Error(`Failed to fetch profiles (${res.status})`);
       const data = await res.json();
       setProfiles(Array.isArray(data.profiles) ? data.profiles : []);
     } catch (e) {
-      setError(e.message || 'Failed to load profiles');
+      setToastConfig({ title: 'Error', description: e.message || 'Failed to load profiles', variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setLoading(false);
     }
@@ -85,20 +87,21 @@ const VatSysProfiles = () => {
   const doUpload = async () => {
     if (uploading) return;
     if (!token) {
-      setError('Missing staff token');
+      setToastConfig({ title: 'Error', description: 'Missing staff token', variant: 'destructive' });
+      setShowToast(true);
       return;
     }
     if (!file) {
-      setError('Select a file');
+      setToastConfig({ title: 'Error', description: 'Select a file', variant: 'destructive' });
+      setShowToast(true);
       return;
     }
     const v = validateFile(file);
     if (v) {
-      setError(v);
+      setToastConfig({ title: 'Error', description: v, variant: 'destructive' });
+      setShowToast(true);
       return;
     }
-    setError('');
-    setSuccess('');
     setUploading(true);
     try {
       const form = new FormData();
@@ -122,14 +125,15 @@ const VatSysProfiles = () => {
         throw new Error(msg);
       }
       await res.json();
-      setSuccess('Profile uploaded successfully');
+      setToastConfig({ title: 'Success', description: 'Profile uploaded successfully', variant: 'success' });
+      setShowToast(true);
       // Optimistically refresh list
       fetchProfiles();
       setFile(null);
       setNote('');
-      setTimeout(() => setSuccess(''), 10000);
     } catch (e) {
-      setError(e.message || 'Upload failed');
+      setToastConfig({ title: 'Error', description: e.message || 'Upload failed', variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setUploading(false);
     }
@@ -137,16 +141,17 @@ const VatSysProfiles = () => {
 
   const doDelete = async (profile) => {
     if (!token) {
-      setError('Missing staff token');
+      setToastConfig({ title: 'Error', description: 'Missing staff token', variant: 'destructive' });
+      setShowToast(true);
       return;
     }
     const filename = profile.name || parseFilenameFromUrl(profile.url);
     if (!filename) {
-      setError('Could not derive filename for delete');
+      setToastConfig({ title: 'Error', description: 'Could not derive filename for delete', variant: 'destructive' });
+      setShowToast(true);
       return;
     }
     if (!confirm(`Delete profile "${filename}"? This cannot be undone.`)) return;
-    setError('');
     try {
       const res = await fetch(
         `https://v2.stopbars.com/vatsys/profiles/${encodeURIComponent(filename)}`,
@@ -166,13 +171,14 @@ const VatSysProfiles = () => {
         if (data?.error) msg = data.error;
         throw new Error(msg);
       }
-      setSuccess(`Deleted ${filename}`);
+      setToastConfig({ title: 'Success', description: `Deleted ${filename}`, variant: 'success' });
+      setShowToast(true);
       setProfiles((prev) =>
         prev.filter((p) => (p.name || parseFilenameFromUrl(p.url)) !== filename)
       );
-      setTimeout(() => setSuccess(''), 8000);
     } catch (e) {
-      setError(e.message || 'Delete failed');
+      setToastConfig({ title: 'Error', description: e.message || 'Delete failed', variant: 'destructive' });
+      setShowToast(true);
     }
   };
 
@@ -187,10 +193,7 @@ const VatSysProfiles = () => {
     setFile(f);
   };
 
-  const clearStatus = () => {
-    setError('');
-    setSuccess('');
-  };
+
 
   return (
     <div className="space-y-6">
@@ -404,26 +407,27 @@ const VatSysProfiles = () => {
             </div>
           </div>
 
-          {error && (
-            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400">
-              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
-              <span className="flex-1">{error}</span>
-              <button onClick={clearStatus} className="text-red-400/70 hover:text-red-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          {success && (
-            <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3 text-emerald-400">
-              <Check className="w-5 h-5 mt-0.5 shrink-0" />
-              <span className="flex-1">{success}</span>
-              <button onClick={clearStatus} className="text-emerald-400/70 hover:text-emerald-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          {/* Toast Notifications */}
+          <Toast
+            title={toastConfig.title}
+            description={toastConfig.description}
+            variant={toastConfig.variant}
+            show={showToast}
+            onClose={() => setShowToast(false)}
+            duration={5000}
+          />
         </CardContent>
       </Card>
+
+      {/* Toast Notifications */}
+      <Toast
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        show={showToast}
+        onClose={() => setShowToast(false)}
+        duration={5000}
+      />
     </div>
   );
 };

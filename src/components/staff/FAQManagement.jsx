@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import {
   HelpCircle,
-  AlertTriangle,
-  Check,
   RefreshCw,
   Plus,
   Edit2,
@@ -23,8 +22,6 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 const FAQManagement = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [editingFaq, setEditingFaq] = useState(null);
   const [deletingFaq, setDeletingFaq] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -45,6 +42,8 @@ const FAQManagement = () => {
   });
   const [recentlyMovedFaq, setRecentlyMovedFaq] = useState(null);
   const [moveDirection, setMoveDirection] = useState(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
 
   useEffect(() => {
     fetchFAQs();
@@ -53,7 +52,6 @@ const FAQManagement = () => {
   const fetchFAQs = async () => {
     try {
       setLoading(true);
-      setError('');
 
       const response = await fetch('https://v2.stopbars.com/faqs');
 
@@ -69,7 +67,6 @@ const FAQManagement = () => {
       );
       setFaqs(sortedFaqs);
     } catch (err) {
-      setError('Failed to load FAQs. Please try again.');
       console.error('Error fetching FAQs:', err);
     } finally {
       setLoading(false);
@@ -99,13 +96,13 @@ const FAQManagement = () => {
 
       const data = await response.json();
       setFaqs([...faqs, data]);
-      setSuccess('FAQ published successfully');
+      setToastConfig({ title: 'Success', description: 'FAQ published successfully', variant: 'success' });
+      setShowToast(true);
       setIsAdding(false);
       setNewFaq({ question: '', answer: '' });
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setIsPublishing(false);
     }
@@ -132,13 +129,13 @@ const FAQManagement = () => {
       const data = await response.json();
       setFaqs(faqs.map((faq) => (faq.id === faqId ? { ...faq, ...data } : faq)));
 
-      setSuccess('FAQ updated successfully');
+      setToastConfig({ title: 'Success', description: 'FAQ updated successfully', variant: 'success' });
+      setShowToast(true);
       setEditingFaq(null);
       setEditForm({ question: '', answer: '' });
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setIsSaving(false);
     }
@@ -161,12 +158,12 @@ const FAQManagement = () => {
       }
 
       setFaqs(faqs.filter((faq) => faq.id !== faqId));
-      setSuccess('FAQ deleted successfully');
+      setToastConfig({ title: 'Success', description: 'FAQ deleted successfully', variant: 'success' });
+      setShowToast(true);
       setDeletingFaq(null);
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setIsDeleting(false);
     }
@@ -227,8 +224,8 @@ const FAQManagement = () => {
         setMoveDirection(null);
       }, 2000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
       // Revert to original order
       fetchFAQs();
       // Clear visual feedback on error too
@@ -292,8 +289,8 @@ const FAQManagement = () => {
         setMoveDirection(null);
       }, 2000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToastConfig({ title: 'Error', description: err.message, variant: 'destructive' });
+      setShowToast(true);
       // Revert to original order
       fetchFAQs();
       // Clear visual feedback on error too
@@ -336,20 +333,15 @@ const FAQManagement = () => {
       </div>
 
       <div className="space-y-6">
-        {/* Status Messages */}
-        {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-            <p className="text-sm text-emerald-400">{success}</p>
-          </div>
-        )}
+        {/* Toast Notifications */}
+        <Toast
+          title={toastConfig.title}
+          description={toastConfig.description}
+          variant={toastConfig.variant}
+          show={showToast}
+          onClose={() => setShowToast(false)}
+          duration={5000}
+        />
 
         {/* Add FAQ Form */}
         {isAdding && (

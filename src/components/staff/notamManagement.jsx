@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Toast } from '../shared/Toast';
 import {
   MessageSquareWarning,
   AlertTriangle,
@@ -13,7 +14,6 @@ import {
   Tag,
   Send,
   HardDriveDownload,
-  CheckCircle2,
   Copy,
   Check,
 } from 'lucide-react';
@@ -49,9 +49,11 @@ const NotamManagement = () => {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showNewTypeDropdown, setShowNewTypeDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [, setSaveSuccess] = useState(false);
   const [hasEditChanges, setHasEditChanges] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastConfig, setToastConfig] = useState({ title: '', description: '', variant: 'default' });
 
   useEffect(() => {
     const fetchNotam = async () => {
@@ -74,7 +76,8 @@ const NotamManagement = () => {
         }
       } catch (err) {
         console.error('Error fetching NOTAM:', err);
-        setError(err.message || 'Failed to fetch NOTAM data');
+      setToastConfig({ title: 'Error', description: err.message || 'Failed to fetch NOTAM data', variant: 'destructive' });
+      setShowToast(true);
       } finally {
         setLoading(false);
       }
@@ -275,10 +278,13 @@ const NotamManagement = () => {
       setEditType(type);
 
       // Show success message
-      setSaveSuccess(true);
+      setToastConfig({ title: 'Success', description: 'NOTAM updated successfully', variant: 'success' });
+      setShowToast(true);
+      setSaveSuccess(false);
     } catch (err) {
       console.error('Error saving NOTAM:', err);
-      setError(err.message || 'Failed to save NOTAM');
+      setToastConfig({ title: 'Error', description: err.message || 'Failed to save NOTAM', variant: 'destructive' });
+      setShowToast(true);
     } finally {
       setSaving(false);
     }
@@ -417,25 +423,15 @@ const NotamManagement = () => {
         </div>
       </div>
 
-      {/* Success Message */}
-      {saveSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-emerald-400 font-medium">NOTAM Updated Successfully</p>
-            <p className="text-xs text-emerald-400/70 mt-1">
-              The endpoint may take a short time to update. Users will see changes after cache
-              expires.
-            </p>
-          </div>
-          <button
-            onClick={() => setSaveSuccess(false)}
-            className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      {/* Toast Notifications */}
+      <Toast
+        title={toastConfig.title}
+        description={toastConfig.description}
+        variant={toastConfig.variant}
+        show={showToast}
+        onClose={() => setShowToast(false)}
+        duration={5000}
+      />
 
       {/* Add New NOTAM Section */}
       {isAdding && (
