@@ -853,7 +853,21 @@ const DivisionManagement = () => {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to add member');
+      if (!response.ok) {
+        if (response.status === 409) {
+          setShowAddMember(false);
+          setNewMemberCid('');
+          setNewMemberRole('nav_member');
+          setToastConfig({
+            variant: 'warning',
+            title: 'Failed to Add Member',
+            description: 'User is already a member of this division',
+          });
+          setShowToast(true);
+          return;
+        }
+        throw new Error('Failed to add member');
+      }
 
       const newMember = await response.json();
       setMembers([...members, newMember]);
