@@ -54,12 +54,6 @@ const PACKAGE_TYPES = [
     filename: 'bars-models-2020.zip',
     description: 'MSFS 2020 models package.',
   },
-  {
-    id: 'removals',
-    label: 'Removals',
-    filename: 'bars-removals.zip',
-    description: 'Removals list to override other scenery.',
-  },
 ];
 
 const PackagesManagement = () => {
