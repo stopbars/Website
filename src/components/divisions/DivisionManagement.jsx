@@ -501,6 +501,7 @@ const DivisionManagement = () => {
   const token = getVatsimToken();
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isLeadDev, setIsLeadDev] = useState(false);
+  const [isProductManager, setIsProductManager] = useState(false);
   const [showMapPreview, setShowMapPreview] = useState(false);
   const [mapAirport, setMapAirport] = useState(null);
   const [mapPoints, setMapPoints] = useState([]);
@@ -522,8 +523,9 @@ const DivisionManagement = () => {
   const isNavHead = currentMemberRole === 'nav_head';
   const isNavMember = currentMemberRole === 'nav_member';
   const isDivisionMember = isNavHead || isNavMember;
-  const canManageMembers = isLeadDev || isNavHead;
-  const canRequestAirport = isLeadDev || isDivisionMember;
+  const canManageAsStaff = isLeadDev || isProductManager;
+  const canManageMembers = canManageAsStaff || isNavHead;
+  const canRequestAirport = canManageAsStaff || isDivisionMember;
 
   const [showToast, setShowToast] = useState(false);
   const [toastConfig, setToastConfig] = useState({
@@ -575,7 +577,9 @@ const DivisionManagement = () => {
         });
         if (staffResponse.ok) {
           const staffData = await staffResponse.json();
-          setIsLeadDev(staffData.isStaff && staffData.role?.toLowerCase() === 'lead_developer');
+          const role = staffData.role?.toLowerCase();
+          setIsLeadDev(staffData.isStaff && role === 'lead_developer');
+          setIsProductManager(staffData.isStaff && role === 'product_manager');
         }
 
         const accountResponse = await fetch('https://v2.stopbars.com/auth/account', {
@@ -625,10 +629,10 @@ const DivisionManagement = () => {
 
   useEffect(() => {
     if (loading) return;
-    if (!isLeadDev && !isDivisionMember) {
+    if (!canManageAsStaff && !isDivisionMember) {
       navigate('/account');
     }
-  }, [loading, isLeadDev, isDivisionMember, navigate]);
+  }, [loading, canManageAsStaff, isDivisionMember, navigate]);
 
   const loadMapPreview = useCallback(async (airport) => {
     if (!airport?.icao) return;
@@ -901,7 +905,7 @@ const DivisionManagement = () => {
     if (!memberToRemove) return;
     const isSelf = String(currentUserId) === String(memberId);
     if (isSelf) return;
-    if (!isLeadDev && memberToRemove.role === 'nav_head') return;
+    if (!canManageAsStaff && memberToRemove.role === 'nav_head') return;
     setRemovingMember(true);
     try {
       const response = await fetch(
@@ -942,7 +946,7 @@ const DivisionManagement = () => {
     if (!member) return;
     const isSelf = String(currentUserId) === String(member.vatsim_id);
     if (isSelf) return;
-    if (!isLeadDev && member.role === 'nav_head') return;
+    if (!canManageAsStaff && member.role === 'nav_head') return;
     setMemberToRemove(member);
     setShowRemoveConfirm(true);
   };
@@ -954,7 +958,7 @@ const DivisionManagement = () => {
   };
 
   const confirmDeleteAirport = (airport) => {
-    if (!isDivisionMember && !isLeadDev) return;
+    if (!isDivisionMember && !canManageAsStaff) return;
     setAirportToDelete(airport);
     setShowDeleteAirportConfirm(true);
   };
@@ -966,7 +970,7 @@ const DivisionManagement = () => {
   };
 
   const handleDeleteAirport = async (airportId) => {
-    if (!isDivisionMember && !isLeadDev) return;
+    if (!isDivisionMember && !canManageAsStaff) return;
     setDeletingAirport(true);
     const deletedIcao = airportToDelete?.icao;
     try {
@@ -1116,7 +1120,7 @@ const DivisionManagement = () => {
                   members.map((member) => {
                     const isSelf = String(currentUserId) === String(member.vatsim_id);
                     const removeDisabled =
-                      !canManageMembers || isSelf || (!isLeadDev && member.role === 'nav_head');
+                      !canManageMembers || isSelf || (!canManageAsStaff && member.role === 'nav_head');
 
                     return (
                       <div
@@ -1249,11 +1253,11 @@ const DivisionManagement = () => {
                               <button
                                 onClick={() => confirmDeleteAirport(airport)}
                                 className={`p-1.5 rounded-lg transition-colors ${
-                                  isDivisionMember || isLeadDev
+                                  isDivisionMember || canManageAsStaff
                                     ? 'text-zinc-400 hover:text-red-400 hover:bg-red-500/10'
                                     : 'text-zinc-500 opacity-50 cursor-not-allowed pointer-events-none'
                                 }`}
-                                disabled={!isDivisionMember && !isLeadDev}
+                                disabled={!isDivisionMember && !canManageAsStaff}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
