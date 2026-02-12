@@ -15,7 +15,7 @@ const TeamMemberCard = ({ name, role, email }) => {
   };
 
   return (
-    <Card className="flex items-center justify-between !p-4">
+    <Card className="flex items-center justify-between p-4!">
       <div>
         <p className="font-medium text-white">{name}</p>
         <p className="text-sm text-zinc-400">{role}</p>
@@ -67,15 +67,24 @@ const About = () => {
 
   return (
     <Layout>
-      <section className="pt-38 pb-20">
+      {/* Hero Banner */}
+      <div className="relative w-full h-[200px] sm:h-[300px] md:h-[450px] mt-[95px] sm:mt-16 overflow-hidden">
+        <img
+          src="/AboutBanner.png"
+          alt="About banner"
+          className="w-full h-full object-cover object-center"
+          draggable={false}
+        />
+        {/* Bottom fade overlay */}
+        <div className="absolute inset-0 bg-linear-to-t from-zinc-950 via-zinc-950/40 to-transparent pointer-events-none" />
+      </div>
+
+      <section className="pt-10 pb-20">
         <div className="max-w-4xl mx-auto px-6">
           <div
             ref={setSectionRef(0)}
             className="space-y-6 pb-12 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
           >
-            <span className="inline-block px-4 py-1.5 text-xs font-medium uppercase tracking-widest text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 rounded-full">
-              About
-            </span>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight">What is BARS?</h1>
             <p className="text-base md:text-lg text-zinc-400 leading-relaxed">
               BARS is an advanced airport lighting simulation platform that synchronizes real-time
@@ -131,7 +140,9 @@ const About = () => {
               BARS development began in late 2024, after the idea of a vatSys plugin to manage
               stopbars came up amongst members of the community. The{' '}
               <a
-                href="/"
+                href="/earliest-prototype.png"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-white border-b border-red-500/70 hover:border-red-400 transition-colors"
               >
                 earliest prototype
@@ -139,14 +150,18 @@ const About = () => {
               was a simple controller only plugin that showed stopbar state changes only inside the
               client, displayed through a simple ground window. That quickly led to a{' '}
               <a
-                href="/"
+                href="/polished-plugin.png"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-white border-b border-red-500/70 hover:border-red-400 transition-colors"
               >
                 more polished plugin
               </a>
               , experiments with SimConnect, object placement, and the first{' '}
               <a
-                href="/"
+                href="/first-sim-renders.png"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-white border-b border-red-500/70 hover:border-red-400 transition-colors"
               >
                 visible in-sim lighting renders
