@@ -3,4 +3,14 @@ Allow: /
 Sitemap: https://stopbars.com/sitemap.xml
 
 Disallow: /account
+Disallow: /auth/callback
+Disallow: /support
+Disallow: /gen
 Disallow: /staff
+Disallow: /banned
+Disallow: /divisions/
+Disallow: /contribute/new
+Disallow: /contribute/map/
+Disallow: /contribute/test/
+Disallow: /contribute/details/
+Disallow: /contribute/generator/

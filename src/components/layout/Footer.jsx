@@ -78,7 +78,7 @@ export const Footer = () => {
               >
                 <img
                   src="https://avatars.githubusercontent.com/u/13403593"
-                  alt="Open Collective Logo"
+                  alt="Open Collective profile image"
                   className="w-7 h-7 md:w-8 md:h-8"
                 />
               </a>

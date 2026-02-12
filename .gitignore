@@ -122,3 +122,4 @@ Thumbs.db
 
 # Runtime files
 *.log
+.cursor/rules/*

@@ -63,6 +63,34 @@ const FAQPage = () => {
     setCurrentPage(1); // Reset to first page when search changes
   }, [searchTerm, faqs]);
 
+  useEffect(() => {
+    const existingScript = document.getElementById('faq-schema');
+    if (existingScript) existingScript.remove();
+    if (!faqs.length) return;
+
+    const schemaScript = document.createElement('script');
+    schemaScript.type = 'application/ld+json';
+    schemaScript.id = 'faq-schema';
+    schemaScript.text = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqs.map((faq) => ({
+        '@type': 'Question',
+        name: faq.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: faq.answer,
+        },
+      })),
+    });
+    document.head.appendChild(schemaScript);
+
+    return () => {
+      const scriptToRemove = document.getElementById('faq-schema');
+      if (scriptToRemove) scriptToRemove.remove();
+    };
+  }, [faqs]);
+
   const totalPages = Math.ceil(filteredFaqs.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -104,7 +132,7 @@ const FAQPage = () => {
           {error ? (
             <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
               <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-zinc-300 mb-2">Failed to Load FAQs</h3>
+              <h2 className="text-lg font-medium text-zinc-300 mb-2">Failed to Load FAQs</h2>
               <p className="text-zinc-500">
                 We couldn&apos;t load the FAQs at this time, please try again later.
               </p>
@@ -128,7 +156,7 @@ const FAQPage = () => {
               {faqs.length === 0 ? (
                 <>
                   <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
+                  <h2 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h2>
                   <p className="text-zinc-500 mb-2">
                     No FAQs were found, please try again later or contact support.
                   </p>
@@ -136,7 +164,7 @@ const FAQPage = () => {
               ) : (
                 <>
                   <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
+                  <h2 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h2>
                   <p className="text-zinc-500 mb-2">
                     No results found matching{' '}
                     <span className="font-semibold text-zinc-400">&quot;{searchTerm}&quot;</span>
@@ -150,7 +178,7 @@ const FAQPage = () => {
                 {currentFaqs.map((faq) => (
                   <Card key={faq.id} className="transition-all duration-200 hover:shadow-lg">
                     <div className="p-6">
-                      <h3 className="text-lg font-medium text-white mb-4">{faq.question}</h3>
+                      <h2 className="text-lg font-medium text-white mb-4">{faq.question}</h2>
                       <div className="text-zinc-400 text-sm">{faq.answer}</div>
                     </div>
                   </Card>

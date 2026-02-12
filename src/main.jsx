@@ -1,9 +1,10 @@
 import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
 import './styles/globals.css';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
+import { AppRouteShell } from './components/shared/AppRouteShell';
 import { ErrorBoundary, RouteError } from './components/shared/ErrorBoundary';
 import { PostHogConsentBootstrap } from './components/shared/PostHogConsentBootstrap';
 import Home from './pages/Home.jsx';
@@ -49,154 +50,134 @@ const DocsRedirect = lazy(() =>
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <Home />,
+    element: <AppRouteShell />,
     errorElement: <RouteError />,
-  },
-  {
-    path: '/about',
-    element: <About />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/credits',
-    element: <Credits />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/account',
-    element: (
-      <ProtectedRoute>
-        <Account />
-      </ProtectedRoute>
-    ),
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/auth/callback',
-    element: <AuthCallback />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/status',
-    element: <GlobalStatus />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/changelog',
-    element: <Changelog />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/support',
-    element: <Contact />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/contact',
-    element: <Contact />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/privacy',
-    element: <Privacy />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/terms',
-    element: <Terms />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/discord',
-    element: <DiscordRedirect />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/docs',
-    element: <DocsRedirect />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/documentation',
-    element: <DocsRedirect />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/contribute',
-    element: <ContributionDashboard />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/contribute/new',
-    element: <ContributeNew />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/contribute/map/:icao',
-    element: <ContributeMap />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/contribute/test/:icao',
-    element: <ContributeTest />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/contribute/details/:icao',
-    element: <ContributeDetails />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/contribute/generator/:icao?',
-    element: <XMLGenerator />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/faq',
-    element: <FAQPage />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/divisions/:id/manage',
-    element: (
-      <ProtectedRoute>
-        <DivisionManagement />
-      </ProtectedRoute>
-    ),
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/divisions/:divisionId/airports/:airportId',
-    element: (
-      <ProtectedRoute>
-        <DivisionAirportManager />
-      </ProtectedRoute>
-    ),
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/gen',
-    element: <DebugGenerator />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/banned',
-    element: <Banned />,
-    errorElement: <RouteError />,
-  },
-  {
-    path: '/staff',
-    element: (
-      <ProtectedRoute>
-        <StaffDashboard />
-      </ProtectedRoute>
-    ),
-    errorElement: <RouteError />,
-  },
-  {
-    path: '*',
-    element: <NotFound />,
-    errorElement: <RouteError />,
+    children: [
+      {
+        index: true,
+        element: <Home />,
+      },
+      {
+        path: 'about',
+        element: <About />,
+      },
+      {
+        path: 'credits',
+        element: <Credits />,
+      },
+      {
+        path: 'account',
+        element: (
+          <ProtectedRoute>
+            <Account />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'auth/callback',
+        element: <AuthCallback />,
+      },
+      {
+        path: 'status',
+        element: <GlobalStatus />,
+      },
+      {
+        path: 'changelog',
+        element: <Changelog />,
+      },
+      {
+        path: 'support',
+        element: <Navigate to="/contact" replace />,
+      },
+      {
+        path: 'contact',
+        element: <Contact />,
+      },
+      {
+        path: 'privacy',
+        element: <Privacy />,
+      },
+      {
+        path: 'terms',
+        element: <Terms />,
+      },
+      {
+        path: 'discord',
+        element: <DiscordRedirect />,
+      },
+      {
+        path: 'docs',
+        element: <DocsRedirect />,
+      },
+      {
+        path: 'documentation',
+        element: <DocsRedirect />,
+      },
+      {
+        path: 'contribute',
+        element: <ContributionDashboard />,
+      },
+      {
+        path: 'contribute/new',
+        element: <ContributeNew />,
+      },
+      {
+        path: 'contribute/map/:icao',
+        element: <ContributeMap />,
+      },
+      {
+        path: 'contribute/test/:icao',
+        element: <ContributeTest />,
+      },
+      {
+        path: 'contribute/details/:icao',
+        element: <ContributeDetails />,
+      },
+      {
+        path: 'contribute/generator/:icao?',
+        element: <XMLGenerator />,
+      },
+      {
+        path: 'faq',
+        element: <FAQPage />,
+      },
+      {
+        path: 'divisions/:id/manage',
+        element: (
+          <ProtectedRoute>
+            <DivisionManagement />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'divisions/:divisionId/airports/:airportId',
+        element: (
+          <ProtectedRoute>
+            <DivisionAirportManager />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'gen',
+        element: <DebugGenerator />,
+      },
+      {
+        path: 'banned',
+        element: <Banned />,
+      },
+      {
+        path: 'staff',
+        element: (
+          <ProtectedRoute>
+            <StaffDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '*',
+        element: <NotFound />,
+      },
+    ],
   },
 ]);
 
