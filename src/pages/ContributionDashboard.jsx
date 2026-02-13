@@ -303,7 +303,7 @@ const ContributionDashboard = () => {
             <div>
               <h1 className="text-3xl font-bold mb-2">Community Contributions</h1>
               <p className="text-zinc-400">
-                Help expand the BARS network by contributing your own airport mappings
+                Help expand the BARS compatibility by contributing your own scenery contributions
               </p>
             </div>
             {!user ? (

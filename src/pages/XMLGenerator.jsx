@@ -1,23 +1,22 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
+import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
 import {
-  Search,
   Loader,
   Download,
   AlertCircle,
   Info,
-  FileCode2,
   Copy,
   Check,
   Settings,
   ChevronDown,
   ChevronUp,
   Layers,
-  Map as MapIcon,
+  RotateCcw,
 } from 'lucide-react';
 import Map, { Source, Layer, NavigationControl, ScaleControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -205,13 +204,16 @@ const generateGUID = () => {
   return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
 };
 
+const DEFAULT_PADDING_METERS = 1;
+const DEFAULT_BASE_ALTITUDE = 0;
+
 const XMLGenerator = () => {
   const { icao: urlIcao } = useParams();
+  const navigate = useNavigate();
   const mapRef = useRef(null);
 
   // State
-  const [icao, setIcao] = useState(urlIcao?.toUpperCase() || '');
-  const [isSearching, setIsSearching] = useState(false);
+  const [icao] = useState(urlIcao?.toUpperCase() || '');
   const [airport, setAirport] = useState(null);
   const [points, setPoints] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -219,8 +221,9 @@ const XMLGenerator = () => {
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [generatedXML, setGeneratedXML] = useState('');
   const [copied, setCopied] = useState(false);
-  const [paddingMeters, setPaddingMeters] = useState(1);
-  const [baseAltitude, setBaseAltitude] = useState(0);
+  const [paddingMeters, setPaddingMeters] = useState(DEFAULT_PADDING_METERS);
+  const [baseAltitude, setBaseAltitude] = useState(DEFAULT_BASE_ALTITUDE);
+  const [defaultElevation, setDefaultElevation] = useState(DEFAULT_BASE_ALTITUDE);
   const [showSettings, setShowSettings] = useState(false);
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
@@ -233,70 +236,54 @@ const XMLGenerator = () => {
   // Store generated polygon data for map display
   const [generatedPolygons, setGeneratedPolygons] = useState({ bars: [], remove: [] });
 
-  // Auto-search if ICAO provided via URL
+  // Auto-load airport data on mount
   useEffect(() => {
-    if (urlIcao && /^[A-Za-z0-9]{4}$/.test(urlIcao)) {
-      handleSearch();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Search for airport
-  const handleSearch = async (e) => {
-    e?.preventDefault();
-
-    if (!icao) {
-      setError('Please enter an airport ICAO code');
-      setShowErrorToast(true);
-      return;
-    }
-
-    if (!/^[A-Za-z0-9]{4}$/.test(icao)) {
-      setError('ICAO code must be exactly 4 characters');
-      setShowErrorToast(true);
-      return;
-    }
-
-    setIsSearching(true);
-    setError('');
-    setGeneratedXML('');
-    setPoints([]);
-
-    try {
-      const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
-      if (!airportResponse.ok) {
-        throw new Error('Airport not found');
-      }
-      const airportData = await airportResponse.json();
-
-      setAirport({
-        icao: airportData.icao,
-        name: airportData.name,
-        latitude: airportData.latitude,
-        longitude: airportData.longitude,
-        elevation_m: airportData.elevation_m,
-      });
-
-      // Set map view to airport location
-      setViewState((prev) => ({
-        ...prev,
-        latitude: airportData.latitude,
-        longitude: airportData.longitude,
-        zoom: 14,
-      }));
-
-      if (typeof airportData.elevation_m === 'number') {
-        setBaseAltitude(airportData.elevation_m);
+    const fetchData = async () => {
+      if (!urlIcao || !/^[A-Za-z0-9]{4}$/.test(urlIcao)) {
+        navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
+        return;
       }
 
-      const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${icao}/points`);
-      if (!pointsResponse.ok) {
-        throw new Error('Failed to fetch airport points');
-      }
-      const pointsData = await pointsResponse.json();
+      setLoading(true);
+      setError('');
+      setGeneratedXML('');
+      setPoints([]);
 
-      setPoints(
-        pointsData.map((point) => ({
+      try {
+        const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${urlIcao}`);
+        if (!airportResponse.ok) {
+          throw new Error('Failed to load airport data');
+        }
+        const airportData = await airportResponse.json();
+
+        setAirport({
+          icao: airportData.icao,
+          name: airportData.name,
+          latitude: airportData.latitude,
+          longitude: airportData.longitude,
+          elevation_m: airportData.elevation_m,
+        });
+
+        // Set map view to airport location
+        setViewState((prev) => ({
+          ...prev,
+          latitude: airportData.latitude,
+          longitude: airportData.longitude,
+          zoom: 14,
+        }));
+
+        if (typeof airportData.elevation_m === 'number') {
+          setBaseAltitude(airportData.elevation_m);
+          setDefaultElevation(airportData.elevation_m);
+        }
+
+        const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${urlIcao}/points`);
+        if (!pointsResponse.ok) {
+          throw new Error('Failed to fetch airport points');
+        }
+        const pointsData = await pointsResponse.json();
+
+        const transformedPoints = pointsData.map((point) => ({
           id: point.id,
           type: point.type,
           name: point.name,
@@ -305,16 +292,31 @@ const XMLGenerator = () => {
           color: point.color || undefined,
           elevated: point.elevated,
           ihp: point.ihp,
-        }))
-      );
-    } catch (err) {
-      setError(err.message || 'Failed to load airport data');
-      setShowErrorToast(true);
-      setAirport(null);
-    } finally {
-      setIsSearching(false);
-    }
-  };
+        }));
+
+        // Redirect to map if no points found
+        if (transformedPoints.length === 0) {
+          navigate(`/contribute/map/${urlIcao}`);
+          return;
+        }
+
+        setPoints(transformedPoints);
+      } catch (err) {
+        console.error(err);
+        navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
+        return;
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reset functions
+  const resetPadding = () => setPaddingMeters(DEFAULT_PADDING_METERS);
+  const resetAltitude = () => setBaseAltitude(defaultElevation);
 
   // Generate XML from points
   const generateXML = useCallback(() => {
@@ -424,7 +426,7 @@ ${allPolygonXML.join('\n')}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${airport?.icao || 'airport'}-draft.xml`;
+    a.download = `${airport?.icao || 'airport'}-Draft.xml`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -495,175 +497,41 @@ ${allPolygonXML.join('\n')}
     [generatedPolygons.remove]
   );
 
+  if (loading) {
+    return (
+      <Layout>
+        <div className="min-h-screen pt-32 pb-20 flex items-center">
+          <div className="w-full max-w-7xl mx-auto px-6">
+            <div className="flex items-center justify-center h-64">
+              <div className="flex flex-col items-center">
+                <Loader className="w-8 h-8 animate-spin text-zinc-400" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
-      <div className="min-h-screen pt-40 pb-20">
-        <div className="max-w-4xl mx-auto px-6">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold mb-4">MSFS XML Generator</h1>
-            <p className="text-zinc-400 max-w-2xl mx-auto">
-              Generate draft MSFS scenery XML files from BARS airport lighting data. These files
-              will require manual adjustments before submitting as a contribution.
-            </p>
+      <div className="min-h-screen pt-32 pb-20">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="mb-12 mt-6">
+            <div className="flex items-center space-x-2 mb-12">
+              <Breadcrumb>
+                <BreadcrumbItem title="Map" link={`/contribute/map/${icao}`} />
+                <BreadcrumbItem title="Generator" />
+              </Breadcrumb>
+            </div>
           </div>
 
-          {/* Search Bar */}
-          <div className="max-w-xl mx-auto mb-12">
-            <form onSubmit={handleSearch} className="flex gap-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={icao}
-                  onChange={(e) => setIcao(e.target.value.toUpperCase())}
-                  placeholder="Enter ICAO code (e.g., EGLL)"
-                  maxLength={4}
-                  className="w-full pl-12 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-white placeholder:text-zinc-500 uppercase tracking-wider"
-                />
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
-              </div>
-              <Button type="submit" disabled={isSearching}>
-                {isSearching ? <Loader className="w-4 h-4 animate-spin" /> : 'Generate'}
-              </Button>
-            </form>
-          </div>
-
-          {/* Results */}
-          {airport && (
-            <>
-              {/* Airport Info Card */}
-              <Card className="p-6 mb-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold">{airport.icao}</h2>
-                    <p className="text-zinc-400">{airport.name}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="flex items-center space-x-2 px-4 py-2 text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition-colors"
-                  >
-                    <Settings className="w-4 h-4" />
-                    <span>Settings</span>
-                    {showSettings ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Settings Panel */}
-                {showSettings && (
-                  <div className="mb-6 p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Remove Area Padding (m)
-                        </label>
-                        <input
-                          type="number"
-                          value={paddingMeters}
-                          onChange={(e) =>
-                            setPaddingMeters(Math.max(1, parseInt(e.target.value) || 1))
-                          }
-                          min={1}
-                          max={50}
-                          className="w-full px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Base Altitude (m)</label>
-                        <input
-                          type="number"
-                          value={baseAltitude}
-                          onChange={(e) => setBaseAltitude(parseFloat(e.target.value) || 0)}
-                          step={0.1}
-                          className="w-full px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <Button
-                      onClick={generateXML}
-                      variant="secondary"
-                      className="mt-4"
-                      disabled={loading || points.length === 0}
-                    >
-                      {loading ? (
-                        <>
-                          <Loader className="w-4 h-4 mr-2 animate-spin" />
-                          Regenerating...
-                        </>
-                      ) : (
-                        'Regenerate XML'
-                      )}
-                    </Button>
-                  </div>
-                )}
-
-                {/* Statistics */}
-                {generatedXML && (
-                  <div className="grid grid-cols-3 gap-4 mb-6">
-                    <div className="p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-white">{points.length}</div>
-                      <div className="text-sm text-zinc-500">Objects Loaded</div>
-                    </div>
-                    <div className="p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-blue-400">{barsCount}</div>
-                      <div className="text-sm text-zinc-500">BARS Polygons</div>
-                    </div>
-                    <div className="p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-red-400">{removeCount}</div>
-                      <div className="text-sm text-zinc-500">Remove Areas</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* No points warning */}
-                {points.length === 0 && !isSearching && (
-                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center space-x-3">
-                    <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-amber-500">
-                      No points found for this airport. The division may not have added lighting
-                      data yet.
-                    </p>
-                  </div>
-                )}
-
-                {/* Download Actions */}
-                {generatedXML && (
-                  <div className="flex gap-3">
-                    <Button onClick={handleDownload} className="flex-1">
-                      <Download className="w-4 h-4 mr-2" />
-                      Download XML
-                    </Button>
-                    <Button onClick={handleCopy} variant="secondary" className="flex-1">
-                      {copied ? (
-                        <>
-                          <Check className="w-4 h-4 mr-2" />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copy to Clipboard
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </Card>
-
-              {/* Map Preview */}
-              {generatedXML && (
-                <Card className="p-6 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <MapIcon className="w-5 h-5 text-zinc-400" />
-                      <h3 className="text-lg font-medium">Map Preview</h3>
-                    </div>
-                    <span className="text-sm text-zinc-500">{polygonCount} total polygons</span>
-                  </div>
-                  <div className="h-[400px] rounded-lg overflow-hidden border border-zinc-800 relative">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              {/* Map */}
+              <div className="h-150 rounded-lg overflow-hidden border border-zinc-800 relative">
+                {airport ? (
+                  <>
                     <Map
                       ref={mapRef}
                       {...viewState}
@@ -722,33 +590,154 @@ ${allPolygonXML.join('\n')}
                         <span>{styleName}</span>
                       </button>
                     </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="flex flex-col items-center text-zinc-500">
+                      <AlertCircle className="w-12 h-12 mb-3" />
+                      <p>Failed to load airport data</p>
+                    </div>
                   </div>
-                </Card>
-              )}
+                )}
+              </div>
+            </div>
 
-              {/* Info Notice */}
-              {generatedXML && (
-                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center space-x-3">
-                  <Info className="w-5 h-5 text-blue-400 shrink-0" />
-                  <p className="text-blue-400 text-sm">
-                    This is a draft XML file. You may need to adjust altitudes and fine-tune polygon
-                    positions in your scenery editor for best results.
-                  </p>
-                </div>
-              )}
-            </>
-          )}
+            <div className="space-y-6">
+              {airport && (
+                <>
+                  {/* XML Statistics */}
+                  {generatedXML && (
+                    <Card className="p-6">
+                      <div className="mb-4 flex items-start justify-between">
+                        <div>
+                          <h2 className="text-xl font-medium">{airport.icao}</h2>
+                          <p className="text-sm text-zinc-400">{airport.name}</p>
+                        </div>
+                        <button
+                          onClick={() => setShowSettings(!showSettings)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition-colors"
+                          title="Toggle Settings"
+                        >
+                          <Settings className="w-4 h-4" />
+                          {showSettings ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-zinc-400">Objects Loaded</span>
+                          <span className="text-lg font-semibold text-white">{points.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-zinc-400">BARS Polygons</span>
+                          <span className="text-lg font-semibold text-blue-400">{barsCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-zinc-400">Remove Areas</span>
+                          <span className="text-lg font-semibold text-red-400">{removeCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-zinc-400">Total Polygons</span>
+                          <span className="text-lg font-semibold text-white">{polygonCount}</span>
+                        </div>
+                      </div>
 
-          {/* Empty State */}
-          {!airport && !isSearching && (
-            <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-              <FileCode2 className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-zinc-300 mb-2">No Airport Selected</h3>
-              <p className="text-zinc-500">
-                Enter an ICAO code above to generate XML for an airport
-              </p>
-            </Card>
-          )}
+                      {/* Settings Section */}
+                      {showSettings && (
+                        <div className="mt-6 pt-6 border-t border-zinc-700 space-y-4">
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="block text-sm font-medium">
+                                Remove Area Padding (m)
+                              </label>
+                              <button
+                                onClick={resetPadding}
+                                className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
+                                title="Reset to default"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Reset
+                              </button>
+                            </div>
+                            <input
+                              type="number"
+                              value={paddingMeters}
+                              onChange={(e) =>
+                                setPaddingMeters(Math.max(1, parseInt(e.target.value) || 1))
+                              }
+                              min={1}
+                              max={50}
+                              className="w-full px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="block text-sm font-medium">Base Altitude (m)</label>
+                              <button
+                                onClick={resetAltitude}
+                                className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
+                                title="Reset to default"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Reset
+                              </button>
+                            </div>
+                            <input
+                              type="number"
+                              value={baseAltitude}
+                              onChange={(e) => setBaseAltitude(parseFloat(e.target.value) || 0)}
+                              step={0.1}
+                              className="w-full px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  )}
+
+                  {/* Download Actions */}
+                  {generatedXML && (
+                    <Card className="p-6">
+                      <div className="space-y-3">
+                        <Button onClick={handleDownload} className="w-full">
+                          <Download className="w-4 h-4 mr-2" />
+                          Download XML
+                        </Button>
+                        <Button onClick={handleCopy} variant="secondary" className="w-full">
+                          {copied ? (
+                            <>
+                              <Check className="w-4 h-4 mr-2" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4 mr-2" />
+                              Copy to Clipboard
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Info Notice */}
+                  {generatedXML && (
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
+                      <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
+                      <p className="text-sm text-blue-400">
+                        This is a draft XML generated from existing airport lighting data. You will
+                        need to adjust and fine-tune polygon positions in your scenery for best
+                        results. This file is a draft and should not be used for a final submission.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

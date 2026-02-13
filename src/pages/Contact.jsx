@@ -289,7 +289,7 @@ const Contact = () => {
       {/* Toast notifications */}
       <Toast
         title="Message sent successfully"
-        description="Your message has successfully been sent, we will get back to you soon."
+        description="We will get back to you soon."
         variant="success"
         show={showSuccessToast}
         onClose={() => setShowSuccessToast(false)}
