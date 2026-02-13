@@ -6,9 +6,9 @@ const DEFAULT_IMAGE = `${SITE_URL}/banner.png`;
 const FORCE_NOINDEX =
   String(import.meta.env.VITE_SEO_PREVIEW_NOINDEX || '').toLowerCase() === 'true';
 const DEFAULT_META = {
-  title: 'BARS - Airport Lighting Simulation',
+  title: 'BARS - Advanced Airport Lighting Simulation',
   description:
-    'BARS adds realistic airport stopbar and lighting behavior to Microsoft Flight Simulator for VATSIM operations.',
+    'BARS revolutionizes your VATSIM experience with completely free realistic airport lighting simulation. Fully compatible with Microsoft Flight Simulator 2020, and 2024, seamlessly integrated with both default and major third-party sceneries.',
 };
 
 const ROUTE_META = {
@@ -65,8 +65,7 @@ const startsWithMeta = [
     prefix: '/contribute/',
     meta: {
       title: 'BARS - Contribute',
-      description:
-        'Submit airport data, test contributions, and help expand BARS coverage for more airports.',
+      description: 'Submit scenery contributions, and help expand BARS coverage for more airports.',
     },
   },
 ];
