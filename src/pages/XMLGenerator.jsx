@@ -211,9 +211,10 @@ const XMLGenerator = () => {
   const { icao: urlIcao } = useParams();
   const navigate = useNavigate();
   const mapRef = useRef(null);
+  const normalizedIcao = useMemo(() => urlIcao?.trim().toUpperCase() || '', [urlIcao]);
 
   // State
-  const [icao] = useState(urlIcao?.toUpperCase() || '');
+  const icao = normalizedIcao;
   const [airport, setAirport] = useState(null);
   const [points, setPoints] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -239,7 +240,7 @@ const XMLGenerator = () => {
   // Auto-load airport data on mount
   useEffect(() => {
     const fetchData = async () => {
-      if (!urlIcao || !/^[A-Za-z0-9]{4}$/.test(urlIcao)) {
+      if (!normalizedIcao || !/^[A-Z0-9]{4}$/.test(normalizedIcao)) {
         navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
         return;
       }
@@ -250,7 +251,9 @@ const XMLGenerator = () => {
       setPoints([]);
 
       try {
-        const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${urlIcao}`);
+        const airportResponse = await fetch(
+          `https://v2.stopbars.com/airports?icao=${normalizedIcao}`
+        );
         if (!airportResponse.ok) {
           throw new Error('Failed to load airport data');
         }
@@ -277,7 +280,9 @@ const XMLGenerator = () => {
           setDefaultElevation(airportData.elevation_m);
         }
 
-        const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${urlIcao}/points`);
+        const pointsResponse = await fetch(
+          `https://v2.stopbars.com/airports/${normalizedIcao}/points`
+        );
         if (!pointsResponse.ok) {
           throw new Error('Failed to fetch airport points');
         }
@@ -296,7 +301,7 @@ const XMLGenerator = () => {
 
         // Redirect to map if no points found
         if (transformedPoints.length === 0) {
-          navigate(`/contribute/map/${urlIcao}`);
+          navigate(`/contribute/map/${normalizedIcao}`);
           return;
         }
 
@@ -312,7 +317,7 @@ const XMLGenerator = () => {
 
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [normalizedIcao]);
 
   // Reset functions
   const resetPadding = () => setPaddingMeters(DEFAULT_PADDING_METERS);

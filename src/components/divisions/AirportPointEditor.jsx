@@ -4,10 +4,11 @@ import PropTypes from 'prop-types';
 import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { X, ExternalLink } from 'lucide-react';
+import { X, ExternalLink, Check } from 'lucide-react';
 import { Dropdown } from '../shared/Dropdown';
 import { Layout } from '../layout/Layout';
 import { Toast } from '../shared/Toast';
+import { Button } from '../shared/Button';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import 'leaflet/dist/leaflet.css';
@@ -1384,8 +1385,20 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     const onKey = (e) => {
       const isMac = navigator.platform.toLowerCase().includes('mac');
       const mod = isMac ? e.metaKey : e.ctrlKey;
-      if (!mod) return;
       const key = (e.key || '').toLowerCase();
+      if (key === 'escape') {
+        if (creatingNew && !selectedId) {
+          e.preventDefault();
+          e.stopPropagation();
+          setCreatingNew(false);
+          setDrawingCoords([]);
+          if (mapInstanceRef.current?.pm) {
+            mapInstanceRef.current.pm.disableDraw();
+          }
+        }
+        return;
+      }
+      if (!mod) return;
       // Undo: Ctrl/Cmd+Z
       if (key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -1397,7 +1410,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     // Use capture phase to win over any handlers inside the map canvas
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [performUndo]);
+  }, [performUndo, creatingNew, selectedId]);
 
   const startAddPoint = useCallback(() => {
     if (!mapInstanceRef.current) return;
@@ -2139,6 +2152,10 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     }
     return height;
   }, [height]);
+  const hasPendingChanges =
+    changeset.create.length > 0 ||
+    Object.keys(changeset.modify).length > 0 ||
+    changeset.delete.length > 0;
 
   if (permissionsLoading) {
     return (
@@ -2198,9 +2215,11 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>
           <h1 className="text-xl font-semibold text-white tracking-tight">
-            {icao ? `${icao} Object Editor` : 'Airport Object Editor'}
+            {icao ? `${icao} Editor` : 'Editor'}
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">Manage objects for BARS system integration</p>
+          <p className="text-sm text-zinc-400 mt-1">
+            Manage airport lighting data for {icao || 'ICAO'}
+          </p>
         </div>
         {(() => {
           const isPlacing = creatingNew && !selectedId; // only toggle to Cancel while actively placing
@@ -2212,7 +2231,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 if (!selectedId && !creatingNew) startAddPoint();
               }}
               disabled={disabled}
-              className={`shrink-0 inline-flex items-center rounded-md text-sm font-medium px-4 py-2 border transition-colors ${disabled ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' : isPlacing ? 'bg-red-600 hover:bg-red-500 text-white border-red-500' : 'bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300 shadow'}`}
+              className={`shrink-0 inline-flex items-center rounded-md text-sm font-medium px-4 py-2 border transition-colors mt-2 ${disabled ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' : isPlacing ? 'bg-red-600 hover:bg-red-500 text-white border-red-500' : 'bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300 shadow'}`}
             >
               {isPlacing ? 'Cancel' : '+ Add New Object'}
             </button>
@@ -2379,10 +2398,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
             </MapContainer>
           )}
         </div>
-        <div className="w-full lg:w-96 flex flex-col gap-5 overflow-y-auto p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg">
-          <h3 className="text-lg font-medium text-white">
-            {selectedId && !selectedId.startsWith('new_') ? 'Edit Object' : 'Add New Object'}
-          </h3>
+        <div className="w-full lg:w-96 flex flex-col gap-5 min-h-0 p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg">
+          {(selectedId || creatingNew) && (
+            <h3 className="text-lg font-medium text-white">
+              {selectedId && !selectedId.startsWith('new_') ? 'Edit Object' : 'Add New Object'}
+            </h3>
+          )}
           {remoteLoading && (
             <div className="text-[11px] text-blue-300 bg-blue-900/30 rounded px-2 py-1">
               Loading existing points…
@@ -2408,15 +2429,15 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           )}
           {selectedId ? (
             <>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {!creatingNew && selectedId.startsWith('new_') && (
                   <div className="text-[10px] text-amber-300 bg-amber-900/40 px-2 py-1 rounded">
                     New geometry captured. Fill details and save.
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
-                    Object Type
+                  <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1.5">
+                    Type
                   </label>
                   <Dropdown
                     options={POINT_TYPES.map((t) => ({ value: t, label: formatLabel(t) }))}
@@ -2443,8 +2464,8 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
-                    Object Name
+                  <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1.5">
+                    Name
                   </label>
                   <input
                     className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1 text-sm"
@@ -2460,7 +2481,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 </div>
                 {(formState.type === 'stopbar' || formState.type === 'taxiway') && (
                   <div>
-                    <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
+                    <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1.5">
                       Directionality
                     </label>
                     <Dropdown
@@ -2480,7 +2501,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 )}
                 {formState.type === 'taxiway' && (
                   <div>
-                    <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1">
+                    <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1.5">
                       Color
                     </label>
                     <Dropdown
@@ -2491,38 +2512,55 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   </div>
                 )}
                 {formState.type === 'stopbar' && (
-                  <>
-                    {formState.directionality === 'uni-directional' && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <input
-                          id="elevated"
-                          type="checkbox"
-                          checked={formState.elevated}
-                          onChange={(e) =>
-                            setFormState((s) => ({
-                              ...s,
-                              elevated: e.target.checked,
-                              directionality: 'uni-directional', // enforce
-                            }))
-                          }
-                        />
-                        <label htmlFor="elevated" className="text-zinc-300">
-                          Elevated Stopbar Lights
+                  <div>
+                    <label className="block text-xs font-medium tracking-wide text-zinc-300 mb-1.5">
+                      Other
+                    </label>
+                    <div className="space-y-3.5">
+                      {formState.directionality === 'uni-directional' && (
+                        <label className="flex items-center gap-3 text-[15px] cursor-pointer select-none">
+                          <input
+                            id="elevated"
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={formState.elevated}
+                            onChange={(e) =>
+                              setFormState((s) => ({
+                                ...s,
+                                elevated: e.target.checked,
+                                directionality: 'uni-directional', // enforce
+                              }))
+                            }
+                          />
+                          <span
+                            className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-colors ${formState.elevated ? 'bg-emerald-500 border-emerald-500' : 'bg-zinc-800 border-zinc-600'}`}
+                          >
+                            {formState.elevated && (
+                              <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                            )}
+                          </span>
+                          <span className="text-zinc-300">Elevated Stopbar Lights</span>
                         </label>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-sm">
-                      <input
-                        id="ihp"
-                        type="checkbox"
-                        checked={formState.ihp}
-                        onChange={(e) => setFormState((s) => ({ ...s, ihp: e.target.checked }))}
-                      />
-                      <label htmlFor="ihp" className="text-zinc-300">
-                        Intermediate Holding Point (IHP)
+                      )}
+                      <label className="flex items-center gap-3 text-[15px] cursor-pointer select-none">
+                        <input
+                          id="ihp"
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={formState.ihp}
+                          onChange={(e) => setFormState((s) => ({ ...s, ihp: e.target.checked }))}
+                        />
+                        <span
+                          className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-colors ${formState.ihp ? 'bg-emerald-500 border-emerald-500' : 'bg-zinc-800 border-zinc-600'}`}
+                        >
+                          {formState.ihp && (
+                            <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                          )}
+                        </span>
+                        <span className="text-zinc-300">Intermediate Holding Point (IHP)</span>
                       </label>
                     </div>
-                  </>
+                  </div>
                 )}
                 {formErrors.length > 0 && (
                   <ul className="text-xs text-red-400 list-disc pl-4">
@@ -2532,206 +2570,215 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                   </ul>
                 )}
                 <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={handleSave}
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded px-3 py-1.5"
-                  >
+                  <Button onClick={handleSave} className="flex-1 px-3! py-1.5! text-sm">
                     Save
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary"
                     onClick={handleCancelEdit}
-                    className="bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded px-3 py-1.5"
+                    className="px-3! py-1.5! text-sm"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={handleReverse}
                     disabled={!selectedId}
-                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded px-3 py-1.5"
+                    className="px-3! py-1.5! text-sm disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Reverse
-                  </button>
+                  </Button>
                   {selectedId.startsWith('new_') ? (
-                    <button
+                    <Button
+                      variant="destructive"
                       onClick={() => handleRemoveUnsavedNew(selectedId)}
-                      className="text-white text-sm rounded px-3 py-1.5 bg-red-600 hover:bg-red-500"
+                      className="px-3! py-1.5! text-sm"
                     >
                       Remove
-                    </button>
+                    </Button>
                   ) : (
-                    <button
+                    <Button
+                      variant="destructive"
                       onClick={handleDeleteToggle}
-                      className={`text-white text-sm rounded px-3 py-1.5 ${changeset.delete.includes(selectedId) ? 'bg-amber-600 hover:bg-amber-500' : 'bg-red-600 hover:bg-red-500'}`}
+                      className={`px-3! py-1.5! text-sm ${changeset.delete.includes(selectedId) ? 'bg-amber-600! hover:bg-amber-500! border-transparent!' : ''}`}
                     >
                       {changeset.delete.includes(selectedId) ? 'Undo Delete' : 'Delete'}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
             </>
           ) : (
-            <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded p-3">
-              {creatingNew ? (
+            creatingNew && (
+              <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded p-3">
                 <span>
                   Click on the map to add vertices. To finish, Ctrl+Left Click anywhere on the map
-                  or click on a vertex. Adjust if needed, then press Save.
+                  or click on a vertex. Press Escape or Cancel to stop placing.
                 </span>
-              ) : (
-                'Click + Add New Object to start creating a new object polyline on the map.'
-              )}
-            </div>
+              </div>
+            )
           )}
-          <hr className="border-zinc-800" />
-          <div className="flex items-center mt-2">
-            <h3 className="text-sm font-medium text-zinc-200">Objects</h3>
-          </div>
-          <div className="mt-1 relative">
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, type, or ID"
-              className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded pl-2 pr-8 py-1 text-sm"
-            />
-            {searchQuery?.trim() ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  searchInputRef.current?.focus();
-                }}
-                aria-label="Clear search"
-                className="absolute inset-y-0 right-0 flex items-center pr-2 text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            ) : null}
-          </div>
-          {combinedObjects.length === 0 ? (
-            <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded px-3 py-3 text-center">
-              No objects.
-            </div>
-          ) : (
-            <ul className="flex flex-col gap-1.5 text-[13px] max-h-72 overflow-y-auto pr-1">
-              {combinedObjects.map((p) => {
-                const isSelected = p.id === selectedId;
-                const isNew = p.id.startsWith('new_');
-                const typeLabel = formatLabel(p.type || '');
-                const barsId = !isNew ? p.id : 'Unsaved';
-                return (
-                  <li
-                    key={`obj-${p.id}-${p.state}`}
-                    className={`group rounded border flex flex-col gap-1 px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'border-blue-500 bg-zinc-700/80' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700/70'}`}
+          {!selectedId && !creatingNew && (
+            <>
+              <div className="flex items-center mt-0">
+                <h3 className="text-xl font-semibold text-zinc-100 tracking-tight">Objects</h3>
+              </div>
+              <div className="mt-0.5 relative">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by name, type, or ID"
+                  className="w-full bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded pl-2 pr-8 py-1 text-sm"
+                />
+                {searchQuery?.trim() ? (
+                  <button
+                    type="button"
                     onClick={() => {
-                      const layer = featureLayerMapRef.current[p.id];
-                      if (layer) registerSelect(layer, p.id, isNew);
+                      setSearchQuery('');
+                      searchInputRef.current?.focus();
                     }}
+                    aria-label="Clear search"
+                    className="absolute inset-y-0 right-0 flex items-center pr-2 text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-medium text-zinc-100 truncate text-[12px]">
-                          {p.name || '(Unnamed)'}
-                        </span>
-                        <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-600/60 text-zinc-100 tracking-wide">
-                          {typeLabel}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-[9px] uppercase tracking-wide rounded px-1 py-0.5 shrink-0 ${p.state === 'create' && 'bg-green-700 text-green-100'} ${p.state === 'modify' && 'bg-blue-700 text-blue-100'} ${p.state === 'delete' && 'bg-red-700 text-red-100'} ${p.state === 'existing' && 'bg-zinc-600 text-zinc-200'}`}
-                      >
-                        {p.state}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-start text-[10px] text-zinc-400 font-mono">
-                      <span className="truncate" title={barsId}>
-                        {barsId}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <div className="pt-1">
-            <button
-              disabled={
-                uploadState.status === 'uploading' ||
-                (changeset.create.length === 0 &&
-                  Object.keys(changeset.modify).length === 0 &&
-                  changeset.delete.length === 0)
-              }
-              onClick={async () => {
-                const token = getVatsimToken();
-                if (!token) {
-                  setToastConfig({
-                    title: 'Login Required',
-                    description: 'Please login to upload changes.',
-                    variant: 'destructive',
-                  });
-                  setShowToast(true);
-                  return;
-                }
-                const payload = serializeChangeset(changeset);
-                if (
-                  payload.create.length === 0 &&
-                  Object.keys(payload.modify).length === 0 &&
-                  payload.delete.length === 0
-                )
-                  return;
-                setUploadState({ status: 'uploading', message: 'Uploading changes…' });
-                try {
-                  const resp = await fetch(
-                    `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/points/batch`,
-                    {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'X-Vatsim-Token': token,
-                      },
-                      body: JSON.stringify(payload),
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex-1 min-h-0">
+                {combinedObjects.length === 0 ? (
+                  <div className="mt-1 rounded-lg border border-zinc-700 bg-zinc-800/70 px-4 py-5 text-center">
+                    <p className="text-sm font-medium text-zinc-200">No objects found</p>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      {searchQuery?.trim()
+                        ? 'Try a different search term.'
+                        : 'Objects will appear here once loaded or created.'}
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="mt-1 flex h-full flex-col gap-1.5 overflow-y-auto pr-1 text-[13px]">
+                    {combinedObjects.map((p) => {
+                      const isSelected = p.id === selectedId;
+                      const isNew = p.id.startsWith('new_');
+                      const typeLabel = formatLabel(p.type || '');
+                      const barsId = !isNew ? p.id : 'Unsaved';
+                      return (
+                        <li
+                          key={`obj-${p.id}-${p.state}`}
+                          className={`group rounded border flex flex-col gap-1 px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'border-blue-500 bg-zinc-700/80' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700/70'}`}
+                          onClick={() => {
+                            const layer = featureLayerMapRef.current[p.id];
+                            if (layer) registerSelect(layer, p.id, isNew);
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-medium text-zinc-100 truncate text-[12px]">
+                                {p.name || '(Unnamed)'}
+                              </span>
+                              <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-600/60 text-zinc-100 tracking-wide">
+                                {typeLabel}
+                              </span>
+                            </div>
+                            <span
+                              className={`text-[9px] uppercase tracking-wide rounded px-1 py-0.5 shrink-0 ${p.state === 'create' && 'bg-green-700 text-green-100'} ${p.state === 'modify' && 'bg-blue-700 text-blue-100'} ${p.state === 'delete' && 'bg-red-700 text-red-100'} ${p.state === 'existing' && 'bg-zinc-600 text-zinc-200'}`}
+                            >
+                              {p.state}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-start text-[10px] text-zinc-400 font-mono">
+                            <span className="truncate" title={barsId}>
+                              {barsId}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+              <div className="pt-1">
+                <button
+                  disabled={uploadState.status === 'uploading' || !hasPendingChanges}
+                  onClick={async () => {
+                    const token = getVatsimToken();
+                    if (!token) {
+                      setToastConfig({
+                        title: 'Login Required',
+                        description: 'Please login to upload changes.',
+                        variant: 'destructive',
+                      });
+                      setShowToast(true);
+                      return;
                     }
-                  );
-                  if (!resp.ok) {
-                    let msg = '';
+                    const payload = serializeChangeset(changeset);
+                    if (
+                      payload.create.length === 0 &&
+                      Object.keys(payload.modify).length === 0 &&
+                      payload.delete.length === 0
+                    )
+                      return;
+                    setUploadState({ status: 'uploading', message: 'Uploading changes…' });
                     try {
-                      const j = await resp.json();
-                      msg = j?.error || j?.message || '';
-                    } catch {
-                      /* ignore */
+                      const resp = await fetch(
+                        `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/points/batch`,
+                        {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'X-Vatsim-Token': token,
+                          },
+                          body: JSON.stringify(payload),
+                        }
+                      );
+                      if (!resp.ok) {
+                        let msg = '';
+                        try {
+                          const j = await resp.json();
+                          msg = j?.error || j?.message || '';
+                        } catch {
+                          /* ignore */
+                        }
+                        throw new Error(msg || `Upload failed (${resp.status})`);
+                      }
+                      setUploadState({ status: 'success', message: 'Changes saved.' });
+                      setToastConfig({
+                        title: 'Changes Saved',
+                        description: 'Your changes have been successfully uploaded.',
+                        variant: 'success',
+                      });
+                      setShowToast(true);
+                      Object.entries(featureLayerMapRef.current).forEach(([, layer]) => {
+                        if (layer?.remove) layer.remove();
+                      });
+                      featureLayerMapRef.current = {};
+                      resetAll();
+                      setRemotePoints(null);
+                      triggerFetchPoints(true);
+                    } catch (e) {
+                      setUploadState({ status: 'error', message: e.message });
+                      setToastConfig({
+                        title: 'Upload Failed',
+                        description: e.message || 'An error occurred while uploading your changes.',
+                        variant: 'destructive',
+                      });
+                      setShowToast(true);
                     }
-                    throw new Error(msg || `Upload failed (${resp.status})`);
-                  }
-                  setUploadState({ status: 'success', message: 'Changes saved.' });
-                  setToastConfig({
-                    title: 'Changes Saved',
-                    description: 'Your changes have been successfully uploaded.',
-                    variant: 'success',
-                  });
-                  setShowToast(true);
-                  // Clear local layers and refetch
-                  Object.entries(featureLayerMapRef.current).forEach(([, layer]) => {
-                    if (layer?.remove) layer.remove();
-                  });
-                  featureLayerMapRef.current = {};
-                  resetAll();
-                  setRemotePoints(null);
-                  triggerFetchPoints(true);
-                } catch (e) {
-                  setUploadState({ status: 'error', message: e.message });
-                  setToastConfig({
-                    title: 'Upload Failed',
-                    description: e.message || 'An error occurred while uploading your changes.',
-                    variant: 'destructive',
-                  });
-                  setShowToast(true);
-                }
-              }}
-              className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 transition-colors ${uploadState.status === 'uploading' || (changeset.create.length === 0 && Object.keys(changeset.modify).length === 0 && changeset.delete.length === 0) ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-            >
-              {uploadState.status === 'uploading' ? 'Uploading…' : 'Save & Upload'}
-            </button>
-          </div>
+                  }}
+                  className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 inline-flex items-center justify-center gap-2 transition-colors ${uploadState.status === 'uploading' || !hasPendingChanges ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-400 text-white'}`}
+                >
+                  {uploadState.status === 'uploading' && (
+                    <span
+                      className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span>{uploadState.status === 'uploading' ? 'Uploading…' : 'Save & Upload'}</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
       <Toast
