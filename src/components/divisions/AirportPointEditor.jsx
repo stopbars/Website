@@ -4,7 +4,21 @@ import PropTypes from 'prop-types';
 import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { X, ExternalLink, Check } from 'lucide-react';
+import {
+  X,
+  ExternalLink,
+  Check,
+  Plus,
+  SquarePen,
+  Trash2,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  Route,
+  CircleFadingPlus,
+  Loader,
+  MapPinPlus,
+} from 'lucide-react';
 import { Dropdown } from '../shared/Dropdown';
 import { Layout } from '../layout/Layout';
 import { Toast } from '../shared/Toast';
@@ -32,6 +46,44 @@ const formatLabel = (str) => {
         .join('-')
     )
     .join(' ');
+};
+
+/**
+ * Parse a coordinate string in either decimal or DMS format.
+ * Decimal examples: "-27.3815, 153.1314"  or  "-27.3815 153.1314"
+ * DMS examples:     "27°22'53.5"S 153°07'53.0"E"  or  "37°39'47.52"S 144°50'51.69"E"
+ * Returns { lat, lng } or null if unparseable.
+ */
+const parseCoordinateString = (input) => {
+  if (!input || typeof input !== 'string') return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // Try DMS format: 27°22'53.5"S 153°07'53.0"E  (various quote styles)
+  const dmsRegex =
+    /(-?\d+)[°]\s*(\d+)[′'']\s*([\d.]+)[″""]\s*([NSns])\s*[,;\s]+\s*(-?\d+)[°]\s*(\d+)[′'']\s*([\d.]+)[″""]\s*([EWew])/;
+  const dmsMatch = trimmed.match(dmsRegex);
+  if (dmsMatch) {
+    let lat =
+      parseFloat(dmsMatch[1]) + parseFloat(dmsMatch[2]) / 60 + parseFloat(dmsMatch[3]) / 3600;
+    if (dmsMatch[4].toUpperCase() === 'S') lat = -lat;
+    let lng =
+      parseFloat(dmsMatch[5]) + parseFloat(dmsMatch[6]) / 60 + parseFloat(dmsMatch[7]) / 3600;
+    if (dmsMatch[8].toUpperCase() === 'W') lng = -lng;
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180)
+      return { lat, lng };
+  }
+
+  // Try decimal format: "-27.3815, 153.1314" or "-27.3815 153.1314"
+  const parts = trimmed.split(/[,;\s]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const lat = parseFloat(parts[0]);
+    const lng = parseFloat(parts[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180)
+      return { lat, lng };
+  }
+
+  return null;
 };
 
 const MIN_SEGMENT_POINT_DISTANCE_METERS = 1; // 1 meter
@@ -1178,7 +1230,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const navigate = useNavigate();
   const [remotePoints, setRemotePoints] = useState(null); // null = not loaded
   const [remoteLoading, setRemoteLoading] = useState(false);
-  const [remoteError, setRemoteError] = useState(null);
+  const [, setRemoteError] = useState(null);
   const [uploadState, setUploadState] = useState({ status: 'idle', message: '' }); // uploading|success|error|idle
   const [showToast, setShowToast] = useState(false);
   const [toastConfig, setToastConfig] = useState({
@@ -1291,6 +1343,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     };
   }, [icao, isEuroscopeOnly]);
   const [changeset, setChangeset] = useState(defaultChangeset);
+  const [showReviewPanel, setShowReviewPanel] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [formState, setFormState] = useState(emptyFormState);
   const [formErrors, setFormErrors] = useState([]);
@@ -1306,6 +1359,11 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const editUndoStackRef = useRef({});
   const lastEditCoordsRef = useRef({});
   const drawingCoordsRef = useRef([]);
+  const [manualCoordsMode, setManualCoordsMode] = useState(false);
+  const [manualCoords, setManualCoords] = useState([{ value: '' }, { value: '' }]);
+  const [manualCoordsErrors, setManualCoordsErrors] = useState([]);
+  const [manualGenerateState, setManualGenerateState] = useState('idle'); // idle | generating | generated
+  const [manualPlacedId, setManualPlacedId] = useState(null); // temp id of placed-but-not-yet-continued feature
   useEffect(() => {
     drawingCoordsRef.current = drawingCoords;
   }, [drawingCoords]);
@@ -1390,8 +1448,23 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
         if (creatingNew && !selectedId) {
           e.preventDefault();
           e.stopPropagation();
+          // Inline cancel logic (cancelNewDrawing is defined after this effect)
+          if (manualPlacedId) {
+            const layer = featureLayerMapRef.current[manualPlacedId];
+            if (layer) layer.remove();
+            setChangeset((prev) => ({
+              ...prev,
+              create: prev.create.filter((c) => c._tempId !== manualPlacedId),
+            }));
+            delete featureLayerMapRef.current[manualPlacedId];
+          }
           setCreatingNew(false);
           setDrawingCoords([]);
+          setManualCoordsMode(false);
+          setManualCoords([{ value: '' }, { value: '' }]);
+          setManualCoordsErrors([]);
+          setManualGenerateState('idle');
+          setManualPlacedId(null);
           if (mapInstanceRef.current?.pm) {
             mapInstanceRef.current.pm.disableDraw();
           }
@@ -1410,7 +1483,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     // Use capture phase to win over any handlers inside the map canvas
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [performUndo, creatingNew, selectedId]);
+  }, [performUndo, creatingNew, selectedId, manualPlacedId]);
 
   const startAddPoint = useCallback(() => {
     if (!mapInstanceRef.current) return;
@@ -1419,6 +1492,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     // entering drawing mode — undo/redo uses drawing stacks only
     setCreatingNew(true);
     setDrawingCoords([]);
+    // Ensure manual coords state is clean
+    setManualCoordsMode(false);
+    setManualCoords([{ value: '' }, { value: '' }]);
+    setManualCoordsErrors([]);
+    setManualGenerateState('idle');
+    setManualPlacedId(null);
     setFormState(emptyFormState);
     map.pm.enableDraw('Line', {
       snappable: true,
@@ -1433,8 +1512,23 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
 
   // Cancel in-progress placement (before a new temp feature is created/selected)
   const cancelNewDrawing = useCallback(() => {
+    // If we placed a manual-coords feature but haven't continued yet, remove it
+    if (manualPlacedId) {
+      const layer = featureLayerMapRef.current[manualPlacedId];
+      if (layer) layer.remove();
+      setChangeset((prev) => ({
+        ...prev,
+        create: prev.create.filter((c) => c._tempId !== manualPlacedId),
+      }));
+      delete featureLayerMapRef.current[manualPlacedId];
+    }
     setCreatingNew(false);
     setDrawingCoords([]);
+    setManualCoordsMode(false);
+    setManualCoords([{ value: '' }, { value: '' }]);
+    setManualCoordsErrors([]);
+    setManualGenerateState('idle');
+    setManualPlacedId(null);
     if (mapInstanceRef.current?.pm) {
       mapInstanceRef.current.pm.disableDraw();
     }
@@ -1445,7 +1539,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
       setSelectedId(null);
       setFormState(emptyFormState);
     }
-  }, [selectedId]);
+  }, [selectedId, manualPlacedId]);
 
   const handleRemoveUnsavedNew = useCallback(
     (targetId) => {
@@ -1531,6 +1625,29 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     return [];
   }, []);
 
+  const getOutOfBoundsCoordinates = useCallback(
+    (coords = []) => {
+      if (
+        !airportMeta ||
+        !Number.isFinite(airportMeta.bbox_min_lat) ||
+        !Number.isFinite(airportMeta.bbox_min_lon) ||
+        !Number.isFinite(airportMeta.bbox_max_lat) ||
+        !Number.isFinite(airportMeta.bbox_max_lon)
+      ) {
+        return [];
+      }
+
+      return coords.filter(
+        (c) =>
+          c.lat < airportMeta.bbox_min_lat ||
+          c.lat > airportMeta.bbox_max_lat ||
+          c.lng < airportMeta.bbox_min_lon ||
+          c.lng > airportMeta.bbox_max_lon
+      );
+    },
+    [airportMeta]
+  );
+
   const pushGeometryChange = useCallback(
     (layer) => {
       if (!layer) return;
@@ -1564,6 +1681,15 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     (layer, id, isNew = false) => {
       if (creatingNew && !isNew) {
         return;
+      }
+      // If user clicks a manually-placed feature directly on the map (bypassing Next Step),
+      // reset the manual coords state so the next Add New Object starts fresh.
+      if (manualCoordsMode) {
+        setManualCoordsMode(false);
+        setManualCoords([{ value: '' }, { value: '' }]);
+        setManualCoordsErrors([]);
+        setManualGenerateState('idle');
+        setManualPlacedId(null);
       }
       setSelectedId(id);
       // initialize per-object edit history
@@ -1681,8 +1807,115 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
         styleLayerByPoint(lyr, ptData, pid === id, isDeleted);
       });
     },
-    [existingMap, changeset, pushGeometryChange, extractCoords, creatingNew]
+    [existingMap, changeset, pushGeometryChange, extractCoords, creatingNew, manualCoordsMode]
   );
+
+  // Place a new object on the map from manually-entered coordinates (generate step)
+  const handleManualCoordsPlace = useCallback(() => {
+    const parsed = manualCoords.map((c) => parseCoordinateString(c.value));
+    const errors = [];
+    parsed.forEach((p, idx) => {
+      if (!p) errors.push(`Vertex ${idx + 1}: invalid or unrecognised coordinate format.`);
+    });
+    const validCoords = parsed.filter(Boolean);
+    if (validCoords.length < 2 && errors.length === 0) {
+      errors.push('At least 2 valid coordinates are required.');
+    }
+    if (errors.length > 0) {
+      setManualCoordsErrors(errors);
+      return;
+    }
+
+    // Validate that all coordinates fall within the airport bounding box
+    const outOfBounds = getOutOfBoundsCoordinates(validCoords);
+    if (outOfBounds.length > 0) {
+      setManualCoordsErrors([
+        `${outOfBounds.length === validCoords.length ? 'All' : outOfBounds.length} of the entered coordinates are outside the airport boundary. Please check your coordinates and try again.`,
+      ]);
+      setToastConfig({
+        title: 'Coordinates Not Allowed',
+        description:
+          'One or more vertices are outside the airport boundary box. Coordinates must be within the defined airport area.',
+        variant: 'warning',
+      });
+      setShowToast(true);
+      return;
+    }
+
+    setManualCoordsErrors([]);
+    setManualGenerateState('generating');
+
+    const map = mapInstanceRef.current;
+    if (!map) {
+      setManualGenerateState('idle');
+      return;
+    }
+    map.pm.disableDraw();
+
+    // If a previous generation exists, remove it first
+    if (manualPlacedId) {
+      const oldLayer = featureLayerMapRef.current[manualPlacedId];
+      if (oldLayer) oldLayer.remove();
+      setChangeset((prev) => ({
+        ...prev,
+        create: prev.create.filter((c) => c._tempId !== manualPlacedId),
+      }));
+      delete featureLayerMapRef.current[manualPlacedId];
+    }
+
+    const latlngs = validCoords.map((c) => [c.lat, c.lng]);
+    const assignedId = `new_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const layer = L.polyline(latlngs, { pointId: assignedId, color: '#3b82f6' });
+    layer.addTo(map);
+    featureLayerMapRef.current[assignedId] = layer;
+
+    // Fit map to show the new polyline
+    try {
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.5));
+    } catch {
+      /* ignore */
+    }
+
+    // Push initial geometry into changeset so overlay picks it up
+    const coords = latlngs.map(([lat, lng]) => ({ lat, lng }));
+    setChangeset((prev) => ({
+      ...prev,
+      create: [
+        ...prev.create,
+        { _tempId: assignedId, type: 'stopbar', name: '', coordinates: coords },
+      ],
+    }));
+
+    setManualPlacedId(assignedId);
+    // Small delay for visual feedback
+    setTimeout(() => setManualGenerateState('generated'), 350);
+  }, [manualCoords, manualPlacedId, getOutOfBoundsCoordinates]);
+
+  // Continue from manual coords generate step → select the placed feature and enter edit form
+  const handleManualCoordsContinue = useCallback(() => {
+    if (!manualPlacedId) return;
+    const layer = featureLayerMapRef.current[manualPlacedId];
+    if (!layer) return;
+
+    // Register selection (sets selectedId, populates form, enables vertex editing)
+    registerSelect(layer, manualPlacedId, true);
+
+    // Push geometry change to changeset
+    try {
+      pushGeometryChange(layer);
+    } catch {
+      /* ignore */
+    }
+
+    // Reset manual entry state
+    setManualCoordsMode(false);
+    setManualCoords([{ value: '' }, { value: '' }]);
+    setManualCoordsErrors([]);
+    setManualGenerateState('idle');
+    setManualPlacedId(null);
+    setDrawingCoords([]);
+  }, [manualPlacedId, registerSelect, pushGeometryChange]);
 
   const handleCancelEdit = useCallback(() => {
     if (!selectedId) return;
@@ -1819,6 +2052,18 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     setFormErrors(errors);
     if (errors.length) return;
 
+    const outOfBoundsCoordinates = getOutOfBoundsCoordinates(coordinates);
+    if (outOfBoundsCoordinates.length > 0) {
+      setToastConfig({
+        title: 'Coordinates Not Allowed',
+        description:
+          'One or more vertices are outside the airport boundary box. Coordinates must be within the defined airport area.',
+        variant: 'warning',
+      });
+      setShowToast(true);
+      return;
+    }
+
     setChangeset((prev) => {
       const next = { ...prev };
       if (selectedId.startsWith('new_')) {
@@ -1872,6 +2117,45 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
     return a.every((p, i) => p.lat === b[i].lat && p.lng === b[i].lng);
   };
+
+  const revertChange = useCallback(
+    (type, id) => {
+      if (type === 'create') {
+        setChangeset((prev) => ({ ...prev, create: prev.create.filter((c) => c._tempId !== id) }));
+        const layer = featureLayerMapRef.current[id];
+        if (layer?.remove) layer.remove();
+        delete featureLayerMapRef.current[id];
+        if (selectedId === id) {
+          setSelectedId(null);
+          setFormState(emptyFormState);
+        }
+      } else if (type === 'modify') {
+        setChangeset((prev) => {
+          const nextModify = { ...prev.modify };
+          delete nextModify[id];
+          return { ...prev, modify: nextModify };
+        });
+        const original = existingMap[id];
+        if (original) {
+          const layer = featureLayerMapRef.current[id];
+          if (layer) {
+            const latlngs = original.coordinates.map((c) => [c.lat, c.lng]);
+            if (layer.setLatLngs && latlngs.length >= 2) layer.setLatLngs(latlngs);
+            else if (layer.setLatLng && latlngs.length === 1) layer.setLatLng(latlngs[0]);
+            styleLayerByPoint(layer, original);
+          }
+        }
+      } else if (type === 'delete') {
+        setChangeset((prev) => ({ ...prev, delete: prev.delete.filter((d) => d !== id) }));
+        const original = existingMap[id];
+        if (original) {
+          const layer = featureLayerMapRef.current[id];
+          if (layer) styleLayerByPoint(layer, original);
+        }
+      }
+    },
+    [selectedId, existingMap]
+  );
 
   const handleReverse = useCallback(() => {
     if (!selectedId) return;
@@ -1935,9 +2219,76 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     setSelectedId(null);
     setFormState(emptyFormState);
     setCreatingNew(false);
+    setShowReviewPanel(false);
     if (mapInstanceRef.current) mapInstanceRef.current.pm.disableDraw();
     editUndoStackRef.current = {};
     lastEditCoordsRef.current = {};
+  };
+
+  const handleUpload = async () => {
+    const token = getVatsimToken();
+    if (!token) {
+      setToastConfig({
+        title: 'Login Required',
+        description: 'Please login to upload changes.',
+        variant: 'destructive',
+      });
+      setShowToast(true);
+      return;
+    }
+    const payload = serializeChangeset(changeset);
+    if (
+      payload.create.length === 0 &&
+      Object.keys(payload.modify).length === 0 &&
+      payload.delete.length === 0
+    )
+      return;
+    setUploadState({ status: 'uploading', message: 'Uploading changes…' });
+    try {
+      const resp = await fetch(
+        `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/points/batch`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Vatsim-Token': token,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!resp.ok) {
+        let msg = '';
+        try {
+          const j = await resp.json();
+          msg = j?.error || j?.message || '';
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg || `Upload failed (${resp.status})`);
+      }
+      setUploadState({ status: 'success', message: 'Changes saved.' });
+      setToastConfig({
+        title: 'Changes Saved',
+        description: 'Your changes have been successfully uploaded.',
+        variant: 'success',
+      });
+      setShowToast(true);
+      Object.entries(featureLayerMapRef.current).forEach(([, layer]) => {
+        if (layer?.remove) layer.remove();
+      });
+      featureLayerMapRef.current = {};
+      resetAll();
+      setRemotePoints(null);
+      triggerFetchPoints(true);
+    } catch (e) {
+      setUploadState({ status: 'error', message: e.message });
+      setToastConfig({
+        title: 'Upload Failed',
+        description: e.message || 'An error occurred while uploading your changes.',
+        variant: 'destructive',
+      });
+      setShowToast(true);
+    }
   };
 
   useEffect(() => {
@@ -2156,6 +2507,14 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     changeset.create.length > 0 ||
     Object.keys(changeset.modify).length > 0 ||
     changeset.delete.length > 0;
+  const totalChanges =
+    changeset.create.length + Object.keys(changeset.modify).length + changeset.delete.length;
+
+  useEffect(() => {
+    if (showReviewPanel && !hasPendingChanges) {
+      setShowReviewPanel(false);
+    }
+  }, [hasPendingChanges, showReviewPanel]);
 
   if (permissionsLoading) {
     return (
@@ -2214,8 +2573,16 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     <div className="flex flex-col px-4 py-6 lg:px-8 pt-16" style={{ height: resolvedHeightValue }}>
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-white tracking-tight">
-            {icao ? `${icao} Editor` : 'Editor'}
+          <h1 className="text-xl font-semibold text-white tracking-tight inline-flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(`/divisions/${divisionId}/manage`)}
+              className="inline-flex items-center justify-center rounded-md p-1 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+              aria-label="Back to division management"
+            >
+              <ChevronLeft className="w-5 h-5" aria-hidden="true" />
+            </button>
+            <span>{icao ? `${icao} Editor` : 'Editor'}</span>
           </h1>
           <p className="text-sm text-zinc-400 mt-1">
             Manage airport lighting data for {icao || 'ICAO'}
@@ -2233,7 +2600,14 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               disabled={disabled}
               className={`shrink-0 inline-flex items-center rounded-md text-sm font-medium px-4 py-2 border transition-colors mt-2 ${disabled ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' : isPlacing ? 'bg-red-600 hover:bg-red-500 text-white border-red-500' : 'bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300 shadow'}`}
             >
-              {isPlacing ? 'Cancel' : '+ Add New Object'}
+              {isPlacing ? (
+                <>
+                  <X className="w-4 h-4 mr-1.5" />
+                  Cancel
+                </>
+              ) : (
+                '+ Add New Object'
+              )}
             </button>
           );
         })()}
@@ -2398,33 +2772,22 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
             </MapContainer>
           )}
         </div>
-        <div className="w-full lg:w-96 flex flex-col gap-5 min-h-0 p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg">
+        <div className="w-full lg:w-96 flex flex-col gap-5 min-h-0 p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg overflow-y-auto">
           {(selectedId || creatingNew) && (
-            <h3 className="text-lg font-medium text-white">
-              {selectedId && !selectedId.startsWith('new_') ? 'Edit Object' : 'Add New Object'}
-            </h3>
-          )}
-          {remoteLoading && (
-            <div className="text-[11px] text-blue-300 bg-blue-900/30 rounded px-2 py-1">
-              Loading existing points…
-            </div>
-          )}
-          {remoteError && (
-            <div className="text-[11px] text-red-300 bg-red-900/40 rounded px-2 py-1 flex items-start gap-2">
-              <span className="flex-1">Failed to load points: {remoteError}</span>
-              <button type="button" className="underline" onClick={() => triggerFetchPoints(true)}>
-                Retry
-              </button>
-            </div>
-          )}
-          {uploadState.status === 'error' && !showToast && (
-            <div className="text-[11px] text-red-300 bg-red-900/40 rounded px-2 py-1">
-              {uploadState.message || 'Upload failed.'}
-            </div>
-          )}
-          {uploadState.status === 'success' && !showToast && (
-            <div className="text-[11px] text-emerald-300 bg-emerald-900/30 rounded px-2 py-1">
-              {uploadState.message || 'Changes saved.'}
+            <div className="flex items-center gap-2.5">
+              {creatingNew && !selectedId && (
+                <button
+                  type="button"
+                  onClick={cancelNewDrawing}
+                  className="p-1 -ml-1 rounded-md hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                  aria-label="Back to objects"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              <h3 className="text-lg font-medium text-white">
+                {selectedId && !selectedId.startsWith('new_') ? 'Edit Object' : 'Add New Object'}
+              </h3>
             </div>
           )}
           {selectedId ? (
@@ -2610,17 +2973,153 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
             </>
           ) : (
             creatingNew && (
-              <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded p-3">
-                <span>
-                  Click on the map to add vertices. To finish, Ctrl+Left Click anywhere on the map
-                  or click on a vertex. Press Escape or Cancel to stop placing.
-                </span>
-              </div>
+              <>
+                {!manualCoordsMode ? (
+                  <>
+                    <div className="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded p-3">
+                      <span>
+                        Click on the map to add vertices. To finish, Ctrl+Left Click anywhere on the
+                        map or click on a vertex. Press Escape or Cancel to stop placing.
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setManualCoordsMode(true);
+                        setManualGenerateState('idle');
+                        setManualPlacedId(null);
+                        if (mapInstanceRef.current?.pm) mapInstanceRef.current.pm.disableDraw();
+                      }}
+                      className="w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                        <CircleFadingPlus className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div className="ml-3 text-left">
+                        <p className="text-sm font-medium text-white">Vertices by Coordinates</p>
+                        <p className="text-xs text-zinc-400">
+                          Manually place vertices on the map by entering coordinates. Useful when
+                          the map imagery is outdated or when you need exact positioning.
+                        </p>
+                      </div>
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex flex-col gap-4 min-h-0 flex-1">
+                    <div className="text-xs text-blue-300 bg-blue-900/30 border border-blue-500/30 rounded p-3">
+                      <p className="text-blue-300/90">
+                        You can place vertices on the map using manual coordinate input. Open any
+                        maps service like Google Maps, navigate to your desired location, and copy
+                        the coordinates then paste them below. Both decimal and DMS formats are
+                        supported.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3 min-h-0">
+                      <label className="block text-[13px] font-medium tracking-wide text-zinc-300">
+                        Vertices
+                      </label>
+                      <div className="flex flex-col gap-2 overflow-y-auto max-h-52 pr-0.5">
+                        {manualCoords.map((coord, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="shrink-0 w-7 h-7 rounded-md bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-semibold text-zinc-300 tabular-nums">
+                              {idx + 1}
+                            </span>
+                            <input
+                              type="text"
+                              value={coord.value}
+                              onChange={(e) => {
+                                const next = [...manualCoords];
+                                next[idx] = { value: e.target.value };
+                                setManualCoords(next);
+                                // Reset generate state when coords change after generation
+                                if (manualGenerateState === 'generated')
+                                  setManualGenerateState('idle');
+                              }}
+                              placeholder="-27.3815, 153.1314"
+                              className="flex-1 min-w-0 bg-zinc-800/70 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-2 py-1.5 text-sm font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (manualCoords.length <= 2) return;
+                                setManualCoords(manualCoords.filter((_, i) => i !== idx));
+                                if (manualGenerateState === 'generated')
+                                  setManualGenerateState('idle');
+                              }}
+                              disabled={manualCoords.length <= 2}
+                              className="shrink-0 p-1.5 rounded text-zinc-500 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                              title="Remove vertex"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualCoords([...manualCoords, { value: '' }]);
+                          if (manualGenerateState === 'generated') setManualGenerateState('idle');
+                        }}
+                        className="w-full text-xs text-zinc-400 hover:text-zinc-200 border border-dashed border-zinc-700 hover:border-zinc-500 rounded px-2 py-2 transition-colors"
+                      >
+                        + Add Vertex
+                      </button>
+                    </div>
+
+                    {manualCoordsErrors.length > 0 && (
+                      <ul className="text-xs text-red-400 list-disc pl-4">
+                        {manualCoordsErrors.map((err) => (
+                          <li key={err}>{err}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="flex flex-col gap-2 mt-auto">
+                      <Button
+                        onClick={handleManualCoordsPlace}
+                        disabled={
+                          manualGenerateState === 'generating' ||
+                          manualGenerateState === 'generated'
+                        }
+                        variant="secondary"
+                        className="w-full"
+                      >
+                        {manualGenerateState === 'generating' ? (
+                          <div className="flex items-center justify-center">
+                            <Loader className="w-4 h-4 mr-2 animate-spin" />
+                            <span>Mapping Coordinates…</span>
+                          </div>
+                        ) : manualGenerateState === 'generated' ? (
+                          <div className="flex items-center justify-center">
+                            <Check className="w-4 h-4 mr-2" />
+                            <span>Coordinates Mapped</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center">
+                            <MapPinPlus className="w-4 h-4 mr-2" />
+                            <span>Map Coordinates</span>
+                          </div>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleManualCoordsContinue}
+                        disabled={manualGenerateState !== 'generated'}
+                        className={`w-full ${manualGenerateState !== 'generated' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <span>Next Step</span>
+                        <ChevronRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )
           )}
-          {!selectedId && !creatingNew && (
+          {!selectedId && !creatingNew && !showReviewPanel && (
             <>
-              <div className="flex items-center mt-0">
+              <div className="flex items-center mt-0 gap-2">
+                <Route className="w-5 h-5 text-zinc-300" aria-hidden="true" />
                 <h3 className="text-xl font-semibold text-zinc-100 tracking-tight">Objects</h3>
               </div>
               <div className="mt-0.5 relative">
@@ -2682,9 +3181,13 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                               </span>
                             </div>
                             <span
-                              className={`text-[9px] uppercase tracking-wide rounded px-1 py-0.5 shrink-0 ${p.state === 'create' && 'bg-green-700 text-green-100'} ${p.state === 'modify' && 'bg-blue-700 text-blue-100'} ${p.state === 'delete' && 'bg-red-700 text-red-100'} ${p.state === 'existing' && 'bg-zinc-600 text-zinc-200'}`}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] tracking-wide shrink-0 font-semibold ${p.state === 'create' ? 'bg-green-500/20 text-green-300 border border-green-500/30' : ''} ${p.state === 'modify' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : ''} ${p.state === 'delete' ? 'bg-red-500/20 text-red-300 border border-red-500/30' : ''} ${p.state === 'existing' ? 'bg-zinc-700/60 text-zinc-300 border border-zinc-600/40' : ''}`}
                             >
-                              {p.state}
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 animate-pulse ${p.state === 'create' ? 'bg-green-400' : ''} ${p.state === 'modify' ? 'bg-blue-400' : ''} ${p.state === 'delete' ? 'bg-red-400' : ''} ${p.state === 'existing' ? 'bg-zinc-400' : ''}`}
+                                style={{ animationDuration: '4s' }}
+                              />
+                              {p.state.charAt(0).toUpperCase() + p.state.slice(1)}
                             </span>
                           </div>
                           <div className="flex items-center justify-start text-[10px] text-zinc-400 font-mono">
@@ -2700,73 +3203,169 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               </div>
               <div className="pt-1">
                 <button
+                  disabled={!hasPendingChanges}
+                  onClick={() => setShowReviewPanel(true)}
+                  className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 inline-flex items-center justify-center gap-2 transition-colors ${!hasPendingChanges ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-orange-500/60 hover:bg-orange-500/80 text-white'}`}
+                >
+                  <span>Review Changes</span>
+                  {hasPendingChanges && (
+                    <span className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-white/25 text-[10px] font-bold px-1 tabular-nums">
+                      {totalChanges}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+          {!selectedId && !creatingNew && showReviewPanel && (
+            <>
+              {/* Review Changes Header */}
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowReviewPanel(false)}
+                  className="p-1 -ml-1 rounded-md hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                  aria-label="Back to objects"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <h3 className="text-xl font-semibold text-zinc-100 tracking-tight">
+                  Review Changes
+                </h3>
+              </div>
+
+              {/* Change list */}
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3.5 pr-1">
+                {/* Creates */}
+                {changeset.create.map((c) => (
+                  <div
+                    key={c._tempId}
+                    className="relative rounded-lg border border-green-500/30 bg-green-500/5 pl-4 pr-3 py-2.5 flex flex-col gap-1"
+                  >
+                    <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-green-500 rounded-r-full" />
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40">
+                          <Plus className="w-3 h-3 text-green-400" strokeWidth={2.5} />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-medium text-zinc-100 truncate">
+                              {c.name || '(Unnamed)'}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700/60 text-zinc-300 tracking-wide shrink-0">
+                              {formatLabel(c.type || '')}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 font-mono leading-tight mt-0.5">
+                            Unsaved
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => revertChange('create', c._tempId)}
+                        title="Revert this change"
+                        className="shrink-0 flex items-center gap-1 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 px-1.5 py-1 rounded transition-colors"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Revert</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Modifies */}
+                {Object.entries(changeset.modify).map(([id, diff]) => {
+                  const original = existingMap[id] || {};
+                  return (
+                    <div
+                      key={id}
+                      className="relative rounded-lg border border-blue-500/30 bg-blue-500/5 pl-4 pr-3 py-2.5 flex flex-col gap-1"
+                    >
+                      <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-blue-500 rounded-r-full" />
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/20 border border-blue-500/40">
+                            <SquarePen className="w-3 h-3 text-blue-400" strokeWidth={2.5} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-medium text-zinc-100 truncate">
+                                {diff.name ?? original.name ?? '(Unnamed)'}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700/60 text-zinc-300 tracking-wide shrink-0">
+                                {formatLabel(diff.type || original.type || '')}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 font-mono leading-tight mt-0.5 truncate">
+                              {id}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => revertChange('modify', id)}
+                          title="Revert this change"
+                          className="shrink-0 flex items-center gap-1 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 px-1.5 py-1 rounded transition-colors"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Revert</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Deletes */}
+                {changeset.delete.map((id) => {
+                  const original = existingMap[id] || {};
+                  return (
+                    <div
+                      key={id}
+                      className="relative rounded-lg border border-red-500/30 bg-red-500/5 pl-4 pr-3 py-2.5 flex flex-col gap-1"
+                    >
+                      <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-red-500 rounded-r-full" />
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-red-500/20 border border-red-500/40">
+                            <Trash2 className="w-3 h-3 text-red-400" strokeWidth={2.5} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-medium text-zinc-100 truncate">
+                                {original.name || '(Unnamed)'}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700/60 text-zinc-300 tracking-wide shrink-0">
+                                {formatLabel(original.type || '')}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 font-mono leading-tight mt-0.5 truncate">
+                              {id}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => revertChange('delete', id)}
+                          title="Revert this change"
+                          className="shrink-0 flex items-center gap-1 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 px-1.5 py-1 rounded transition-colors"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Revert</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Save & Upload */}
+              <div className="mt-3 pt-3 border-t border-zinc-700/60">
+                <button
                   disabled={uploadState.status === 'uploading' || !hasPendingChanges}
-                  onClick={async () => {
-                    const token = getVatsimToken();
-                    if (!token) {
-                      setToastConfig({
-                        title: 'Login Required',
-                        description: 'Please login to upload changes.',
-                        variant: 'destructive',
-                      });
-                      setShowToast(true);
-                      return;
-                    }
-                    const payload = serializeChangeset(changeset);
-                    if (
-                      payload.create.length === 0 &&
-                      Object.keys(payload.modify).length === 0 &&
-                      payload.delete.length === 0
-                    )
-                      return;
-                    setUploadState({ status: 'uploading', message: 'Uploading changes…' });
-                    try {
-                      const resp = await fetch(
-                        `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/points/batch`,
-                        {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'X-Vatsim-Token': token,
-                          },
-                          body: JSON.stringify(payload),
-                        }
-                      );
-                      if (!resp.ok) {
-                        let msg = '';
-                        try {
-                          const j = await resp.json();
-                          msg = j?.error || j?.message || '';
-                        } catch {
-                          /* ignore */
-                        }
-                        throw new Error(msg || `Upload failed (${resp.status})`);
-                      }
-                      setUploadState({ status: 'success', message: 'Changes saved.' });
-                      setToastConfig({
-                        title: 'Changes Saved',
-                        description: 'Your changes have been successfully uploaded.',
-                        variant: 'success',
-                      });
-                      setShowToast(true);
-                      Object.entries(featureLayerMapRef.current).forEach(([, layer]) => {
-                        if (layer?.remove) layer.remove();
-                      });
-                      featureLayerMapRef.current = {};
-                      resetAll();
-                      setRemotePoints(null);
-                      triggerFetchPoints(true);
-                    } catch (e) {
-                      setUploadState({ status: 'error', message: e.message });
-                      setToastConfig({
-                        title: 'Upload Failed',
-                        description: e.message || 'An error occurred while uploading your changes.',
-                        variant: 'destructive',
-                      });
-                      setShowToast(true);
-                    }
-                  }}
-                  className={`w-full text-xs rounded px-3 py-2 font-medium mt-1 inline-flex items-center justify-center gap-2 transition-colors ${uploadState.status === 'uploading' || !hasPendingChanges ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-400 text-white'}`}
+                  onClick={handleUpload}
+                  className={`w-full text-xs rounded px-3 py-2 font-medium inline-flex items-center justify-center gap-2 transition-colors ${uploadState.status === 'uploading' || !hasPendingChanges ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-orange-500/60 hover:bg-orange-500/80 text-white'}`}
                 >
                   {uploadState.status === 'uploading' && (
                     <span
