@@ -61,7 +61,7 @@ const parseCoordinateString = (input) => {
 
   // Try DMS format: 27°22'53.5"S 153°07'53.0"E  (various quote styles)
   const dmsRegex =
-    /(-?\d+)[°]\s*(\d+)[′'']\s*([\d.]+)[″""]\s*([NSns])\s*[,;\s]+\s*(-?\d+)[°]\s*(\d+)[′'']\s*([\d.]+)[″""]\s*([EWew])/;
+    /(-?\d+)[°]\s*(\d+)[′']\s*([\d.]+)[″"]\s*([NSns])\s*[,;\s]+\s*(-?\d+)[°]\s*(\d+)[′']\s*([\d.]+)[″"]\s*([EWew])/;
   const dmsMatch = trimmed.match(dmsRegex);
   if (dmsMatch) {
     let lat =
