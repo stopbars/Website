@@ -1,17 +1,9 @@
 import { useState } from 'react';
 import { Button } from '../shared/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../shared/Card';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import {
-  Upload,
-  Package,
-  Check,
-  X,
-  AlertTriangle,
-  Info,
-  FileArchive,
-  RefreshCw,
-} from 'lucide-react';
+import { Upload, Package, Check, X, Info, FileArchive, RefreshCw } from 'lucide-react';
 
 /**
  * PackagesManagement
@@ -60,15 +52,19 @@ const PackagesManagement = () => {
   const [selectedType, setSelectedType] = useState('models');
   const [file, setFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
-  const [error, setError] = useState('');
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const [success, setSuccess] = useState(null); // {type,key,size,sha256,url,etag}
   const [uploading, setUploading] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
 
   const reset = () => {
     setFile(null);
-    setError('');
-    setUploading(false);
+    setToast((t) => ({ ...t, show: false }));
   };
 
   const validate = (f) => {
@@ -84,11 +80,10 @@ const PackagesManagement = () => {
     if (!f) return;
     const v = validate(f);
     if (v) {
-      setError(v);
+      setToast({ show: true, title: 'Invalid file', description: v, variant: 'destructive' });
       return;
     }
     setFile(f);
-    setError('');
   };
 
   const onDrop = (e) => {
@@ -99,27 +94,31 @@ const PackagesManagement = () => {
     if (!f) return;
     const v = validate(f);
     if (v) {
-      setError(v);
+      setToast({ show: true, title: 'Invalid file', description: v, variant: 'destructive' });
       return;
     }
     setFile(f);
-    setError('');
   };
 
   const handleUpload = async () => {
     if (uploading) return;
     const v = validate(file);
     if (v) {
-      setError(v);
+      setToast({ show: true, title: 'Invalid file', description: v, variant: 'destructive' });
       return;
     }
-    setError('');
+    setToast((t) => ({ ...t, show: false }));
     setSuccess(null);
     try {
       setUploading(true);
       const token = getVatsimToken();
       if (!token) {
-        setError('Missing auth token');
+        setToast({
+          show: true,
+          title: 'Not authenticated',
+          description: 'Missing auth token. Please log in again.',
+          variant: 'destructive',
+        });
         setUploading(false);
         return;
       }
@@ -143,12 +142,24 @@ const PackagesManagement = () => {
       }
       const data = await res.json();
       setSuccess(data.package || null);
+      // Show toast notification
+      setToast({
+        show: true,
+        title: 'Package uploaded',
+        description: 'The package has been uploaded successfully.',
+        variant: 'success',
+      });
       // Auto-clear file after success to avoid accidental reupload
       setFile(null);
       setShowMeta(true);
       setTimeout(() => setSuccess(null), 15000); // fade success after 15s
     } catch (err) {
-      setError(err.message);
+      setToast({
+        show: true,
+        title: 'Upload failed',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setUploading(false);
     }
@@ -189,7 +200,6 @@ const PackagesManagement = () => {
                   key={pt.id}
                   onClick={() => {
                     setSelectedType(pt.id);
-                    setError('');
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${active ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700/70'}`}
                 >
@@ -291,16 +301,6 @@ const PackagesManagement = () => {
             />
           </div>
 
-          {error && (
-            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-400">
-              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
-              <span className="flex-1">{error}</span>
-              <button onClick={() => setError('')} className="text-red-400/70 hover:text-red-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
           {success && (
             <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 relative">
               <div className="flex items-start gap-3">
@@ -376,6 +376,14 @@ const PackagesManagement = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast((t) => ({ ...t, show: false }))}
+      />
     </div>
   );
 };

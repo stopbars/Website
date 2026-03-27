@@ -2,16 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '../shared/Button';
 
-const previewOptions = [
-  'Stopbars',
-  'Follow The Greens',
-  'Lead On Lights',
-  'EuroScope Plugin',
-  'vatSys Plugin',
-];
-
 export const Hero = () => {
-  const [selectedPreview, setSelectedPreview] = useState(previewOptions[0]);
   const [downloadInfo, setDownloadInfo] = useState(null);
   const [downloadAvailable, setDownloadAvailable] = useState(true);
 
@@ -44,7 +35,7 @@ export const Hero = () => {
 
   return (
     <section
-      className="relative flex items-center justify-center min-h-[80vh] px-6 pt-48 pb-28"
+      className="relative flex items-center justify-center min-h-[80vh] px-6 pt-36 md:pt-48 pb-28"
       aria-labelledby="hero-heading"
     >
       <div className="max-w-5xl mx-auto text-center space-y-10">
@@ -107,32 +98,11 @@ export const Hero = () => {
           </Button>
         </div>
 
-        <div className="max-w-5xl mx-auto mt-24">
-          <div className="flex flex-wrap justify-center gap-3 mt-10">
-            {previewOptions.map((option) => {
-              const isSelected = option === selectedPreview;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setSelectedPreview(option)}
-                  className={`px-5 py-2.5 rounded-full text-sm md:text-base border transition-colors duration-300 cursor-pointer ${
-                    isSelected
-                      ? 'bg-white text-black border-white'
-                      : 'bg-zinc-900/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
-                  }`}
-                  aria-pressed={isSelected}
-                >
-                  {option}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-10 h-96 md:h-128 relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
+        <div className="max-w-5xl mx-auto mt-16">
+          <div className="h-96 md:h-128 relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-lg md:text-2xl font-medium text-zinc-200">
-                {selectedPreview} Placeholder
+                Video Placeholder
               </span>
             </div>
           </div>

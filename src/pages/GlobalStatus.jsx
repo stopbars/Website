@@ -253,7 +253,7 @@ const GlobalStatus = () => {
               </div>
 
               <div className="flex gap-3">
-                <div className="w-full lg:w-48">
+                <div className="flex-1 min-w-0 lg:w-48 lg:flex-none">
                   <label htmlFor="activity-filter" className="sr-only">
                     Filter by activity
                   </label>
@@ -268,7 +268,7 @@ const GlobalStatus = () => {
                   />
                 </div>
 
-                <div className="w-full lg:w-48">
+                <div className="flex-1 min-w-0 lg:w-48 lg:flex-none">
                   <label htmlFor="continent-filter" className="sr-only">
                     Filter by continent
                   </label>
@@ -368,7 +368,7 @@ const GlobalStatus = () => {
               ) : (
                 <div className="overflow-auto">
                   <Card className="p-4">
-                    <div className="min-w-[800px]">
+                    <div className="min-w-200">
                       <table className="w-full">
                         <thead className="border-b border-zinc-800">
                           <tr>

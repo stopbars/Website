@@ -8,7 +8,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
-marked.setOptions({
+marked.use({
   breaks: true, // so a single newline becomes a line break
   gfm: true,
 });
@@ -282,14 +282,14 @@ const Changelog = () => {
           text-decoration: underline !important;
         }
       `}</style>
-      <div className="min-h-screen pt-40 pb-20">
+      <div className="min-h-screen pt-38 md:pt-40 pb-20">
         <div className="max-w-5xl mx-auto px-6">
           {/* Header Section */}
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-4xl font-semibold">Changelog</h1>
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between mb-8">
+            <h1 className="text-3xl sm:text-4xl font-semibold">Changelog</h1>
 
             {/* Filter Dropdown */}
-            <div className="w-56 mt-1">
+            <div className="w-full sm:w-56 sm:mt-1">
               <Dropdown
                 options={[
                   { value: '__all__', label: 'All Products' },
@@ -339,30 +339,27 @@ const Changelog = () => {
           ) : (
             <div className="relative">
               {/* Main Content (Right Side) */}
-              <div className="ml-48">
+              <div className="md:ml-48">
                 {filteredReleases.map((release, index) => (
                   <div
                     key={release.id}
                     ref={addReleaseRef}
-                    className={`relative ${index > 0 ? 'mt-20' : ''}`}
+                    className={`relative ${index > 0 ? 'mt-12 md:mt-20' : ''}`}
                   >
-                    {/* Timeline dot positioned relative to this release */}
-                    <div className="absolute -left-48 flex items-baseline" style={{ top: '2px' }}>
+                    {/* Timeline dot — hidden on mobile, shown md+ */}
+                    <div
+                      className="hidden md:flex absolute -left-48 items-baseline"
+                      style={{ top: '2px' }}
+                    >
                       <div className="relative">
                         <div
                           className={`timeline-dot w-3.5 h-3.5 ${index === 0 ? 'bg-green-500' : 'bg-zinc-600'} rounded-full border-2 border-zinc-900 shadow-lg transition-colors duration-300`}
                         ></div>
                         {index === 0 && (
-                          <>
-                            <div
-                              className="absolute inset-0 w-3.5 h-3.5 bg-green-500 rounded-full animate-pulse opacity-50"
-                              style={{ animationDuration: '3s' }}
-                            ></div>
-                            <div
-                              className="absolute -inset-0.5 w-4.5 h-4.5 bg-green-500 rounded-full animate-ping opacity-20"
-                              style={{ animationDuration: '3s' }}
-                            ></div>
-                          </>
+                          <div
+                            className="absolute -inset-0.5 w-4.5 h-4.5 bg-green-500 rounded-full animate-ping opacity-15"
+                            style={{ animationDuration: '4s' }}
+                          ></div>
                         )}
                         {/* Timeline line connecting to next release */}
                         {index < filteredReleases.length - 1 && (
@@ -382,6 +379,11 @@ const Changelog = () => {
                         {formatDate(release.created_at)}
                       </div>
                     </div>
+
+                    {/* Mobile date — shown below md */}
+                    <p className="md:hidden text-sm text-zinc-400 font-medium mb-2">
+                      {formatDate(release.created_at)}
+                    </p>
 
                     {/* Release content */}
                     <h2 className="text-2xl font-semibold text-white mb-6">

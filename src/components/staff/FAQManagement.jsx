@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import {
   HelpCircle,
-  AlertTriangle,
-  Check,
   RefreshCw,
   Plus,
   Edit2,
@@ -23,8 +22,12 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 const FAQManagement = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const [editingFaq, setEditingFaq] = useState(null);
   const [deletingFaq, setDeletingFaq] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -53,7 +56,6 @@ const FAQManagement = () => {
   const fetchFAQs = async () => {
     try {
       setLoading(true);
-      setError('');
 
       const response = await fetch('https://v2.stopbars.com/faqs');
 
@@ -69,7 +71,12 @@ const FAQManagement = () => {
       );
       setFaqs(sortedFaqs);
     } catch (err) {
-      setError('Failed to load FAQs. Please try again.');
+      setToast({
+        show: true,
+        title: 'Failed to load FAQs',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
       console.error('Error fetching FAQs:', err);
     } finally {
       setLoading(false);
@@ -99,13 +106,21 @@ const FAQManagement = () => {
 
       const data = await response.json();
       setFaqs([...faqs, data]);
-      setSuccess('FAQ published successfully');
+      setToast({
+        show: true,
+        title: 'FAQ published',
+        description: 'The FAQ has been published successfully.',
+        variant: 'success',
+      });
       setIsAdding(false);
       setNewFaq({ question: '', answer: '' });
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToast({
+        show: true,
+        title: 'Failed to publish FAQ',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setIsPublishing(false);
     }
@@ -132,13 +147,21 @@ const FAQManagement = () => {
       const data = await response.json();
       setFaqs(faqs.map((faq) => (faq.id === faqId ? { ...faq, ...data } : faq)));
 
-      setSuccess('FAQ updated successfully');
+      setToast({
+        show: true,
+        title: 'FAQ updated',
+        description: 'The FAQ has been updated successfully.',
+        variant: 'success',
+      });
       setEditingFaq(null);
       setEditForm({ question: '', answer: '' });
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToast({
+        show: true,
+        title: 'Failed to update FAQ',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -161,12 +184,20 @@ const FAQManagement = () => {
       }
 
       setFaqs(faqs.filter((faq) => faq.id !== faqId));
-      setSuccess('FAQ deleted successfully');
+      setToast({
+        show: true,
+        title: 'FAQ deleted',
+        description: 'The FAQ has been deleted successfully.',
+        variant: 'success',
+      });
       setDeletingFaq(null);
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToast({
+        show: true,
+        title: 'Failed to delete FAQ',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setIsDeleting(false);
     }
@@ -227,8 +258,12 @@ const FAQManagement = () => {
         setMoveDirection(null);
       }, 2000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToast({
+        show: true,
+        title: 'Failed to reorder FAQ',
+        description: err.message,
+        variant: 'destructive',
+      });
       // Revert to original order
       fetchFAQs();
       // Clear visual feedback on error too
@@ -292,8 +327,12 @@ const FAQManagement = () => {
         setMoveDirection(null);
       }, 2000);
     } catch (err) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+      setToast({
+        show: true,
+        title: 'Failed to reorder FAQ',
+        description: err.message,
+        variant: 'destructive',
+      });
       // Revert to original order
       fetchFAQs();
       // Clear visual feedback on error too
@@ -336,21 +375,6 @@ const FAQManagement = () => {
       </div>
 
       <div className="space-y-6">
-        {/* Status Messages */}
-        {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-            <p className="text-sm text-emerald-400">{success}</p>
-          </div>
-        )}
-
         {/* Add FAQ Form */}
         {isAdding && (
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
@@ -524,7 +548,65 @@ const FAQManagement = () => {
                 ) : (
                   // View Mode
                   <div>
-                    <div className="flex items-start justify-between gap-4 mb-4">
+                    {/* Mobile: top row — number + movers on left, edit + delete on right */}
+                    <div className="flex items-center justify-between mb-3 sm:hidden">
+                      <div className="flex items-center gap-2">
+                        {faqs.length > 1 && (
+                          <>
+                            <span
+                              className={`text-xs font-mono px-2 py-1 rounded-md bg-zinc-800 border border-zinc-700 transition-colors ${recentlyMovedFaq === faq.id ? 'text-emerald-400 border-emerald-500/30' : 'text-zinc-500'}`}
+                            >
+                              #{index + 1}
+                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                onClick={() => handleMoveFaqUp(faq, index)}
+                                disabled={index === 0}
+                                className={`p-1 rounded-md ${index === 0 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'up' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
+                                title="Move up"
+                              >
+                                <ChevronUp className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleMoveFaqDown(faq, index)}
+                                disabled={index === faqs.length - 1}
+                                className={`p-1 rounded-md ${index === faqs.length - 1 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'down' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
+                                title="Move down"
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditingFaq(faq.id);
+                            setEditForm({ question: faq.question, answer: faq.answer });
+                            setOriginalEditForm({ question: faq.question, answer: faq.answer });
+                          }}
+                          className="p-2 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                          title="Edit FAQ"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeletingFaq(faq)}
+                          className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Delete FAQ"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {/* Mobile: question title */}
+                    <h3 className="font-medium text-white leading-relaxed mb-4 sm:hidden">
+                      {faq.question}
+                    </h3>
+
+                    {/* Desktop: original layout */}
+                    <div className="hidden sm:flex sm:items-start sm:justify-between sm:gap-4 sm:mb-4">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
                         {faqs.length > 1 && (
                           <div className="flex items-center gap-2 shrink-0">
@@ -628,6 +710,14 @@ const FAQManagement = () => {
           </div>
         </Dialog>
       </div>
+
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast((t) => ({ ...t, show: false }))}
+      />
     </div>
   );
 };

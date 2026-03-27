@@ -294,7 +294,7 @@ const ContributeDetails = () => {
                         </div>
 
                         {/* Skeleton for Top Packages */}
-                        <div className="mt-4 grid grid-cols-2 gap-2">
+                        <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
                           {[...Array(4)].map((_, index) => (
                             <div
                               key={index}
@@ -355,7 +355,7 @@ const ContributeDetails = () => {
 
                         {/* Top Packages */}
                         {topPackages.length > 0 && (
-                          <div className="mt-4 grid grid-cols-2 gap-2">
+                          <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
                             {topPackages.map((pkg, index) => (
                               <button
                                 key={index}
@@ -364,13 +364,13 @@ const ContributeDetails = () => {
                                   setSceneryName(pkg.packageName);
                                   setShowSuggestions(false);
                                 }}
-                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800/70 transition-colors cursor-pointer"
+                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800/70 transition-colors cursor-pointer text-white"
                               >
-                                <div className="flex items-center space-x-3 min-w-0">
+                                <div className="flex items-center space-x-3 min-w-0 flex-1">
                                   <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-blue-500/20">
                                     <Plus className="w-3.5 h-3.5 text-blue-400" />
                                   </div>
-                                  <div className="font-medium text-left text-sm truncate">
+                                  <div className="font-medium text-left text-sm truncate min-w-0">
                                     {pkg.packageName}
                                   </div>
                                 </div>
@@ -457,11 +457,9 @@ const ContributeDetails = () => {
                           Contribution Acknowledgement
                         </span>
                         <p className="text-xs text-zinc-400 leading-relaxed">
-                          By submitting this contribution, you agree that you have followed the
-                          contribution guide, to create the best possible, tested, and working
-                          contribution you can submit, verifying no issues occur within the
-                          submission, and that this work is your own and is linked to your BARS
-                          account.
+                          By submitting, you confirm you have followed the contribution guidelines,
+                          that your submission has been tested and works correctly, and that this
+                          work is your own.
                         </p>
                       </div>
 

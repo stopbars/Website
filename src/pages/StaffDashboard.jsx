@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -21,6 +21,7 @@ import {
   FileUp,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Dropdown } from '../components/shared/Dropdown';
 import { getVatsimToken } from '../utils/cookieUtils';
 
 // Import existing components
@@ -280,6 +281,50 @@ const StaffDashboard = () => {
     }, 100);
   };
 
+  // Mobile nav options — grouped with section headers and icons
+  const mobileNavOptions = useMemo(() => {
+    if (!staffRoles) return [];
+    const hasAccess = (tab) => tab.roles.some((r) => staffRoles[r.toLowerCase()] === 1);
+    const groups = [
+      {
+        label: 'System Management',
+        ids: [
+          'userManagement',
+          'staffManagement',
+          'divisionManagement',
+          'cacheManagement',
+          'banManagement',
+          'releaseManagement',
+        ],
+      },
+      {
+        label: 'Content Management',
+        ids: [
+          'airportManagement',
+          'contributionManagement',
+          'notamManagement',
+          'faqManagement',
+          'contactMessages',
+        ],
+      },
+      {
+        label: 'Data Management',
+        ids: ['packagesManagement', 'vatsysProfiles'],
+      },
+    ];
+    const opts = [];
+    for (const group of groups) {
+      const tabs = group.ids.map((id) => TABS[id]).filter((tab) => tab && hasAccess(tab));
+      if (tabs.length > 0) {
+        opts.push({ label: group.label, isHeader: true });
+        for (const tab of tabs) {
+          opts.push({ value: tab.id, label: tab.label, icon: tab.icon });
+        }
+      }
+    }
+    return opts;
+  }, [staffRoles]);
+
   // Check if user has access to a specific tab
   const hasTabAccess = (tab) => {
     if (!staffRoles) return false;
@@ -311,7 +356,7 @@ const StaffDashboard = () => {
     return (
       <Layout>
         <div className="pt-32 pb-20">
-          <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
+          <div className="max-w-450 mx-auto px-6 2xl:px-12">
             <div className="flex items-center justify-center h-64">
               <Loader className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
@@ -325,7 +370,7 @@ const StaffDashboard = () => {
     return (
       <Layout>
         <div className="pt-32 pb-20">
-          <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
+          <div className="max-w-450 mx-auto px-6 2xl:px-12">
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
               <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
               <p className="text-red-500">{error}</p>
@@ -342,8 +387,8 @@ const StaffDashboard = () => {
   return (
     <Layout>
       <div className="pt-32 pb-20">
-        <div className="max-w-[1800px] mx-auto px-6 2xl:px-12">
-          <div className="flex items-center justify-between mb-8">
+        <div className="max-w-450 mx-auto px-6 2xl:px-12">
+          <div className="flex flex-col gap-3 mb-8 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-2">Staff Dashboard</h1>
               <p className="text-zinc-400">
@@ -363,7 +408,7 @@ const StaffDashboard = () => {
                 })()}
               </p>
             </div>
-            <div className="flex items-center space-x-1 mt-4">
+            <div className="flex items-center gap-2">
               <iframe
                 src="https://status.stopbars.com/badge?theme=dark"
                 width="200"
@@ -391,9 +436,28 @@ const StaffDashboard = () => {
             </div>
           )}
 
+          {/* Mobile nav dropdown */}
+          {activeTab && mobileNavOptions.length > 0 && (
+            <div className="md:hidden mb-4">
+              <Dropdown
+                options={mobileNavOptions}
+                value={activeTab}
+                onChange={(tabId) => {
+                  setActiveTab(tabId);
+                  setSearchParams((prev) => {
+                    const params = new URLSearchParams(prev);
+                    params.set('tool', tabId);
+                    return params;
+                  });
+                }}
+                placeholder="Select a tool..."
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-12 gap-6">
-            {/* Sidebar with tabs */}
-            <div className="col-span-3">
+            {/* Sidebar with tabs — hidden on mobile */}
+            <div className="hidden md:block md:col-span-3">
               <Card className="p-4 overflow-hidden">
                 <nav className="space-y-3">
                   {/* Group tabs by category */}
@@ -545,7 +609,7 @@ const StaffDashboard = () => {
             </div>
 
             {/* Main content area */}
-            <div className="col-span-9">
+            <div className="col-span-12 md:col-span-9">
               <Card className="p-6">{renderTabContent()}</Card>
             </div>
           </div>

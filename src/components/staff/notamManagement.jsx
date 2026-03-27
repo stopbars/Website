@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   MessageSquareWarning,
-  AlertTriangle,
   Info,
   Loader,
   Plus,
@@ -13,10 +12,10 @@ import {
   Tag,
   Send,
   HardDriveDownload,
-  CheckCircle2,
   Copy,
   Check,
 } from 'lucide-react';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import DOMPurify from 'dompurify';
 
@@ -49,7 +48,12 @@ const NotamManagement = () => {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showNewTypeDropdown, setShowNewTypeDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const [hasEditChanges, setHasEditChanges] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -114,7 +118,7 @@ const NotamManagement = () => {
           bg: 'bg-amber-500/10',
           border: 'border-amber-500/20',
           text: 'text-amber-400',
-          icon: AlertTriangle,
+          icon: MessageSquareWarning,
           circle: 'bg-amber-400',
         };
       case 'info':
@@ -146,7 +150,7 @@ const NotamManagement = () => {
           bg: 'bg-red-500/10',
           border: 'border-red-500/20',
           text: 'text-red-400',
-          icon: AlertTriangle,
+          icon: MessageSquareWarning,
           circle: 'bg-red-400',
         };
       default:
@@ -275,10 +279,21 @@ const NotamManagement = () => {
       setEditType(type);
 
       // Show success message
-      setSaveSuccess(true);
+      setToast({
+        show: true,
+        title: 'NOTAM Updated',
+        description:
+          'The NOTAM has been published successfully. Changes may take a short time to propagate.',
+        variant: 'success',
+      });
     } catch (err) {
       console.error('Error saving NOTAM:', err);
-      setError(err.message || 'Failed to save NOTAM');
+      setToast({
+        show: true,
+        title: 'NOTAM Failed',
+        description: err.message || 'Failed to save NOTAM',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -417,26 +432,6 @@ const NotamManagement = () => {
         </div>
       </div>
 
-      {/* Success Message */}
-      {saveSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-emerald-400 font-medium">NOTAM Updated Successfully</p>
-            <p className="text-xs text-emerald-400/70 mt-1">
-              The endpoint may take a short time to update. Users will see changes after cache
-              expires.
-            </p>
-          </div>
-          <button
-            onClick={() => setSaveSuccess(false)}
-            className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Add New NOTAM Section */}
       {isAdding && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
@@ -557,7 +552,7 @@ const NotamManagement = () => {
       {/* Current NOTAM Display */}
       {!isEditing && !isAdding && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-col items-start gap-3 mb-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-zinc-800 border border-zinc-700">
                 <MessageSquareWarning className="w-4 h-4 text-zinc-400" />
@@ -574,7 +569,6 @@ const NotamManagement = () => {
             </div>
           ) : error ? (
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
               <p className="text-sm text-red-400">{error}</p>
             </div>
           ) : notamData?.notam ? (
@@ -605,6 +599,14 @@ const NotamManagement = () => {
           )}
         </div>
       )}
+
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast((t) => ({ ...t, show: false }))}
+      />
     </div>
   );
 };

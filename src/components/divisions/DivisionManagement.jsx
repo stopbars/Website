@@ -1077,7 +1077,7 @@ const DivisionManagement = () => {
 
   return (
     <Layout>
-      <div className="pt-40 pb-20">
+      <div className="pt-32 md:pt-40 pb-20">
         <div className="container mx-auto px-4 max-w-6xl">
           {/* Header */}
           <div className="mb-6">
@@ -1120,7 +1120,9 @@ const DivisionManagement = () => {
                   members.map((member) => {
                     const isSelf = String(currentUserId) === String(member.vatsim_id);
                     const removeDisabled =
-                      !canManageMembers || isSelf || (!canManageAsStaff && member.role === 'nav_head');
+                      !canManageMembers ||
+                      isSelf ||
+                      (!canManageAsStaff && member.role === 'nav_head');
 
                     return (
                       <div

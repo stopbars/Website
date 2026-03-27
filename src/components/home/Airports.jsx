@@ -118,9 +118,9 @@ export const Airports = () => {
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 sm:mb-12 gap-4">
           <div>
-            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:space-x-3 mb-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:space-x-3 mb-1">
               <h2 className="text-3xl font-bold">Global BARS Status</h2>
-              <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full self-start mb-2 sm:mb-0 sm:mt-2">
+              <div className="flex items-center space-x-2 px-3 py-1 bg-zinc-800 rounded-full self-start mb-1.5 sm:mb-0 sm:mt-2">
                 <div className="relative">
                   <div
                     className={`w-2.5 h-2.5 rounded-full ${Object.keys(liveMap).length === 0 ? 'bg-red-400' : 'bg-emerald-400'} transition-colors duration-300 shadow-lg`}
@@ -145,7 +145,7 @@ export const Airports = () => {
           </div>
           <Button
             onClick={() => navigate('/status')}
-            className="flex items-center self-start sm:self-center"
+            className="flex items-center self-start sm:self-center -mt-1 sm:mt-0"
           >
             Global Status Page
             <ExternalLink className="w-4 h-4 ml-2" />

@@ -11,7 +11,6 @@ import {
   TowerControl,
   Edit,
   Trash2,
-  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Loader,
@@ -24,7 +23,6 @@ import {
 const DivisionManagement = () => {
   const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [expandedDivisions, setExpandedDivisions] = useState({});
   const [divisionMembers, setDivisionMembers] = useState({});
   const [divisionAirports, setDivisionAirports] = useState({});
@@ -59,7 +57,12 @@ const DivisionManagement = () => {
         const divisionsData = await response.json();
         setDivisions(divisionsData);
       } catch (err) {
-        setError(err.message);
+        setToast({
+          show: true,
+          title: 'Failed to load divisions',
+          description: err.message,
+          variant: 'destructive',
+        });
       } finally {
         setLoading(false);
       }
@@ -146,7 +149,6 @@ const DivisionManagement = () => {
 
   const handleDeleteDivision = async (divisionId) => {
     setIsDeletingDivision(true);
-    setError('');
 
     const divisionName = deletingDivision?.name;
 
@@ -184,12 +186,10 @@ const DivisionManagement = () => {
   const cancelDelete = () => {
     setDeletingDivision(null);
     setDeleteConfirmation('');
-    setError('');
   };
 
   const handleEditDivision = async (divisionId, newName) => {
     setIsEditingDivision(true);
-    setError('');
 
     try {
       const response = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
@@ -238,12 +238,10 @@ const DivisionManagement = () => {
   const cancelEdit = () => {
     setEditingDivision(null);
     setNewDivisionName('');
-    setError('');
   };
 
   const handleCreateDivision = async () => {
     setIsCreatingDivision(true);
-    setError('');
 
     try {
       const response = await fetch('https://v2.stopbars.com/divisions', {
@@ -293,50 +291,47 @@ const DivisionManagement = () => {
     setShowCreateDialog(false);
     setCreateDivisionName('');
     setCreateDivisionHeadCid('');
-    setError('');
   };
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-          <div className="animate-pulse bg-zinc-700 h-8 w-48 rounded mb-4 md:mb-0"></div>
-          <div className="animate-pulse bg-zinc-700 h-9 w-32 rounded-lg"></div>
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <div className="animate-pulse bg-zinc-700 h-7 w-48 rounded mb-2"></div>
+            <div className="animate-pulse bg-zinc-700 h-4 w-36 rounded"></div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="animate-pulse bg-zinc-700 h-9 w-28 rounded-lg"></div>
+            <div className="animate-pulse bg-zinc-700 h-9 w-32 rounded-lg"></div>
+          </div>
         </div>
+        {/* Card skeletons */}
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="p-6">
               <div className="animate-pulse">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-1 mb-2">
+                {/* Mobile: name/date stacked, buttons below */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
                       <div className="bg-zinc-700 h-6 w-40 rounded"></div>
                       <div className="bg-zinc-700 h-4 w-8 rounded"></div>
                     </div>
                     <div className="bg-zinc-700 h-4 w-24 rounded"></div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="bg-zinc-700 h-8 w-8 rounded"></div>
-                    <div className="bg-zinc-700 h-8 w-8 rounded"></div>
-                    <div className="bg-zinc-700 h-8 w-8 rounded"></div>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
+                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
+                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
+                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
                   </div>
                 </div>
                 <div className="bg-zinc-700 h-4 w-3/4 rounded"></div>
               </div>
             </Card>
           ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-semibold text-white">Division Management</h2>
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-          <p className="text-red-500">{error}</p>
         </div>
       </div>
     );
@@ -354,7 +349,10 @@ const DivisionManagement = () => {
             <Layers className="w-4 h-4 mr-2 text-zinc-400" />
             {divisions.length} division{divisions.length !== 1 ? 's' : ''}
           </span>
-          <Button onClick={() => setShowCreateDialog(true)}>
+          <Button
+            onClick={() => setShowCreateDialog(true)}
+            className="px-4 py-2 text-sm sm:px-6 sm:py-3"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Create Division
           </Button>
@@ -363,12 +361,6 @@ const DivisionManagement = () => {
 
       <div className="space-y-4">
         {/* Status Messages */}
-        {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-            <p className="text-red-400">{error}</p>
-          </div>
-        )}
 
         {divisions.length > 0 ? (
           <div className="space-y-4">
@@ -389,7 +381,7 @@ const DivisionManagement = () => {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
                         <div>
                           <div className="flex items-center gap-2">
                             <h4 className="text-xl font-semibold text-white">{division.name}</h4>
@@ -399,7 +391,7 @@ const DivisionManagement = () => {
                             {formatDate(division.created_at)}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             onClick={() => toggleDivisionExpansion(division.id)}
                             variant="outline"
@@ -495,7 +487,7 @@ const DivisionManagement = () => {
 
                               {/* Airports */}
                               <div>
-                                <div className="flex items-center justify-between mb-3">
+                                <div className="flex flex-col gap-1 mb-3 sm:flex-row sm:items-center sm:justify-between">
                                   <h5 className="text-lg font-semibold text-white flex items-center">
                                     <TowerControl className="w-5 h-5 mr-2" />
                                     Airports
@@ -509,7 +501,7 @@ const DivisionManagement = () => {
                                     {airports.map((airport) => (
                                       <div
                                         key={airport.id}
-                                        className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg"
+                                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-zinc-800/50 rounded-lg gap-2"
                                       >
                                         <div>
                                           <p className="text-white font-medium">{airport.icao}</p>
@@ -531,7 +523,7 @@ const DivisionManagement = () => {
                                           </div>
                                         </div>
                                         <span
-                                          className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[11px] shrink-0 ${
+                                          className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-xs shrink-0 ${
                                             getDataSubmitted(airport)
                                               ? 'text-emerald-300/80 bg-emerald-500/5'
                                               : 'text-zinc-400/80 bg-zinc-800/40'

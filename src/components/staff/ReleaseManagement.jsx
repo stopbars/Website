@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   Upload,
   Image as ImageIcon,
   Check,
   AlertTriangle,
-  History,
   X,
   Plus,
   Edit,
@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { marked } from 'marked';
 // Configure marked to treat single line breaks as <br> and enable GitHub-flavored markdown.
-marked.setOptions({
+marked.use({
   breaks: true, // so a single newline becomes a line break
   gfm: true,
 });
@@ -56,14 +56,17 @@ const ReleaseManagement = () => {
   const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [uploadSuccess, setUploadSuccess] = useState('');
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
 
   // Changelog edit state
   const [editReleaseId, setEditReleaseId] = useState('');
   const [newChangelog, setNewChangelog] = useState('');
   const [updating, setUpdating] = useState(false);
-  const [updateError, setUpdateError] = useState('');
-  const [updateSuccess, setUpdateSuccess] = useState('');
 
   // Releases list state
   const [releases, setReleases] = useState([]);
@@ -360,8 +363,6 @@ const ReleaseManagement = () => {
   const resetUpdateForm = () => {
     setEditReleaseId('');
     setNewChangelog('');
-    setUpdateError('');
-    // Don't clear success message here - let it show for 4 seconds
   };
 
   const renderMarkdown = (md) => {
@@ -415,7 +416,6 @@ const ReleaseManagement = () => {
   const executeUpload = async () => {
     if (!pendingUploadData) return;
     setUploadError('');
-    setUploadSuccess('');
     setConfirmOpen(false);
     try {
       setUploading(true);
@@ -442,7 +442,12 @@ const ReleaseManagement = () => {
         }
         throw new Error(message);
       }
-      setUploadSuccess('Release created successfully');
+      setToast({
+        show: true,
+        title: 'Release Published',
+        description: 'The new release has been published and is now available for download.',
+        variant: 'success',
+      });
       resetUploadForm();
       setIsAdding(false);
       fetchReleases(productFilter); // Refresh the releases list
@@ -451,7 +456,6 @@ const ReleaseManagement = () => {
     } finally {
       setUploading(false);
       setPendingUploadData(null);
-      setTimeout(() => setUploadSuccess(''), 4000);
     }
   };
 
@@ -462,14 +466,12 @@ const ReleaseManagement = () => {
     setShowProductDropdown(false);
     setShowFilterDropdown(false);
     resetUploadForm();
-    setUploadSuccess(''); // Clear any previous success message
   };
 
   const handleStartUpdate = () => {
     setIsUpdating(true);
     setIsAdding(false);
     resetUpdateForm();
-    setUpdateSuccess(''); // Clear any previous success message
   };
 
   const handleCancel = () => {
@@ -479,27 +481,38 @@ const ReleaseManagement = () => {
     setShowFilterDropdown(false);
     resetUploadForm();
     resetUpdateForm();
-    setUpdateSuccess(''); // Clear success message when canceling
-    setUploadSuccess(''); // Clear upload success message when canceling
   };
 
   // submitUpload replaced by confirmation modal flow
 
   const submitChangelogUpdate = async (e) => {
     e.preventDefault();
-    setUpdateError('');
-    setUpdateSuccess('');
 
     if (!editReleaseId.trim()) {
-      setUpdateError('Release ID is required');
+      setToast({
+        show: true,
+        title: 'Validation Error',
+        description: 'Release ID is required.',
+        variant: 'destructive',
+      });
       return;
     }
     if (!newChangelog.trim()) {
-      setUpdateError('Changelog content is required');
+      setToast({
+        show: true,
+        title: 'Validation Error',
+        description: 'Changelog content is required.',
+        variant: 'destructive',
+      });
       return;
     }
     if (newChangelog.length > 20000) {
-      setUpdateError('Changelog exceeds 20,000 character limit');
+      setToast({
+        show: true,
+        title: 'Validation Error',
+        description: 'Changelog exceeds 20,000 character limit.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -526,16 +539,23 @@ const ReleaseManagement = () => {
         throw new Error(message);
       }
 
-      setUpdateSuccess('Changelog updated successfully');
+      setToast({
+        show: true,
+        title: 'Changelog Updated',
+        description: 'The release changelog has been updated.',
+        variant: 'success',
+      });
       fetchReleases(productFilter); // Refresh the releases list
       resetUpdateForm();
     } catch (err) {
-      setUpdateError(err.message);
+      setToast({
+        show: true,
+        title: 'Update Failed',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setUpdating(false);
-      setTimeout(() => {
-        setUpdateSuccess('');
-      }, 4000);
     }
   };
 
@@ -617,7 +637,7 @@ const ReleaseManagement = () => {
             e.stopPropagation();
             setIsOpen(!isOpen);
           }}
-          className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750 text-sm min-w-[180px]"
+          className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750 text-sm min-w-45"
         >
           <span className="transition-colors duration-200">
             {currentOption?.label || 'All Products'}
@@ -670,7 +690,7 @@ const ReleaseManagement = () => {
           {!isAdding && !isUpdating && (
             <button
               onClick={handleStartAdd}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-sm font-medium text-blue-400 hover:bg-blue-500/30 hover:border-blue-500/40 transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
             >
               <Plus className="w-4 h-4" />
               New Release
@@ -722,51 +742,11 @@ const ReleaseManagement = () => {
       </div>
 
       <div className="space-y-8">
-        {/* Success Messages */}
-        {uploadSuccess && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-emerald-400 font-medium">Release Published Successfully</p>
-              <p className="text-emerald-300/80 text-sm mt-1">
-                The new release has been published and is now available for download.
-              </p>
-            </div>
-            <button
-              onClick={() => setUploadSuccess('')}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {updateSuccess && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-emerald-400 font-medium">Changelog Updated Successfully</p>
-              <p className="text-emerald-300/80 text-sm mt-1">
-                The release changelog has been updated.
-              </p>
-            </div>
-            <button
-              onClick={() => setUpdateSuccess('')}
-              className="text-emerald-400/60 hover:text-emerald-400 transition-colors shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
         {/* Add New Release Section */}
         {isAdding && (
           <div className="space-y-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl">
             <div className="mb-4">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Package className="w-5 h-5 text-blue-400" />
-                Create New Release
-              </h3>
+              <h3 className="text-lg font-semibold text-white">Create New Release</h3>
             </div>
 
             <form
@@ -930,7 +910,7 @@ const ReleaseManagement = () => {
                       {product === 'Installer' ? 'Installer File' : 'Release File'}
                       <span className="text-red-400 ml-1">*</span>
                     </label>
-                    <div className="border-2 rounded-lg p-6 text-center transition-colors border-zinc-600 bg-zinc-800/50 text-sm min-h-[140px] flex flex-col items-center justify-center max-w-[420px] mx-auto">
+                    <div className="border-2 rounded-lg p-6 text-center transition-colors border-zinc-600 bg-zinc-800/50 text-sm min-h-35 flex flex-col items-center justify-center max-w-105 mx-auto">
                       <div className="flex items-center gap-2 text-amber-400 mb-2">
                         <Info className="w-6 h-6" />
                         <span className="font-medium">SimConnect.NET (External)</span>
@@ -1076,13 +1056,6 @@ const ReleaseManagement = () => {
                   )}
                 </div>
               </div>
-
-              {updateError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400 flex items-start space-x-2">
-                  <AlertTriangle className="w-4 h-4 mt-0.5" />
-                  <span>{updateError}</span>
-                </div>
-              )}
             </form>
           </div>
         )}
@@ -1090,11 +1063,8 @@ const ReleaseManagement = () => {
         {/* Existing Releases Section */}
         {!isAdding && !isUpdating && (
           <div className="mt-8">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-blue-400" />
-                <h3 className="text-lg font-semibold text-white">Existing Releases</h3>
-              </div>
+            <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-lg font-semibold text-white">Existing Releases</h3>
               <div className="flex items-center gap-3">
                 {renderFilterDropdown(
                   productFilter,
@@ -1144,15 +1114,13 @@ const ReleaseManagement = () => {
                         <tr key={rel.id} className="hover:bg-zinc-800/50 transition-colors">
                           <td className="py-3 px-4 font-mono text-zinc-300">{rel.id}</td>
                           <td className="py-3 px-4">
-                            <span className="inline-flex items-center rounded-full bg-blue-500/20 text-blue-400 px-3 py-1 text-xs font-medium">
-                              {rel.product}
-                            </span>
+                            <span className="text-zinc-300 text-sm">{rel.product}</span>
                           </td>
                           <td className="py-3 px-4 font-mono text-white">{rel.version}</td>
                           <td className="py-3 px-4 text-zinc-400 whitespace-nowrap">
                             {rel.created_at ? new Date(rel.created_at).toLocaleDateString() : '-'}
                           </td>
-                          <td className="py-3 px-4 text-zinc-400 truncate max-w-[180px]">
+                          <td className="py-3 px-4 text-zinc-400 truncate max-w-45">
                             {rel.changelog ? (
                               rel.changelog.slice(0, 60)
                             ) : (
@@ -1251,7 +1219,7 @@ const ReleaseManagement = () => {
                     <span className="text-zinc-400">
                       {product === 'Installer' ? 'Installer File:' : 'ZIP File:'}
                     </span>
-                    <span className="font-medium truncate max-w-[200px]" title={file?.name}>
+                    <span className="font-medium truncate max-w-50" title={file?.name}>
                       {file?.name}
                     </span>
                   </div>
@@ -1267,7 +1235,7 @@ const ReleaseManagement = () => {
               )}
               <div className="flex justify-between">
                 <span className="text-zinc-400">Promo Image:</span>
-                <span className="font-medium truncate max-w-[200px]" title={image?.name}>
+                <span className="font-medium truncate max-w-50" title={image?.name}>
                   {image ? image.name : '(none)'}
                 </span>
               </div>
@@ -1315,6 +1283,14 @@ const ReleaseManagement = () => {
           </div>
         )}
       </Dialog>
+
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast((t) => ({ ...t, show: false }))}
+      />
     </div>
   );
 };

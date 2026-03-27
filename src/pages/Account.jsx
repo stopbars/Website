@@ -404,8 +404,8 @@ const Account = () => {
           <h1 className="text-4xl font-bold mb-8 text-white">Account Settings</h1>
           <div className="space-y-8">
             {staffRoles?.isStaff && (
-              <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
-                <div className="flex items-center justify-between">
+              <Card className="p-5 sm:p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center space-x-3 mb-2">
                       <Shield className="w-6 h-6 text-blue-400" />
@@ -423,7 +423,7 @@ const Account = () => {
                   <Button
                     variant="primary"
                     onClick={() => (window.location.href = '/staff')}
-                    className="bg-blue-500 hover:bg-blue-600"
+                    className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600"
                   >
                     <Link className="w-4 h-4 mr-2" />
                     Staff Dashboard
@@ -569,23 +569,21 @@ const Account = () => {
                 </div>
 
                 {/* Display Name Mode */}
-                <div className="bg-zinc-900/50 p-6 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
-                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                    <div>
-                      <h3 className="text-lg font-semibold">Preferred Display Name Mode</h3>
-                      <p className="text-sm text-zinc-400">
-                        Choose how your name appears publicly across BARS.
-                      </p>
-                    </div>
+                <div className="relative bg-zinc-900/50 p-4 sm:p-6 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold">Preferred Display Name Mode</h3>
+                    <p className="text-sm text-zinc-400">
+                      Choose how your name appears publicly across BARS.
+                    </p>
                     {user?.display_name && (
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60">
+                      <div className="mt-3 sm:mt-0 sm:absolute sm:top-6 sm:right-6">
+                        <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60 whitespace-nowrap inline-block">
                           Current: <span className="font-medium">{user.display_name}</span>
                         </div>
                       </div>
                     )}
                   </div>
-                  <div className="grid md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     {displayModeOptions.map((opt) => {
                       const active = Number(displayMode) === opt.value;
                       return (
@@ -631,8 +629,8 @@ const Account = () => {
             </Card>
 
             {userDivisions.length > 0 && (
-              <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
-                <div className="flex items-center space-x-3 mb-8">
+              <Card className="p-5 sm:p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
+                <div className="flex items-center space-x-3 mb-6 sm:mb-8">
                   <Building2 className="w-6 h-6 text-blue-400" />
                   <h2 className="text-2xl font-semibold">Your Divisions</h2>
                 </div>
@@ -646,7 +644,7 @@ const Account = () => {
                       division && (
                         <div
                           key={division.id}
-                          className="flex items-center justify-between p-6 bg-zinc-900/50 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50"
+                          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-6 bg-zinc-900/50 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50"
                         >
                           <div>
                             <h3 className="text-xl font-semibold text-white">{division.name}</h3>
@@ -657,7 +655,7 @@ const Account = () => {
                             onClick={() =>
                               (window.location.href = `/divisions/${division.id}/manage`)
                             }
-                            className="bg-blue-500 hover:bg-blue-600"
+                            className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600"
                           >
                             <Link className="w-4 h-4 mr-2" />
                             Manage Division
@@ -670,32 +668,36 @@ const Account = () => {
               </Card>
             )}
 
-            <Card className="p-8 border-red-500/20 hover:border-red-500/30 transition-all duration-300">
-              <div className="flex items-center space-x-3 mb-8">
+            <Card className="p-5 sm:p-8 border-red-500/20 hover:border-red-500/30 transition-all duration-300">
+              <div className="flex items-center space-x-3 mb-6 sm:mb-8">
                 <AlertOctagon className="w-6 h-6 text-red-500" />
                 <h2 className="text-2xl font-semibold text-red-500">Danger Zone</h2>
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-6 bg-red-500/5 rounded-lg border border-red-500/10">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-6 bg-red-500/5 rounded-lg border border-red-500/10">
                   <div>
                     <h3 className="font-medium text-red-400">Sign Out</h3>
                     <p className="text-sm text-zinc-400">End your current session</p>
                   </div>
-                  <Button variant="outline" onClick={logout}>
+                  <Button variant="outline" onClick={logout} className="w-full sm:w-auto">
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign Out
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-between p-6 bg-red-500/5 rounded-lg border border-red-500/10">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-6 bg-red-500/5 rounded-lg border border-red-500/10">
                   <div>
                     <h3 className="font-medium text-red-400">Delete Account</h3>
                     <p className="text-sm text-zinc-400">
                       Permanently delete your BARS account and all stored data.
                     </p>
                   </div>
-                  <Button variant="outline" onClick={() => setIsDeleteDialogOpen(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                    className="w-full sm:w-auto"
+                  >
                     <OctagonAlert className="w-4 h-4 mr-2" />
                     Delete Account
                   </Button>

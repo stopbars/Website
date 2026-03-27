@@ -345,7 +345,7 @@ const VatSysProfiles = () => {
             </Button>
           </div>
 
-          <div className="mt-3 overflow-hidden rounded-xl border border-zinc-800">
+          <div className="mt-3 overflow-x-auto overflow-hidden rounded-xl border border-zinc-800">
             <div className="grid grid-cols-12 bg-zinc-900/60 px-4 py-2 text-xs text-zinc-400">
               <div className="col-span-2">ICAO</div>
               <div className="col-span-6">Name</div>

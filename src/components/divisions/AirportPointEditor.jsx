@@ -1367,6 +1367,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   useEffect(() => {
     drawingCoordsRef.current = drawingCoords;
   }, [drawingCoords]);
+
   useEffect(() => {
     if (uploadState.status === 'success') {
       const t = setTimeout(() => {
@@ -2570,7 +2571,10 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   }
 
   return (
-    <div className="flex flex-col px-4 py-6 lg:px-8 pt-16" style={{ height: resolvedHeightValue }}>
+    <div
+      className="flex flex-col px-4 py-6 lg:px-8 pt-12 lg:pt-16 lg:h-(--editor-h)"
+      style={{ '--editor-h': resolvedHeightValue }}
+    >
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>
           <h1 className="text-xl font-semibold text-white tracking-tight inline-flex items-center gap-2">
@@ -2612,8 +2616,8 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           );
         })()}
       </div>
-      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
-        <div className="flex-1 relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900">
+      <div className="flex flex-col lg:flex-row gap-6 lg:flex-1 lg:min-h-0">
+        <div className="h-[70vh] min-h-72 lg:h-auto lg:max-h-none lg:flex-1 relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900">
           {airportMetaLoading && !derivedCenter && (
             <div className="w-full h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-4">
@@ -2772,7 +2776,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
             </MapContainer>
           )}
         </div>
-        <div className="w-full lg:w-96 flex flex-col gap-5 min-h-0 p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg overflow-y-auto">
+        <div className="flex flex-col gap-5 min-h-0 h-[60vh] lg:h-auto overflow-y-auto p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg lg:w-96 lg:flex-none lg:overflow-y-auto">
           {(selectedId || creatingNew) && (
             <div className="flex items-center gap-2.5">
               {creatingNew && !selectedId && (
