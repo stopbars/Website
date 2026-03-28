@@ -18,6 +18,9 @@ import {
   CircleFadingPlus,
   Loader,
   MapPinPlus,
+  ImageUp,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import { Dropdown } from '../shared/Dropdown';
 import { Layout } from '../layout/Layout';
@@ -1226,6 +1229,164 @@ const emptyFormState = {
   ihp: false,
 };
 
+// ---------------------------------------------------------------------------
+// ImageOverlayTool
+// Renders a draggable, resizable, lockable image overlay inside the MapContainer.
+// ---------------------------------------------------------------------------
+const ImageOverlayTool = ({ imageUrl, bounds, onBoundsChange, locked, opacity }) => {
+  const map = useMap();
+  const overlayRef = useRef(null);
+  const dragMarkerRef = useRef(null);
+  const cornerMarkersRef = useRef([]);
+
+  const makeHandleIcon = (cursor = 'move') =>
+    L.divIcon({
+      className: '',
+      html: `<div style="width:14px;height:14px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 0 0 1px #1e40af;cursor:${cursor};"></div>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+
+  const makeCornerIcon = () =>
+    L.divIcon({
+      className: '',
+      html: `<div style="width:10px;height:10px;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 0 1px #b45309;cursor:nwse-resize;"></div>`,
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+    });
+
+  useEffect(() => {
+    if (!map || !imageUrl || !bounds) return;
+
+    // Create the image overlay
+    const overlay = L.imageOverlay(imageUrl, bounds, {
+      opacity,
+      interactive: false,
+      className: 'bars-image-overlay',
+    }).addTo(map);
+    overlayRef.current = overlay;
+
+    const getCenter = (b) => {
+      const sw = b.getSouthWest();
+      const ne = b.getNorthEast();
+      return L.latLng((sw.lat + ne.lat) / 2, (sw.lng + ne.lng) / 2);
+    };
+
+    const getCorners = (b) => {
+      const sw = b.getSouthWest();
+      const ne = b.getNorthEast();
+      return [sw, L.latLng(sw.lat, ne.lng), ne, L.latLng(ne.lat, sw.lng)]; // SW, SE, NE, NW
+    };
+
+    if (!locked) {
+      // Center drag handle
+      const center = getCenter(overlay.getBounds());
+      const dragMarker = L.marker(center, {
+        icon: makeHandleIcon('move'),
+        draggable: true,
+        zIndexOffset: 1000,
+      }).addTo(map);
+      dragMarkerRef.current = dragMarker;
+
+      dragMarker.on('drag', () => {
+        const newCenter = dragMarker.getLatLng();
+        const b = overlay.getBounds();
+        const sw = b.getSouthWest();
+        const ne = b.getNorthEast();
+        const halfLat = (ne.lat - sw.lat) / 2;
+        const halfLng = (ne.lng - sw.lng) / 2;
+        const newBounds = L.latLngBounds(
+          [newCenter.lat - halfLat, newCenter.lng - halfLng],
+          [newCenter.lat + halfLat, newCenter.lng + halfLng]
+        );
+        overlay.setBounds(newBounds);
+        // Keep corner markers in sync
+        const corners = getCorners(newBounds);
+        cornerMarkersRef.current.forEach((m, i) => m.setLatLng(corners[i]));
+      });
+
+      dragMarker.on('dragend', () => {
+        onBoundsChange(overlay.getBounds());
+      });
+
+      // Corner resize handles
+      const corners = getCorners(overlay.getBounds());
+      const cornerMarkers = corners.map((corner, idx) => {
+        const m = L.marker(corner, {
+          icon: makeCornerIcon(),
+          draggable: true,
+          zIndexOffset: 1001,
+        }).addTo(map);
+
+        m.on('drag', () => {
+          const b = overlay.getBounds();
+          const sw = b.getSouthWest();
+          const ne = b.getNorthEast();
+          const pos = m.getLatLng();
+          let newSW, newNE;
+          // idx: 0=SW, 1=SE, 2=NE, 3=NW
+          if (idx === 0) {
+            newSW = pos;
+            newNE = ne;
+          } else if (idx === 1) {
+            newSW = L.latLng(pos.lat, sw.lng);
+            newNE = L.latLng(ne.lat, pos.lng);
+          } else if (idx === 2) {
+            newSW = sw;
+            newNE = pos;
+          } else {
+            newSW = L.latLng(sw.lat, pos.lng);
+            newNE = L.latLng(pos.lat, ne.lng);
+          }
+
+          const validSW = L.latLng(Math.min(newSW.lat, newNE.lat), Math.min(newSW.lng, newNE.lng));
+          const validNE = L.latLng(Math.max(newSW.lat, newNE.lat), Math.max(newSW.lng, newNE.lng));
+          const newBounds = L.latLngBounds(validSW, validNE);
+          overlay.setBounds(newBounds);
+          // Sync center handle
+          dragMarkerRef.current?.setLatLng(getCenter(newBounds));
+          // Sync other corner handles
+          const newCorners = getCorners(newBounds);
+          cornerMarkersRef.current.forEach((cm, ci) => {
+            if (ci !== idx) cm.setLatLng(newCorners[ci]);
+          });
+        });
+
+        m.on('dragend', () => {
+          onBoundsChange(overlay.getBounds());
+        });
+
+        return m;
+      });
+      cornerMarkersRef.current = cornerMarkers;
+    }
+
+    return () => {
+      overlay.remove();
+      dragMarkerRef.current?.remove();
+      dragMarkerRef.current = null;
+      cornerMarkersRef.current.forEach((m) => m.remove());
+      cornerMarkersRef.current = [];
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, imageUrl, bounds, locked]);
+
+  // Update opacity without remounting
+  useEffect(() => {
+    overlayRef.current?.setOpacity(opacity);
+  }, [opacity]);
+
+  return null;
+};
+
+ImageOverlayTool.propTypes = {
+  imageUrl: PropTypes.string,
+  bounds: PropTypes.object,
+  onBoundsChange: PropTypes.func.isRequired,
+  locked: PropTypes.bool,
+  opacity: PropTypes.number,
+};
+
 const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = 'dynamic' }) => {
   const navigate = useNavigate();
   const [remotePoints, setRemotePoints] = useState(null); // null = not loaded
@@ -1359,6 +1520,13 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const editUndoStackRef = useRef({});
   const lastEditCoordsRef = useRef({});
   const drawingCoordsRef = useRef([]);
+  // Image overlay reference layer state
+  const [refImageUrl, setRefImageUrl] = useState(null);
+  const [refImageBounds, setRefImageBounds] = useState(null);
+  const [refImageLocked, setRefImageLocked] = useState(false);
+  const [refImageOpacity, setRefImageOpacity] = useState(0.5);
+  const refImageInputRef = useRef(null);
+  const refImageObjectUrlRef = useRef(null);
   const [manualCoordsMode, setManualCoordsMode] = useState(false);
   const [manualCoords, setManualCoords] = useState([{ value: '' }, { value: '' }]);
   const [manualCoordsErrors, setManualCoordsErrors] = useState([]);
@@ -1485,6 +1653,96 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
   }, [performUndo, creatingNew, selectedId, manualPlacedId]);
+
+  const handleRefImageUpload = useCallback(
+    (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      e.target.value = '';
+
+      // 1. Validate MIME type
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        setToastConfig({
+          title: 'Invalid Format',
+          description: 'Unsupported file type. Please upload a JPEG, PNG, GIF, or WebP image.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+        return;
+      }
+
+      // 2. Enforce a 20 MB file size cap to prevent browser freeze on huge files
+      const MAX_BYTES = 20 * 1024 * 1024;
+      if (file.size > MAX_BYTES) {
+        setToastConfig({
+          title: 'File Too Large',
+          description: 'Image exceeds the 20 MB limit.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+        return;
+      }
+
+      // 3. Verify the file is actually a decodable image before committing state
+      const candidateUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        // Revoke previous object URL
+        if (refImageObjectUrlRef.current) {
+          URL.revokeObjectURL(refImageObjectUrlRef.current);
+        }
+        refImageObjectUrlRef.current = candidateUrl;
+        // Place the image centred on current map view, spanning ~15% of visible area
+        const map = mapInstanceRef.current;
+        if (map) {
+          const center = map.getCenter();
+          const bounds = map.getBounds();
+          const spanLat = (bounds.getNorth() - bounds.getSouth()) * 0.15;
+          const spanLng = (bounds.getEast() - bounds.getWest()) * 0.15;
+          setRefImageBounds(
+            L.latLngBounds(
+              [center.lat - spanLat / 2, center.lng - spanLng / 2],
+              [center.lat + spanLat / 2, center.lng + spanLng / 2]
+            )
+          );
+        }
+        setRefImageUrl(candidateUrl);
+        setRefImageLocked(false);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(candidateUrl);
+        setToastConfig({
+          title: 'Decode Failed',
+          description:
+            'The file could not be read as an image. It may be corrupt or an unsupported format.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+      };
+      img.src = candidateUrl;
+    },
+    [setToastConfig, setShowToast]
+  );
+
+  const handleRefImageRemove = useCallback(() => {
+    if (refImageObjectUrlRef.current) {
+      URL.revokeObjectURL(refImageObjectUrlRef.current);
+      refImageObjectUrlRef.current = null;
+    }
+    setRefImageUrl(null);
+    setRefImageBounds(null);
+    setRefImageLocked(false);
+  }, []);
+
+  // Clean up object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (refImageObjectUrlRef.current) {
+        URL.revokeObjectURL(refImageObjectUrlRef.current);
+      }
+    };
+  }, []);
 
   const startAddPoint = useCallback(() => {
     if (!mapInstanceRef.current) return;
@@ -2742,6 +3000,15 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               })()}
               <ViewTracker />
               {/* Removed automatic BoundsFitter to prevent unwanted recentering while editing */}
+              {refImageUrl && refImageBounds && (
+                <ImageOverlayTool
+                  imageUrl={refImageUrl}
+                  bounds={refImageBounds}
+                  onBoundsChange={setRefImageBounds}
+                  locked={refImageLocked}
+                  opacity={refImageOpacity}
+                />
+              )}
               <GeomanController
                 existingPoints={activeExistingPoints}
                 featureLayerMapRef={featureLayerMapRef}
@@ -3125,6 +3392,83 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               <div className="flex items-center mt-0 gap-2">
                 <Route className="w-5 h-5 text-zinc-300" aria-hidden="true" />
                 <h3 className="text-xl font-semibold text-zinc-100 tracking-tight">Objects</h3>
+              </div>
+              {/* Reference Image panel */}
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 gap-2">
+                  <div className="flex items-center gap-2">
+                    <ImageUp className="w-4 h-4 text-zinc-400 shrink-0" aria-hidden="true" />
+                    <span className="text-xs font-medium text-zinc-300">Reference Image</span>
+                  </div>
+                  {refImageUrl ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        title={refImageLocked ? 'Unlock overlay' : 'Lock overlay position'}
+                        onClick={() => setRefImageLocked((v) => !v)}
+                        className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                      >
+                        {refImageLocked ? (
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        ) : (
+                          <LockOpen className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove reference image"
+                        onClick={handleRefImageRemove}
+                        className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-red-400 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => refImageInputRef.current?.click()}
+                      className="text-[11px] px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-white transition-colors"
+                    >
+                      Upload
+                    </button>
+                  )}
+                  <input
+                    ref={refImageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="sr-only"
+                    onChange={handleRefImageUpload}
+                  />
+                </div>
+                {refImageUrl && (
+                  <div className="px-3 pb-3 flex flex-col gap-2 border-t border-zinc-700/60 pt-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-400 w-14 shrink-0">Opacity</span>
+                      <input
+                        type="range"
+                        min={0.05}
+                        max={1}
+                        step={0.05}
+                        value={refImageOpacity}
+                        onChange={(e) => setRefImageOpacity(parseFloat(e.target.value))}
+                        className="flex-1 h-1 accent-blue-500 cursor-pointer"
+                      />
+                      <span className="text-[11px] text-zinc-400 w-8 text-right tabular-nums">
+                        {Math.round(refImageOpacity * 100)}%
+                      </span>
+                    </div>
+                    {!refImageLocked && (
+                      <p className="text-[10px] text-zinc-500">
+                        Drag the blue handle to move · drag corners to resize
+                      </p>
+                    )}
+                    {refImageLocked && (
+                      <p className="text-[10px] text-amber-400/80">
+                        Overlay is locked - unlock to reposition
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="mt-0.5 relative">
                 <input
