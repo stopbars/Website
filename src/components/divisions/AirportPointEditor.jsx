@@ -3393,12 +3393,12 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 <Route className="w-5 h-5 text-zinc-300" aria-hidden="true" />
                 <h3 className="text-xl font-semibold text-zinc-100 tracking-tight">Objects</h3>
               </div>
-              {/* Reference Image panel */}
+              {/* Image Overlay panel */}
               <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 gap-2">
                   <div className="flex items-center gap-2">
                     <ImageUp className="w-4 h-4 text-zinc-400 shrink-0" aria-hidden="true" />
-                    <span className="text-xs font-medium text-zinc-300">Reference Image</span>
+                    <span className="text-xs font-medium text-zinc-300">Image Overlay</span>
                   </div>
                   {refImageUrl ? (
                     <div className="flex items-center gap-1">
@@ -3416,7 +3416,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                       </button>
                       <button
                         type="button"
-                        title="Remove reference image"
+                        title="Remove image overlay"
                         onClick={handleRefImageRemove}
                         className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-red-400 transition-colors"
                       >

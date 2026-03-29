@@ -436,8 +436,8 @@ const NotamManagement = () => {
       {isAdding && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <Plus className="w-4 h-4 text-blue-400" />
+            <div className="p-2 rounded-lg bg-zinc-800 border border-zinc-700">
+              <Plus className="w-4 h-4 text-zinc-400" />
             </div>
             <h3 className="font-medium text-white">Add New NOTAM</h3>
           </div>
@@ -497,8 +497,8 @@ const NotamManagement = () => {
       {isEditing && notamData?.notam && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <Edit className="w-4 h-4 text-amber-400" />
+            <div className="p-2 rounded-lg bg-zinc-800 border border-zinc-700">
+              <Edit className="w-4 h-4 text-zinc-400" />
             </div>
             <h3 className="font-medium text-white">Edit Current NOTAM</h3>
           </div>
