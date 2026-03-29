@@ -5,5 +5,5 @@ export const DocsRedirect = () => {
     window.location.href = 'https://docs.stopbars.com';
   }, []);
 
-  return <div>Redirecting to Documentation...</div>;
+  return;
 };

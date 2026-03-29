@@ -194,7 +194,7 @@ export default function CacheManagement() {
               <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
                 Namespace
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={namespace}
@@ -204,7 +204,7 @@ export default function CacheManagement() {
                 />
                 <button
                   onClick={() => setNamespace('')}
-                  className="px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
                 >
                   Clear
                 </button>
@@ -249,7 +249,7 @@ export default function CacheManagement() {
               <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
                 Namespace
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={namespace}
@@ -260,7 +260,7 @@ export default function CacheManagement() {
                 <button
                   onClick={handlePurgeNamespace}
                   disabled={loading}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
                 >
                   {loading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -284,7 +284,7 @@ export default function CacheManagement() {
 
       {/* Purge ALL */}
       <div className="bg-zinc-900/50 border border-red-500/20 rounded-xl p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
               <Bomb className="w-4 h-4 text-red-400" />
@@ -299,7 +299,7 @@ export default function CacheManagement() {
           <button
             onClick={handlePurgeAll}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bomb className="w-4 h-4" />}
             Purge ALL
