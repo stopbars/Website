@@ -1733,13 +1733,7 @@ const ImageOverlayTool = ({
       gesture.moved = false;
       gesture.suppressClick = false;
     };
-  }, [
-    autoAlignExpectingOverlayPoint,
-    map,
-    onAutoAlignOverlayPoint,
-    rotation,
-    bounds,
-  ]);
+  }, [autoAlignExpectingOverlayPoint, map, onAutoAlignOverlayPoint, rotation, bounds]);
 
   return null;
 };
@@ -1757,10 +1751,7 @@ ImageOverlayTool.propTypes = {
   onAutoAlignOverlayPoint: PropTypes.func,
 };
 
-const OverlayAutoAlignController = ({
-  expectingMapPoint,
-  onMapPointAdd,
-}) => {
+const OverlayAutoAlignController = ({ expectingMapPoint, onMapPointAdd }) => {
   const map = useMap();
   const pointerGestureRef = useRef({
     active: false,
@@ -2158,7 +2149,9 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     !refImageLatestAutoAlignMatch?.mapPoint;
   const refImageCompletedAutoAlignMatches = useMemo(
     () =>
-      refImageAutoAlignMatches.filter((match) => Boolean(match.overlayPoint) && Boolean(match.mapPoint)),
+      refImageAutoAlignMatches.filter(
+        (match) => Boolean(match.overlayPoint) && Boolean(match.mapPoint)
+      ),
     [refImageAutoAlignMatches]
   );
 
@@ -2211,7 +2204,8 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     if (refImageCompletedAutoAlignMatches.length < 2) {
       setToastConfig({
         title: 'Need More Point Matches',
-        description: 'Add at least two completed overlay-to-basemap point matches before applying alignment.',
+        description:
+          'Add at least two completed overlay-to-basemap point matches before applying alignment.',
         variant: 'destructive',
       });
       setShowToast(true);
@@ -2229,7 +2223,8 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     if (!transform || !Number.isFinite(transform.heightScale)) {
       setToastConfig({
         title: 'Alignment Failed',
-        description: 'The selected points could not produce a stable alignment. Try spreading the matches further apart.',
+        description:
+          'The selected points could not produce a stable alignment. Try spreading the matches further apart.',
         variant: 'destructive',
       });
       setShowToast(true);
@@ -2253,11 +2248,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     setShowToast(true);
     setRefImageAutoAlignActive(false);
     resetRefImageAutoAlignMatches();
-  }, [
-    refImageAspectRatio,
-    refImageCompletedAutoAlignMatches,
-    resetRefImageAutoAlignMatches,
-  ]);
+  }, [refImageAspectRatio, refImageCompletedAutoAlignMatches, resetRefImageAutoAlignMatches]);
 
   // No global snapshots; undo only in drawing or when editing a selected geometry
 
@@ -2432,9 +2423,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           const northEast = map.containerPointToLatLng(
             L.point(centerPoint.x + widthPx / 2, centerPoint.y - heightPx / 2)
           );
-          setRefImageBounds(
-            L.latLngBounds(southWest, northEast)
-          );
+          setRefImageBounds(L.latLngBounds(southWest, northEast));
         }
         setRefImageAspectRatio(nextAspectRatio);
         setRefImageRotation(0);
@@ -3507,22 +3496,6 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     refImageLatestAutoAlignMatch && !refImageLatestAutoAlignMatch.mapPoint
       ? refImageLatestAutoAlignMatch
       : null;
-  const refImageAutoAlignPrompt = useMemo(() => {
-    if (!refImageAutoAlignActive) return '';
-    if (refImageAutoAlignExpectingOverlayPoint) {
-      return `Click an overlay point for match ${refImageAutoAlignMatches.length + 1}.`;
-    }
-    if (refImageAutoAlignExpectingMapPoint) {
-      return `Click the matching basemap point for match ${refImageAutoAlignMatches.length}.`;
-    }
-    return 'Add more point matches or apply the best-fit alignment.';
-  }, [
-    refImageAutoAlignActive,
-    refImageAutoAlignExpectingMapPoint,
-    refImageAutoAlignExpectingOverlayPoint,
-    refImageAutoAlignMatches.length,
-  ]);
-
   useEffect(() => {
     if (showReviewPanel && !hasPendingChanges) {
       setShowReviewPanel(false);
@@ -4219,28 +4192,26 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                         step={0.05}
                         value={refImageOpacity}
                         onChange={(e) => setRefImageOpacity(parseFloat(e.target.value))}
-                        className="flex-1 h-1 accent-blue-500 cursor-pointer"
+                        className="flex-1 h-1.5 accent-blue-500 cursor-pointer rounded-full bg-zinc-600"
                       />
-                      <div className="flex items-center gap-1 shrink-0">
-                        <input
-                          type="number"
-                          min={5}
-                          max={100}
-                          step={1}
-                          inputMode="numeric"
-                          value={refImageOpacityInput}
-                          onChange={(e) => setRefImageOpacityInput(e.target.value)}
-                          onBlur={(e) => commitRefImageOpacityInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.currentTarget.blur();
-                            }
-                          }}
-                          className="w-12 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-1.5 py-1 text-[11px] text-right text-zinc-300 tabular-nums"
-                          aria-label="Overlay opacity percent"
-                        />
-                        <span className="text-[11px] text-zinc-400">%</span>
-                      </div>
+                      <input
+                        type="number"
+                        min={5}
+                        max={100}
+                        step={1}
+                        inputMode="numeric"
+                        value={refImageOpacityInput}
+                        onChange={(e) => setRefImageOpacityInput(e.target.value)}
+                        onBlur={(e) => commitRefImageOpacityInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        className="w-12 shrink-0 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-1.5 py-1 text-[11px] text-right text-zinc-300 tabular-nums"
+                        aria-label="Overlay opacity percent"
+                      />
+                      <span className="text-[11px] text-zinc-400 shrink-0">%</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-zinc-400 w-14 shrink-0">Rotate</span>
@@ -4251,28 +4222,25 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                         step={1}
                         value={refImageRotation}
                         onChange={(e) => setRefImageRotation(parseInt(e.target.value, 10) || 0)}
-                        className="flex-1 h-1 accent-emerald-500 cursor-pointer"
+                        className="flex-1 h-1.5 accent-emerald-500 cursor-pointer rounded-full bg-zinc-600"
                       />
-                      <div className="flex items-center gap-1 shrink-0">
-                        <input
-                          type="number"
-                          min={-180}
-                          max={180}
-                          step={1}
-                          inputMode="numeric"
-                          value={refImageRotationInput}
-                          onChange={(e) => setRefImageRotationInput(e.target.value)}
-                          onBlur={(e) => commitRefImageRotationInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.currentTarget.blur();
-                            }
-                          }}
-                          className="w-14 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-1.5 py-1 text-[11px] text-right text-zinc-300 tabular-nums"
-                          aria-label="Overlay rotation degrees"
-                        />
-                        <span className="text-[11px] text-zinc-400">deg</span>
-                      </div>
+                      <input
+                        type="number"
+                        min={-180}
+                        max={180}
+                        step={1}
+                        inputMode="numeric"
+                        value={refImageRotationInput}
+                        onChange={(e) => setRefImageRotationInput(e.target.value)}
+                        onBlur={(e) => commitRefImageRotationInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        className="w-12 shrink-0 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-1.5 py-1 text-[11px] text-right text-zinc-300 tabular-nums"
+                        aria-label="Overlay rotation degrees"
+                      />
                       <button
                         type="button"
                         onClick={() => setRefImageRotation(0)}
@@ -4283,19 +4251,15 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-2.5 flex flex-col gap-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-[11px] font-medium text-zinc-200">Auto Align</p>
-                          <p className="text-[10px] text-zinc-500">
-                            Build as many overlay-to-basemap point matches as you want, then apply a best-fit alignment.
-                          </p>
-                        </div>
+                    <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-2.5 flex flex-col gap-2.5">
+                      {/* Header */}
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-semibold text-zinc-200">Auto Align</span>
                         {!refImageAutoAlignActive ? (
                           <button
                             type="button"
                             onClick={startRefImageAutoAlign}
-                            className="shrink-0 rounded bg-sky-500/15 px-2 py-1 text-[10px] font-medium text-sky-300 hover:bg-sky-500/25 transition-colors"
+                            className="shrink-0 rounded bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 px-2 py-1 text-[10px] font-medium text-zinc-200 transition-colors"
                           >
                             Start
                           </button>
@@ -4303,93 +4267,70 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                           <button
                             type="button"
                             onClick={cancelRefImageAutoAlign}
-                            className="shrink-0 rounded bg-zinc-800 px-2 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-700 transition-colors"
+                            className="shrink-0 p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                            aria-label="Cancel auto align"
                           >
-                            Cancel
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div
-                          className={`rounded border px-2 py-1.5 text-[10px] ${
-                            refImageAutoAlignMatches.length > 0
-                              ? 'border-sky-400/50 bg-sky-500/10 text-sky-200'
-                              : 'border-zinc-700 bg-zinc-800/60 text-zinc-400'
-                          }`}
-                        >
-                          Overlay picks {refImageAutoAlignMatches.length}
-                        </div>
-                        <div
-                          className={`rounded border px-2 py-1.5 text-[10px] ${
-                            refImageCompletedAutoAlignMatches.length > 0
-                              ? 'border-pink-400/50 bg-pink-500/10 text-pink-200'
-                              : 'border-zinc-700 bg-zinc-800/60 text-zinc-400'
-                          }`}
-                        >
-                          Complete matches {refImageCompletedAutoAlignMatches.length}
-                        </div>
-                      </div>
-                      {refImagePendingAutoAlignMatch && (
-                        <div className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200">
-                          Match {refImageAutoAlignMatches.length} is waiting for its basemap point.
-                        </div>
-                      )}
-                      <p
-                        className={`text-[10px] ${
-                          refImageAutoAlignActive ? 'text-zinc-300' : 'text-zinc-500'
-                        }`}
-                      >
-                        {refImageAutoAlignActive
-                          ? refImageAutoAlignPrompt
-                          : 'Click one point on the overlay, then the matching point on the basemap. Repeat for as many landmarks as you want, then apply the fit.'}
-                      </p>
-                      {(refImageAutoAlignActive ||
-                        refImageAutoAlignMatches.length > 0) && (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleRefImageAutoAlignApply}
-                            disabled={
-                              refImageCompletedAutoAlignMatches.length < 2 ||
-                              Boolean(refImagePendingAutoAlignMatch)
-                            }
-                            className="rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-medium text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            Apply Alignment
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleRefImageAutoAlignUndo}
-                            disabled={
-                              refImageAutoAlignMatches.length === 0
-                            }
-                            className="rounded border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            Undo Last
-                          </button>
-                          <button
-                            type="button"
-                            onClick={resetRefImageAutoAlignMatches}
-                            disabled={refImageAutoAlignMatches.length === 0}
-                            className="rounded border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            Clear Matches
-                          </button>
-                        </div>
+
+                      {refImageAutoAlignActive && (
+                        <>
+                          {/* Step instructions */}
+                          <div className="mt-1 flex flex-col gap-2.5">
+                            {refImageAutoAlignExpectingOverlayPoint && (
+                              <div className="flex flex-col gap-1">
+                                <p className="text-xs font-semibold text-zinc-100">Overlay</p>
+                                <p className="text-xs text-zinc-400 leading-relaxed">
+                                  Click a point on your image overlay. Use a clear landmark like a
+                                  building corner, runway threshold, or intersection.
+                                </p>
+                              </div>
+                            )}
+                            {refImageAutoAlignExpectingMapPoint && (
+                              <div className="flex flex-col gap-1">
+                                <p className="text-xs font-semibold text-zinc-100">Basemap</p>
+                                <p className="text-xs text-zinc-400 leading-relaxed">
+                                  Click that same landmark on the basemap. You may need to lower the
+                                  overlay opacity to see the basemap clearly. Repeat process for
+                                  more pairs to improve accuracy.
+                                </p>
+                              </div>
+                            )}
+                            {!refImageAutoAlignExpectingOverlayPoint &&
+                              !refImageAutoAlignExpectingMapPoint && (
+                                <p className="text-xs text-zinc-400">
+                                  Add more pairs or apply the alignment below.
+                                </p>
+                              )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleRefImageAutoAlignApply}
+                              disabled={
+                                refImageCompletedAutoAlignMatches.length < 2 ||
+                                Boolean(refImagePendingAutoAlignMatch)
+                              }
+                              className="flex-1 rounded bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 px-2 py-1 text-[10px] font-medium text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Apply Alignment
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRefImageAutoAlignUndo}
+                              disabled={refImageAutoAlignMatches.length === 0}
+                              className="rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Undo
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
-                    {!refImageLocked && (
-                      <div className="flex flex-col gap-1 text-[10px] text-zinc-500">
-                        <p>Drag the blue handle to move, the orange corners to resize, and the green handle or slider to rotate.</p>
-                        <p>Resize stays aspect-locked by default. Hold Shift while dragging a corner to stretch the image.</p>
-                        <p>Auto Align now fits the overlay against all completed point pairs, so adding more landmarks improves accuracy.</p>
-                      </div>
-                    )}
-                    {refImageLocked && (
-                      <p className="text-[10px] text-amber-400/80">
-                        Overlay is locked - unlock to use the on-map move, resize, and rotate handles. Auto Align still works while locked.
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
