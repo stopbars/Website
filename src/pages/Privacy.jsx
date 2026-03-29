@@ -1,15 +1,17 @@
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { ConsentBanner } from '../components/shared/ConsentBanner';
+import { Button } from '../components/shared/Button';
 import { useState } from 'react';
 
 const Privacy = () => {
   const [showConsentBanner, setShowConsentBanner] = useState(false);
   return (
     <Layout>
-      <div className="pt-32 pb-20">
+      <div className="pt-45 pb-20">
         <div className="max-w-4xl mx-auto px-6">
-          <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
+          <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
+          <p className="text-sm text-zinc-500 mb-8">Last updated: March 29, 2026</p>
           <div className="space-y-6">
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4">Overview</h2>
@@ -20,14 +22,12 @@ const Privacy = () => {
                 data in a transparent and secure manner.
               </p>
               <p className="text-zinc-300 mb-2">
-                Data controller: Edward Mitchell (BARS). Contact: <u>edward@stopbars.com</u>.
-              </p>
-              <p className="text-zinc-300 mb-2">
                 This policy applies globally. For users in the EEA/UK, we process personal data in
                 accordance with GDPR/UK GDPR. For California residents, we provide the disclosures
-                required by the California Privacy Rights Act (CPRA).
+                required by the California Privacy Rights Act (CPRA). As an Australian-based
+                operator, we comply with the Australian Privacy Act 1988 (Cth). The data controller
+                is Edward Mitchell (BARS); for enquiries, please contact <u>legal@stopbars.com</u>.
               </p>
-              <p className="text-zinc-300">Last updated: September 6, 2025</p>
             </Card>
 
             <Card className="p-6">
@@ -44,10 +44,10 @@ const Privacy = () => {
                     <li>Personal API key and last regeneration timestamp</li>
                     <li>Account creation and last login timestamps</li>
                   </ul>
-                  <p className="text-zinc-300 mt-2">
-                    Storing your full name enables accurate display names, proper attribution of
-                    contributions, and certain account features that depend on your verified
-                    identity.
+                  <p className="text-zinc-300 mt-2 text-sm italic">
+                    Note: the terms &quot;API Key&quot; and &quot;API Token&quot; are used
+                    interchangeably across BARS software, documentation, and these policies. Both
+                    refer to the same personal authentication credential issued to your account.
                   </p>
                 </div>
 
@@ -59,7 +59,30 @@ const Privacy = () => {
                     <li>API key regeneration attempts (aggregate)</li>
                   </ul>
                 </div>
+                <div>
+                  <h3 className="text-lg font-medium mb-2">Technical Data</h3>
+                  <ul className="list-disc pl-6 text-zinc-300 space-y-2">
+                    <li>
+                      IP addresses - received transiently during requests and used for rate limiting
+                      and abuse prevention; we store only a hashed (SHA‑256) derivative for counting
+                      purposes and do not retain the plaintext IP
+                    </li>
+                    <li>
+                      User-agent strings (browser/client identification), received transiently
+                    </li>
+                  </ul>
+                </div>
               </div>
+            </Card>
+
+            <Card className="p-6">
+              <h2 className="text-xl font-semibold mb-4">Automated Decision-Making</h2>
+              <p className="text-zinc-300">
+                We do not use automated decision-making or profiling that produces legal or
+                similarly significant effects on you, as described under GDPR Article 22. Rate
+                limiting and abuse detection are automated operational controls and do not involve
+                profiling of individuals for decisions with legal effect.
+              </p>
             </Card>
 
             <Card className="p-6">
@@ -136,9 +159,9 @@ const Privacy = () => {
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4">Analytics</h2>
               <p className="text-zinc-300">
-                We use PostHog Cloud EU for website analytics. Analytics are{' '}
-                <strong>disabled by default</strong> and only enabled after you consent in the
-                cookie banner. We honor Global Privacy Control (GPC) and Do Not Track (DNT).
+                We use PostHog Cloud EU for website analytics. Analytics are disabled by default and
+                only enabled after you consent in the cookie banner. We honor Global Privacy Control
+                (GPC) and Do Not Track (DNT).
               </p>
               <p className="mt-4 text-zinc-300">
                 When consent is denied or unknown, analytics are disabled and no cookies persist.
@@ -176,7 +199,7 @@ const Privacy = () => {
                 </ul>
                 <p>
                   You can exercise these rights through your account settings or by contacting us at{' '}
-                  <u>support@stopbars.com</u>. We will respond within 30 days where required by law
+                  <u>legal@stopbars.com</u>. We will respond within 30 days where required by law
                   and will verify your identity before fulfilling access or deletion requests. We
                   will request only the minimum information necessary to verify your identity. This
                   may include providing valid legal identification.
@@ -185,7 +208,18 @@ const Privacy = () => {
                   <h3 className="text-lg font-medium mb-2">EEA/UK</h3>
                   <p>
                     You also have the right to object to processing based on legitimate interests
-                    and to withdraw consent at any time (without affecting prior processing).
+                    and to withdraw consent at any time (without affecting prior processing). You
+                    have the right to lodge a complaint with your national data protection
+                    supervisory authority.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium mb-2">Australia</h3>
+                  <p>
+                    Under the Australian Privacy Act 1988 (Cth) and the APPs, you have the right to
+                    access and seek correction of personal information we hold about you. If you are
+                    unsatisfied with our handling of a privacy complaint, you may refer the matter
+                    to the Office of the Australian Information Commissioner (OAIC).
                   </p>
                 </div>
                 <div>
@@ -275,8 +309,10 @@ const Privacy = () => {
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4">Contact Information</h2>
               <p className="text-zinc-300">
-                For privacy questions or rights requests, contact <u>support@stopbars.com</u>.
-                Security reports: <u>edward@stopbars.com</u> (PGP key in repository root on GitHub).
+                For privacy questions or to exercise your data rights, please contact us at{' '}
+                <u>legal@stopbars.com</u>. For security disclosures and vulnerability reports,
+                please contact <u>legal@stopbars.com</u>. A PGP key is available through our GitHub
+                repositories for encrypted correspondence.
               </p>
             </Card>
 
@@ -285,12 +321,7 @@ const Privacy = () => {
               <p className="text-zinc-300 mb-4">
                 You can manage your analytics cookie preferences at any time using the button below.
               </p>
-              <button
-                onClick={() => setShowConsentBanner(true)}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded cursor-pointer"
-              >
-                Manage Cookie Settings
-              </button>
+              <Button onClick={() => setShowConsentBanner(true)}>Manage Cookie Settings</Button>
             </Card>
           </div>
         </div>

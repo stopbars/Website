@@ -4,9 +4,10 @@ import { Card } from '../components/shared/Card';
 const Terms = () => {
   return (
     <Layout>
-      <div className="pt-32 pb-20">
+      <div className="pt-45 pb-20">
         <div className="max-w-4xl mx-auto px-6">
-          <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
+          <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
+          <p className="text-sm text-zinc-500 mb-8">Last updated: March 29, 2026</p>
           <div className="space-y-6">
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4">Overview</h2>
@@ -26,12 +27,7 @@ const Terms = () => {
                     and brand names are the property of their respective owners.
                   </p>
                 </div>
-                <p className="text-zinc-300">
-                  Operator: BARS is operated by Edward Mitchell. Contact: <u>edward@stopbars.com</u>
-                  .
-                </p>
               </div>
-              <p className="text-zinc-300 mt-6">Last updated: September 6, 2025</p>
             </Card>
 
             <Card className="p-6">
@@ -49,6 +45,13 @@ const Terms = () => {
                   <strong>&quot;Account&quot;</strong> means your BARS account authenticated via
                   VATSIM OAuth and any associated API key(s).
                 </p>
+                <p>
+                  <strong>&quot;API Key&quot; / &quot;API Token&quot;</strong> - these terms are
+                  used interchangeably throughout these Terms and across BARS software and
+                  documentation. Both refer to the personal authentication credential issued to your
+                  BARS account, used by client software to connect to and authenticate with BARS
+                  services.
+                </p>
               </div>
             </Card>
 
@@ -56,10 +59,10 @@ const Terms = () => {
               <h2 className="text-xl font-semibold mb-4">Realtime Services</h2>
               <div className="space-y-4 text-zinc-300">
                 <p>
-                  Controllers and observers may connect to realtime services over WebSockets using
-                  an API key and airport identifier. We may log operational metadata necessary to
-                  maintain reliability and security and may disconnect clients that appear inactive,
-                  abusive, or misconfigured.
+                  Pilots, Controllers, and observers may connect to realtime services over
+                  WebSockets using an API key and airport identifier. We may log operational
+                  metadata necessary to maintain reliability and security and may disconnect clients
+                  that appear inactive, abusive, or misconfigured.
                 </p>
               </div>
             </Card>
@@ -68,21 +71,26 @@ const Terms = () => {
               <h2 className="text-xl font-semibold mb-4">Community Contributions</h2>
               <div className="space-y-4 text-zinc-300">
                 <p>
-                  You may submit lighting packages and related content. You represent and warrant
-                  that you have all rights necessary to submit the content and that your submission
-                  does not infringe any third-party rights.
+                  You may submit scenery contribution packages and related content. You represent
+                  and warrant that you have all rights necessary to submit the content and that your
+                  submission does not infringe any third-party rights.
                 </p>
                 <p>
                   You retain ownership of your submissions. By submitting User Content, you grant
                   BARS a worldwide, non-exclusive, royalty‑free, transferable, and sublicensable
                   license to use, host, reproduce, modify, adapt, create derivative works from,
                   publicly perform, publicly display, and distribute your User Content in connection
-                  with the Services and community packages. You may revoke your submission at any
-                  time by contacting us; upon revocation, we will cease distributing your User
-                  Content in future releases and within our services. Revocation applies
-                  prospectively only—existing versions or packages already distributed may continue
-                  to include your contribution. We may moderate, approve, deny, or remove
-                  submissions at our discretion.
+                  with the Services and community packages.
+                </p>
+                <p>
+                  You may revoke your submission at any time by deleting it through the Contribution
+                  Dashboard. Only pending or rejected submissions may be self-deleted. If you wish
+                  to remove an approved package from distribution, you must contact us at{' '}
+                  <u>support@stopbars.com</u> to request removal; upon approval of such a request,
+                  we will cease distributing your User Content in future releases and within our
+                  services. Revocation applies prospectively only—existing versions or packages
+                  already distributed may continue to include your contribution. We may moderate,
+                  approve, deny, or remove submissions at our discretion.
                 </p>
               </div>
             </Card>
@@ -179,7 +187,7 @@ const Terms = () => {
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">Beta & Experimental Features</h2>
+              <h2 className="text-xl font-semibold mb-4">Experimental Features</h2>
               <div className="space-y-4 text-zinc-300">
                 <p>
                   From time to time we may make beta or experimental features available. Such
@@ -314,10 +322,9 @@ const Terms = () => {
                 </p>
                 <p>
                   If you believe an enforcement action was made in error, you may appeal by
-                  contacting support at
-                  <u> support@stopbars.com</u>. Appeals can be made by email, and final decisions
-                  remain at BARS’ discretion. We will review appeals in good faith but are not
-                  obligated to reinstate access.
+                  contacting us at <u>staff@stopbars.com</u>. Appeals can be made by email, and
+                  final decisions remain at BARS discretion. We will review appeals in good faith
+                  but are not obligated to reinstate access.
                 </p>
                 <p>
                   Upon termination, your right to use the service will immediately cease. All
@@ -350,19 +357,22 @@ const Terms = () => {
               <h2 className="text-xl font-semibold mb-4">Governing Law & Disputes</h2>
               <div className="space-y-4 text-zinc-300">
                 <p>
-                  These Terms are governed by the laws of Western Australia, without regard to
-                  conflict of laws principles. You agree to the exclusive jurisdiction of the courts
-                  located in Western Australia for any disputes arising out of or relating to these
-                  Terms or the Services.
+                  These Terms are governed by the laws of Australia, without regard to conflict of
+                  laws principles. We comply with the Australian Privacy Act 1988 (Cth) and the
+                  Australian Privacy Principles (APPs), the Australian Consumer Law (ACL), and where
+                  applicable, the EU General Data Protection Regulation (GDPR/UK GDPR) and the
+                  California Privacy Rights Act (CPRA). You agree to the exclusive jurisdiction of
+                  the courts located in Australia for any disputes arising out of or relating to
+                  these Terms or the Services.
                 </p>
                 <p>
                   Before commencing any formal proceedings, you agree to first attempt to resolve
-                  the dispute informally by contacting us at <u>support@stopbars.com</u>. If we
-                  cannot resolve the dispute within 30 days, either party may pursue available
-                  remedies in the agreed forum. Nothing in this section limits any non‑excludable
-                  rights under the Australian Consumer Law. Enforcement actions (such as bans or
-                  restrictions) apply globally to your use of BARS software and services, not
-                  limited by geography.
+                  the dispute informally by contacting us at <u>legal@stopbars.com</u>. If we cannot
+                  resolve the dispute within 30 days, either party may pursue available remedies in
+                  the agreed forum. Nothing in this section limits any non‑excludable rights under
+                  the Australian Consumer Law. Enforcement actions (such as bans or restrictions)
+                  apply globally to your use of BARS software and services, not limited by
+                  geography.
                 </p>
               </div>
             </Card>
@@ -397,11 +407,33 @@ const Terms = () => {
             </Card>
 
             <Card className="p-6">
+              <h2 className="text-xl font-semibold mb-4">Copyright & DMCA</h2>
+              <div className="space-y-4 text-zinc-300">
+                <p>
+                  We respect intellectual property rights. If you believe that content available
+                  through BARS infringes your copyright, you may submit a written notice to{' '}
+                  <u>legal@stopbars.com</u> including: (a) identification of the copyrighted work
+                  claimed to be infringed; (b) identification of the allegedly infringing material
+                  and its location within our Services; (c) your contact information; (d) a
+                  statement that you have a good faith belief the use is not authorised by the
+                  copyright owner; and (e) a statement, under penalty of perjury, that the
+                  information is accurate and you are authorised to act on behalf of the copyright
+                  owner.
+                </p>
+                <p>
+                  Upon receipt of a valid notice, we will investigate and, where appropriate, remove
+                  or disable access to the allegedly infringing content. Repeat infringers may have
+                  their accounts terminated. If your content was removed in error, you may submit a
+                  counter-notice to <u>legal@stopbars.com</u>.
+                </p>
+              </div>
+            </Card>
+
+            <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4">Contact Information</h2>
               <p className="text-zinc-300">
-                For any questions about these Terms, please contact us through our Discord
-                community, or via email: <u>support@stopbars.com</u>. For legal notices, contact:{' '}
-                <u>edward@stopbars.com</u>.
+                For any questions about these Terms of Service or legal notices, please contact:{' '}
+                <u>legal@stopbars.com</u>
               </p>
             </Card>
           </div>
