@@ -157,59 +157,97 @@ const formatPointColorStyle = (color) => {
   }
 };
 
-const PointPopupContent = React.memo(({ point, copiedId, onCopy }) => (
-  <div className="p-3 -m-3 bg-zinc-900 rounded-lg shadow-lg min-w-[200px]">
-    <h3 className="font-bold text-white mb-1">{point.name}</h3>
+const POINT_TYPE_STYLES = {
+  stopbar: { accent: 'border-t-2 border-red-500' },
+  lead_on: { accent: 'border-t-2 border-amber-500' },
+  taxiway: { accent: 'border-t-2 border-green-500' },
+  stand: { accent: 'border-t-2 border-blue-500' },
+};
 
-    <div className="bg-zinc-800/50 rounded px-3 py-2 mb-3 flex items-center justify-between">
-      <code className="text-sm text-zinc-300">{point.id}</code>
-      <button
-        onClick={(event) => onCopy(point.id, event)}
-        className={`text-zinc-400 hover:text-white transition-colors p-1 rounded ${copiedId === point.id ? 'text-green-500' : ''}`}
-        title="Copy ID"
-      >
-        {copiedId === point.id ? <Check className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
-      </button>
-    </div>
+const PopupRow = ({ label, value }) => (
+  <div className="flex items-center justify-between gap-6">
+    <span className="text-xs text-zinc-500 uppercase tracking-wide">{label}</span>
+    <span className="text-sm text-zinc-200 font-medium">{value}</span>
+  </div>
+);
 
-    <div className="space-y-2">
-      <div className="flex justify-between">
-        <span className="text-sm text-zinc-400">Type:</span>
-        <span className="text-sm text-white">{formatPointType(point.type)}</span>
+PopupRow.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.node.isRequired,
+};
+
+const PointPopupContent = React.memo(({ point, copiedId, onCopy }) => {
+  const style = POINT_TYPE_STYLES[point.type] || POINT_TYPE_STYLES.taxiway;
+  const stopPopupInteraction = (event) => {
+    event.stopPropagation();
+    event.nativeEvent?.stopImmediatePropagation?.();
+  };
+
+  return (
+    <div
+      className="-m-[10px] -mb-[9px]"
+      onPointerDown={stopPopupInteraction}
+      onDoubleClick={stopPopupInteraction}
+    >
+      <div className={`bg-zinc-900 rounded-lg shadow-lg min-w-[240px] ${style.accent}`}>
+        <div className="px-3.5 pt-3.5 pb-3 pr-9">
+          <h3 className="font-semibold text-white text-[15px] leading-snug">{point.name}</h3>
+        </div>
+
+        <div className="px-3.5">
+          <button
+            type="button"
+            onClick={(event) => onCopy(point.id, event)}
+            className="w-full group flex items-center justify-between gap-2 bg-zinc-800/60 hover:bg-zinc-800 rounded-md px-2.5 py-2 transition-colors cursor-pointer"
+            title="Copy ID"
+          >
+            <code className="text-xs text-zinc-400 font-mono truncate">{point.id}</code>
+            <span
+              className={`shrink-0 transition-colors ${copiedId === point.id ? 'text-green-400' : 'text-zinc-500 group-hover:text-zinc-300'}`}
+            >
+              {copiedId === point.id ? (
+                <Check className="w-3.5 h-3.5" />
+              ) : (
+                <CopyIcon className="w-3.5 h-3.5" />
+              )}
+            </span>
+          </button>
+        </div>
+
+        <div className="px-3.5 pt-3 pb-3.5 space-y-2">
+          <PopupRow label="Type" value={formatPointType(point.type)} />
+
+          {point.type === 'stopbar' && (
+            <>
+              <PopupRow
+                label="Direction"
+                value={<span className="capitalize">{point.directionality}</span>}
+              />
+              <PopupRow label="Elevated" value={point.elevated ? 'True' : 'False'} />
+              <PopupRow label="IHP" value={point.ihp ? 'True' : 'False'} />
+            </>
+          )}
+
+          {point.type === 'taxiway' && (
+            <>
+              <PopupRow
+                label="Direction"
+                value={<span className="capitalize">{point.directionality}</span>}
+              />
+              <PopupRow label="Color" value={formatPointColorStyle(point.color)} />
+            </>
+          )}
+        </div>
       </div>
 
-      {point.type === 'stopbar' && (
-        <>
-          <div className="flex justify-between">
-            <span className="text-sm text-zinc-400">Directionality:</span>
-            <span className="text-sm text-white capitalize">{point.directionality}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-zinc-400">Elevated Bar:</span>
-            <span className="text-sm text-white">{point.elevated ? 'Yes' : 'No'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-zinc-400">IHP:</span>
-            <span className="text-sm text-white">{point.ihp ? 'Yes' : 'No'}</span>
-          </div>
-        </>
-      )}
-
-      {point.type === 'taxiway' && (
-        <>
-          <div className="flex justify-between">
-            <span className="text-sm text-zinc-400">Directionality:</span>
-            <span className="text-sm text-white capitalize">{point.directionality}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-zinc-400">Color Style:</span>
-            <span className="text-sm text-white">{formatPointColorStyle(point.color)}</span>
-          </div>
-        </>
-      )}
+      <div className="flex justify-center">
+        <svg width="14" height="7" viewBox="0 0 14 7" className="block -mt-px">
+          <path d="M0 0L7 7L14 0Z" fill="#18181b" />
+        </svg>
+      </div>
     </div>
-  </div>
-));
+  );
+});
 
 PointPopupContent.displayName = 'PointPopupContent';
 
@@ -542,12 +580,31 @@ style.textContent = `
     background-color: #4ade80 !important;
   }
   .maplibregl-popup-content {
-    background: transparent;
-    padding: 0;
-    box-shadow: none;
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  .maplibregl-popup-close-button {
+    font-size: 22px !important;
+    width: 26px !important;
+    height: 26px !important;
+    line-height: 26px !important;
+    padding: 0 !important;
+    color: #a1a1aa !important;
+    right: 6px !important;
+    top: 6px !important;
+    border-radius: 4px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .maplibregl-popup-close-button:hover {
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.1) !important;
   }
   .maplibregl-popup-tip {
-    border-top-color: #18181b;
+    display: none !important;
   }
 `;
 document.head.appendChild(style);
@@ -853,6 +910,24 @@ const ContributeMap = () => {
     setActivePointId(null);
   }, []);
 
+  const setMapCanvasCursor = useCallback((cursor) => {
+    const canvas = mapRef.current?.getCanvas?.();
+    if (canvas) {
+      canvas.style.cursor = cursor;
+    }
+  }, []);
+
+  const handleInteractiveHover = useCallback(
+    (event) => {
+      const hasInteractiveFeature =
+        Array.isArray(event?.features) &&
+        event.features.some((feature) => INTERACTIVE_LAYER_IDS.includes(feature?.layer?.id));
+
+      setMapCanvasCursor(hasInteractiveFeature ? 'pointer' : '');
+    },
+    [setMapCanvasCursor]
+  );
+
   const handleMarkerClick = useCallback((point, e) => {
     e.originalEvent.stopPropagation();
     setActivePointId(point.id);
@@ -884,6 +959,7 @@ const ContributeMap = () => {
     if (event) {
       event.stopPropagation();
       event.preventDefault();
+      event.nativeEvent?.stopImmediatePropagation?.();
     }
     navigator.clipboard.writeText(id);
     setCopiedId(id);
@@ -963,6 +1039,8 @@ const ContributeMap = () => {
                   ref={mapRef}
                   {...viewState}
                   onMove={(evt) => setViewState(evt.viewState)}
+                  onMouseMove={handleInteractiveHover}
+                  onMouseLeave={() => setMapCanvasCursor('')}
                   onLoad={onMapLoad}
                   onStyleData={(e) => addCapIcons(e.target)}
                   mapStyle={mapStyle}
