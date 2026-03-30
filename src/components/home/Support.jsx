@@ -4,9 +4,6 @@ import { Button } from '../shared/Button';
 export const Support = () => {
   return (
     <section className="py-32 relative overflow-hidden" id="support">
-      {/* Background decoration*/}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-emerald-500/5 blur-3xl rounded-full" />
-
       <div className="relative max-w-7xl mx-auto px-6">
         {/* Header */}
         <div className="text-center mb-16">
@@ -21,8 +18,8 @@ export const Support = () => {
           {/* Documentation Card */}
           <div className="group relative p-8 rounded-2xl bg-linear-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-colors duration-300 flex flex-col">
             <div className="relative flex flex-col flex-1">
-              <div className="w-14 h-14 mb-6 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                <FileText className="w-7 h-7 text-red-400" />
+              <div className="w-14 h-14 mb-6 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                <FileText className="w-7 h-7 text-zinc-400" />
               </div>
 
               <h3 className="text-xl font-semibold mb-3">Documentation</h3>

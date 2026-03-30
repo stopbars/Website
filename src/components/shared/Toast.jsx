@@ -103,7 +103,7 @@ export const Toast = ({
   return (
     <div
       className={`
-        fixed bottom-4 left-4 z-50 max-w-sm w-full
+        fixed bottom-4 left-4 right-4 sm:right-auto sm:left-4 z-50 sm:max-w-sm sm:w-full
         transform transition-all duration-500 ease-out
         ${
           isAnimating

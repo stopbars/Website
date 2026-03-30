@@ -2,12 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Dialog } from '../shared/Dialog';
+import { Toast } from '../shared/Toast';
 import {
-  AlertTriangle,
   Loader,
   Trash2,
   Mail,
-  CheckCircle2,
   MessageSquare,
   XCircle,
   AlertOctagon,
@@ -56,17 +55,18 @@ export default function ContactMessages() {
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const [selectedId, setSelectedId] = useState(null);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [deletingMessage, setDeletingMessage] = useState(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
 
-  const clearBanners = () => {
-    setError(null);
-    setSuccess(null);
-  };
+  const clearBanners = () => {};
 
   const fetchMessages = useCallback(async () => {
     if (!token) return;
@@ -93,7 +93,12 @@ export default function ContactMessages() {
       });
       setMessages(normalized);
     } catch (e) {
-      setError(e.message || 'Error fetching messages');
+      setToast({
+        show: true,
+        title: 'Failed to load messages',
+        description: e.message || 'Error fetching messages',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -104,14 +109,7 @@ export default function ContactMessages() {
   }, [fetchMessages]);
 
   // Auto-dismiss success messages after 3 seconds
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => {
-        setSuccess(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success]);
+  // (handled by Toast component)
 
   const filteredMessages = messages; // Direct list (already newest first)
 
@@ -143,9 +141,19 @@ export default function ContactMessages() {
       setMessages((prev) =>
         prev.map((m) => (m.id === id ? { ...m, ...(updatedObj || {}), status: newStatus } : m))
       );
-      setSuccess('Status updated');
+      setToast({
+        show: true,
+        title: 'Status updated',
+        description: `Status changed to ${newStatus}.`,
+        variant: 'success',
+      });
     } catch (e) {
-      setError(e.message || 'Failed to update status');
+      setToast({
+        show: true,
+        title: 'Failed to update status',
+        description: e.message || 'Failed to update status',
+        variant: 'destructive',
+      });
     } finally {
       setUpdatingStatusId(null);
     }
@@ -168,10 +176,20 @@ export default function ContactMessages() {
       // 204 No Content expected
       setMessages((prev) => prev.filter((m) => m.id !== id));
       if (selectedId === id) setSelectedId(null);
-      setSuccess('Message deleted successfully');
+      setToast({
+        show: true,
+        title: 'Message deleted',
+        description: 'The message has been deleted successfully.',
+        variant: 'success',
+      });
       setDeletingMessage(null);
     } catch (e) {
-      setError(e.message || 'Failed to delete message');
+      setToast({
+        show: true,
+        title: 'Failed to delete message',
+        description: e.message || 'Failed to delete message',
+        variant: 'destructive',
+      });
     } finally {
       setIsDeletingMessage(false);
     }
@@ -204,23 +222,11 @@ export default function ContactMessages() {
       </div>
 
       {/* Status Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
-      {success && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-400">{success}</p>
-        </div>
-      )}
 
       {/* Message Grid */}
       <div className="grid grid-cols-12 gap-6">
         {/* List */}
-        <div className="col-span-12 lg:col-span-5 space-y-3 max-h-[600px] overflow-y-auto pr-1">
+        <div className="col-span-12 lg:col-span-5 space-y-3 max-h-150 overflow-y-auto pr-1">
           {filteredMessages.length === 0 ? (
             <div className="p-8 text-center border border-dashed border-zinc-700/50 rounded-xl bg-zinc-800/20">
               <Mail className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
@@ -311,7 +317,12 @@ export default function ContactMessages() {
                     if (selectedMessage.email) {
                       navigator.clipboard.writeText(selectedMessage.email).catch(() => {});
                       window.open('https://mail.stopbars.com', '_blank', 'noopener');
-                      setSuccess('Email copied & ZoHo opened');
+                      setToast({
+                        show: true,
+                        title: 'Email copied & opened',
+                        description: '',
+                        variant: 'success',
+                      });
                     }
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
@@ -330,7 +341,7 @@ export default function ContactMessages() {
               </div>
 
               {/* Message Content */}
-              <div className="bg-zinc-800/30 border border-zinc-700/30 rounded-lg p-4 max-h-[360px] overflow-y-auto">
+              <div className="bg-zinc-800/30 border border-zinc-700/30 rounded-lg p-4 max-h-90 overflow-y-auto">
                 <p className="whitespace-pre-wrap text-sm text-zinc-300 leading-relaxed">
                   {selectedMessage.message || selectedMessage.body || '(No message content)'}
                 </p>
@@ -346,7 +357,7 @@ export default function ContactMessages() {
               )}
             </div>
           ) : (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 flex items-center justify-center min-h-[300px]">
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 flex items-center justify-center min-h-75">
               <div className="text-center">
                 <Mail className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
                 <p className="text-sm text-zinc-400">Select a message to view details</p>
@@ -399,6 +410,14 @@ export default function ContactMessages() {
           </div>
         </div>
       </Dialog>
+
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast((t) => ({ ...t, show: false }))}
+      />
     </div>
   );
 }

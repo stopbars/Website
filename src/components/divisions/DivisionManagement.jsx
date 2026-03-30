@@ -498,6 +498,7 @@ const DivisionManagement = () => {
   const [showDeleteAirportConfirm, setShowDeleteAirportConfirm] = useState(false);
   const [airportToDelete, setAirportToDelete] = useState(null);
   const [deletingAirport, setDeletingAirport] = useState(false);
+  const [updatingContributionAirportId, setUpdatingContributionAirportId] = useState(null);
   const token = getVatsimToken();
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isLeadDev, setIsLeadDev] = useState(false);
@@ -1066,6 +1067,70 @@ const DivisionManagement = () => {
     }
   };
 
+  const handleContributionToggle = async (airport, contributionsEnabled) => {
+    if (!isDivisionMember) return;
+
+    setUpdatingContributionAirportId(airport.id);
+    setAirports((prev) =>
+      prev.map((a) =>
+        a.id === airport.id ? { ...a, contributions_enabled: contributionsEnabled } : a
+      )
+    );
+    try {
+      const response = await fetch(
+        `https://v2.stopbars.com/divisions/${divisionId}/airports/${airport.id}/contributions`,
+        {
+          method: 'PATCH',
+          headers: {
+            'X-Vatsim-Token': token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ contributionsEnabled }),
+        }
+      );
+
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update contribution setting');
+        }
+
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to update contribution setting');
+      }
+
+      const updatedAirport = await response.json();
+      setAirports((prev) =>
+        prev.map((currentAirport) =>
+          currentAirport.id === updatedAirport.id ? updatedAirport : currentAirport
+        )
+      );
+      setToastConfig({
+        variant: 'success',
+        title: `${airport.icao} Contributions ${contributionsEnabled ? 'Enabled' : 'Disabled'}`,
+        description: contributionsEnabled
+          ? 'Contributions are now enabled for this airport.'
+          : 'Contributions are now disabled for this airport.',
+      });
+      setShowToast(true);
+    } catch (err) {
+      setAirports((prev) =>
+        prev.map((a) =>
+          a.id === airport.id ? { ...a, contributions_enabled: !contributionsEnabled } : a
+        )
+      );
+      setToastConfig({
+        variant: 'destructive',
+        title: 'Failed to Update Contribution Setting',
+        description: err.message || 'An error occurred while updating the contribution setting.',
+      });
+      setShowToast(true);
+    } finally {
+      setUpdatingContributionAirportId(null);
+    }
+  };
+
   if (loading)
     return (
       <Layout>
@@ -1077,7 +1142,7 @@ const DivisionManagement = () => {
 
   return (
     <Layout>
-      <div className="pt-40 pb-20">
+      <div className="pt-32 md:pt-40 pb-20">
         <div className="container mx-auto px-4 max-w-6xl">
           {/* Header */}
           <div className="mb-6">
@@ -1120,7 +1185,9 @@ const DivisionManagement = () => {
                   members.map((member) => {
                     const isSelf = String(currentUserId) === String(member.vatsim_id);
                     const removeDisabled =
-                      !canManageMembers || isSelf || (!canManageAsStaff && member.role === 'nav_head');
+                      !canManageMembers ||
+                      isSelf ||
+                      (!canManageAsStaff && member.role === 'nav_head');
 
                     return (
                       <div
@@ -1264,6 +1331,41 @@ const DivisionManagement = () => {
                             )}
                           </div>
                         </div>
+                        {airport.status === 'approved' && (
+                          <div className="mt-3 rounded-lg border border-zinc-700/50 bg-zinc-900/40 px-3 py-2.5 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm text-white">Scenery Contributions</p>
+                              <p className="text-xs text-zinc-500">
+                                {airport.contributions_enabled ? 'Enabled' : 'Disabled'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={airport.contributions_enabled}
+                              aria-label={`Toggle scenery contributions for ${airport.icao}`}
+                              onClick={() =>
+                                handleContributionToggle(airport, !airport.contributions_enabled)
+                              }
+                              disabled={
+                                !isDivisionMember || updatingContributionAirportId === airport.id
+                              }
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                airport.contributions_enabled ? 'bg-emerald-500' : 'bg-zinc-700'
+                              } ${
+                                !isDivisionMember || updatingContributionAirportId === airport.id
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : 'cursor-pointer'
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                                  airport.contributions_enabled ? 'translate-x-5' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        )}
                         <div className="mt-3 pt-3 border-t border-zinc-700/50 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <div className="relative">

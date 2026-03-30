@@ -427,7 +427,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
                 <h3 className="text-lg font-medium mb-5">Contribution Details</h3>
 
                 {/* Row 1: Airport ICAO | Simulator */}
-                <div className="grid grid-cols-2 gap-6 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div>
                     <p className="text-sm text-zinc-400 mb-1">Airport ICAO</p>
                     <p className="font-semibold text-white">{contribution.airportIcao}</p>
@@ -453,7 +453,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
                 </div>
 
                 {/* Row 2: Package | Submitted By */}
-                <div className="grid grid-cols-2 gap-6 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <p className="text-sm text-zinc-400">Package</p>

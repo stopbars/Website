@@ -296,13 +296,13 @@ const ContributionDashboard = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-39 pb-20">
-        <div className="max-w-7xl mx-auto px-6">
+      <div className="min-h-screen pt-32 sm:pt-39 pb-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Header */}
-          <div className="flex items-center justify-between mb-12">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
             <div>
-              <h1 className="text-3xl font-bold mb-2">Community Contributions</h1>
-              <p className="text-zinc-400">
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Community Contributions</h1>
+              <p className="text-zinc-400 text-sm sm:text-base">
                 Help expand the BARS compatibility by contributing your own scenery contributions
               </p>
             </div>
@@ -320,8 +320,7 @@ const ContributionDashboard = () => {
             ) : (
               <Button
                 onClick={handleContributeClick}
-                disabled
-                className="flex items-center space-x-2 opacity-60 cursor-not-allowed"
+                className="flex items-center space-x-2"
               >
                 <Plus className="w-4 h-4" />
                 <span>Contribute New Airport</span>
@@ -332,8 +331,8 @@ const ContributionDashboard = () => {
           {/* Main content grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left column - Leaderboard */}
-            <div>
-              <Card className="p-6">
+            <div className="order-2 lg:order-1">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center space-x-3 mb-6">
                   <Trophy className="w-5 h-5 text-amber-400" />
                   <h2 className="text-xl font-semibold">Top Contributors</h2>
@@ -362,8 +361,8 @@ const ContributionDashboard = () => {
                         >
                           {index + 1}
                         </div>
-                        <div>
-                          <div className="font-medium">{contributor.name}</div>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{contributor.name}</div>
                         </div>
                       </div>
                       <div className="text-right">
@@ -377,7 +376,7 @@ const ContributionDashboard = () => {
             </div>
 
             {/* Right column - Contributions list & tabs */}
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 order-1 lg:order-2">
               {/* Tabs */}
               <div
                 ref={tabsContainerRef}
@@ -400,7 +399,7 @@ const ContributionDashboard = () => {
                   onClick={() => setCurrentTab('all')}
                 >
                   <div className="flex items-center space-x-2">
-                    <Users className="w-4 h-4" />
+                    <Users className="w-4 h-4 shrink-0 max-[500px]:hidden" />
                     <span>All Contributions</span>
                   </div>
                 </button>
@@ -417,7 +416,7 @@ const ContributionDashboard = () => {
                       disabled={!user}
                     >
                       <div className="flex items-center space-x-2">
-                        <User className="w-4 h-4" />
+                        <User className="w-4 h-4 shrink-0 max-[500px]:hidden" />
                         <span>Your Contributions</span>
                       </div>
                     </button>
@@ -434,7 +433,7 @@ const ContributionDashboard = () => {
                     disabled={!user}
                   >
                     <div className="flex items-center space-x-2">
-                      <User className="w-4 h-4" />
+                      <User className="w-4 h-4 shrink-0 max-[500px]:hidden" />
                       <span>Your Contributions</span>
                     </div>
                   </button>
@@ -445,7 +444,7 @@ const ContributionDashboard = () => {
               {currentTab === 'user' && userContributionSummary && (
                 <div className="mb-6 p-4 bg-zinc-800/50 rounded-lg">
                   <h3 className="font-medium mb-3">Your Contribution Summary</h3>
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="bg-zinc-700/50 p-3 rounded-lg text-center">
                       <div className="text-2xl font-bold">{userContributionSummary.total}</div>
                       <div className="text-sm text-zinc-400">Total</div>
@@ -502,7 +501,7 @@ const ContributionDashboard = () => {
                 {filteredContributions.map((airport) => (
                   <Card
                     key={airport.airport}
-                    className="p-6 hover:border-zinc-700 transition-colors"
+                    className="p-4 sm:p-6 hover:border-zinc-700 transition-colors"
                   >
                     <div className="space-y-4">
                       {/* Airport Header */}
@@ -522,7 +521,7 @@ const ContributionDashboard = () => {
                           .map((contribution) => (
                             <div
                               key={contribution.id}
-                              className={`flex items-center justify-between p-3 rounded-lg ${
+                              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg ${
                                 contribution.status === 'approved'
                                   ? 'bg-zinc-800/50'
                                   : contribution.status === 'pending'
@@ -532,9 +531,11 @@ const ContributionDashboard = () => {
                                       : 'bg-zinc-800/50'
                               }`}
                             >
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">{contribution.scenery}</span>
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium break-all">
+                                    {contribution.scenery}
+                                  </span>
                                   {contribution.simulator && (
                                     <span
                                       className={`text-xs px-2 py-0.5 rounded-full border ${
@@ -577,7 +578,7 @@ const ContributionDashboard = () => {
                               {contribution.status === 'approved' && (
                                 <button
                                   onClick={() => handleDownload(airport.airport, contribution.id)}
-                                  className="px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2"
+                                  className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center justify-center gap-2"
                                   title="Download XML"
                                 >
                                   <FileDown className="w-4 h-4" />
@@ -585,9 +586,9 @@ const ContributionDashboard = () => {
                                 </button>
                               )}
                               {contribution.status === 'pending' && (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                                   <Button
-                                    className="px-4! py-2! text-sm bg-amber-600! hover:bg-amber-700! text-white!"
+                                    className="px-4! py-2! text-sm bg-amber-600! hover:bg-amber-700! text-white! w-full sm:w-auto"
                                     onClick={() =>
                                       setConfirmDelete({
                                         id: contribution.id,
@@ -604,7 +605,7 @@ const ContributionDashboard = () => {
                               )}
                               {contribution.status === 'rejected' &&
                                 (contribution.rejectionReason ? (
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
                                     <button
                                       onClick={() =>
                                         setViewingRejection({
@@ -613,7 +614,7 @@ const ContributionDashboard = () => {
                                           reason: contribution.rejectionReason,
                                         })
                                       }
-                                      className="px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center gap-2 cursor-pointer"
+                                      className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center justify-center gap-2 cursor-pointer"
                                       title="View Reason"
                                     >
                                       <AlertOctagon className="w-4 h-4" />
@@ -636,11 +637,11 @@ const ContributionDashboard = () => {
                                     </Button>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
                                     <div className="text-xs text-zinc-400">No reason provided</div>
                                     <Button
                                       variant="destructive"
-                                      className="px-4! py-2! text-sm"
+                                      className="px-4! py-2! text-sm w-full sm:w-auto"
                                       onClick={() =>
                                         setConfirmDelete({
                                           id: contribution.id,

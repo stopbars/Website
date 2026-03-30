@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import Map, { Source, Layer, NavigationControl, ScaleControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import {
+  fetchContributionPolicy,
+  getContributionDisabledMessage,
+} from '../utils/contributionPolicy';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -220,6 +224,7 @@ const XMLGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showErrorToast, setShowErrorToast] = useState(false);
+  const [contributionPolicy, setContributionPolicy] = useState(null);
   const [generatedXML, setGeneratedXML] = useState('');
   const [copied, setCopied] = useState(false);
   const [paddingMeters, setPaddingMeters] = useState(DEFAULT_PADDING_METERS);
@@ -233,6 +238,9 @@ const XMLGenerator = () => {
     latitude: 0,
     zoom: 14,
   });
+  const contributionsDisabled =
+    contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
+  const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
 
   // Store generated polygon data for map display
   const [generatedPolygons, setGeneratedPolygons] = useState({ bars: [], remove: [] });
@@ -251,13 +259,15 @@ const XMLGenerator = () => {
       setPoints([]);
 
       try {
-        const airportResponse = await fetch(
-          `https://v2.stopbars.com/airports?icao=${normalizedIcao}`
-        );
+        const [airportResponse, policy] = await Promise.all([
+          fetch(`https://v2.stopbars.com/airports?icao=${normalizedIcao}`),
+          fetchContributionPolicy(normalizedIcao),
+        ]);
         if (!airportResponse.ok) {
           throw new Error('Failed to load airport data');
         }
         const airportData = await airportResponse.json();
+        setContributionPolicy(policy);
 
         setAirport({
           icao: airportData.icao,
@@ -325,7 +335,7 @@ const XMLGenerator = () => {
 
   // Generate XML from points
   const generateXML = useCallback(() => {
-    if (points.length === 0) return;
+    if (points.length === 0 || contributionsDisabled) return;
 
     setLoading(true);
 
@@ -414,14 +424,20 @@ ${allPolygonXML.join('\n')}
     } finally {
       setLoading(false);
     }
-  }, [points, paddingMeters, baseAltitude]);
+  }, [points, paddingMeters, baseAltitude, contributionsDisabled]);
 
   // Auto-generate when points change
   useEffect(() => {
+    if (contributionsDisabled) {
+      setGeneratedXML('');
+      setGeneratedPolygons({ bars: [], remove: [] });
+      return;
+    }
+
     if (points.length > 0) {
       generateXML();
     }
-  }, [points, generateXML]);
+  }, [points, generateXML, contributionsDisabled]);
 
   // Download XML
   const handleDownload = () => {
@@ -530,6 +546,13 @@ ${allPolygonXML.join('\n')}
               </Breadcrumb>
             </div>
           </div>
+
+          {contributionsDisabled && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+              <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
+              <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">

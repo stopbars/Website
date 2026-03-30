@@ -10,6 +10,10 @@ import { useWindowSize } from '../hooks/useWindowSize';
 import { ArrowRight, FileUp, Upload, Check, Loader, Search, UserPen, Plus } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
+import {
+  fetchContributionPolicy,
+  getContributionDisabledMessage,
+} from '../utils/contributionPolicy';
 
 const ContributeDetails = () => {
   const { icao } = useParams();
@@ -22,6 +26,7 @@ const ContributeDetails = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preloaded, setPreloaded] = useState(false);
   const [airport, setAirport] = useState(null);
+  const [contributionPolicy, setContributionPolicy] = useState(null);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [errorTitle, setErrorTitle] = useState('Error');
@@ -37,6 +42,9 @@ const ContributeDetails = () => {
   const [confettiRun, setConfettiRun] = useState(true);
   const [acknowledged, setAcknowledged] = useState(false);
   const [simulator, setSimulator] = useState('msfs2024');
+  const contributionsDisabled =
+    contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
+  const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -60,8 +68,19 @@ const ContributeDetails = () => {
   useEffect(() => {
     const fetchAirport = async () => {
       try {
-        const response = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
-        if (response.ok) {
+        const [responseResult, policyResult] = await Promise.allSettled([
+          fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
+          fetchContributionPolicy(icao),
+        ]);
+
+        if (policyResult.status === 'fulfilled') {
+          setContributionPolicy(policyResult.value);
+        } else {
+          console.error('Error fetching contribution policy:', policyResult.reason);
+        }
+
+        if (responseResult.status === 'fulfilled' && responseResult.value.ok) {
+          const response = responseResult.value;
           const data = await response.json();
           setAirport({
             icao: data.icao,
@@ -130,6 +149,13 @@ const ContributeDetails = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (contributionsDisabled) {
+      setErrorTitle('Contributions Disabled');
+      setError(disabledContributionMessage);
+      setShowErrorToast(true);
+      return;
+    }
 
     if (!user) {
       setErrorTitle('Error');
@@ -272,6 +298,13 @@ const ContributeDetails = () => {
             </div>
           </div>
 
+          {contributionsDisabled && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+              <FileUp className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
+              <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <Card className="p-6">
@@ -294,7 +327,7 @@ const ContributeDetails = () => {
                         </div>
 
                         {/* Skeleton for Top Packages */}
-                        <div className="mt-4 grid grid-cols-2 gap-2">
+                        <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
                           {[...Array(4)].map((_, index) => (
                             <div
                               key={index}
@@ -355,7 +388,7 @@ const ContributeDetails = () => {
 
                         {/* Top Packages */}
                         {topPackages.length > 0 && (
-                          <div className="mt-4 grid grid-cols-2 gap-2">
+                          <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
                             {topPackages.map((pkg, index) => (
                               <button
                                 key={index}
@@ -364,13 +397,13 @@ const ContributeDetails = () => {
                                   setSceneryName(pkg.packageName);
                                   setShowSuggestions(false);
                                 }}
-                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800/70 transition-colors cursor-pointer"
+                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800/70 transition-colors cursor-pointer text-white"
                               >
-                                <div className="flex items-center space-x-3 min-w-0">
+                                <div className="flex items-center space-x-3 min-w-0 flex-1">
                                   <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-blue-500/20">
                                     <Plus className="w-3.5 h-3.5 text-blue-400" />
                                   </div>
-                                  <div className="font-medium text-left text-sm truncate">
+                                  <div className="font-medium text-left text-sm truncate min-w-0">
                                     {pkg.packageName}
                                   </div>
                                 </div>
@@ -457,11 +490,9 @@ const ContributeDetails = () => {
                           Contribution Acknowledgement
                         </span>
                         <p className="text-xs text-zinc-400 leading-relaxed">
-                          By submitting this contribution, you agree that you have followed the
-                          contribution guide, to create the best possible, tested, and working
-                          contribution you can submit, verifying no issues occur within the
-                          submission, and that this work is your own and is linked to your BARS
-                          account.
+                          By submitting, you confirm you have followed the contribution guidelines,
+                          that your submission has been tested and works correctly, and that this
+                          work is your own.
                         </p>
                       </div>
 
@@ -541,9 +572,23 @@ const ContributeDetails = () => {
               <Button
                 onClick={handleSubmit}
                 disabled={
-                  isSubmitting || !selectedFile || !sceneryName || !simulator || !acknowledged
+                  contributionsDisabled ||
+                  isSubmitting ||
+                  !selectedFile ||
+                  !sceneryName ||
+                  !simulator ||
+                  !acknowledged
                 }
-                className={`w-full ${isSubmitting || !selectedFile || !sceneryName || !simulator || !acknowledged ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`w-full ${
+                  contributionsDisabled ||
+                  isSubmitting ||
+                  !selectedFile ||
+                  !sceneryName ||
+                  !simulator ||
+                  !acknowledged
+                    ? 'opacity-40 cursor-not-allowed'
+                    : ''
+                }`}
               >
                 {isSubmitting ? (
                   <div className="flex items-center justify-center">

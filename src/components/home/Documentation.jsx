@@ -35,7 +35,7 @@ export const Documentation = () => {
           className="opacity-0 translate-y-12 transition-all duration-1000 ease-out"
         >
           <div className="text-center mb-12">
-            <span className="inline-block px-4 py-1.5 text-sm font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full mb-4">
+            <span className="inline-block px-4 py-1.5 text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-full mb-4">
               Open Source
             </span>
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Become a Contributor</h2>

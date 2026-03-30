@@ -205,7 +205,7 @@ export default function StaffManagement() {
           {/* Add / Update Form */}
           <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
             <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
-              <UserPlus className="w-4 h-4 text-blue-400" />
+              <UserPlus className="w-4 h-4 text-zinc-400" />
               Add Staff Member
             </h3>
             <form onSubmit={openAddDialog} className="grid md:grid-cols-4 gap-4 items-end">
@@ -252,7 +252,7 @@ export default function StaffManagement() {
           {/* Staff List */}
           <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
             <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-emerald-400" />
+              <UserCheck className="w-4 h-4 text-zinc-400" />
               Current Staff
             </h3>
             {staff.length === 0 ? (
@@ -284,7 +284,7 @@ export default function StaffManagement() {
                           {member.name || member.full_name || '—'}
                         </td>
                         <td className="py-3 px-4">
-                          <span className="inline-flex items-center rounded-full bg-blue-500/20 text-blue-400 px-3 py-1 text-xs font-medium">
+                          <span className="inline-flex items-center rounded-full bg-zinc-700/60 text-zinc-300 px-3 py-1 text-xs font-medium">
                             {member.role || member.staff_role || 'UNKNOWN'}
                           </span>
                         </td>

@@ -24,7 +24,8 @@ export function Dropdown({
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const currentOption = options.find((opt) => opt.value === value);
+  const currentOption = options.find((opt) => !opt.isHeader && opt.value === value);
+  const TriggerIcon = currentOption?.icon || null;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -64,7 +65,8 @@ export function Dropdown({
           disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
-        <span className="transition-colors duration-200">
+        <span className="transition-colors duration-200 truncate min-w-0 mr-1 flex items-center gap-2">
+          {TriggerIcon && <TriggerIcon className="w-4 h-4 shrink-0" />}
           {currentOption?.label || placeholder}
         </span>
         <ChevronDown
@@ -74,29 +76,42 @@ export function Dropdown({
 
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
-          {options.map((option, index) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`w-full px-4 py-2.5 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
-                value === option.value
-                  ? 'bg-zinc-700 text-blue-400'
-                  : 'text-white hover:text-zinc-100'
-              }`}
-              style={{
-                animationDelay: `${index * 25}ms`,
-                animationFillMode: 'both',
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
+          {options.map((option, index) => {
+            if (option.isHeader) {
+              return (
+                <div key={`header-${index}`} className="px-4 pt-3 pb-1">
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    {option.label}
+                  </p>
+                </div>
+              );
+            }
+            const OptionIcon = option.icon;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-4 py-2.5 text-left hover:bg-zinc-700 transition-all duration-150 flex items-center gap-2 ${
+                  value === option.value
+                    ? 'bg-zinc-700 text-blue-400'
+                    : 'text-white hover:text-zinc-100'
+                }`}
+                style={{
+                  animationDelay: `${index * 25}ms`,
+                  animationFillMode: 'both',
+                }}
+              >
+                {OptionIcon && <OptionIcon className="w-4 h-4 shrink-0" />}
+                {option.label}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -106,8 +121,10 @@ export function Dropdown({
 Dropdown.propTypes = {
   options: PropTypes.arrayOf(
     PropTypes.shape({
-      value: PropTypes.string.isRequired,
+      value: PropTypes.string,
       label: PropTypes.string.isRequired,
+      icon: PropTypes.elementType,
+      isHeader: PropTypes.bool,
     })
   ),
   value: PropTypes.string,

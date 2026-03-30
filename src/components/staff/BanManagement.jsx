@@ -2,17 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { formatLocalDateTime } from '../../utils/dateUtils';
+import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
-import {
-  AlertTriangle,
-  AlertOctagon,
-  Ban as BanIcon,
-  Check,
-  Loader,
-  Trash2,
-  UserX,
-  FileText,
-} from 'lucide-react';
+import { Toast } from '../shared/Toast';
+import { AlertOctagon, Ban as BanIcon, Loader, Trash2, UserX, FileText } from 'lucide-react';
 
 const API_BASE = 'https://v2.stopbars.com';
 
@@ -21,8 +14,12 @@ export default function BanManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [bans, setBans] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  const [toast, setToast] = useState({
+    show: false,
+    title: '',
+    description: '',
+    variant: 'default',
+  });
   const [viewingReason, setViewingReason] = useState(null); // { targetId, reason }
   const [removingBan, setRemovingBan] = useState(null); // targetId to remove
   const [isRemovingBan, setIsRemovingBan] = useState(false);
@@ -56,14 +53,18 @@ export default function BanManagement() {
 
   const fetchBans = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await fetch(`${API_BASE}/bans`, { headers });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
       setBans(Array.isArray(data?.bans) ? data.bans : []);
     } catch (e) {
-      setError(e.message || 'Failed to load bans');
+      setToast({
+        show: true,
+        title: 'Failed to Load Bans',
+        description: e.message || 'Failed to load bans.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -71,25 +72,26 @@ export default function BanManagement() {
 
   useEffect(() => {
     if (!token) {
-      setError('Authentication required.');
+      setToast({
+        show: true,
+        title: 'Authentication Required',
+        description: 'A valid VATSIM token is required to manage bans.',
+        variant: 'destructive',
+      });
       return;
     }
     fetchBans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Auto-dismiss success after ~4 seconds
-  useEffect(() => {
-    if (!success) return;
-    const t = setTimeout(() => setSuccess(null), 4000);
-    return () => clearTimeout(t);
-  }, [success]);
-
   const handleCreateBan = async () => {
-    setError(null);
-    setSuccess(null);
     if (!vatsimId.trim()) {
-      setError('VATSIM CID is required');
+      setToast({
+        show: true,
+        title: 'Validation Error',
+        description: 'VATSIM CID is required.',
+        variant: 'destructive',
+      });
       return;
     }
     const body = {
@@ -106,13 +108,23 @@ export default function BanManagement() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
-      setSuccess('Ban created/updated successfully');
+      setToast({
+        show: true,
+        title: 'Ban Applied',
+        description: 'The ban has been successfully created or updated.',
+        variant: 'success',
+      });
       setVatsimId('');
       setReason('');
       setExpiresAtLocal('');
       await fetchBans();
     } catch (e) {
-      setError(e.message || 'Failed to create ban');
+      setToast({
+        show: true,
+        title: 'Failed to Apply Ban',
+        description: e.message || 'Failed to create ban.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -120,8 +132,6 @@ export default function BanManagement() {
 
   const handleRemoveBan = async () => {
     if (!removingBan) return;
-    setError(null);
-    setSuccess(null);
     try {
       setIsRemovingBan(true);
       const res = await fetch(`${API_BASE}/bans/${encodeURIComponent(removingBan)}`, {
@@ -132,11 +142,21 @@ export default function BanManagement() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || `${res.status} ${res.statusText}`);
       }
-      setSuccess('Ban removed');
+      setToast({
+        show: true,
+        title: 'Ban Removed',
+        description: 'The ban has been removed',
+        variant: 'success',
+      });
       setRemovingBan(null);
       await fetchBans();
     } catch (e) {
-      setError(e.message || 'Failed to remove ban');
+      setToast({
+        show: true,
+        title: 'Failed to Remove Ban',
+        description: e.message || 'Failed to remove ban.',
+        variant: 'destructive',
+      });
     } finally {
       setIsRemovingBan(false);
     }
@@ -226,26 +246,8 @@ export default function BanManagement() {
         )}
       </div>
 
-      {/* Status Messages */}
-      {(error || success) && (
-        <div
-          className={`p-4 rounded-lg border flex items-center gap-3 ${
-            error ? 'bg-red-500/10 border-red-500/20' : 'bg-emerald-500/10 border-emerald-500/20'
-          }`}
-        >
-          {error ? (
-            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-          ) : (
-            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-          )}
-          <p className={`text-sm ${error ? 'text-red-400' : 'text-emerald-400'}`}>
-            {error || success}
-          </p>
-        </div>
-      )}
-
       {/* Create / Update Ban */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+      <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
         <div className="flex items-center gap-2 mb-5">
           <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
             <BanIcon className="w-4 h-4 text-red-400" />
@@ -253,7 +255,7 @@ export default function BanManagement() {
           <h3 className="font-medium text-white">Create / Update Ban</h3>
         </div>
         <div className="grid md:grid-cols-12 gap-4 items-end">
-          <div className="md:col-span-3">
+          <div className="md:col-span-3 min-w-0">
             <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
               VATSIM CID
             </label>
@@ -262,11 +264,11 @@ export default function BanManagement() {
               value={vatsimId}
               onChange={(e) => setVatsimId(e.target.value.replace(/[^0-9]/g, ''))}
               placeholder="e.g., 1234567"
-              className="w-full px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+              className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
               inputMode="numeric"
             />
           </div>
-          <div className="md:col-span-4">
+          <div className="md:col-span-5 min-w-0">
             <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
               Reason
             </label>
@@ -275,10 +277,10 @@ export default function BanManagement() {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Ban reason (optional)"
-              className="w-full px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+              className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
             />
           </div>
-          <div className="md:col-span-3">
+          <div className="md:col-span-3 min-w-0">
             <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
               Expires At
             </label>
@@ -286,32 +288,20 @@ export default function BanManagement() {
               type="datetime-local"
               value={expiresAtLocal}
               onChange={(e) => setExpiresAtLocal(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+              className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
             />
           </div>
-          <div className="md:col-span-2 flex gap-2">
+          <div className="md:col-span-1 min-w-0">
             <button
               onClick={handleCreateBan}
               disabled={loading || !vatsimId}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm whitespace-nowrap"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm whitespace-nowrap"
             >
               Ban
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setVatsimId('');
-                setReason('');
-                setExpiresAtLocal('');
-              }}
-              disabled={loading}
-              className="px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-50 transition-all text-sm whitespace-nowrap"
-            >
-              Reset
-            </button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Existing Bans */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
@@ -374,7 +364,7 @@ export default function BanManagement() {
         icon={AlertOctagon}
         iconColor="red"
         title="Remove Ban"
-        description={`This action will remove the ban and allow ${removingBan} to access and use all BARS services again.`}
+        description={`Removing this ban will restore full access to BARS services for VATSIM CID ${removingBan}. This action cannot be undone.`}
         isLoading={isRemovingBan}
         closeOnBackdrop={!isRemovingBan}
         closeOnEscape={!isRemovingBan}
@@ -394,6 +384,14 @@ export default function BanManagement() {
           },
         ]}
       ></Dialog>
+
+      <Toast
+        show={toast.show}
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        onClose={() => setToast((t) => ({ ...t, show: false }))}
+      />
     </div>
   );
 }

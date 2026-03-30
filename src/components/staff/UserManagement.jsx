@@ -34,6 +34,7 @@ const USERS_PER_PAGE = 6;
 const TruncatedName = ({ name }) => {
   const textRef = useRef(null);
   const [isTruncated, setIsTruncated] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
 
   useEffect(() => {
     const checkTruncation = () => {
@@ -46,14 +47,37 @@ const TruncatedName = ({ name }) => {
     return () => window.removeEventListener('resize', checkTruncation);
   }, [name]);
 
+  // Close tooltip when clicking elsewhere
+  useEffect(() => {
+    if (!tooltipOpen) return;
+    const handler = () => setTooltipOpen(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [tooltipOpen]);
+
   const content = (
-    <h3 ref={textRef} className="font-medium text-white truncate">
+    <h3
+      ref={textRef}
+      className={`font-medium text-white truncate ${isTruncated ? 'cursor-pointer' : ''}`}
+      onClick={
+        isTruncated
+          ? (e) => {
+              e.stopPropagation();
+              setTooltipOpen((o) => !o);
+            }
+          : undefined
+      }
+    >
       {name}
     </h3>
   );
 
   if (isTruncated) {
-    return <Tooltip content={name}>{content}</Tooltip>;
+    return (
+      <Tooltip content={name} open={tooltipOpen}>
+        {content}
+      </Tooltip>
+    );
   }
 
   return content;
@@ -293,7 +317,7 @@ const UserManagement = () => {
         </div>
         <div className="flex items-center gap-3">
           {!loading && (
-            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+            <span className="inline-flex items-center whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
               <Users className="w-4 h-4 mr-2 text-zinc-400" />
               {totalUsers} users
             </span>
@@ -305,7 +329,7 @@ const UserManagement = () => {
               placeholder="Search users..."
               value={searchTerm}
               onChange={handleSearch}
-              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-64 transition-all"
+              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-all"
             />
           </div>
         </div>
@@ -564,10 +588,10 @@ const UserManagement = () => {
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="justify-self-start flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="justify-self-start flex items-center justify-center p-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                aria-label="Previous page"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Previous
               </button>
               <span className="text-sm text-zinc-400 justify-self-center">
                 Page <span className="font-medium text-zinc-300">{currentPage}</span> of{' '}
@@ -576,9 +600,9 @@ const UserManagement = () => {
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="justify-self-end flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="justify-self-end flex items-center justify-center p-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                aria-label="Next page"
               >
-                Next
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

@@ -5,5 +5,5 @@ export const DiscordRedirect = () => {
     window.location.href = 'https://discord.gg/7EhmtwKWzs';
   }, []);
 
-  return <div>Redirecting to Discord...</div>;
+  return;
 };

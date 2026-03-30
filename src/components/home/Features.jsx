@@ -34,7 +34,7 @@ export const Features = () => {
         <div className="text-center mb-20 max-w-2xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">Core Features</h2>
           <p className="text-zinc-400 text-lg">
-            BARS brings professional-grade airport lighting simulation to your flight simulator,
+            BARS brings advanced airport lighting simulation features to your flight simulator,
             completely free and in real time with VATSIM.
           </p>
         </div>

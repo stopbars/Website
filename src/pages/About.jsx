@@ -68,7 +68,7 @@ const About = () => {
   return (
     <Layout>
       {/* Hero Banner */}
-      <div className="relative w-full h-[200px] sm:h-[300px] md:h-[450px] mt-[95px] sm:mt-16 overflow-hidden">
+      <div className="relative w-full h-50 sm:h-75 md:h-112.5 mt-23.75 sm:mt-16 overflow-hidden">
         <img
           src="/AboutBanner.png"
           alt="About banner"

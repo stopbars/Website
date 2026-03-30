@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
-import { MapContainer, TileLayer, useMap, Rectangle, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Rectangle, Polyline, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
@@ -18,6 +18,9 @@ import {
   CircleFadingPlus,
   Loader,
   MapPinPlus,
+  ImageUp,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import { Dropdown } from '../shared/Dropdown';
 import { Layout } from '../layout/Layout';
@@ -1226,6 +1229,699 @@ const emptyFormState = {
   ihp: false,
 };
 
+const MIN_OVERLAY_SIZE_PX = 24;
+const PICK_DRAG_THRESHOLD_PX = 6;
+const ROTATION_HANDLE_OFFSET_PX = 28;
+const OVERLAY_ROTATION_TRANSFORM_REGEX =
+  /\stranslate\([^)]*\)\srotate\([^)]*\)\stranslate\([^)]*\)\s*$/;
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const normalizeAngle = (value) => {
+  if (!Number.isFinite(value)) return 0;
+  let next = value % 360;
+  if (next > 180) next -= 360;
+  if (next <= -180) next += 360;
+  return next;
+};
+
+const rotatePointOffset = (point, angleDeg) => {
+  const radians = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return L.point(point.x * cos - point.y * sin, point.x * sin + point.y * cos);
+};
+
+const getOverlayMetricsFromBounds = (map, overlayBounds) => {
+  const swPoint = map.latLngToLayerPoint(overlayBounds.getSouthWest());
+  const nePoint = map.latLngToLayerPoint(overlayBounds.getNorthEast());
+  const center = L.point((swPoint.x + nePoint.x) / 2, (swPoint.y + nePoint.y) / 2);
+
+  return {
+    center,
+    width: Math.max(Math.abs(nePoint.x - swPoint.x), MIN_OVERLAY_SIZE_PX),
+    height: Math.max(Math.abs(swPoint.y - nePoint.y), MIN_OVERLAY_SIZE_PX),
+  };
+};
+
+const buildBoundsFromMetrics = (map, center, width, height) => {
+  const swPoint = L.point(center.x - width / 2, center.y + height / 2);
+  const nePoint = L.point(center.x + width / 2, center.y - height / 2);
+  return L.latLngBounds(map.layerPointToLatLng(swPoint), map.layerPointToLatLng(nePoint));
+};
+
+const getUnitOverlayPoint = (normalizedPoint, aspectRatio = 1) =>
+  L.point(
+    ((normalizedPoint?.x ?? 0.5) - 0.5) * (aspectRatio > 0 ? aspectRatio : 1),
+    (normalizedPoint?.y ?? 0.5) - 0.5
+  );
+
+const getDisplayedOverlayLayerPoint = ({ map, bounds, rotation = 0, normalizedPoint }) => {
+  if (!map || !bounds || !normalizedPoint) return null;
+  const { center, width, height } = getOverlayMetricsFromBounds(map, bounds);
+  const localOffset = L.point(
+    ((normalizedPoint.x ?? 0.5) - 0.5) * width,
+    ((normalizedPoint.y ?? 0.5) - 0.5) * height
+  );
+  const rotatedOffset = rotatePointOffset(localOffset, rotation);
+  return L.point(center.x + rotatedOffset.x, center.y + rotatedOffset.y);
+};
+
+const solveBestFitOverlayTransform = (sourcePoints, targetPoints) => {
+  if (
+    !Array.isArray(sourcePoints) ||
+    !Array.isArray(targetPoints) ||
+    sourcePoints.length !== targetPoints.length ||
+    sourcePoints.length < 2
+  ) {
+    return null;
+  }
+
+  const count = sourcePoints.length;
+  const sourceCentroid = sourcePoints.reduce(
+    (sum, point) => L.point(sum.x + point.x, sum.y + point.y),
+    L.point(0, 0)
+  );
+  sourceCentroid.x /= count;
+  sourceCentroid.y /= count;
+
+  const targetCentroid = targetPoints.reduce(
+    (sum, point) => L.point(sum.x + point.x, sum.y + point.y),
+    L.point(0, 0)
+  );
+  targetCentroid.x /= count;
+  targetCentroid.y /= count;
+
+  let dot = 0;
+  let cross = 0;
+  let sourceVariance = 0;
+
+  for (let index = 0; index < count; index += 1) {
+    const sourceDelta = L.point(
+      sourcePoints[index].x - sourceCentroid.x,
+      sourcePoints[index].y - sourceCentroid.y
+    );
+    const targetDelta = L.point(
+      targetPoints[index].x - targetCentroid.x,
+      targetPoints[index].y - targetCentroid.y
+    );
+
+    dot += sourceDelta.x * targetDelta.x + sourceDelta.y * targetDelta.y;
+    cross += sourceDelta.x * targetDelta.y - sourceDelta.y * targetDelta.x;
+    sourceVariance += sourceDelta.x * sourceDelta.x + sourceDelta.y * sourceDelta.y;
+  }
+
+  if (sourceVariance < 0.000001) return null;
+
+  const heightScale = Math.hypot(dot, cross) / sourceVariance;
+  const rotation = normalizeAngle((Math.atan2(cross, dot) * 180) / Math.PI);
+  const rotatedSourceCentroid = rotatePointOffset(
+    L.point(sourceCentroid.x * heightScale, sourceCentroid.y * heightScale),
+    rotation
+  );
+  const center = L.point(
+    targetCentroid.x - rotatedSourceCentroid.x,
+    targetCentroid.y - rotatedSourceCentroid.y
+  );
+
+  return { center, heightScale, rotation };
+};
+
+// ---------------------------------------------------------------------------
+// ImageOverlayTool
+// Renders a draggable, resizable, rotatable, lockable image overlay inside the MapContainer.
+// ---------------------------------------------------------------------------
+const ImageOverlayTool = ({
+  imageUrl,
+  bounds,
+  onBoundsChange,
+  locked,
+  opacity,
+  rotation = 0,
+  onRotationChange,
+  aspectRatio = 1,
+  autoAlignExpectingOverlayPoint = false,
+  onAutoAlignOverlayPoint,
+}) => {
+  const map = useMap();
+  const overlayRef = useRef(null);
+  const dragMarkerRef = useRef(null);
+  const cornerMarkersRef = useRef([]);
+  const rotationMarkerRef = useRef(null);
+  const rotationRef = useRef(normalizeAngle(rotation));
+  const aspectRatioRef = useRef(aspectRatio > 0 ? aspectRatio : 1);
+  const shiftPressedRef = useRef(false);
+  const syncPresentationRef = useRef(() => {});
+  const autoAlignGestureRef = useRef({
+    active: false,
+    moved: false,
+    suppressClick: false,
+    startX: 0,
+    startY: 0,
+  });
+
+  const makeHandleIcon = (
+    cursor = 'move',
+    { size = 14, fill = '#3b82f6', outline = '#1e40af', radius = '50%' } = {}
+  ) =>
+    L.divIcon({
+      className: '',
+      html: `<div style="width:${size}px;height:${size}px;border-radius:${radius};background:${fill};border:2px solid #fff;box-shadow:0 0 0 1px ${outline};cursor:${cursor};"></div>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+
+  const makeCornerIcon = () =>
+    L.divIcon({
+      className: '',
+      html: `<div style="width:10px;height:10px;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 0 1px #b45309;cursor:nwse-resize;"></div>`,
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+    });
+
+  const makeRotationIcon = () =>
+    makeHandleIcon('grab', {
+      size: 12,
+      fill: '#10b981',
+      outline: '#047857',
+    });
+
+  useEffect(() => {
+    rotationRef.current = normalizeAngle(rotation);
+    syncPresentationRef.current();
+  }, [rotation]);
+
+  useEffect(() => {
+    aspectRatioRef.current = aspectRatio > 0 ? aspectRatio : 1;
+  }, [aspectRatio]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Shift') shiftPressedRef.current = true;
+    };
+    const onKeyUp = (e) => {
+      if (e.key === 'Shift') shiftPressedRef.current = false;
+    };
+    const resetShiftState = () => {
+      shiftPressedRef.current = false;
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', resetShiftState);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', resetShiftState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!map || !imageUrl || !bounds) return;
+
+    // Create the image overlay
+    const overlay = L.imageOverlay(imageUrl, bounds, {
+      opacity,
+      interactive: false,
+      className: 'bars-image-overlay',
+    }).addTo(map);
+    overlayRef.current = overlay;
+
+    const getDisplayGeometry = (overlayBounds = overlay.getBounds()) => {
+      const { center, width, height } = getOverlayMetricsFromBounds(map, overlayBounds);
+      const cornerOffsets = [
+        L.point(-width / 2, height / 2), // SW
+        L.point(width / 2, height / 2), // SE
+        L.point(width / 2, -height / 2), // NE
+        L.point(-width / 2, -height / 2), // NW
+      ];
+      const corners = cornerOffsets.map((offset) => {
+        const rotatedOffset = rotatePointOffset(offset, rotationRef.current);
+        return L.point(center.x + rotatedOffset.x, center.y + rotatedOffset.y);
+      });
+      const rotationOffset = rotatePointOffset(
+        L.point(0, -height / 2 - ROTATION_HANDLE_OFFSET_PX),
+        rotationRef.current
+      );
+
+      return {
+        center,
+        width,
+        height,
+        corners,
+        rotationHandle: L.point(center.x + rotationOffset.x, center.y + rotationOffset.y),
+      };
+    };
+
+    const applyOverlayRotation = () => {
+      const element = overlay.getElement();
+      if (!element) return;
+      const overlayBounds = overlay.getBounds();
+      const { width, height } = getOverlayMetricsFromBounds(map, overlayBounds);
+      const baseTransform = (element.style.transform || '')
+        .replace(OVERLAY_ROTATION_TRANSFORM_REGEX, '')
+        .trim();
+      const pivotX = width / 2;
+      const pivotY = height / 2;
+      const rotationTransform =
+        rotationRef.current === 0
+          ? ''
+          : ` translate(${pivotX}px, ${pivotY}px) rotate(${rotationRef.current}deg) translate(${-pivotX}px, ${-pivotY}px)`;
+
+      // Keep Leaflet's top-left transform origin intact so animated zoom can scale from the
+      // correct anchor, then add our center-based rotation as an extra transform segment.
+      element.style.transformOrigin = '0 0';
+      element.style.width = `${width}px`;
+      element.style.height = `${height}px`;
+      element.style.transform = `${baseTransform}${rotationTransform}`.trim();
+    };
+
+    const syncPresentation = () => {
+      applyOverlayRotation();
+
+      if (locked) return;
+
+      const geometry = getDisplayGeometry();
+      dragMarkerRef.current?.setLatLng(map.layerPointToLatLng(geometry.center));
+      cornerMarkersRef.current.forEach((marker, index) => {
+        marker.setLatLng(map.layerPointToLatLng(geometry.corners[index]));
+      });
+      rotationMarkerRef.current?.setLatLng(map.layerPointToLatLng(geometry.rotationHandle));
+    };
+    syncPresentationRef.current = syncPresentation;
+    map.on('zoomanim zoomend viewreset resize', syncPresentation);
+
+    if (!locked) {
+      // Center drag handle
+      const geometry = getDisplayGeometry();
+      const dragMarker = L.marker(map.layerPointToLatLng(geometry.center), {
+        icon: makeHandleIcon('move'),
+        draggable: true,
+        zIndexOffset: 1000,
+      }).addTo(map);
+      dragMarkerRef.current = dragMarker;
+
+      dragMarker.on('drag', () => {
+        const { width, height } = getOverlayMetricsFromBounds(map, overlay.getBounds());
+        const centerPoint = map.latLngToLayerPoint(dragMarker.getLatLng());
+        const newBounds = buildBoundsFromMetrics(map, centerPoint, width, height);
+        overlay.setBounds(newBounds);
+        syncPresentation();
+      });
+
+      dragMarker.on('dragend', () => {
+        onBoundsChange(overlay.getBounds());
+      });
+
+      // Corner resize handles
+      const cornerDirections = [
+        { x: -1, y: 1 }, // SW
+        { x: 1, y: 1 }, // SE
+        { x: 1, y: -1 }, // NE
+        { x: -1, y: -1 }, // NW
+      ];
+      const cornerMarkers = geometry.corners.map((corner, idx) => {
+        const m = L.marker(map.layerPointToLatLng(corner), {
+          icon: makeCornerIcon(),
+          draggable: true,
+          zIndexOffset: 1001,
+        }).addTo(map);
+
+        m.on('drag', () => {
+          const geometry = getDisplayGeometry();
+          const anchorPoint = geometry.corners[(idx + 2) % 4];
+          const pointerPoint = map.latLngToLayerPoint(m.getLatLng());
+          const localVector = rotatePointOffset(
+            L.point(pointerPoint.x - anchorPoint.x, pointerPoint.y - anchorPoint.y),
+            -rotationRef.current
+          );
+          const direction = cornerDirections[idx];
+
+          let nextWidth = Math.max(
+            direction.x > 0 ? localVector.x : -localVector.x,
+            MIN_OVERLAY_SIZE_PX
+          );
+          let nextHeight = Math.max(
+            direction.y > 0 ? localVector.y : -localVector.y,
+            MIN_OVERLAY_SIZE_PX
+          );
+
+          if (!shiftPressedRef.current) {
+            const lockedAspectRatio = aspectRatioRef.current || 1;
+            if (nextWidth / nextHeight > lockedAspectRatio) {
+              nextHeight = nextWidth / lockedAspectRatio;
+            } else {
+              nextWidth = nextHeight * lockedAspectRatio;
+            }
+          }
+
+          const resizedOffset = rotatePointOffset(
+            L.point(direction.x * nextWidth, direction.y * nextHeight),
+            rotationRef.current
+          );
+          const draggedCornerPoint = L.point(
+            anchorPoint.x + resizedOffset.x,
+            anchorPoint.y + resizedOffset.y
+          );
+          const nextCenter = L.point(
+            (anchorPoint.x + draggedCornerPoint.x) / 2,
+            (anchorPoint.y + draggedCornerPoint.y) / 2
+          );
+          const newBounds = buildBoundsFromMetrics(map, nextCenter, nextWidth, nextHeight);
+
+          overlay.setBounds(newBounds);
+          syncPresentation();
+        });
+
+        m.on('dragend', () => {
+          syncPresentation();
+          onBoundsChange(overlay.getBounds());
+        });
+
+        return m;
+      });
+      cornerMarkersRef.current = cornerMarkers;
+
+      const rotationMarker = L.marker(map.layerPointToLatLng(geometry.rotationHandle), {
+        icon: makeRotationIcon(),
+        draggable: true,
+        zIndexOffset: 1002,
+      }).addTo(map);
+      rotationMarkerRef.current = rotationMarker;
+
+      rotationMarker.on('drag', () => {
+        const { center } = getOverlayMetricsFromBounds(map, overlay.getBounds());
+        const pointerPoint = map.latLngToLayerPoint(rotationMarker.getLatLng());
+        const dx = pointerPoint.x - center.x;
+        const dy = pointerPoint.y - center.y;
+        if (dx === 0 && dy === 0) return;
+
+        const nextRotation = normalizeAngle((Math.atan2(dy, dx) * 180) / Math.PI + 90);
+        rotationRef.current = nextRotation;
+        onRotationChange?.(nextRotation);
+        syncPresentation();
+      });
+
+      rotationMarker.on('dragend', () => {
+        syncPresentation();
+      });
+    }
+
+    overlay.once('load', syncPresentation);
+    syncPresentation();
+
+    return () => {
+      map.off('zoomanim zoomend viewreset resize', syncPresentation);
+      overlay.remove();
+      dragMarkerRef.current?.remove();
+      dragMarkerRef.current = null;
+      cornerMarkersRef.current.forEach((m) => m.remove());
+      cornerMarkersRef.current = [];
+      rotationMarkerRef.current?.remove();
+      rotationMarkerRef.current = null;
+      syncPresentationRef.current = () => {};
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, imageUrl, bounds, locked]);
+
+  // Update opacity without remounting
+  useEffect(() => {
+    overlayRef.current?.setOpacity(opacity);
+  }, [opacity]);
+
+  useEffect(() => {
+    syncPresentationRef.current();
+  }, [locked]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!map || !overlay) return undefined;
+
+    const element = overlay.getElement();
+    if (!element) return undefined;
+
+    const shouldCaptureOverlayPoint = autoAlignExpectingOverlayPoint;
+    const gesture = autoAlignGestureRef.current;
+    const handlePointerDown = (event) => {
+      gesture.active = true;
+      gesture.moved = false;
+      gesture.suppressClick = false;
+      gesture.startX = event.clientX;
+      gesture.startY = event.clientY;
+    };
+    const handlePointerMove = (event) => {
+      if (!gesture.active || gesture.moved) return;
+      if (
+        Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) >
+        PICK_DRAG_THRESHOLD_PX
+      ) {
+        gesture.moved = true;
+      }
+    };
+    const finishPointerGesture = () => {
+      if (gesture.active && gesture.moved) {
+        gesture.suppressClick = true;
+      }
+      gesture.active = false;
+    };
+    const handleOverlayClick = (event) => {
+      if (!shouldCaptureOverlayPoint) return;
+      if (gesture.suppressClick || gesture.moved) {
+        gesture.suppressClick = false;
+        gesture.moved = false;
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const containerRect = map.getContainer().getBoundingClientRect();
+      const containerPoint = L.point(
+        event.clientX - containerRect.left,
+        event.clientY - containerRect.top
+      );
+      const layerPoint = map.containerPointToLayerPoint(containerPoint);
+      const { center, width, height } = getOverlayMetricsFromBounds(map, overlay.getBounds());
+      const localOffset = rotatePointOffset(
+        L.point(layerPoint.x - center.x, layerPoint.y - center.y),
+        -rotationRef.current
+      );
+
+      onAutoAlignOverlayPoint?.({
+        x: clamp(localOffset.x / width + 0.5, 0, 1),
+        y: clamp(localOffset.y / height + 0.5, 0, 1),
+      });
+    };
+
+    element.style.pointerEvents = shouldCaptureOverlayPoint ? 'auto' : 'none';
+    element.style.cursor = shouldCaptureOverlayPoint ? 'crosshair' : '';
+    element.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('pointermove', handlePointerMove, true);
+    window.addEventListener('pointerup', finishPointerGesture, true);
+    window.addEventListener('pointercancel', finishPointerGesture, true);
+    element.addEventListener('click', handleOverlayClick);
+
+    return () => {
+      element.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('pointermove', handlePointerMove, true);
+      window.removeEventListener('pointerup', finishPointerGesture, true);
+      window.removeEventListener('pointercancel', finishPointerGesture, true);
+      element.removeEventListener('click', handleOverlayClick);
+      element.style.pointerEvents = 'none';
+      element.style.cursor = '';
+      gesture.active = false;
+      gesture.moved = false;
+      gesture.suppressClick = false;
+    };
+  }, [autoAlignExpectingOverlayPoint, map, onAutoAlignOverlayPoint, rotation, bounds]);
+
+  return null;
+};
+
+ImageOverlayTool.propTypes = {
+  imageUrl: PropTypes.string,
+  bounds: PropTypes.object,
+  onBoundsChange: PropTypes.func.isRequired,
+  locked: PropTypes.bool,
+  opacity: PropTypes.number,
+  rotation: PropTypes.number,
+  onRotationChange: PropTypes.func,
+  aspectRatio: PropTypes.number,
+  autoAlignExpectingOverlayPoint: PropTypes.bool,
+  onAutoAlignOverlayPoint: PropTypes.func,
+};
+
+const OverlayAutoAlignController = ({ expectingMapPoint, onMapPointAdd }) => {
+  const map = useMap();
+  const pointerGestureRef = useRef({
+    active: false,
+    moved: false,
+    suppressClick: false,
+    startX: 0,
+    startY: 0,
+  });
+
+  useEffect(() => {
+    const container = map.getContainer();
+    const previousCursor = container.style.cursor;
+
+    container.style.cursor = expectingMapPoint ? 'crosshair' : previousCursor;
+
+    return () => {
+      container.style.cursor = previousCursor;
+    };
+  }, [expectingMapPoint, map]);
+
+  useEffect(() => {
+    if (!expectingMapPoint) return undefined;
+
+    const container = map.getContainer();
+    const gesture = pointerGestureRef.current;
+    const handlePointerDown = (event) => {
+      gesture.active = true;
+      gesture.moved = false;
+      gesture.suppressClick = false;
+      gesture.startX = event.clientX;
+      gesture.startY = event.clientY;
+    };
+    const handlePointerMove = (event) => {
+      if (!gesture.active || gesture.moved) return;
+      if (
+        Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) >
+        PICK_DRAG_THRESHOLD_PX
+      ) {
+        gesture.moved = true;
+      }
+    };
+    const finishPointerGesture = () => {
+      if (gesture.active && gesture.moved) {
+        gesture.suppressClick = true;
+      }
+      gesture.active = false;
+    };
+    const handleMapClick = (event) => {
+      if (gesture.suppressClick || gesture.moved) {
+        gesture.suppressClick = false;
+        gesture.moved = false;
+        return;
+      }
+      if (event.originalEvent) {
+        L.DomEvent.stop(event.originalEvent);
+      }
+      gesture.suppressClick = false;
+      gesture.moved = false;
+      onMapPointAdd?.(event.latlng);
+    };
+
+    container.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('pointermove', handlePointerMove, true);
+    window.addEventListener('pointerup', finishPointerGesture, true);
+    window.addEventListener('pointercancel', finishPointerGesture, true);
+    map.on('click', handleMapClick);
+    return () => {
+      container.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('pointermove', handlePointerMove, true);
+      window.removeEventListener('pointerup', finishPointerGesture, true);
+      window.removeEventListener('pointercancel', finishPointerGesture, true);
+      map.off('click', handleMapClick);
+      gesture.active = false;
+      gesture.moved = false;
+      gesture.suppressClick = false;
+    };
+  }, [expectingMapPoint, map, onMapPointAdd]);
+
+  return null;
+};
+
+OverlayAutoAlignController.propTypes = {
+  expectingMapPoint: PropTypes.bool,
+  onMapPointAdd: PropTypes.func,
+};
+
+const OverlayAutoAlignPreview = ({ bounds, rotation = 0, matches }) => {
+  const map = useMap();
+
+  const overlayLatLngs = useMemo(() => {
+    if (!map || !bounds || matches.length === 0) return [];
+
+    return matches
+      .map((match) =>
+        getDisplayedOverlayLayerPoint({
+          map,
+          bounds,
+          rotation,
+          normalizedPoint: match.overlayPoint,
+        })
+      )
+      .filter(Boolean)
+      .map((layerPoint, index) => ({
+        latlng: map.layerPointToLatLng(layerPoint),
+        complete: Boolean(matches[index]?.mapPoint),
+      }));
+  }, [bounds, map, matches, rotation]);
+
+  const mapLatLngs = useMemo(
+    () =>
+      matches
+        .filter((match) => match.mapPoint)
+        .map((match) => ({
+          latlng: match.mapPoint,
+          complete: true,
+        })),
+    [matches]
+  );
+
+  if (overlayLatLngs.length === 0 && mapLatLngs.length === 0) return null;
+
+  return (
+    <>
+      {overlayLatLngs.map(({ latlng, complete }, index) => (
+        <CircleMarker
+          key={`overlay-align-point-${index}`}
+          center={latlng}
+          radius={7}
+          pathOptions={{
+            color: complete ? '#e0f2fe' : '#bae6fd',
+            weight: 2,
+            fillColor: complete ? '#38bdf8' : '#0ea5e9',
+            fillOpacity: 1,
+          }}
+        />
+      ))}
+      {mapLatLngs.map(({ latlng }, index) => (
+        <CircleMarker
+          key={`map-align-point-${index}`}
+          center={latlng}
+          radius={7}
+          pathOptions={{
+            color: '#fdf2f8',
+            weight: 2,
+            fillColor: '#f472b6',
+            fillOpacity: 1,
+          }}
+        />
+      ))}
+    </>
+  );
+};
+
+OverlayAutoAlignPreview.propTypes = {
+  bounds: PropTypes.object,
+  rotation: PropTypes.number,
+  matches: PropTypes.arrayOf(
+    PropTypes.shape({
+      overlayPoint: PropTypes.shape({
+        x: PropTypes.number.isRequired,
+        y: PropTypes.number.isRequired,
+      }),
+      mapPoint: PropTypes.shape({
+        lat: PropTypes.number.isRequired,
+        lng: PropTypes.number.isRequired,
+      }),
+    })
+  ),
+};
+
 const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = 'dynamic' }) => {
   const navigate = useNavigate();
   const [remotePoints, setRemotePoints] = useState(null); // null = not loaded
@@ -1359,6 +2055,19 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const editUndoStackRef = useRef({});
   const lastEditCoordsRef = useRef({});
   const drawingCoordsRef = useRef([]);
+  // Image overlay reference layer state
+  const [refImageUrl, setRefImageUrl] = useState(null);
+  const [refImageBounds, setRefImageBounds] = useState(null);
+  const [refImageLocked, setRefImageLocked] = useState(false);
+  const [refImageOpacity, setRefImageOpacity] = useState(0.5);
+  const [refImageRotation, setRefImageRotation] = useState(0);
+  const [refImageAspectRatio, setRefImageAspectRatio] = useState(1);
+  const [refImageAutoAlignActive, setRefImageAutoAlignActive] = useState(false);
+  const [refImageAutoAlignMatches, setRefImageAutoAlignMatches] = useState([]);
+  const [refImageOpacityInput, setRefImageOpacityInput] = useState('50');
+  const [refImageRotationInput, setRefImageRotationInput] = useState('0');
+  const refImageInputRef = useRef(null);
+  const refImageObjectUrlRef = useRef(null);
   const [manualCoordsMode, setManualCoordsMode] = useState(false);
   const [manualCoords, setManualCoords] = useState([{ value: '' }, { value: '' }]);
   const [manualCoordsErrors, setManualCoordsErrors] = useState([]);
@@ -1367,6 +2076,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   useEffect(() => {
     drawingCoordsRef.current = drawingCoords;
   }, [drawingCoords]);
+
   useEffect(() => {
     if (uploadState.status === 'success') {
       const t = setTimeout(() => {
@@ -1375,6 +2085,170 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
       return () => clearTimeout(t);
     }
   }, [uploadState.status]);
+
+  useEffect(() => {
+    setRefImageOpacityInput(String(Math.round(refImageOpacity * 100)));
+  }, [refImageOpacity]);
+
+  useEffect(() => {
+    setRefImageRotationInput(String(Math.round(refImageRotation)));
+  }, [refImageRotation]);
+
+  const commitRefImageOpacityInput = useCallback(
+    (rawValue) => {
+      const parsedPercent = parseFloat(rawValue);
+      if (!Number.isFinite(parsedPercent)) {
+        setRefImageOpacityInput(String(Math.round(refImageOpacity * 100)));
+        return;
+      }
+
+      const nextOpacity = clamp(parsedPercent / 100, 0.05, 1);
+      setRefImageOpacity(nextOpacity);
+      setRefImageOpacityInput(String(Math.round(nextOpacity * 100)));
+    },
+    [refImageOpacity]
+  );
+
+  const commitRefImageRotationInput = useCallback(
+    (rawValue) => {
+      const parsedDegrees = parseFloat(rawValue);
+      if (!Number.isFinite(parsedDegrees)) {
+        setRefImageRotationInput(String(Math.round(refImageRotation)));
+        return;
+      }
+
+      const nextRotation = clamp(parsedDegrees, -180, 180);
+      setRefImageRotation(nextRotation);
+      setRefImageRotationInput(String(Math.round(nextRotation)));
+    },
+    [refImageRotation]
+  );
+
+  const resetRefImageAutoAlignMatches = useCallback(() => {
+    setRefImageAutoAlignMatches([]);
+  }, []);
+
+  const cancelRefImageAutoAlign = useCallback(() => {
+    setRefImageAutoAlignActive(false);
+    resetRefImageAutoAlignMatches();
+  }, [resetRefImageAutoAlignMatches]);
+
+  const startRefImageAutoAlign = useCallback(() => {
+    setRefImageAutoAlignActive(true);
+    resetRefImageAutoAlignMatches();
+  }, [resetRefImageAutoAlignMatches]);
+
+  const refImageLatestAutoAlignMatch =
+    refImageAutoAlignMatches[refImageAutoAlignMatches.length - 1] || null;
+  const refImageAutoAlignExpectingOverlayPoint =
+    refImageAutoAlignActive &&
+    (!refImageLatestAutoAlignMatch || Boolean(refImageLatestAutoAlignMatch.mapPoint));
+  const refImageAutoAlignExpectingMapPoint =
+    refImageAutoAlignActive &&
+    Boolean(refImageLatestAutoAlignMatch?.overlayPoint) &&
+    !refImageLatestAutoAlignMatch?.mapPoint;
+  const refImageCompletedAutoAlignMatches = useMemo(
+    () =>
+      refImageAutoAlignMatches.filter(
+        (match) => Boolean(match.overlayPoint) && Boolean(match.mapPoint)
+      ),
+    [refImageAutoAlignMatches]
+  );
+
+  const handleRefImageAutoAlignOverlayPoint = useCallback(
+    (normalizedPoint) => {
+      if (!refImageAutoAlignActive) return;
+      setRefImageAutoAlignMatches((prev) => {
+        const lastMatch = prev[prev.length - 1];
+        if (lastMatch && !lastMatch.mapPoint) return prev;
+        return [...prev, { overlayPoint: normalizedPoint, mapPoint: null }];
+      });
+    },
+    [refImageAutoAlignActive]
+  );
+
+  const handleRefImageAutoAlignMapPoint = useCallback(
+    (latlng) => {
+      if (!refImageAutoAlignActive) return;
+      setRefImageAutoAlignMatches((prev) => {
+        const lastIndex = prev.length - 1;
+        const lastMatch = prev[lastIndex];
+        if (!lastMatch || !lastMatch.overlayPoint || lastMatch.mapPoint) return prev;
+
+        const next = [...prev];
+        next[lastIndex] = { ...lastMatch, mapPoint: latlng };
+        return next;
+      });
+    },
+    [refImageAutoAlignActive]
+  );
+
+  const handleRefImageAutoAlignUndo = useCallback(() => {
+    setRefImageAutoAlignMatches((prev) => {
+      if (prev.length === 0) return prev;
+
+      const lastMatch = prev[prev.length - 1];
+      if (!lastMatch.mapPoint) return prev.slice(0, -1);
+
+      const next = [...prev];
+      next[next.length - 1] = { ...lastMatch, mapPoint: null };
+      return next;
+    });
+  }, []);
+
+  const handleRefImageAutoAlignApply = useCallback(() => {
+    const map = mapInstanceRef.current;
+    const aspectRatio = refImageAspectRatio > 0 ? refImageAspectRatio : 1;
+    if (!map) return;
+
+    if (refImageCompletedAutoAlignMatches.length < 2) {
+      setToastConfig({
+        title: 'Need More Point Matches',
+        description:
+          'Add at least two completed overlay-to-basemap point matches before applying alignment.',
+        variant: 'destructive',
+      });
+      setShowToast(true);
+      return;
+    }
+
+    const sourcePoints = refImageCompletedAutoAlignMatches.map((match) =>
+      getUnitOverlayPoint(match.overlayPoint, aspectRatio)
+    );
+    const targetPoints = refImageCompletedAutoAlignMatches.map((match) =>
+      map.latLngToLayerPoint(match.mapPoint)
+    );
+    const transform = solveBestFitOverlayTransform(sourcePoints, targetPoints);
+
+    if (!transform || !Number.isFinite(transform.heightScale)) {
+      setToastConfig({
+        title: 'Alignment Failed',
+        description:
+          'The selected points could not produce a stable alignment. Try spreading the matches further apart.',
+        variant: 'destructive',
+      });
+      setShowToast(true);
+      return;
+    }
+
+    const nextHeight = Math.max(
+      transform.heightScale,
+      MIN_OVERLAY_SIZE_PX,
+      MIN_OVERLAY_SIZE_PX / Math.max(aspectRatio, 1)
+    );
+    const nextWidth = nextHeight * aspectRatio;
+
+    setRefImageBounds(buildBoundsFromMetrics(map, transform.center, nextWidth, nextHeight));
+    setRefImageRotation(transform.rotation);
+    setToastConfig({
+      title: 'Overlay Aligned',
+      description: `Applied best-fit alignment from ${refImageCompletedAutoAlignMatches.length} point matches.`,
+      variant: 'default',
+    });
+    setShowToast(true);
+    setRefImageAutoAlignActive(false);
+    resetRefImageAutoAlignMatches();
+  }, [refImageAspectRatio, refImageCompletedAutoAlignMatches, resetRefImageAutoAlignMatches]);
 
   // No global snapshots; undo only in drawing or when editing a selected geometry
 
@@ -1484,6 +2358,115 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
   }, [performUndo, creatingNew, selectedId, manualPlacedId]);
+
+  const handleRefImageUpload = useCallback(
+    (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      e.target.value = '';
+
+      // 1. Validate MIME type
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        setToastConfig({
+          title: 'Invalid Format',
+          description: 'Unsupported file type. Please upload a JPEG, PNG, GIF, or WebP image.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+        return;
+      }
+
+      // 2. Enforce a 20 MB file size cap to prevent browser freeze on huge files
+      const MAX_BYTES = 20 * 1024 * 1024;
+      if (file.size > MAX_BYTES) {
+        setToastConfig({
+          title: 'File Too Large',
+          description: 'Image exceeds the 20 MB limit.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+        return;
+      }
+
+      // 3. Verify the file is actually a decodable image before committing state
+      const candidateUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const nextAspectRatio =
+          img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1;
+        // Revoke previous object URL
+        if (refImageObjectUrlRef.current) {
+          URL.revokeObjectURL(refImageObjectUrlRef.current);
+        }
+        refImageObjectUrlRef.current = candidateUrl;
+        setRefImageAutoAlignActive(false);
+        resetRefImageAutoAlignMatches();
+        // Place the image centred on current map view while preserving its natural aspect ratio.
+        const map = mapInstanceRef.current;
+        if (map) {
+          const center = map.getCenter();
+          const centerPoint = map.latLngToContainerPoint(center);
+          const mapSize = map.getSize();
+          const maxWidthPx = mapSize.x * 0.3;
+          const maxHeightPx = mapSize.y * 0.3;
+          let widthPx = maxWidthPx;
+          let heightPx = widthPx / nextAspectRatio;
+          if (heightPx > maxHeightPx) {
+            heightPx = maxHeightPx;
+            widthPx = heightPx * nextAspectRatio;
+          }
+
+          const southWest = map.containerPointToLatLng(
+            L.point(centerPoint.x - widthPx / 2, centerPoint.y + heightPx / 2)
+          );
+          const northEast = map.containerPointToLatLng(
+            L.point(centerPoint.x + widthPx / 2, centerPoint.y - heightPx / 2)
+          );
+          setRefImageBounds(L.latLngBounds(southWest, northEast));
+        }
+        setRefImageAspectRatio(nextAspectRatio);
+        setRefImageRotation(0);
+        setRefImageUrl(candidateUrl);
+        setRefImageLocked(false);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(candidateUrl);
+        setToastConfig({
+          title: 'Decode Failed',
+          description:
+            'The file could not be read as an image. It may be corrupt or an unsupported format.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+      };
+      img.src = candidateUrl;
+    },
+    [resetRefImageAutoAlignMatches, setToastConfig, setShowToast]
+  );
+
+  const handleRefImageRemove = useCallback(() => {
+    if (refImageObjectUrlRef.current) {
+      URL.revokeObjectURL(refImageObjectUrlRef.current);
+      refImageObjectUrlRef.current = null;
+    }
+    setRefImageUrl(null);
+    setRefImageBounds(null);
+    setRefImageLocked(false);
+    setRefImageRotation(0);
+    setRefImageAspectRatio(1);
+    setRefImageAutoAlignActive(false);
+    resetRefImageAutoAlignMatches();
+  }, [resetRefImageAutoAlignMatches]);
+
+  // Clean up object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (refImageObjectUrlRef.current) {
+        URL.revokeObjectURL(refImageObjectUrlRef.current);
+      }
+    };
+  }, []);
 
   const startAddPoint = useCallback(() => {
     if (!mapInstanceRef.current) return;
@@ -2509,7 +3492,10 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     changeset.delete.length > 0;
   const totalChanges =
     changeset.create.length + Object.keys(changeset.modify).length + changeset.delete.length;
-
+  const refImagePendingAutoAlignMatch =
+    refImageLatestAutoAlignMatch && !refImageLatestAutoAlignMatch.mapPoint
+      ? refImageLatestAutoAlignMatch
+      : null;
   useEffect(() => {
     if (showReviewPanel && !hasPendingChanges) {
       setShowReviewPanel(false);
@@ -2570,7 +3556,10 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   }
 
   return (
-    <div className="flex flex-col px-4 py-6 lg:px-8 pt-16" style={{ height: resolvedHeightValue }}>
+    <div
+      className="flex flex-col px-4 py-6 lg:px-8 pt-12 lg:pt-16 lg:h-(--editor-h)"
+      style={{ '--editor-h': resolvedHeightValue }}
+    >
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>
           <h1 className="text-xl font-semibold text-white tracking-tight inline-flex items-center gap-2">
@@ -2612,8 +3601,8 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
           );
         })()}
       </div>
-      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
-        <div className="flex-1 relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900">
+      <div className="flex flex-col lg:flex-row gap-6 lg:flex-1 lg:min-h-0">
+        <div className="h-[70vh] min-h-72 lg:h-auto lg:max-h-none lg:flex-1 relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900">
           {airportMetaLoading && !derivedCenter && (
             <div className="w-full h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-4">
@@ -2738,6 +3727,29 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               })()}
               <ViewTracker />
               {/* Removed automatic BoundsFitter to prevent unwanted recentering while editing */}
+              {refImageUrl && refImageBounds && (
+                <ImageOverlayTool
+                  imageUrl={refImageUrl}
+                  bounds={refImageBounds}
+                  onBoundsChange={setRefImageBounds}
+                  locked={refImageLocked}
+                  opacity={refImageOpacity}
+                  rotation={refImageRotation}
+                  onRotationChange={setRefImageRotation}
+                  aspectRatio={refImageAspectRatio}
+                  autoAlignExpectingOverlayPoint={refImageAutoAlignExpectingOverlayPoint}
+                  onAutoAlignOverlayPoint={handleRefImageAutoAlignOverlayPoint}
+                />
+              )}
+              <OverlayAutoAlignController
+                expectingMapPoint={refImageAutoAlignExpectingMapPoint}
+                onMapPointAdd={handleRefImageAutoAlignMapPoint}
+              />
+              <OverlayAutoAlignPreview
+                bounds={refImageBounds}
+                rotation={refImageRotation}
+                matches={refImageAutoAlignMatches}
+              />
               <GeomanController
                 existingPoints={activeExistingPoints}
                 featureLayerMapRef={featureLayerMapRef}
@@ -2772,7 +3784,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
             </MapContainer>
           )}
         </div>
-        <div className="w-full lg:w-96 flex flex-col gap-5 min-h-0 p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg overflow-y-auto">
+        <div className="flex flex-col gap-5 min-h-0 h-[60vh] lg:h-auto overflow-y-auto p-5 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg lg:w-96 lg:flex-none lg:overflow-y-auto">
           {(selectedId || creatingNew) && (
             <div className="flex items-center gap-2.5">
               {creatingNew && !selectedId && (
@@ -3121,6 +4133,206 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
               <div className="flex items-center mt-0 gap-2">
                 <Route className="w-5 h-5 text-zinc-300" aria-hidden="true" />
                 <h3 className="text-xl font-semibold text-zinc-100 tracking-tight">Objects</h3>
+              </div>
+              {/* Image Overlay panel */}
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 gap-2">
+                  <div className="flex items-center gap-2">
+                    <ImageUp className="w-4 h-4 text-zinc-400 shrink-0" aria-hidden="true" />
+                    <span className="text-xs font-medium text-zinc-300">Image Overlay</span>
+                  </div>
+                  {refImageUrl ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        title={refImageLocked ? 'Unlock overlay' : 'Lock overlay position'}
+                        onClick={() => setRefImageLocked((v) => !v)}
+                        className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                      >
+                        {refImageLocked ? (
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        ) : (
+                          <LockOpen className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove image overlay"
+                        onClick={handleRefImageRemove}
+                        className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-red-400 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => refImageInputRef.current?.click()}
+                      className="text-[11px] px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-white transition-colors"
+                    >
+                      Upload
+                    </button>
+                  )}
+                  <input
+                    ref={refImageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="sr-only"
+                    onChange={handleRefImageUpload}
+                  />
+                </div>
+                {refImageUrl && (
+                  <div className="px-3 pb-3 flex flex-col gap-2 border-t border-zinc-700/60 pt-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-400 w-14 shrink-0">Opacity</span>
+                      <input
+                        type="range"
+                        min={0.05}
+                        max={1}
+                        step={0.05}
+                        value={refImageOpacity}
+                        onChange={(e) => setRefImageOpacity(parseFloat(e.target.value))}
+                        className="flex-1 h-1.5 accent-blue-500 cursor-pointer rounded-full bg-zinc-600"
+                      />
+                      <input
+                        type="number"
+                        min={5}
+                        max={100}
+                        step={1}
+                        inputMode="numeric"
+                        value={refImageOpacityInput}
+                        onChange={(e) => setRefImageOpacityInput(e.target.value)}
+                        onBlur={(e) => commitRefImageOpacityInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        className="w-12 shrink-0 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-1.5 py-1 text-[11px] text-right text-zinc-300 tabular-nums"
+                        aria-label="Overlay opacity percent"
+                      />
+                      <span className="text-[11px] text-zinc-400 shrink-0">%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-400 w-14 shrink-0">Rotate</span>
+                      <input
+                        type="range"
+                        min={-180}
+                        max={180}
+                        step={1}
+                        value={refImageRotation}
+                        onChange={(e) => setRefImageRotation(parseInt(e.target.value, 10) || 0)}
+                        className="flex-1 h-1.5 accent-emerald-500 cursor-pointer rounded-full bg-zinc-600"
+                      />
+                      <input
+                        type="number"
+                        min={-180}
+                        max={180}
+                        step={1}
+                        inputMode="numeric"
+                        value={refImageRotationInput}
+                        onChange={(e) => setRefImageRotationInput(e.target.value)}
+                        onBlur={(e) => commitRefImageRotationInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        className="w-12 shrink-0 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 focus:outline-none rounded px-1.5 py-1 text-[11px] text-right text-zinc-300 tabular-nums"
+                        aria-label="Overlay rotation degrees"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRefImageRotation(0)}
+                        title="Reset rotation"
+                        className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={Math.round(refImageRotation) === 0}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-2.5 flex flex-col gap-2.5">
+                      {/* Header */}
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-semibold text-zinc-200">Auto Align</span>
+                        {!refImageAutoAlignActive ? (
+                          <button
+                            type="button"
+                            onClick={startRefImageAutoAlign}
+                            className="shrink-0 rounded bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 px-2 py-1 text-[10px] font-medium text-zinc-200 transition-colors"
+                          >
+                            Start
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={cancelRefImageAutoAlign}
+                            className="shrink-0 p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                            aria-label="Cancel auto align"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {refImageAutoAlignActive && (
+                        <>
+                          {/* Step instructions */}
+                          <div className="mt-1 flex flex-col gap-2.5">
+                            {refImageAutoAlignExpectingOverlayPoint && (
+                              <div className="flex flex-col gap-1">
+                                <p className="text-xs font-semibold text-zinc-100">Overlay</p>
+                                <p className="text-xs text-zinc-400 leading-relaxed">
+                                  Click a point on your image overlay. Use a clear landmark like a
+                                  building corner, runway threshold, or intersection.
+                                </p>
+                              </div>
+                            )}
+                            {refImageAutoAlignExpectingMapPoint && (
+                              <div className="flex flex-col gap-1">
+                                <p className="text-xs font-semibold text-zinc-100">Basemap</p>
+                                <p className="text-xs text-zinc-400 leading-relaxed">
+                                  Click that same landmark on the basemap. You may need to lower the
+                                  overlay opacity to see the basemap clearly. Repeat process for
+                                  more pairs to improve accuracy.
+                                </p>
+                              </div>
+                            )}
+                            {!refImageAutoAlignExpectingOverlayPoint &&
+                              !refImageAutoAlignExpectingMapPoint && (
+                                <p className="text-xs text-zinc-400">
+                                  Add more pairs or apply the alignment below.
+                                </p>
+                              )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleRefImageAutoAlignApply}
+                              disabled={
+                                refImageCompletedAutoAlignMatches.length < 2 ||
+                                Boolean(refImagePendingAutoAlignMatch)
+                              }
+                              className="flex-1 rounded bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 px-2 py-1 text-[10px] font-medium text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Apply Alignment
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRefImageAutoAlignUndo}
+                              disabled={refImageAutoAlignMatches.length === 0}
+                              className="rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-[10px] text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Undo
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="mt-0.5 relative">
                 <input

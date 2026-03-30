@@ -27,7 +27,7 @@ const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl gap-4 hover:bg-zinc-800/70 transition-colors">
       <div className="space-y-1">
-        <h3 className="text-lg font-semibold text-white flex items-center">
+        <h3 className="text-lg font-semibold text-white flex items-center flex-wrap gap-y-1">
           <MapPin className={`w-5 h-5 mr-2 ${STATUS_COLORS[airport.status]}`} />
           <span>{airport.icao}</span>
           <span className="mx-2 text-zinc-600">•</span>
@@ -51,6 +51,25 @@ const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
             {isApproved ? airport.approved_by : airport.requested_by}
           </span>
         </p>
+        {isApproved && (
+          <span
+            className={`inline-flex items-center gap-1.5 mt-1 px-1.5 py-0.5 rounded-md text-xs ${
+              airport.contributions_enabled
+                ? 'text-blue-300/80 bg-blue-500/5'
+                : 'text-zinc-400/80 bg-zinc-800/40'
+            }`}
+            title={
+              airport.contributions_enabled ? 'Contributions enabled' : 'Contributions disabled'
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                airport.contributions_enabled ? 'bg-blue-400/80' : 'bg-zinc-500/70'
+              }`}
+            ></span>
+            Contributions {airport.contributions_enabled ? 'Enabled' : 'Disabled'}
+          </span>
+        )}
       </div>
       <div className="flex gap-2 w-full sm:w-auto">
         {isPending && (
@@ -104,6 +123,7 @@ AirportCard.propTypes = {
     division_name: PropTypes.string.isRequired,
     requested_by: PropTypes.string,
     approved_by: PropTypes.string,
+    contributions_enabled: PropTypes.bool,
   }).isRequired,
   onApprove: PropTypes.func.isRequired,
   loadingState: PropTypes.shape({
@@ -116,7 +136,6 @@ AirportCard.propTypes = {
 const AirportManagement = () => {
   const [airports, setAirports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [loadingState, setLoadingState] = useState({ id: null, action: null });
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [toast, setToast] = useState(null);
@@ -151,7 +170,11 @@ const AirportManagement = () => {
 
       setAirports(sortedAirports);
     } catch (err) {
-      setError(err.message);
+      showToast({
+        title: 'Failed to load airports',
+        description: err.message,
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -190,7 +213,6 @@ const AirportManagement = () => {
         variant: 'success',
       });
     } catch (err) {
-      setError(err.message);
       showToast({
         title: 'Error',
         description: err.message,
@@ -274,18 +296,18 @@ const AirportManagement = () => {
           <p className="text-sm text-zinc-400 mt-1">Manage and review division airports </p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
+          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300 whitespace-nowrap shrink-0">
             <MapPin className="w-4 h-4 mr-2 text-zinc-400" />
             {pendingCount} pending
           </span>
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-initial">
             <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
               value={searchTerm}
               onChange={handleSearch}
               placeholder="Search airports..."
-              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-64 transition-all"
+              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-all"
             />
           </div>
         </div>
@@ -297,10 +319,6 @@ const AirportManagement = () => {
             <div className="text-center py-8 text-zinc-400">
               <Loader className="w-12 h-12 mx-auto mb-3 opacity-50 animate-spin" />
               <p>Loading airports...</p>
-            </div>
-          ) : error ? (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
-              {error}
             </div>
           ) : !filteredAirports?.length ? (
             <div className="text-center py-8 text-zinc-500">
@@ -325,10 +343,10 @@ const AirportManagement = () => {
                       type="button"
                       onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                       disabled={safePage === 1}
-                      className="justify-self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Previous page"
+                      className="justify-self-start flex items-center p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ChevronLeft className="w-4 h-4" />
-                      Previous
                     </button>
                     <span className="text-sm text-zinc-400 justify-self-center">
                       Page <span className="font-medium text-zinc-300">{safePage}</span> of{' '}
@@ -338,9 +356,9 @@ const AirportManagement = () => {
                       type="button"
                       onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                       disabled={safePage === totalPages}
-                      className="justify-self-end flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Next page"
+                      className="justify-self-end flex items-center p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300 hover:bg-zinc-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Next
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
