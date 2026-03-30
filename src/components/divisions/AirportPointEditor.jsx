@@ -2000,7 +2000,7 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   }, [permissionsLoading, isLeadDev, isDivisionMember, navigate]);
 
   const isEuroscopeOnly = useMemo(() => {
-    const prefixes = ['K', 'M', 'Y', 'N', 'A', 'V'];
+    const prefixes = ['K', 'M', 'Y', 'N', 'A'];
     const first = icao?.[0];
     if (!first) return false;
     return !prefixes.includes(first);
