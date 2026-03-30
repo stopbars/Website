@@ -10,6 +10,10 @@ import { useWindowSize } from '../hooks/useWindowSize';
 import { ArrowRight, FileUp, Upload, Check, Loader, Search, UserPen, Plus } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
+import {
+  fetchContributionPolicy,
+  getContributionDisabledMessage,
+} from '../utils/contributionPolicy';
 
 const ContributeDetails = () => {
   const { icao } = useParams();
@@ -22,6 +26,7 @@ const ContributeDetails = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preloaded, setPreloaded] = useState(false);
   const [airport, setAirport] = useState(null);
+  const [contributionPolicy, setContributionPolicy] = useState(null);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [errorTitle, setErrorTitle] = useState('Error');
@@ -37,6 +42,9 @@ const ContributeDetails = () => {
   const [confettiRun, setConfettiRun] = useState(true);
   const [acknowledged, setAcknowledged] = useState(false);
   const [simulator, setSimulator] = useState('msfs2024');
+  const contributionsDisabled =
+    contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
+  const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -60,7 +68,11 @@ const ContributeDetails = () => {
   useEffect(() => {
     const fetchAirport = async () => {
       try {
-        const response = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
+        const [response, policy] = await Promise.all([
+          fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
+          fetchContributionPolicy(icao),
+        ]);
+        setContributionPolicy(policy);
         if (response.ok) {
           const data = await response.json();
           setAirport({
@@ -130,6 +142,13 @@ const ContributeDetails = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (contributionsDisabled) {
+      setErrorTitle('Contributions Disabled');
+      setError(disabledContributionMessage);
+      setShowErrorToast(true);
+      return;
+    }
 
     if (!user) {
       setErrorTitle('Error');
@@ -271,6 +290,13 @@ const ContributeDetails = () => {
               </Breadcrumb>
             </div>
           </div>
+
+          {contributionsDisabled && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+              <FileUp className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
+              <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
@@ -539,9 +565,23 @@ const ContributeDetails = () => {
               <Button
                 onClick={handleSubmit}
                 disabled={
-                  isSubmitting || !selectedFile || !sceneryName || !simulator || !acknowledged
+                  contributionsDisabled ||
+                  isSubmitting ||
+                  !selectedFile ||
+                  !sceneryName ||
+                  !simulator ||
+                  !acknowledged
                 }
-                className={`w-full ${isSubmitting || !selectedFile || !sceneryName || !simulator || !acknowledged ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`w-full ${
+                  contributionsDisabled ||
+                  isSubmitting ||
+                  !selectedFile ||
+                  !sceneryName ||
+                  !simulator ||
+                  !acknowledged
+                    ? 'opacity-40 cursor-not-allowed'
+                    : ''
+                }`}
               >
                 {isSubmitting ? (
                   <div className="flex items-center justify-center">

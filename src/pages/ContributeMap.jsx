@@ -24,6 +24,10 @@ import Map, {
   ScaleControl,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import {
+  fetchContributionPolicy,
+  getContributionDisabledMessage,
+} from '../utils/contributionPolicy';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -702,6 +706,7 @@ const ContributeMap = () => {
   const [loading, setLoading] = useState(true);
   const [airport, setAirport] = useState(null);
   const [points, setPoints] = useState([]);
+  const [contributionPolicy, setContributionPolicy] = useState(null);
   const [activePointId, setActivePointId] = useState(null);
   const [viewState, setViewState] = useState({
     longitude: 0,
@@ -711,17 +716,25 @@ const ContributeMap = () => {
   const [copiedId, setCopiedId] = useState(null);
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
+  const contributionsDisabled =
+    contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
+  const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
+  const owningDivisionLabel = contributionPolicy?.divisionName || 'the owning Division';
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
 
-        const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${icao}`);
+        const [airportResponse, policy] = await Promise.all([
+          fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
+          fetchContributionPolicy(icao),
+        ]);
         if (!airportResponse.ok) {
           throw new Error('Failed to fetch airport data');
         }
         const airportData = await airportResponse.json();
+        setContributionPolicy(policy);
 
         setAirport({
           icao: airportData.icao,
@@ -952,6 +965,7 @@ const ContributeMap = () => {
   );
 
   const handleContinue = () => {
+    if (contributionsDisabled) return;
     navigate(`/contribute/test/${icao}`);
   };
 
@@ -1287,13 +1301,13 @@ const ContributeMap = () => {
                 <h2 className="text-xl font-medium mb-4">XML Generator</h2>
                 <button
                   onClick={
-                    points.length === 0
+                    points.length === 0 || contributionsDisabled
                       ? undefined
                       : () => navigate(`/contribute/generator/${icao}`)
                   }
-                  disabled={points.length === 0}
+                  disabled={points.length === 0 || contributionsDisabled}
                   className={`w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 transition-all ${
-                    points.length === 0
+                    points.length === 0 || contributionsDisabled
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-zinc-800 hover:border-zinc-600'
                   }`}
@@ -1311,30 +1325,40 @@ const ContributeMap = () => {
                 </button>
               </Card>
 
-              {points.length === 0 ? (
+              {contributionsDisabled ? (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
+                  <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
+                </div>
+              ) : points.length === 0 ? (
                 <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
                   <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
                   <p className="text-sm text-amber-400">
-                    This airport currently has no airport lighting data submitted by the owning
-                    Division. Please check back later, or contact the Division requesting this
-                    airport.
+                    This airport currently has no airport lighting data submitted by{' '}
+                    {owningDivisionLabel}. Please check back later, or contact the Division
+                    requesting this airport.
                   </p>
                 </div>
               ) : (
                 <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
                   <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
                   <p className="text-sm text-blue-400">
-                    This is the existing airport data for this airport, set by the owning Division.
-                    Your contribution will add support for a specific simulator scenery package.
+                    This is the existing airport data for this airport, set by{' '}
+                    {owningDivisionLabel}. Your contribution will add support for a specific
+                    simulator scenery package.
                   </p>
                 </div>
               )}
 
               <Button
-                onClick={points.length === 0 ? undefined : handleContinue}
-                disabled={points.length === 0}
-                aria-disabled={points.length === 0}
-                className={`w-full ${points.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={points.length === 0 || contributionsDisabled ? undefined : handleContinue}
+                disabled={points.length === 0 || contributionsDisabled}
+                aria-disabled={points.length === 0 || contributionsDisabled}
+                className={`w-full ${
+                  points.length === 0 || contributionsDisabled
+                    ? 'opacity-50 cursor-not-allowed'
+                    : ''
+                }`}
               >
                 <span>Continue to Next Step</span>
                 <ChevronRight className="w-4 h-4 ml-2" />

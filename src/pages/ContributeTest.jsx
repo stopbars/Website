@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -7,6 +7,10 @@ import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
 import { Toast } from '../components/shared/Toast';
 import XMLMap from '../components/shared/XMLMap';
 import { ChevronRight, FileUp, Check, Loader, FileSearch, Spline, X } from 'lucide-react';
+import {
+  fetchContributionPolicy,
+  getContributionDisabledMessage,
+} from '../utils/contributionPolicy';
 
 const ContributeTest = () => {
   const { icao } = useParams();
@@ -27,6 +31,23 @@ const ContributeTest = () => {
   const [showPolyLines, setShowPolyLines] = useState(false);
   const [showRemoveAreas, setShowRemoveAreas] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [contributionPolicy, setContributionPolicy] = useState(null);
+  const contributionsDisabled =
+    contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
+  const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
+
+  useEffect(() => {
+    const loadContributionPolicy = async () => {
+      try {
+        const policy = await fetchContributionPolicy(icao);
+        setContributionPolicy(policy);
+      } catch (err) {
+        console.error('Failed to load contribution policy:', err);
+      }
+    };
+
+    loadContributionPolicy();
+  }, [icao]);
 
   const processFile = (file) => {
     if (!file) {
@@ -106,6 +127,13 @@ const ContributeTest = () => {
   };
 
   const handleTestXml = async () => {
+    if (contributionsDisabled) {
+      setErrorTitle('Contributions Disabled');
+      setError(disabledContributionMessage);
+      setShowErrorToast(true);
+      return;
+    }
+
     if (!xmlData) {
       setErrorTitle('Error');
       setError('Please upload an XML file first');
@@ -199,6 +227,13 @@ const ContributeTest = () => {
   };
 
   const handleContinue = () => {
+    if (contributionsDisabled) {
+      setErrorTitle('Contributions Disabled');
+      setError(disabledContributionMessage);
+      setShowErrorToast(true);
+      return;
+    }
+
     // Only allow navigation if XML has been tested and is valid
     if (isXmlTested && !error) {
       navigate(`/contribute/details/${icao}`, {
@@ -227,6 +262,13 @@ const ContributeTest = () => {
               </Breadcrumb>
             </div>
           </div>
+
+          {contributionsDisabled && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
+              <X className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
+              <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
@@ -318,7 +360,7 @@ const ContributeTest = () => {
                 {/* Test XML button */}
                 <Button
                   onClick={handleTestXml}
-                  disabled={!xmlData || isValidating || isXmlTested}
+                  disabled={contributionsDisabled || !xmlData || isValidating || isXmlTested}
                   className="mt-4 w-full"
                 >
                   {isValidating ? (
@@ -465,8 +507,10 @@ const ContributeTest = () => {
               {/* Continue button */}
               <Button
                 onClick={handleContinue}
-                className={`w-full ${!isXmlTested ? 'opacity-50 cursor-not-allowed' : ''}`}
-                disabled={!isXmlTested || !!error}
+                className={`w-full ${
+                  contributionsDisabled || !isXmlTested ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+                disabled={contributionsDisabled || !isXmlTested || !!error}
               >
                 <span>Continue to Next Step</span>
                 <ChevronRight className="w-4 h-4 ml-2" />
