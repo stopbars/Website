@@ -320,8 +320,7 @@ const ContributionDashboard = () => {
             ) : (
               <Button
                 onClick={handleContributeClick}
-                disabled
-                className="flex items-center space-x-2 opacity-60 cursor-not-allowed"
+                className="flex items-center space-x-2"
               >
                 <Plus className="w-4 h-4" />
                 <span>Contribute New Airport</span>

@@ -112,7 +112,7 @@ const ContributeNew = () => {
             <div className="mt-8 pt-6 border-t border-zinc-800">
               <Button
                 variant="outline"
-                onClick={() => window.navigate('/contribute/guide')}
+                onClick={() => window.location.assign('https://docs.stopbars.com/contributions')}
                 className="flex items-center justify-center w-full"
               >
                 <BookOpen className="w-4 h-4 mr-2" />
