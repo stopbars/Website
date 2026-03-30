@@ -51,6 +51,25 @@ const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
             {isApproved ? airport.approved_by : airport.requested_by}
           </span>
         </p>
+        {isApproved && (
+          <span
+            className={`inline-flex items-center gap-1.5 mt-1 px-1.5 py-0.5 rounded-md text-xs ${
+              airport.contributions_enabled
+                ? 'text-blue-300/80 bg-blue-500/5'
+                : 'text-zinc-400/80 bg-zinc-800/40'
+            }`}
+            title={
+              airport.contributions_enabled ? 'Contributions enabled' : 'Contributions disabled'
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                airport.contributions_enabled ? 'bg-blue-400/80' : 'bg-zinc-500/70'
+              }`}
+            ></span>
+            Contributions {airport.contributions_enabled ? 'Enabled' : 'Disabled'}
+          </span>
+        )}
       </div>
       <div className="flex gap-2 w-full sm:w-auto">
         {isPending && (
@@ -104,6 +123,7 @@ AirportCard.propTypes = {
     division_name: PropTypes.string.isRequired,
     requested_by: PropTypes.string,
     approved_by: PropTypes.string,
+    contributions_enabled: PropTypes.bool,
   }).isRequired,
   onApprove: PropTypes.func.isRequired,
   loadingState: PropTypes.shape({

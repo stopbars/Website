@@ -522,29 +522,57 @@ const DivisionManagement = () => {
                                             </div>
                                           </div>
                                         </div>
-                                        <span
-                                          className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-xs shrink-0 ${
-                                            getDataSubmitted(airport)
-                                              ? 'text-emerald-300/80 bg-emerald-500/5'
-                                              : 'text-zinc-400/80 bg-zinc-800/40'
-                                          }`}
-                                          title={
-                                            getDataSubmitted(airport)
-                                              ? 'Some BARS objects exist'
-                                              : 'No BARS objects yet'
-                                          }
-                                        >
+                                        <div className="flex flex-col items-end gap-1 shrink-0">
                                           <span
-                                            className={`w-1.5 h-1.5 rounded-full ${
+                                            className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-xs ${
                                               getDataSubmitted(airport)
-                                                ? 'bg-emerald-400/80'
-                                                : 'bg-zinc-500/70'
+                                                ? 'text-emerald-300/80 bg-emerald-500/5'
+                                                : 'text-zinc-400/80 bg-zinc-800/40'
                                             }`}
-                                          ></span>
-                                          {getDataSubmitted(airport)
-                                            ? 'Objects Added'
-                                            : 'No objects yet'}
-                                        </span>
+                                            title={
+                                              getDataSubmitted(airport)
+                                                ? 'Some BARS objects exist'
+                                                : 'No BARS objects yet'
+                                            }
+                                          >
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full ${
+                                                getDataSubmitted(airport)
+                                                  ? 'bg-emerald-400/80'
+                                                  : 'bg-zinc-500/70'
+                                              }`}
+                                            ></span>
+                                            {getDataSubmitted(airport)
+                                              ? 'Objects Added'
+                                              : 'No objects yet'}
+                                          </span>
+                                          {airport.status === 'approved' && (
+                                            <span
+                                              className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-xs ${
+                                                airport.contributions_enabled
+                                                  ? 'text-blue-300/80 bg-blue-500/5'
+                                                  : 'text-zinc-400/80 bg-zinc-800/40'
+                                              }`}
+                                              title={
+                                                airport.contributions_enabled
+                                                  ? 'Scenery contributions enabled'
+                                                  : 'Scenery contributions disabled'
+                                              }
+                                            >
+                                              <span
+                                                className={`w-1.5 h-1.5 rounded-full ${
+                                                  airport.contributions_enabled
+                                                    ? 'bg-blue-400/80'
+                                                    : 'bg-zinc-500/70'
+                                                }`}
+                                              ></span>
+                                              Contributions{' '}
+                                              {airport.contributions_enabled
+                                                ? 'Enabled'
+                                                : 'Disabled'}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
