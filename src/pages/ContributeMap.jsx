@@ -189,11 +189,11 @@ const PointPopupContent = React.memo(({ point, copiedId, onCopy }) => {
 
   return (
     <div
-      className="-m-[10px] -mb-[9px]"
+      className="-m-2.5 -mb-2.25"
       onPointerDown={stopPopupInteraction}
       onDoubleClick={stopPopupInteraction}
     >
-      <div className={`bg-zinc-900 rounded-lg shadow-lg min-w-[240px] ${style.accent}`}>
+      <div className={`bg-zinc-900 rounded-lg shadow-lg min-w-60 ${style.accent}`}>
         <div className="px-3.5 pt-3.5 pb-3 pr-9">
           <h3 className="font-semibold text-white text-[15px] leading-snug">{point.name}</h3>
         </div>
@@ -1048,7 +1048,7 @@ const ContributeMap = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               {/* Map */}
-              <div className="h-[600px] rounded-lg overflow-hidden border border-zinc-800 relative">
+              <div className="h-150 rounded-lg overflow-hidden border border-zinc-800 relative">
                 <Map
                   ref={mapRef}
                   {...viewState}
@@ -1343,9 +1343,8 @@ const ContributeMap = () => {
                 <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
                   <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
                   <p className="text-sm text-blue-400">
-                    This is the existing airport data for this airport, set by{' '}
-                    {owningDivisionLabel}. Your contribution will add support for a specific
-                    simulator scenery package.
+                    This is the existing airport data for this airport, set by {owningDivisionLabel}
+                    . Your contribution will add support for a specific simulator scenery package.
                   </p>
                 </div>
               )}
