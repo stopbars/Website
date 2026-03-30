@@ -68,12 +68,19 @@ const ContributeDetails = () => {
   useEffect(() => {
     const fetchAirport = async () => {
       try {
-        const [response, policy] = await Promise.all([
+        const [responseResult, policyResult] = await Promise.allSettled([
           fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
           fetchContributionPolicy(icao),
         ]);
-        setContributionPolicy(policy);
-        if (response.ok) {
+
+        if (policyResult.status === 'fulfilled') {
+          setContributionPolicy(policyResult.value);
+        } else {
+          console.error('Error fetching contribution policy:', policyResult.reason);
+        }
+
+        if (responseResult.status === 'fulfilled' && responseResult.value.ok) {
+          const response = responseResult.value;
           const data = await response.json();
           setAirport({
             icao: data.icao,
