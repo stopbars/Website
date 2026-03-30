@@ -29,8 +29,8 @@ export const getContributionDisabledMessage = (policy) => {
   const divisionName = policy?.divisionName;
 
   if (divisionName) {
-    return `Community contributions for this airport are currently disabled by ${divisionName}.`;
+    return `Scenery contributions for this airport are currently disabled by ${divisionName}, please check back later.`;
   }
 
-  return 'Community contributions for this airport are currently disabled by the owning division.';
+  return 'Scenery contributions for this airport are currently disabled by the owning division';
 };

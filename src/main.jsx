@@ -45,6 +45,11 @@ const DocsRedirect = lazy(() =>
     default: module.DocsRedirect,
   }))
 );
+const DonateRedirect = lazy(() =>
+  import('./components/shared/DonateRedirect.jsx').then((module) => ({
+    default: module.DonateRedirect,
+  }))
+);
 
 const router = createBrowserRouter([
   {
@@ -114,6 +119,11 @@ const router = createBrowserRouter([
   {
     path: '/docs',
     element: <DocsRedirect />,
+    errorElement: <RouteError />,
+  },
+  {
+    path: '/donate',
+    element: <DonateRedirect />,
     errorElement: <RouteError />,
   },
   {
