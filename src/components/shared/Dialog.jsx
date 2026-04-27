@@ -75,7 +75,7 @@ const DialogField = ({ field, colorScheme }) => {
     helperText,
   } = field;
 
-  const baseInputClasses = `w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 transition-all focus:outline-none focus:ring-2 ${colorScheme.focusRing}`;
+  const baseInputClasses = `w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 transition-[background-color,border-color,box-shadow,opacity] duration-150 ease-out focus:outline-none focus:ring-2 ${colorScheme.focusRing}`;
 
   return (
     <div className="space-y-2">
@@ -213,7 +213,7 @@ export const Dialog = ({
   children,
   fields = [],
   buttons = [],
-  buttonsPosition = 'right',
+  buttonsPosition = 'left',
   isLoading = false,
   showCloseButton = true,
   closeOnBackdrop = true,
@@ -336,7 +336,7 @@ export const Dialog = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className={`bg-zinc-900 rounded-xl ${maxWidthClasses[maxWidth] || maxWidthClasses.md} w-full border border-zinc-800 shadow-2xl shadow-black/50 focus:outline-none`}
+        className={`bg-zinc-900 rounded-xl ${maxWidthClasses[maxWidth] || maxWidthClasses.md} w-full border border-zinc-800 focus:outline-none`}
         style={{
           animation: 'dialogContentIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         }}
@@ -355,7 +355,7 @@ export const Dialog = ({
               type="button"
               onClick={onClose}
               disabled={isLoading}
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1.5 text-zinc-500 transition-[background-color,color,transform,opacity] duration-150 ease-out hover:bg-zinc-800 hover:text-zinc-300 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
               aria-label="Close dialog"
             >
               <X className="w-5 h-5" />

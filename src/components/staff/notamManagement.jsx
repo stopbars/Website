@@ -30,7 +30,7 @@ const parseNotamLinks = (content) => {
   // Add target="_blank" and rel="noopener noreferrer" for security
   const sanitizedContent = content.replace(
     linkRegex,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline hover:brightness-125 transition-all">$1</a>'
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-150 hover:brightness-125">$1</a>'
   );
   return DOMPurify.sanitize(sanitizedContent);
 };
@@ -318,7 +318,8 @@ const NotamManagement = () => {
       <div className="relative">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center justify-between w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+          aria-expanded={isOpen}
+          className="flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-white transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
         >
           <div className="flex items-center space-x-2">
             <div
@@ -327,12 +328,12 @@ const NotamManagement = () => {
             <span className="capitalize transition-colors duration-200">{currentType}</span>
           </div>
           <ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 shrink-0 transition-transform duration-150 ease-out ${isOpen ? 'rotate-180' : ''}`}
           />
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-150">
             {getNotamTypes().map((type, index) => (
               <button
                 key={type}
@@ -340,7 +341,7 @@ const NotamManagement = () => {
                   setType(type);
                   setIsOpen(false);
                 }}
-                className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 flex items-center space-x-2 ${
+                className={`flex min-h-10 w-full items-center space-x-2 px-4 py-2 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
                   currentType === type
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'
@@ -351,7 +352,7 @@ const NotamManagement = () => {
                 }}
               >
                 <div
-                  className={`w-3 h-3 rounded-full transition-all duration-200 ${getNotamTypeStyles(type).circle}`}
+                  className={`h-3 w-3 rounded-full transition-colors duration-150 ${getNotamTypeStyles(type).circle}`}
                 ></div>
                 <span className="capitalize transition-colors duration-150">{type}</span>
               </button>
@@ -375,7 +376,7 @@ const NotamManagement = () => {
             <>
               <button
                 onClick={handleStartAdd}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
               >
                 <Plus className="w-4 h-4" />
                 New NOTAM
@@ -383,7 +384,7 @@ const NotamManagement = () => {
               {notamData?.notam && (
                 <button
                   onClick={handleStartEdit}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 >
                   <Edit className="w-4 h-4" />
                   Edit Current
@@ -400,7 +401,7 @@ const NotamManagement = () => {
                   (isEditing && !hasEditChanges) ||
                   saving
                 }
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-medium text-blue-400 transition-[background-color,border-color,transform,opacity] duration-150 ease-out hover:bg-blue-500/30 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
               >
                 {saving ? (
                   <>
@@ -422,7 +423,7 @@ const NotamManagement = () => {
               <button
                 onClick={handleCancel}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-400 transition-[background-color,color,transform,opacity] duration-150 ease-out hover:bg-zinc-800 hover:text-zinc-300 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
               >
                 <X className="w-4 h-4" />
                 Cancel
@@ -452,7 +453,7 @@ const NotamManagement = () => {
               <textarea
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
-                className="w-full h-24 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white placeholder-zinc-500 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                 placeholder="Enter NOTAM content..."
               />
             </div>
@@ -513,7 +514,7 @@ const NotamManagement = () => {
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full h-24 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white transition-[background-color,border-color,box-shadow] duration-150 ease-out focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
               />
             </div>
 

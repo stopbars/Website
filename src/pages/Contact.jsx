@@ -68,18 +68,19 @@ const Contact = () => {
         <button
           type="button"
           onClick={() => setShowTopicDropdown(!showTopicDropdown)}
-          className="flex items-center justify-between w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+          aria-expanded={showTopicDropdown}
+          className="flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-white transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
         >
           <span className={selectedTopic ? 'text-white' : 'text-zinc-500'}>
             {selectedTopic || 'Select a topic'}
           </span>
           <ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${showTopicDropdown ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 shrink-0 transition-transform duration-150 ease-out ${showTopicDropdown ? 'rotate-180' : ''}`}
           />
         </button>
 
         {showTopicDropdown && (
-          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-150">
             {topicOptions.map((topic, index) => (
               <button
                 key={topic}
@@ -88,7 +89,7 @@ const Contact = () => {
                   setSelectedTopic(topic);
                   setShowTopicDropdown(false);
                 }}
-                className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
+                className={`min-h-10 w-full px-4 py-2 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
                   selectedTopic === topic
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'
@@ -239,7 +240,7 @@ const Contact = () => {
           <div className="grid md:grid-cols-2 gap-6">
             {/* Discord Support */}
             <Card
-              className="p-6 hover:border-blue-500/30 transition-all cursor-pointer group"
+              className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-blue-500/30 active:scale-[0.96]"
               onClick={() =>
                 window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')
               }
@@ -254,7 +255,7 @@ const Contact = () => {
                     <span className="text-sm text-zinc-400">
                       Get instant help from our community
                     </span>
-                    <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-blue-400 transition-all" />
+                    <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors duration-150 group-hover:text-blue-400" />
                   </div>
                 </div>
               </div>
@@ -262,7 +263,7 @@ const Contact = () => {
 
             {/* General Support Email */}
             <Card
-              className="p-6 hover:border-emerald-500/30 transition-all cursor-pointer group"
+              className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-emerald-500/30 active:scale-[0.96]"
               onClick={() => handleCopyEmail('support@stopbars.com')}
             >
               <div className="flex items-center space-x-3">

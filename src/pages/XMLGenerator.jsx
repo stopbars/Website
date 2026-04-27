@@ -734,7 +734,7 @@ ${allPolygonXML.join('\n')}
                           <Download className="w-4 h-4 mr-2" />
                           Download XML
                         </Button>
-                        <Button onClick={handleCopy} variant="secondary" className="w-full">
+                        <Button onClick={handleCopy} variant="secondary" className="w-full" static>
                           {copied ? (
                             <>
                               <Check className="w-4 h-4 mr-2" />

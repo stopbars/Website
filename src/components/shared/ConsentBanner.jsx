@@ -46,7 +46,7 @@ export const ConsentBanner = ({ show, setShow }) => {
   if (!show) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm p-5 bg-zinc-900/95 rounded-xl border border-zinc-700 shadow-xl backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300">
+    <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-zinc-700 bg-zinc-900/95 p-5 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300">
       <div className="flex flex-col">
         <div className="flex items-start gap-2 mb-3">
           <Cookie className="w-5 h-5 text-white/90" aria-hidden="true" />
@@ -67,7 +67,7 @@ export const ConsentBanner = ({ show, setShow }) => {
           <Button
             variant="outline"
             onClick={handleDecline}
-            className="text-xs py-2 px-4 h-8 transition-all duration-300 ease-out hover:bg-zinc-800 hover:border-zinc-600"
+            className="h-8 px-4 py-2 text-xs hover:border-zinc-600 hover:bg-zinc-800"
           >
             Decline
           </Button>

@@ -17,7 +17,7 @@ const parseNotamLinks = (content) => {
   // Add target="_blank" and rel="noopener noreferrer" for security
   const sanitizedContent = content.replace(
     linkRegex,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline hover:brightness-125 transition-all">$1</a>'
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-150 hover:brightness-125">$1</a>'
   );
 
   // Sanitize the content to prevent XSS attacks
@@ -153,6 +153,10 @@ export const Navbar = () => {
   const toggleMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
+
+  const mobileLinkClasses =
+    'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
+
   return (
     <>
       {' '}
@@ -282,9 +286,9 @@ export const Navbar = () => {
               <button
                 onClick={toggleMenu}
                 type="button"
-                className="inline-flex items-center justify-center p-2 rounded-md text-zinc-400 hover:text-white focus:outline-none"
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md p-2 text-zinc-400 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 aria-controls="mobile-menu"
-                aria-expanded="false"
+                aria-expanded={mobileMenuOpen}
               >
                 <span className="sr-only">Open main menu</span>
                 {mobileMenuOpen ? (
@@ -298,25 +302,25 @@ export const Navbar = () => {
         </div>
         {/* Mobile menu, show/hide based on menu state with smooth animation */}
         <div
-          className={`md:hidden fixed inset-x-0 transform transition-all duration-300 ease-in-out ${
+          className={`md:hidden fixed inset-x-0 transform transition-[opacity,transform] duration-200 ease-out ${
             mobileMenuOpen
               ? 'translate-y-0 opacity-100'
               : '-translate-y-2 opacity-0 pointer-events-none'
           }`}
           id="mobile-menu"
         >
-          <div className="bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 shadow-lg rounded-b-xl mx-2">
+          <div className="mx-2 rounded-b-xl border-b border-zinc-800 bg-zinc-900/95 backdrop-blur-md">
             <div className="px-5 py-4 space-y-1">
               <Link
                 to="/about"
-                className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
+                className={mobileLinkClasses}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">About</span>
               </Link>
               <Link
                 to="/contribute"
-                className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
+                className={mobileLinkClasses}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">Contribute</span>
@@ -325,7 +329,7 @@ export const Navbar = () => {
                 href="https://docs.stopbars.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
+                className={mobileLinkClasses}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">Documentation</span>
@@ -334,7 +338,7 @@ export const Navbar = () => {
                 href="https://opencollective.com/stopbars"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center space-x-3 text-zinc-300 hover:text-white hover:bg-zinc-800/70 rounded-lg p-3 transition-all"
+                className={mobileLinkClasses}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">Donate</span>

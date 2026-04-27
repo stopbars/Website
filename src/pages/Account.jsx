@@ -42,6 +42,7 @@ const Account = () => {
   const [pendingDisplayMode, setPendingDisplayMode] = useState(null);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showErrorToast, setShowErrorToast] = useState(false);
+  const [displayModeErrorMessage, setDisplayModeErrorMessage] = useState('');
   const [showRegenerateSuccessToast, setShowRegenerateSuccessToast] = useState(false);
   const [showRegenerateErrorToast, setShowRegenerateErrorToast] = useState(false);
   const [regenerateErrorMessage, setRegenerateErrorMessage] = useState('');
@@ -55,29 +56,25 @@ const Account = () => {
     return stored === 'true';
   });
   const cidCopyTimeoutRef = useRef(null);
-  const displayModeRequestRef = useRef({ id: 0, controller: null });
+  const displayModeRequestRef = useRef({ id: 0, controller: null, inFlight: false });
+  const displayModeSaveTimeoutRef = useRef(null);
+  const desiredDisplayModeRef = useRef(Number(user?.display_mode ?? 0));
+  const confirmedDisplayModeRef = useRef(Number(user?.display_mode ?? 0));
   const refreshDebounceRef = useRef(null);
 
   // Sync local state when user loads / changes
   useEffect(() => {
     // Don't override local selection while a change is pending
     if (isDisplayModeSaving) return;
-    if (user?.display_mode !== undefined && user.display_mode !== displayMode) {
-      setDisplayMode(user.display_mode);
+    if (user?.display_mode !== undefined) {
+      const mode = Number(user.display_mode);
+      desiredDisplayModeRef.current = mode;
+      confirmedDisplayModeRef.current = mode;
+      if (mode !== Number(displayMode)) {
+        setDisplayMode(mode);
+      }
     }
   }, [user?.display_mode, displayMode, isDisplayModeSaving]);
-
-  // When server reflects the pending mode, clear saving state
-  useEffect(() => {
-    if (
-      isDisplayModeSaving &&
-      pendingDisplayMode != null &&
-      user?.display_mode === pendingDisplayMode
-    ) {
-      setIsDisplayModeSaving(false);
-      setPendingDisplayMode(null);
-    }
-  }, [user?.display_mode, isDisplayModeSaving, pendingDisplayMode]);
 
   useEffect(() => {
     const fetchStaffRole = async () => {
@@ -291,79 +288,145 @@ const Account = () => {
     }
   };
 
-  const handleUpdateDisplayMode = (newMode) => {
-    // Avoid redundant updates
-    const sameAsUser = Number(user?.display_mode) === Number(newMode);
-    const sameAsPending = Number(pendingDisplayMode) === Number(newMode);
-    if ((sameAsUser && !isDisplayModeSaving) || (sameAsPending && isDisplayModeSaving)) {
+  const scheduleDisplayModeSave = (delay = 220) => {
+    if (displayModeSaveTimeoutRef.current) {
+      clearTimeout(displayModeSaveTimeoutRef.current);
+    }
+    displayModeSaveTimeoutRef.current = setTimeout(() => {
+      displayModeSaveTimeoutRef.current = null;
+      flushDisplayModeSave();
+    }, delay);
+  };
+
+  const flushDisplayModeSave = async () => {
+    if (displayModeRequestRef.current.inFlight) return;
+
+    const modeToSave = desiredDisplayModeRef.current;
+    if (Number(confirmedDisplayModeRef.current) === Number(modeToSave)) {
+      setIsDisplayModeSaving(false);
+      setPendingDisplayMode(null);
       return;
     }
+
     const token = getVatsimToken();
-    const prevUser = user ? { ...user } : null;
-    setDisplayMode(newMode);
-
-    // Optimistic update of user in context
-    if (user) {
-      const optimisticName = computeDisplayName(user.full_name, user.vatsim_id, newMode);
-      setUser({ ...user, display_mode: newMode, display_name: optimisticName });
-    }
-    setIsDisplayModeSaving(true);
-    setPendingDisplayMode(newMode);
-
-    // Fire & forget request
-    // Cancel any in-flight request (latest-wins)
-    if (displayModeRequestRef.current.controller) {
-      displayModeRequestRef.current.controller.abort();
-    }
     const controller = new AbortController();
     const requestId = (displayModeRequestRef.current.id || 0) + 1;
-    displayModeRequestRef.current = { id: requestId, controller };
+    displayModeRequestRef.current = { id: requestId, controller, inFlight: true };
 
-    fetch('https://v2.stopbars.com/auth/display-mode', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Vatsim-Token': token,
-      },
-      body: JSON.stringify({ mode: newMode }),
-      signal: controller.signal,
-    })
-      .then((res) => {
-        // Ignore stale responses
-        if (displayModeRequestRef.current.id !== requestId) return;
-        if (!res.ok) throw new Error('Failed');
-        setShowSuccessToast(true);
-        setIsDisplayModeSaving(false);
-        setPendingDisplayMode(null);
-        // Debounced background refresh to align with server canonical values
-        if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
-        refreshDebounceRef.current = setTimeout(() => {
-          // Silent refresh so we don't toggle global loading state
-          refreshUserData({ silent: true }).catch(() => {});
-          refreshDebounceRef.current = null;
-        }, 600);
-      })
-      .catch((err) => {
-        // Handle abort errors and stale responses
-        const aborted = err?.name === 'AbortError';
-        if (aborted) {
-          // If the aborted request is still considered the latest, clear pending so user can retry
-          if (displayModeRequestRef.current.id === requestId) {
-            setIsDisplayModeSaving(false);
-            setPendingDisplayMode(null);
-          }
-          return;
+    let shouldSaveLatest = false;
+    let savedLatest = false;
+    let aborted = false;
+
+    try {
+      const response = await fetch('https://v2.stopbars.com/auth/display-mode', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Vatsim-Token': token,
+        },
+        body: JSON.stringify({ mode: modeToSave }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        let apiMessage = '';
+        try {
+          const data = await response.json();
+          apiMessage = data?.message || data?.error || '';
+        } catch {
+          apiMessage = '';
         }
-        if (displayModeRequestRef.current.id !== requestId) return;
+
+        const error = new Error(apiMessage || 'Failed to save display name preference');
+        error.status = response.status;
+        error.apiMessage = apiMessage;
+        throw error;
+      }
+
+      confirmedDisplayModeRef.current = modeToSave;
+      if (Number(desiredDisplayModeRef.current) === Number(modeToSave)) {
+        savedLatest = true;
+      } else {
+        shouldSaveLatest = true;
+      }
+    } catch (err) {
+      aborted = err?.name === 'AbortError';
+      if (
+        !aborted &&
+        err?.status !== 429 &&
+        Number(desiredDisplayModeRef.current) !== Number(modeToSave)
+      ) {
+        shouldSaveLatest = true;
+      } else if (!aborted) {
+        const rollbackMode = confirmedDisplayModeRef.current;
         console.error('Failed to persist display mode:', err);
+        desiredDisplayModeRef.current = rollbackMode;
+        setDisplayMode(rollbackMode);
+        setUser((prevUser) =>
+          prevUser
+            ? {
+                ...prevUser,
+                display_mode: rollbackMode,
+                display_name: computeDisplayName(
+                  prevUser.full_name,
+                  prevUser.vatsim_id,
+                  rollbackMode
+                ),
+              }
+            : prevUser
+        );
+        setDisplayModeErrorMessage(
+          err?.status === 429
+            ? err.apiMessage ||
+                'Rate limit hit. Please wait a moment before changing your display name preference again.'
+            : 'Failed to save preference, display name has been reverted.'
+        );
         setShowErrorToast(true);
         setIsDisplayModeSaving(false);
         setPendingDisplayMode(null);
-        if (prevUser) {
-          setUser(prevUser);
-          setDisplayMode(prevUser.display_mode);
-        }
-      });
+      }
+    } finally {
+      if (displayModeRequestRef.current.id === requestId) {
+        displayModeRequestRef.current = { id: requestId, controller: null, inFlight: false };
+      }
+
+      if (shouldSaveLatest) {
+        scheduleDisplayModeSave(0);
+      } else if (savedLatest && !aborted) {
+        setShowSuccessToast(true);
+        setIsDisplayModeSaving(false);
+        setPendingDisplayMode(null);
+
+        if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = setTimeout(() => {
+          refreshUserData({ silent: true }).catch(() => {});
+          refreshDebounceRef.current = null;
+        }, 600);
+      }
+    }
+  };
+
+  const handleUpdateDisplayMode = (newMode) => {
+    const numericMode = Number(newMode);
+    if (Number(desiredDisplayModeRef.current) === numericMode) return;
+
+    desiredDisplayModeRef.current = numericMode;
+    setDisplayMode(numericMode);
+    setIsDisplayModeSaving(true);
+    setPendingDisplayMode(numericMode);
+    setDisplayModeErrorMessage('');
+
+    setUser((prevUser) =>
+      prevUser
+        ? {
+            ...prevUser,
+            display_mode: numericMode,
+            display_name: computeDisplayName(prevUser.full_name, prevUser.vatsim_id, numericMode),
+          }
+        : prevUser
+    );
+
+    scheduleDisplayModeSave();
   };
 
   // Cleanup on unmount: abort any in-flight request and clear timers
@@ -371,6 +434,10 @@ const Account = () => {
     return () => {
       if (displayModeRequestRef.current.controller) {
         displayModeRequestRef.current.controller.abort();
+      }
+      if (displayModeSaveTimeoutRef.current) {
+        clearTimeout(displayModeSaveTimeoutRef.current);
+        displayModeSaveTimeoutRef.current = null;
       }
       if (refreshDebounceRef.current) {
         clearTimeout(refreshDebounceRef.current);
@@ -468,6 +535,7 @@ const Account = () => {
                         variant="outline"
                         size="sm"
                         onClick={handleCopyApiKey}
+                        static
                         className={`min-w-25 ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
                       >
                         {copySuccess ? (
@@ -577,8 +645,12 @@ const Account = () => {
                     </p>
                     {user?.display_name && (
                       <div className="mt-3 sm:mt-0 sm:absolute sm:top-6 sm:right-6">
-                        <div className="text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60 whitespace-nowrap inline-block">
-                          Current: <span className="font-medium">{user.display_name}</span>
+                        <div className="inline-flex items-center gap-2 text-sm text-zinc-300 bg-zinc-800/60 px-3 py-1 rounded-full border border-zinc-700/60 whitespace-nowrap">
+                          {isDisplayModeSaving && (
+                            <Loader className="w-3.5 h-3.5 animate-spin text-blue-300" />
+                          )}
+                          <span>{isDisplayModeSaving ? 'Saving' : 'Current'}:</span>
+                          <span className="font-medium">{user.display_name}</span>
                         </div>
                       </div>
                     )}
@@ -586,18 +658,26 @@ const Account = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     {displayModeOptions.map((opt) => {
                       const active = Number(displayMode) === opt.value;
+                      const savingThisOption =
+                        isDisplayModeSaving && Number(pendingDisplayMode) === opt.value;
                       return (
                         <button
                           key={opt.value}
                           type="button"
+                          aria-pressed={active}
+                          aria-busy={savingThisOption}
                           onClick={() => handleUpdateDisplayMode(opt.value)}
-                          className={`text-left group relative rounded-lg border p-4 transition-all ${active ? 'border-blue-500/60 bg-blue-500/10' : 'border-zinc-800/70 hover:border-zinc-600/60 hover:bg-zinc-800/40'}`}
+                          className={`text-left group relative rounded-lg border p-4 transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${active ? 'border-blue-500/60 bg-blue-500/10 shadow-[0_0_0_1px_rgba(59,130,246,0.12)]' : 'border-zinc-800/70 hover:border-zinc-600/60 hover:bg-zinc-800/40'}`}
                         >
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-medium">{opt.label}</span>
                             <span
-                              className={`w-3 h-3 rounded-full border ${active ? 'bg-blue-500 border-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'border-zinc-600 group-hover:border-zinc-400'}`}
-                            ></span>
+                              className={`grid place-items-center w-3 h-3 rounded-full border transition-[background-color,border-color,box-shadow] duration-200 ${active ? 'bg-blue-500 border-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'border-zinc-600 group-hover:border-zinc-400'}`}
+                            >
+                              {savingThisOption && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse" />
+                              )}
+                            </span>
                           </div>
                           <p className="text-xs text-zinc-400">
                             Example: <span className="text-zinc-300 font-mono">{opt.example}</span>
@@ -803,8 +883,10 @@ const Account = () => {
       />
 
       <Toast
-        title="Error"
-        description="Failed to save preference, display name has been reverted."
+        title="Could Not Save Display Name"
+        description={
+          displayModeErrorMessage || 'Failed to save preference, display name has been reverted.'
+        }
         variant="destructive"
         show={showErrorToast}
         onClose={() => setShowErrorToast(false)}

@@ -10,10 +10,13 @@ const Select = ({ value, onValueChange, placeholder, disabled, error, children }
       <button
         type="button"
         onClick={() => !disabled && setOpen(!open)}
+        aria-expanded={open}
         className={`
-          relative w-full flex items-center justify-between 
+          relative flex min-h-10 w-full items-center justify-between
           rounded-md border px-3 py-2 text-sm
-          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-800/50'}
+          transition-[background-color,border-color,transform,opacity] duration-150 ease-out
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-800/50 active:scale-[0.99]'}
           ${error ? 'border-red-500' : 'border-zinc-700'}
           ${open ? 'border-blue-500 ring-2 ring-blue-500/20' : ''}
         `}
@@ -32,8 +35,8 @@ const Select = ({ value, onValueChange, placeholder, disabled, error, children }
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div
             className={`
-            absolute z-40 w-full mt-1 rounded-md border border-zinc-700 
-            bg-zinc-900 shadow-lg max-h-60 overflow-auto
+            absolute z-40 mt-1 max-h-60 w-full overflow-auto rounded-md border border-zinc-700
+            bg-zinc-900 animate-in fade-in-0 zoom-in-95 duration-150
           `}
           >
             {children({
@@ -81,7 +84,9 @@ const SelectItem = React.forwardRef(({ value, children, disabled }, ref) => {
     <button
       ref={ref || itemRef}
       className={`
-        relative flex w-full items-center px-3 py-2 text-sm
+        relative flex min-h-10 w-full items-center px-3 py-2 text-sm
+        transition-[background-color,color,opacity] duration-150 ease-out
+        focus-visible:outline-none focus-visible:bg-zinc-800
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-800'}
       `}
       onClick={() => !disabled && itemRef.current?.click()}

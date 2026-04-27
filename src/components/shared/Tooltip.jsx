@@ -7,7 +7,7 @@ export const Tooltip = ({ children, content, className = '', open = false }) => 
     <div className={`relative flex items-center group ${className}`}>
       {children}
       <div
-        className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-zinc-900 text-white text-xs rounded transition-opacity duration-200 whitespace-nowrap border border-zinc-700 z-50 shadow-md ${open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        className={`absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white whitespace-nowrap transition-opacity duration-150 ${open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
       >
         {content}
         {/* Arrow */}

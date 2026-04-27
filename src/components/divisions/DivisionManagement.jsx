@@ -1460,7 +1460,7 @@ const DivisionManagement = () => {
               />
             </div>
           </div>
-          <div className="flex gap-3 pt-2 justify-end">
+          <div className="flex gap-3 pt-2 justify-between">
             <Button
               type="submit"
               disabled={addingMember || !newMemberCid || !canManageMembers}
@@ -1527,7 +1527,7 @@ const DivisionManagement = () => {
               Enter the 4-letter ICAO code for the airport.
             </p>
           </div>
-          <div className="flex gap-3 pt-2 justify-end">
+          <div className="flex gap-3 pt-2 justify-between">
             <Button type="submit" disabled={addingAirport || newAirportIcao.length !== 4}>
               {addingAirport ? (
                 <>

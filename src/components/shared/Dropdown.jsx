@@ -55,27 +55,28 @@ export function Dropdown({
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
         type="button"
+        aria-expanded={isOpen}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           if (!disabled) setIsOpen(!isOpen);
         }}
         disabled={disabled}
-        className={`flex items-center justify-between w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white transition-all duration-200 hover:border-zinc-600 ${
+        className={`flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white transition-[background-color,border-color,transform,opacity] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
           disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
-        <span className="transition-colors duration-200 truncate min-w-0 mr-1 flex items-center gap-2">
+        <span className="mr-2 flex min-w-0 items-center gap-2 truncate transition-colors duration-150">
           {TriggerIcon && <TriggerIcon className="w-4 h-4 shrink-0" />}
           {currentOption?.label || placeholder}
         </span>
         <ChevronDown
-          className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 transition-transform duration-150 ease-out ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-150">
           {options.map((option, index) => {
             if (option.isHeader) {
               return (
@@ -97,7 +98,7 @@ export function Dropdown({
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className={`w-full px-4 py-2.5 text-left hover:bg-zinc-700 transition-all duration-150 flex items-center gap-2 ${
+                className={`flex min-h-10 w-full items-center gap-2 px-4 py-2.5 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
                   value === option.value
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'

@@ -18,7 +18,7 @@ export const Toast = ({
     setTimeout(() => {
       setIsVisible(false);
       if (onClose) onClose();
-    }, 500); // Wait for exit animation
+    }, 300); // Wait for exit animation
   }, [onClose]);
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export const Toast = ({
       setIsAnimating(false);
       finalizeTimer = setTimeout(() => {
         setIsVisible(false);
-      }, 500);
+      }, 300);
     }, 0);
 
     return () => {
@@ -73,25 +73,25 @@ export const Toast = ({
   // Variant styles
   const variants = {
     default: {
-      container: 'bg-zinc-900/95 border-zinc-700 text-white shadow-xl backdrop-blur-sm',
+      container: 'bg-zinc-900/95 border-zinc-700 text-white backdrop-blur-sm',
       icon: 'text-white/90',
       title: 'text-white',
       description: 'text-zinc-400',
     },
     success: {
-      container: 'bg-green-900/90 border-green-700 text-white shadow-xl backdrop-blur-sm',
+      container: 'bg-green-900/90 border-green-700 text-white backdrop-blur-sm',
       icon: 'text-green-400',
       title: 'text-green-100',
       description: 'text-green-200',
     },
     warning: {
-      container: 'bg-orange-900/90 border-orange-700 text-white shadow-xl backdrop-blur-sm',
+      container: 'bg-orange-900/90 border-orange-700 text-white backdrop-blur-sm',
       icon: 'text-orange-400',
       title: 'text-orange-100',
       description: 'text-orange-200',
     },
     destructive: {
-      container: 'bg-red-900/90 border-red-700 text-white shadow-xl backdrop-blur-sm',
+      container: 'bg-red-900/90 border-red-700 text-white backdrop-blur-sm',
       icon: 'text-red-400',
       title: 'text-red-100',
       description: 'text-red-200',
@@ -104,7 +104,7 @@ export const Toast = ({
     <div
       className={`
         fixed bottom-4 left-4 right-4 sm:right-auto sm:left-4 z-50 sm:max-w-sm sm:w-full
-        transform transition-all duration-500 ease-out
+        transform transition-[opacity,transform] duration-300 ease-out
         ${
           isAnimating
             ? 'translate-x-0 opacity-100 scale-100'
@@ -116,14 +116,14 @@ export const Toast = ({
         className={`
           ${currentVariant.container}
           border rounded-xl p-5 relative
-          transform transition-all duration-500 ease-out
-          ${isAnimating ? 'translate-y-0 scale-100' : 'translate-y-2 scale-98'}
+          transform transition-[opacity,transform] duration-300 ease-out
+          ${isAnimating ? 'translate-y-0 scale-100' : 'translate-y-2 scale-[0.98]'}
         `}
       >
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-3 right-3 p-1 hover:bg-white/10 rounded-full transition-colors duration-200"
+          className="absolute right-3 top-3 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full p-1 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-white/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35"
           aria-label="Close notification"
         >
           <X className="w-4 h-4 text-current opacity-70 hover:opacity-100" />
