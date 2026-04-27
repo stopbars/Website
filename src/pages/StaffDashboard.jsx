@@ -18,7 +18,6 @@ import {
   RefreshCw,
   Loader,
   TowerControl,
-  FileUp,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Dropdown } from '../components/shared/Dropdown';
@@ -35,7 +34,6 @@ import ReleaseManagement from '../components/staff/ReleaseManagement';
 import StaffManagement from '../components/staff/StaffManagement';
 import ContactMessages from '../components/staff/ContactMessages';
 import PackagesManagement from '../components/staff/PackagesManagement';
-import VatSysProfiles from '../components/staff/VatSysProfiles';
 import CacheManagement from '../components/staff/CacheManagement';
 import BanManagement from '../components/staff/BanManagement';
 
@@ -81,14 +79,6 @@ const TABS = {
     roles: ['lead_developer'],
     description: 'Upload installer data packages (models & removals)',
     component: PackagesManagement,
-  },
-  vatsysProfiles: {
-    id: 'vatsysProfiles',
-    label: 'vatSys Profiles',
-    icon: FileUp,
-    roles: ['lead_developer'],
-    description: 'Manage public vatSys profile XMLs',
-    component: VatSysProfiles,
   },
   cacheManagement: {
     id: 'cacheManagement',
@@ -309,7 +299,7 @@ const StaffDashboard = () => {
       },
       {
         label: 'Data Management',
-        ids: ['packagesManagement', 'vatsysProfiles'],
+        ids: ['packagesManagement'],
       },
     ];
     const opts = [];
@@ -564,8 +554,7 @@ const StaffDashboard = () => {
                   )}
                   {/* Data Management Group (packages) */}
                   {Object.values(TABS).some(
-                    (tab) =>
-                      ['packagesManagement', 'vatsysProfiles'].includes(tab.id) && hasTabAccess(tab)
+                    (tab) => ['packagesManagement'].includes(tab.id) && hasTabAccess(tab)
                   ) && (
                     <div className="space-y-1 mb-2">
                       <div className="px-4 py-2">
@@ -574,8 +563,7 @@ const StaffDashboard = () => {
                       {Object.values(TABS)
                         .filter(
                           (tab) =>
-                            ['packagesManagement', 'vatsysProfiles'].includes(tab.id) &&
-                            hasTabAccess(tab)
+                            ['packagesManagement'].includes(tab.id) && hasTabAccess(tab)
                         )
                         .map((tab) => {
                           const Icon = tab.icon;

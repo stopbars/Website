@@ -318,10 +318,7 @@ const ContributionDashboard = () => {
                 </Button>
               </Tooltip>
             ) : (
-              <Button
-                onClick={handleContributeClick}
-                className="flex items-center space-x-2"
-              >
+              <Button onClick={handleContributeClick} className="flex items-center space-x-2">
                 <Plus className="w-4 h-4" />
                 <span>Contribute New Airport</span>
               </Button>

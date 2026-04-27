@@ -21,6 +21,7 @@ import {
   ImageUp,
   Lock,
   LockOpen,
+  Link2,
 } from 'lucide-react';
 import { Dropdown } from '../shared/Dropdown';
 import { Layout } from '../layout/Layout';
@@ -1229,6 +1230,27 @@ const emptyFormState = {
   ihp: false,
 };
 
+const getPointCenterCoordinate = (point) => {
+  const coords = Array.isArray(point?.coordinates) ? point.coordinates : [];
+  const validCoords = coords.filter(
+    (coord) => typeof coord?.lat === 'number' && typeof coord?.lng === 'number'
+  );
+  if (validCoords.length === 0) return null;
+
+  const total = validCoords.reduce(
+    (sum, coord) => ({
+      lat: sum.lat + coord.lat,
+      lng: sum.lng + coord.lng,
+    }),
+    { lat: 0, lng: 0 }
+  );
+
+  return {
+    lat: total.lat / validCoords.length,
+    lng: total.lng / validCoords.length,
+  };
+};
+
 const MIN_OVERLAY_SIZE_PX = 24;
 const PICK_DRAG_THRESHOLD_PX = 6;
 const ROTATION_HANDLE_OFFSET_PX = 28;
@@ -2073,6 +2095,13 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
   const [manualCoordsErrors, setManualCoordsErrors] = useState([]);
   const [manualGenerateState, setManualGenerateState] = useState('idle'); // idle | generating | generated
   const [manualPlacedId, setManualPlacedId] = useState(null); // temp id of placed-but-not-yet-continued feature
+  const [linkMap, setLinkMap] = useState({});
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [linksError, setLinksError] = useState(null);
+  const [linkActionState, setLinkActionState] = useState({ status: 'idle', id: '' });
+  const [linkPickStopbarId, setLinkPickStopbarId] = useState(null);
+  const [linkDraftOriginalLeadOnIds, setLinkDraftOriginalLeadOnIds] = useState([]);
+  const [linkDraftLeadOnIds, setLinkDraftLeadOnIds] = useState([]);
   useEffect(() => {
     drawingCoordsRef.current = drawingCoords;
   }, [drawingCoords]);
@@ -2594,6 +2623,126 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     }
   }, [existingPoints.length, remotePoints, remoteLoading, triggerFetchPoints]);
 
+  const triggerFetchLinks = useCallback(async () => {
+    if (!icao || isEuroscopeOnly) return;
+    try {
+      setLinksLoading(true);
+      setLinksError(null);
+      const resp = await fetch(
+        `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/links`,
+        {
+          headers: token ? { 'X-Vatsim-Token': token } : undefined,
+        }
+      );
+      if (!resp.ok) throw new Error(`Failed to load links (${resp.status})`);
+      const data = await resp.json();
+      const rawLinks = data?.links && typeof data.links === 'object' ? data.links : {};
+      const normalizedLinks = Object.fromEntries(
+        Object.entries(rawLinks).map(([stopbarId, leadOnIds]) => [
+          stopbarId,
+          Array.isArray(leadOnIds) ? [...new Set(leadOnIds.filter(Boolean))] : [],
+        ])
+      );
+      setLinkMap(normalizedLinks);
+    } catch (e) {
+      setLinksError(e.message);
+    } finally {
+      setLinksLoading(false);
+    }
+  }, [icao, isEuroscopeOnly, token]);
+
+  useEffect(() => {
+    triggerFetchLinks();
+  }, [triggerFetchLinks]);
+
+  const mutateAirportLinks = useCallback(
+    async ({ link = [], unlink = [] }) => {
+      const token = getVatsimToken();
+      if (!token) {
+        setToastConfig({
+          title: 'Login Required',
+          description: 'Please login to update lead-on links.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+        return;
+      }
+
+      const payload = {};
+      if (link.length) payload.link = link;
+      if (unlink.length) payload.unlink = unlink;
+      if (!payload.link && !payload.unlink) return true;
+
+      const action = link[0] || unlink[0];
+      const actionId =
+        link.length + unlink.length > 1
+          ? 'bulk'
+          : `${payload.link ? 'link' : 'unlink'}:${action.stopbarId}:${action.leadOnId}`;
+      setLinkActionState({ status: 'saving', id: actionId });
+
+      try {
+        const resp = await fetch(
+          `https://v2.stopbars.com/airports/${encodeURIComponent(icao)}/links/bulk`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Vatsim-Token': token,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        if (!resp.ok) {
+          let msg = '';
+          try {
+            const j = await resp.json();
+            msg = j?.error || j?.message || '';
+          } catch {
+            /* ignore */
+          }
+          throw new Error(msg || `Link update failed (${resp.status})`);
+        }
+
+        setLinkMap((prev) => {
+          const next = Object.fromEntries(
+            Object.entries(prev).map(([stopbarId, leadOnIds]) => [stopbarId, [...leadOnIds]])
+          );
+
+          link.forEach(({ stopbarId, leadOnId }) => {
+            const existing = next[stopbarId] || [];
+            if (!existing.includes(leadOnId)) next[stopbarId] = [...existing, leadOnId];
+          });
+
+          unlink.forEach(({ stopbarId, leadOnId }) => {
+            next[stopbarId] = (next[stopbarId] || []).filter((id) => id !== leadOnId);
+            if (next[stopbarId].length === 0) delete next[stopbarId];
+          });
+
+          return next;
+        });
+        setToastConfig({
+          title: link.length || unlink.length ? 'Lead-on Links Saved' : 'No Link Changes',
+          description: 'The stopbar lead-on links have been updated.',
+          variant: 'success',
+        });
+        setShowToast(true);
+        return true;
+      } catch (e) {
+        setToastConfig({
+          title: 'Link Update Failed',
+          description: e.message || 'An error occurred while updating links.',
+          variant: 'destructive',
+        });
+        setShowToast(true);
+        return false;
+      } finally {
+        setLinkActionState({ status: 'idle', id: '' });
+      }
+    },
+    [icao]
+  );
+
   const extractCoords = useCallback((layer) => {
     if (!layer) return [];
     if (layer.getLatLng) {
@@ -2662,6 +2811,19 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
 
   const registerSelect = useCallback(
     (layer, id, isNew = false) => {
+      if (linkPickStopbarId && !isNew && !changeset.delete.includes(id)) {
+        const point = existingMap[id];
+        if (point?.type === 'lead_on') {
+          if (linkActionState.status === 'saving') return;
+          setLinkDraftLeadOnIds((current) => {
+            if (current.includes(id)) return current.filter((leadOnId) => leadOnId !== id);
+            return [...current, id];
+          });
+          return;
+        }
+        return;
+      }
+
       if (creatingNew && !isNew) {
         return;
       }
@@ -2790,7 +2952,16 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
         styleLayerByPoint(lyr, ptData, pid === id, isDeleted);
       });
     },
-    [existingMap, changeset, pushGeometryChange, extractCoords, creatingNew, manualCoordsMode]
+    [
+      existingMap,
+      changeset,
+      pushGeometryChange,
+      extractCoords,
+      creatingNew,
+      manualCoordsMode,
+      linkPickStopbarId,
+      linkActionState.status,
+    ]
   );
 
   // Place a new object on the map from manually-entered coordinates (generate step)
@@ -3337,6 +3508,124 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
     searchQuery,
   ]);
 
+  const selectedExistingPoint = useMemo(() => {
+    if (!selectedId || selectedId.startsWith('new_')) return null;
+    return existingMap[selectedId] || null;
+  }, [existingMap, selectedId]);
+
+  useEffect(() => {
+    const canKeepPicking =
+      selectedExistingPoint?.id === linkPickStopbarId &&
+      selectedExistingPoint?.type === 'stopbar' &&
+      !changeset.delete.includes(linkPickStopbarId);
+    if (linkPickStopbarId && !canKeepPicking) {
+      setLinkPickStopbarId(null);
+      setLinkDraftOriginalLeadOnIds([]);
+      setLinkDraftLeadOnIds([]);
+    }
+  }, [changeset.delete, linkPickStopbarId, selectedExistingPoint]);
+
+  const existingLeadOnCount = useMemo(
+    () =>
+      activeExistingPoints.filter(
+        (point) => point.type === 'lead_on' && !changeset.delete.includes(point.id)
+      ).length,
+    [activeExistingPoints, changeset.delete]
+  );
+
+  const selectedStopbarLeadOnIds = useMemo(() => {
+    if (!selectedExistingPoint || selectedExistingPoint.type !== 'stopbar') return [];
+    return linkMap[selectedExistingPoint.id] || [];
+  }, [linkMap, selectedExistingPoint]);
+
+  const displayedStopbarLeadOnIds =
+    linkPickStopbarId === selectedExistingPoint?.id ? linkDraftLeadOnIds : selectedStopbarLeadOnIds;
+
+  const linkDraftChangeCount = useMemo(() => {
+    if (!linkPickStopbarId) return 0;
+    const original = new Set(linkDraftOriginalLeadOnIds);
+    const draft = new Set(linkDraftLeadOnIds);
+    let count = 0;
+    draft.forEach((leadOnId) => {
+      if (!original.has(leadOnId)) count += 1;
+    });
+    original.forEach((leadOnId) => {
+      if (!draft.has(leadOnId)) count += 1;
+    });
+    return count;
+  }, [linkDraftLeadOnIds, linkDraftOriginalLeadOnIds, linkPickStopbarId]);
+
+  const startLinkPickMode = useCallback(() => {
+    if (!selectedExistingPoint || selectedExistingPoint.type !== 'stopbar') return;
+    const currentLeadOnIds = linkMap[selectedExistingPoint.id] || [];
+    setLinkPickStopbarId(selectedExistingPoint.id);
+    setLinkDraftOriginalLeadOnIds([...currentLeadOnIds]);
+    setLinkDraftLeadOnIds([...currentLeadOnIds]);
+  }, [linkMap, selectedExistingPoint]);
+
+  const saveLinkPickMode = useCallback(async () => {
+    if (!linkPickStopbarId) return;
+    const original = new Set(linkDraftOriginalLeadOnIds);
+    const draft = new Set(linkDraftLeadOnIds);
+    const link = linkDraftLeadOnIds
+      .filter((leadOnId) => !original.has(leadOnId))
+      .map((leadOnId) => ({ stopbarId: linkPickStopbarId, leadOnId }));
+    const unlink = linkDraftOriginalLeadOnIds
+      .filter((leadOnId) => !draft.has(leadOnId))
+      .map((leadOnId) => ({ stopbarId: linkPickStopbarId, leadOnId }));
+
+    if (link.length === 0 && unlink.length === 0) {
+      setLinkPickStopbarId(null);
+      setLinkDraftOriginalLeadOnIds([]);
+      setLinkDraftLeadOnIds([]);
+      return;
+    }
+
+    const saved = await mutateAirportLinks({ link, unlink });
+    if (saved) {
+      setLinkPickStopbarId(null);
+      setLinkDraftOriginalLeadOnIds([]);
+      setLinkDraftLeadOnIds([]);
+    }
+  }, [linkDraftLeadOnIds, linkDraftOriginalLeadOnIds, linkPickStopbarId, mutateAirportLinks]);
+
+  const linkPreviewLines = useMemo(() => {
+    if (!linkPickStopbarId) return [];
+    const stopbar = existingMap[linkPickStopbarId];
+    const stopbarCenter = getPointCenterCoordinate(stopbar);
+    if (!stopbarCenter) return [];
+
+    return linkDraftLeadOnIds
+      .map((leadOnId) => {
+        const leadOnCenter = getPointCenterCoordinate(existingMap[leadOnId]);
+        if (!leadOnCenter) return null;
+        return {
+          id: `${linkPickStopbarId}-${leadOnId}`,
+          positions: [
+            [stopbarCenter.lat, stopbarCenter.lng],
+            [leadOnCenter.lat, leadOnCenter.lng],
+          ],
+        };
+      })
+      .filter(Boolean);
+  }, [existingMap, linkDraftLeadOnIds, linkPickStopbarId]);
+
+  const linkPreviewOutlines = useMemo(() => {
+    if (!linkPickStopbarId) return [];
+
+    return linkDraftLeadOnIds
+      .map((leadOnId) => {
+        const leadOn = existingMap[leadOnId];
+        const coords = Array.isArray(leadOn?.coordinates) ? leadOn.coordinates : [];
+        const positions = coords
+          .filter((coord) => typeof coord?.lat === 'number' && typeof coord?.lng === 'number')
+          .map((coord) => [coord.lat, coord.lng]);
+        if (positions.length < 2) return null;
+        return { id: leadOnId, positions };
+      })
+      .filter(Boolean);
+  }, [existingMap, linkDraftLeadOnIds, linkPickStopbarId]);
+
   const parsedAirportCenter = useMemo(() => {
     if (!airportMeta) return null;
     const lat = parseFloat(airportMeta.latitude);
@@ -3764,6 +4053,20 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 redrawTargetRef={redrawTargetRef}
                 geomanAPIRef={geomanAPIRef}
               />
+              {linkPreviewOutlines.map((outline) => (
+                <Polyline
+                  key={`lead-on-outline-${outline.id}`}
+                  positions={outline.positions}
+                  interactive={false}
+                  pathOptions={{
+                    color: '#facc15',
+                    weight: 18,
+                    opacity: 0.95,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                  }}
+                />
+              ))}
               <PolylineVisualizationOverlay
                 featureLayerMapRef={featureLayerMapRef}
                 changeset={changeset}
@@ -3774,6 +4077,19 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                 drawingCoords={drawingCoords}
                 liveGeometryTick={liveGeometryTick}
               />
+              {linkPreviewLines.map((line) => (
+                <Polyline
+                  key={`lead-on-link-${line.id}`}
+                  positions={line.positions}
+                  interactive={false}
+                  pathOptions={{
+                    color: '#facc15',
+                    weight: 3,
+                    opacity: 0.95,
+                    dashArray: '8 6',
+                  }}
+                />
+              ))}
               {maxBounds && <BoundsController bounds={maxBounds} suppressClamp={!!selectedId} />}
               {maxBounds && (
                 <Rectangle
@@ -3937,6 +4253,68 @@ const AirportPointEditor = ({ existingPoints = [], onChangesetChange, height = '
                     </div>
                   </div>
                 )}
+                {selectedExistingPoint?.type === 'stopbar' &&
+                  !changeset.delete.includes(selectedExistingPoint.id) && (
+                    <div className="rounded-lg bg-zinc-800/45 p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+                      {linksError ? (
+                        <div className="rounded-lg bg-red-500/10 p-2.5 text-xs text-red-300 shadow-[0_0_0_1px_rgba(239,68,68,0.22)]">
+                          <p>{linksError}</p>
+                          <button
+                            type="button"
+                            onClick={triggerFetchLinks}
+                            className="mt-2 font-medium text-red-200 hover:text-white"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <Link2 className="h-4 w-4 text-yellow-300" aria-hidden="true" />
+                              <span className="text-sm font-semibold text-zinc-100">
+                                Lead-on links
+                              </span>
+                              {linksLoading && (
+                                <Loader className="h-3.5 w-3.5 animate-spin text-zinc-500" />
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-zinc-400">
+                              {linkPickStopbarId === selectedExistingPoint.id
+                                ? `${displayedStopbarLeadOnIds.length} selected. ${linkDraftChangeCount} unsaved change${linkDraftChangeCount === 1 ? '' : 's'}.`
+                                : `${displayedStopbarLeadOnIds.length} linked of ${existingLeadOnCount} lead-ons.`}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (linkPickStopbarId === selectedExistingPoint.id) {
+                                saveLinkPickMode();
+                              } else {
+                                startLinkPickMode();
+                              }
+                            }}
+                            disabled={
+                              linksLoading ||
+                              linkActionState.status === 'saving' ||
+                              existingLeadOnCount === 0
+                            }
+                            className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                              linkPickStopbarId === selectedExistingPoint.id
+                                ? 'bg-yellow-400 text-zinc-950 hover:bg-yellow-300'
+                                : 'bg-zinc-700 text-zinc-100 hover:bg-zinc-600'
+                            }`}
+                          >
+                            {linkPickStopbarId === selectedExistingPoint.id
+                              ? linkActionState.status === 'saving'
+                                ? 'Saving...'
+                                : 'Save'
+                              : 'Click Lead-ons'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 {formErrors.length > 0 && (
                   <ul className="text-xs text-red-400 list-disc pl-4">
                     {formErrors.map((err) => (
