@@ -35,7 +35,6 @@ export default defineConfig((): UserConfig => {
           assetFileNames: 'assets/[name]-[hash][extname]',
         },
         treeshake: {
-          preset: 'recommended',
           moduleSideEffects: 'no-external',
         },
       },
