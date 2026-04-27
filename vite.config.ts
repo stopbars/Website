@@ -2,17 +2,42 @@
 import { defineConfig, UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+function leafletPluginGlobals() {
+  return {
+    name: 'leaflet-plugin-globals',
+    transform(code: string, id: string) {
+      const normalizedId = id.replace(/\\/g, '/');
+      if (
+        normalizedId.includes('/node_modules/@geoman-io/leaflet-geoman-free/') &&
+        normalizedId.endsWith('/dist/leaflet-geoman.js')
+      ) {
+        return {
+          code: `import L from 'leaflet';\n${code}`,
+          map: null,
+        };
+      }
+    },
+  };
+}
+
 // stable vendor chunk names so browser caching works across deploys
 function vendorChunkName(id: string) {
   if (!id.includes('node_modules')) return null;
   const parts = id.split('node_modules/')[1].split('/');
   const pkg = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+  if (
+    pkg === 'leaflet' ||
+    pkg === '@geoman-io/leaflet-geoman-free' ||
+    pkg === 'leaflet-polylinedecorator'
+  ) {
+    return 'vendor-leaflet';
+  }
   return `vendor-${pkg.replace('@', '').replace('/', '-')}`;
 }
 
 export default defineConfig((): UserConfig => {
   return {
-    plugins: [react()],
+    plugins: [leafletPluginGlobals(), react()],
 
     resolve: {
       dedupe: ['react', 'react-dom'],
