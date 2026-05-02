@@ -1,13 +1,5 @@
 import { useMemo } from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  ExternalLink,
-  KeyRound,
-  Shield,
-  XCircle,
-} from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, KeyRound, Shield, XCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
 import { Layout } from '../components/layout/Layout';
@@ -105,13 +97,13 @@ export default function AuthGrant() {
         <div className="mx-auto max-w-4xl px-6">
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-white">Authorize API Access</h1>
+              <h1 className="text-3xl font-bold text-white">Authorize Access</h1>
               <p className="mt-2 text-sm text-zinc-400">
-                Review this external token request before continuing.
+                Review this external access request before proceeding
               </p>
             </div>
             <span className="inline-flex w-fit items-center rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300">
-              <Shield className="mr-2 h-4 w-4 text-blue-400" />
+              <Shield className="mr-2 h-4 w-4 text-white" />
               Consent required
             </span>
           </div>
@@ -128,7 +120,7 @@ export default function AuthGrant() {
                       <>
                         <h2 className="text-xl font-semibold text-white">{request.appName}</h2>
                         <p className="mt-1 text-sm text-zinc-400">
-                          Wants access to your BARS API token
+                          Wants access to your BARS API Token
                         </p>
                       </>
                     ) : (
@@ -146,10 +138,10 @@ export default function AuthGrant() {
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
                 <div className="mb-1 flex items-center gap-2 text-sm font-medium text-amber-400">
                   <AlertTriangle className="h-4 w-4" />
-                  Keep your token private
+                  Keep your token secret
                 </div>
                 <p className="text-sm leading-6 text-zinc-300">
-                  Grant only if you trust this application. It can use your API token until you
+                  Grant only if you trust this application. It can use your API Token until you
                   regenerate it from your account page.
                 </p>
               </div>
@@ -168,16 +160,13 @@ export default function AuthGrant() {
                   </div>
                   <div className="px-4 py-3">
                     {request.redirectUrl ? (
-                      <div className="flex min-w-0 items-start gap-3">
-                        <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
-                        <div className="min-w-0">
-                          <p className="break-all text-sm font-medium text-zinc-100">
-                            {request.redirectUrl.origin}
-                          </p>
-                          <p className="mt-1 break-all text-xs text-zinc-500">
-                            {request.redirectUrl.pathname}
-                          </p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="break-all text-sm font-medium text-zinc-100">
+                          {request.redirectUrl.origin}
+                        </p>
+                        <p className="mt-1 break-all text-xs text-zinc-500">
+                          {request.redirectUrl.pathname}
+                        </p>
                       </div>
                     ) : (
                       <p className="text-sm leading-6 text-red-400">{request.redirectError}</p>
@@ -187,19 +176,21 @@ export default function AuthGrant() {
               </div>
 
               <div>
-                <h3 className="mb-3 text-sm font-medium text-zinc-400">This allows</h3>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 p-4 text-sm text-zinc-300">
+                <h3 className="mb-3 text-sm font-medium text-zinc-400">
+                  By granting access, this allows:
+                </h3>
+                <div className="overflow-hidden rounded-lg border border-zinc-800/50 bg-zinc-900/50">
+                  <div className="flex items-start gap-3 border-b border-zinc-800/50 p-4 text-sm text-zinc-300">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-400" />
-                    <p className="mt-3">Authenticate to the BARS API as your account.</p>
+                    <p>Authenticate to the BARS API as your account.</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 p-4 text-sm text-zinc-300">
+                  <div className="flex items-start gap-3 border-b border-zinc-800/50 p-4 text-sm text-zinc-300">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-400" />
-                    <p className="mt-3">Use API access available to your account and roles.</p>
+                    <p>Use API access available to your account and roles.</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 p-4 text-sm text-zinc-300">
+                  <div className="flex items-start gap-3 p-4 text-sm text-zinc-300">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-400" />
-                    <p className="mt-3">Continue working until you regenerate your API token.</p>
+                    <p>Continue working until you regenerate your API token.</p>
                   </div>
                 </div>
               </div>
@@ -226,7 +217,7 @@ export default function AuthGrant() {
                 className="w-full sm:w-auto"
               >
                 <XCircle className="h-4 w-4" />
-                Disallow
+                Deny
               </Button>
 
               {!token ? (
@@ -236,7 +227,7 @@ export default function AuthGrant() {
                   disabled={loading || !hasValidRequest}
                   className="w-full sm:w-auto"
                 >
-                  Sign in to review
+                  Login to review
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               ) : (
