@@ -6,7 +6,16 @@ import { Button } from '../components/shared/Button';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
 import { Toast } from '../components/shared/Toast';
 import XMLMap from '../components/shared/XMLMap';
-import { ChevronRight, FileUp, Check, Loader, FileSearch, Spline, X } from 'lucide-react';
+import {
+  ChevronRight,
+  FileUp,
+  Check,
+  Loader,
+  FileSearch,
+  Spline,
+  X,
+  ExternalLink,
+} from 'lucide-react';
 import {
   fetchContributionPolicy,
   getContributionDisabledMessage,
@@ -23,6 +32,7 @@ const ContributeTest = () => {
   const [xmlData, setXmlData] = useState('');
   const [originalXmlData, setOriginalXmlData] = useState('');
   const [supportsXmlData, setSupportsXmlData] = useState('');
+  const [contributionToken, setContributionToken] = useState('');
   const [error, setError] = useState('');
   const [errorTitle, setErrorTitle] = useState('Error');
   const [showErrorToast, setShowErrorToast] = useState(false);
@@ -53,6 +63,9 @@ const ContributeTest = () => {
     if (!file) {
       setSelectedFile(null);
       setXmlData('');
+      setIsXmlTested(false);
+      setContributionToken('');
+      setSupportsXmlData('');
       return;
     }
 
@@ -66,6 +79,9 @@ const ContributeTest = () => {
       setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
+      setIsXmlTested(false);
+      setContributionToken('');
+      setSupportsXmlData('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -77,6 +93,9 @@ const ContributeTest = () => {
       setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
+      setIsXmlTested(false);
+      setContributionToken('');
+      setSupportsXmlData('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -85,6 +104,8 @@ const ContributeTest = () => {
     setShowErrorToast(false);
     setSelectedFile(file);
     setIsXmlTested(false);
+    setContributionToken('');
+    setSupportsXmlData('');
 
     // Read file content
     const reader = new FileReader();
@@ -182,6 +203,10 @@ const ContributeTest = () => {
         setSupportsXmlData(data.supportsXml);
       }
 
+      if (data.token) {
+        setContributionToken(data.token);
+      }
+
       setIsXmlTested(true);
 
       // Replace visualization XML with the generated BARS XML (keep original stored separately)
@@ -224,6 +249,13 @@ const ContributeTest = () => {
       setShowPolyLines(false);
     }
     setShowRemoveAreas(!showRemoveAreas);
+  };
+
+  const handleOpenPilotClientTest = () => {
+    if (!isXmlTested || !contributionToken) return;
+
+    const testUrl = `bars://test?token=${encodeURIComponent(contributionToken)}`;
+    window.open(testUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleContinue = () => {
@@ -280,7 +312,8 @@ const ContributeTest = () => {
 
                 {xmlData || (showRemoveAreas && supportsXmlData) ? (
                   <XMLMap
-                    xmlData={showRemoveAreas ? supportsXmlData : xmlData}
+                    xmlData={xmlData}
+                    removeAreasXmlData={supportsXmlData}
                     height="500px"
                     showPolyLines={showPolyLines}
                     showRemoveAreas={showRemoveAreas}
@@ -357,29 +390,38 @@ const ContributeTest = () => {
                   />
                 </div>
 
-                {/* Test XML button */}
-                <Button
-                  onClick={handleTestXml}
-                  disabled={contributionsDisabled || !xmlData || isValidating || isXmlTested}
-                  className="mt-4 w-full"
-                >
-                  {isValidating ? (
-                    <div className="flex items-center justify-center">
-                      <Loader className="w-4 h-4 mr-2 animate-spin" />
-                      <span>Testing XML...</span>
-                    </div>
-                  ) : isXmlTested ? (
-                    <div className="flex items-center justify-center">
-                      <Check className="w-4 h-4 mr-2" />
-                      <span>XML Tested</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center">
-                      <FileSearch className="w-4 h-4 mr-2" />
-                      <span>Test XML</span>
-                    </div>
-                  )}
-                </Button>
+                {/* Test XML actions */}
+                {isXmlTested ? (
+                  <Button
+                    onClick={handleOpenPilotClientTest}
+                    variant="outline"
+                    className={`mt-4 w-full ${
+                      !contributionToken ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    disabled={!contributionToken}
+                  >
+                    <span>Test In Client</span>
+                    <ExternalLink className="h-5 w-5 min-w-5 shrink-0" strokeWidth={2.5} />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleTestXml}
+                    disabled={contributionsDisabled || !xmlData || isValidating}
+                    className="mt-4 w-full"
+                  >
+                    {isValidating ? (
+                      <div className="flex items-center justify-center">
+                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                        <span>Testing XML...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center">
+                        <FileSearch className="w-4 h-4 mr-2" />
+                        <span>Test XML</span>
+                      </div>
+                    )}
+                  </Button>
+                )}
               </Card>
 
               {/* Map Settings */}
@@ -515,6 +557,7 @@ const ContributeTest = () => {
                 <span>Continue to Next Step</span>
                 <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
+
             </div>
           </div>
         </div>

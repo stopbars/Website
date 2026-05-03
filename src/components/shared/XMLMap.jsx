@@ -59,7 +59,13 @@ const LIGHT_SORT_PRIORITY = {
   taxiway: 100,
 };
 
-const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAreas = false }) => {
+const XMLMap = ({
+  xmlData,
+  removeAreasXmlData = '',
+  height = '600px',
+  showPolyLines = false,
+  showRemoveAreas = false,
+}) => {
   const [parsedLights, setParsedLights] = useState([]);
   const [viewState, setViewState] = useState({
     longitude: 0,
@@ -433,44 +439,36 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
   }, []);
 
   useEffect(() => {
-    const scheduledUpdates = [];
-
-    if (xmlData) {
-      if (xmlData.includes('BarsObject')) {
-        const { lights, lines, center } = parseXML(xmlData);
-        const handle = setTimeout(() => {
-          setParsedLights(lights);
-          setPolylines(lines);
-          if (center) {
-            setViewState((prev) => ({
-              ...prev,
-              longitude: center[0],
-              latitude: center[1],
-            }));
-          }
-        }, 0);
-        scheduledUpdates.push(handle);
-      }
-      if (xmlData.includes('LightSupport')) {
-        const { areas, center } = parseRemoveAreasXML(xmlData);
-        const handle = setTimeout(() => {
-          setRemoveAreas(areas);
-          if (center) {
-            setViewState((prev) => ({
-              ...prev,
-              longitude: center[0],
-              latitude: center[1],
-            }));
-          }
-        }, 0);
-        scheduledUpdates.push(handle);
-      }
+    if (!xmlData || !xmlData.includes('BarsObject')) {
+      setParsedLights([]);
+      setPolylines([]);
+      return undefined;
     }
 
-    return () => {
-      scheduledUpdates.forEach((handle) => clearTimeout(handle));
-    };
-  }, [xmlData, parseXML, parseRemoveAreasXML]);
+    const { lights, lines } = parseXML(xmlData);
+    const handle = setTimeout(() => {
+      setParsedLights(lights);
+      setPolylines(lines);
+    }, 0);
+
+    return () => clearTimeout(handle);
+  }, [xmlData, parseXML]);
+
+  useEffect(() => {
+    const areasSource = removeAreasXmlData || xmlData;
+
+    if (!areasSource || !areasSource.includes('LightSupport')) {
+      setRemoveAreas([]);
+      return undefined;
+    }
+
+    const { areas } = parseRemoveAreasXML(areasSource);
+    const handle = setTimeout(() => {
+      setRemoveAreas(areas);
+    }, 0);
+
+    return () => clearTimeout(handle);
+  }, [removeAreasXmlData, xmlData, parseRemoveAreasXML]);
 
   useEffect(() => {
     const coordinates = [];
@@ -489,13 +487,15 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
       });
     });
 
-    removeAreas.forEach((area) => {
-      area.points.forEach((point) => {
-        if (Array.isArray(point)) {
-          coordinates.push(point);
-        }
+    if (!xmlData?.includes('BarsObject')) {
+      removeAreas.forEach((area) => {
+        area.points.forEach((point) => {
+          if (Array.isArray(point)) {
+            coordinates.push(point);
+          }
+        });
       });
-    });
+    }
 
     if (!coordinates.length) return;
 
@@ -528,7 +528,7 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
     ];
 
     fitMapToBounds(bounds);
-  }, [parsedLights, polylines, removeAreas, fitMapToBounds]);
+  }, [xmlData, parsedLights, polylines, removeAreas, fitMapToBounds]);
 
   const handleMapLoad = useCallback(
     (event) => {
@@ -676,6 +676,7 @@ const XMLMap = ({ xmlData, height = '600px', showPolyLines = false, showRemoveAr
 
 XMLMap.propTypes = {
   xmlData: PropTypes.string,
+  removeAreasXmlData: PropTypes.string,
   height: PropTypes.string,
   showPolyLines: PropTypes.bool,
   showRemoveAreas: PropTypes.bool,

@@ -5,6 +5,15 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      keyframes: {
+        'slide-in-soft': {
+          '0%': { opacity: '0', transform: 'translateY(-0.5rem)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'slide-in-soft': 'slide-in-soft 180ms cubic-bezier(0.2, 0, 0, 1)',
+      },
       typography: (theme) => ({
         invert: {
           css: {
