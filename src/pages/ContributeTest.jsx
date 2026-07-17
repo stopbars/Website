@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -24,13 +24,28 @@ import {
 const ContributeTest = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const fileInputRef = useRef(null);
+  const incomingDraftXml =
+    typeof location.state?.draftXml === 'string' ? location.state.draftXml : '';
+  const incomingDraftFileName =
+    typeof location.state?.draftFileName === 'string'
+      ? location.state.draftFileName
+      : `${icao}-Draft.xml`;
 
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [originalFileName, setOriginalFileName] = useState('');
-  const [originalFileSize, setOriginalFileSize] = useState(0);
-  const [xmlData, setXmlData] = useState('');
-  const [originalXmlData, setOriginalXmlData] = useState('');
+  const [selectedFile, setSelectedFile] = useState(() =>
+    incomingDraftXml
+      ? new File([incomingDraftXml], incomingDraftFileName, { type: 'application/xml' })
+      : null
+  );
+  const [originalFileName, setOriginalFileName] = useState(() =>
+    incomingDraftXml ? incomingDraftFileName : ''
+  );
+  const [originalFileSize, setOriginalFileSize] = useState(() =>
+    incomingDraftXml ? new Blob([incomingDraftXml]).size : 0
+  );
+  const [xmlData, setXmlData] = useState(incomingDraftXml);
+  const [originalXmlData, setOriginalXmlData] = useState(incomingDraftXml);
   const [supportsXmlData, setSupportsXmlData] = useState('');
   const [contributionToken, setContributionToken] = useState('');
   const [error, setError] = useState('');
@@ -290,6 +305,7 @@ const ContributeTest = () => {
               <Breadcrumb>
                 <BreadcrumbItem title="Airport" link="/contribute/new" />
                 <BreadcrumbItem title="Map" link={`/contribute/map/${icao}`} />
+                <BreadcrumbItem title="Draft" link={`/contribute/generator/${icao}`} />
                 <BreadcrumbItem title="Test" />
               </Breadcrumb>
             </div>
@@ -557,7 +573,6 @@ const ContributeTest = () => {
                 <span>Continue to Next Step</span>
                 <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
-
             </div>
           </div>
         </div>

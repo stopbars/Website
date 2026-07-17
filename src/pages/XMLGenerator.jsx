@@ -1,273 +1,95 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  FileCode2,
+  FolderOpen,
+  LoaderCircle,
+  LockKeyhole,
+  RefreshCcw,
+  TriangleAlert,
+} from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
-import {
-  Loader,
-  Download,
-  AlertCircle,
-  Info,
-  Copy,
-  Check,
-  Settings,
-  ChevronDown,
-  ChevronUp,
-  Layers,
-  RotateCcw,
-} from 'lucide-react';
-import Map, { Source, Layer, NavigationControl, ScaleControl } from 'react-map-gl/maplibre';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import DraftGeneratorMap from '../features/draft-generator/DraftGeneratorMap';
+import { selectionFromDrop, selectionFromInput } from '../features/draft-generator/local-package';
 import {
   fetchContributionPolicy,
   getContributionDisabledMessage,
 } from '../utils/contributionPolicy';
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
-
-const STREET_STYLE = {
-  version: 8,
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    },
-  },
-  layers: [
-    {
-      id: 'osm',
-      type: 'raster',
-      source: 'osm',
-      minzoom: 0,
-      maxzoom: 22,
-    },
-  ],
-};
-
-const SATELLITE_STYLE = {
-  version: 8,
-  sources: {
-    mapbox: {
-      type: 'raster',
-      tiles: [
-        `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
-      ],
-      tileSize: 512,
-      attribution: 'Imagery &copy; <a href="https://www.mapbox.com/">Mapbox</a>',
-    },
-  },
-  layers: [
-    {
-      id: 'mapbox',
-      type: 'raster',
-      source: 'mapbox',
-      minzoom: 0,
-      maxzoom: 22,
-    },
-  ],
-};
-
-// Geo utilities
-const toRad = (deg) => (deg * Math.PI) / 180;
-const toDeg = (rad) => (rad * 180) / Math.PI;
-
-// Compute destination point given start, bearing (degrees), and distance (meters)
-const computeDestination = (lng, lat, bearing, distanceMeters) => {
-  const R = 6371000; // Earth radius in meters
-  const brng = toRad(bearing);
-  const lat1 = toRad(lat);
-  const lng1 = toRad(lng);
-  const d = distanceMeters / R;
-
-  const lat2 = Math.asin(
-    Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng)
-  );
-  const lng2 =
-    lng1 +
-    Math.atan2(
-      Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
-      Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
-    );
-
-  return [toDeg(lng2), toDeg(lat2)];
-};
-
-// Calculate bearing between two points
-const calculateBearing = (lng1, lat1, lng2, lat2) => {
-  const dLon = toRad(lng2 - lng1);
-  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
-  const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-};
-
-// Create a buffered polygon around a polyline with given padding
-const createBufferedPolygon = (coordinates, paddingMeters) => {
-  if (coordinates.length < 2) return null;
-
-  const leftPoints = [];
-  const rightPoints = [];
-
-  for (let i = 0; i < coordinates.length; i++) {
-    const [lng, lat] = coordinates[i];
-
-    let bearing;
-    if (i === 0) {
-      bearing = calculateBearing(lng, lat, coordinates[i + 1][0], coordinates[i + 1][1]);
-    } else if (i === coordinates.length - 1) {
-      bearing = calculateBearing(coordinates[i - 1][0], coordinates[i - 1][1], lng, lat);
-    } else {
-      const bearingIn = calculateBearing(coordinates[i - 1][0], coordinates[i - 1][1], lng, lat);
-      const bearingOut = calculateBearing(lng, lat, coordinates[i + 1][0], coordinates[i + 1][1]);
-
-      let diff = bearingOut - bearingIn;
-      if (diff > 180) diff -= 360;
-      if (diff < -180) diff += 360;
-      bearing = bearingIn + diff / 2;
-    }
-
-    const leftBearing = (bearing - 90 + 360) % 360;
-    const rightBearing = (bearing + 90) % 360;
-
-    leftPoints.push(computeDestination(lng, lat, leftBearing, paddingMeters));
-    rightPoints.push(computeDestination(lng, lat, rightBearing, paddingMeters));
-  }
-
-  const startBearing = calculateBearing(
-    coordinates[0][0],
-    coordinates[0][1],
-    coordinates[1][0],
-    coordinates[1][1]
-  );
-  const endBearing = calculateBearing(
-    coordinates[coordinates.length - 2][0],
-    coordinates[coordinates.length - 2][1],
-    coordinates[coordinates.length - 1][0],
-    coordinates[coordinates.length - 1][1]
-  );
-
-  const startLeft = leftPoints[0];
-  const startRight = rightPoints[0];
-  const startCapLeft = computeDestination(
-    startLeft[0],
-    startLeft[1],
-    (startBearing + 180) % 360,
-    paddingMeters
-  );
-  const startCapRight = computeDestination(
-    startRight[0],
-    startRight[1],
-    (startBearing + 180) % 360,
-    paddingMeters
-  );
-
-  const endLeft = leftPoints[leftPoints.length - 1];
-  const endRight = rightPoints[rightPoints.length - 1];
-  const endCapLeft = computeDestination(endLeft[0], endLeft[1], endBearing, paddingMeters);
-  const endCapRight = computeDestination(endRight[0], endRight[1], endBearing, paddingMeters);
-
-  const polygon = [
-    startCapRight,
-    ...rightPoints,
-    endCapRight,
-    endCapLeft,
-    ...leftPoints.reverse(),
-    startCapLeft,
-  ];
-
-  polygon.push(polygon[0]);
-  return polygon;
-};
-
-// Generate XML for MSFS polygon
-const generatePolygonXML = (displayName, groupIndex, altitude, vertices) => {
-  const vertexLines = vertices
-    .slice(0, -1)
-    .map(([lng, lat]) => `\t\t<Vertex lat="${lat.toFixed(14)}" lon="${lng.toFixed(14)}"/>`)
-    .join('\n');
-
-  return `\t<Polygon version="0.4.0" displayName="${displayName}" groupIndex="${groupIndex}" altitude="${altitude.toFixed(11)}">
-\t\t<Attribute name="UniqueGUID" guid="{359C73E8-06BE-4FB2-ABCB-EC942F7761D0}" type="GUID" value="{${generateGUID()}}"/>
-${vertexLines}
-\t</Polygon>`;
-};
-
-// Generate a random GUID
-const generateGUID = () => {
-  const s4 = () =>
-    Math.floor((1 + Math.random()) * 0x10000)
-      .toString(16)
-      .substring(1)
-      .toUpperCase();
-  return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
-};
-
-const DEFAULT_PADDING_METERS = 1;
-const DEFAULT_BASE_ALTITUDE = 0;
-
 const XMLGenerator = () => {
   const { icao: urlIcao } = useParams();
   const navigate = useNavigate();
-  const mapRef = useRef(null);
+  const folderInputRef = useRef(null);
+  const workerRef = useRef(null);
+  const requestIdRef = useRef(0);
   const normalizedIcao = useMemo(() => urlIcao?.trim().toUpperCase() || '', [urlIcao]);
 
-  // State
-  const icao = normalizedIcao;
   const [airport, setAirport] = useState(null);
-  const [points, setPoints] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [divisionPoints, setDivisionPoints] = useState([]);
+  const [contributionPolicy, setContributionPolicy] = useState(null);
+  const [loadingData, setLoadingData] = useState(true);
+  const [selection, setSelection] = useState(null);
+  const [isReadingDrop, setIsReadingDrop] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [generation, setGeneration] = useState({
+    status: 'idle',
+    stage: '',
+    progress: 0,
+  });
+  const [result, setResult] = useState(null);
+  const [geojsonUrl, setGeojsonUrl] = useState('');
+  const [simulatorGeojsonUrl, setSimulatorGeojsonUrl] = useState('');
   const [error, setError] = useState('');
   const [showErrorToast, setShowErrorToast] = useState(false);
-  const [contributionPolicy, setContributionPolicy] = useState(null);
-  const [generatedXML, setGeneratedXML] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [paddingMeters, setPaddingMeters] = useState(DEFAULT_PADDING_METERS);
-  const [baseAltitude, setBaseAltitude] = useState(DEFAULT_BASE_ALTITUDE);
-  const [defaultElevation, setDefaultElevation] = useState(DEFAULT_BASE_ALTITUDE);
-  const [showSettings, setShowSettings] = useState(false);
-  const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
-  const [styleName, setStyleName] = useState('Satellite');
-  const [viewState, setViewState] = useState({
-    longitude: 0,
-    latitude: 0,
-    zoom: 14,
-  });
+
   const contributionsDisabled =
     contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
+  const generationPolicyBlocked = contributionsDisabled && !import.meta.env.DEV;
   const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
+  const isGenerating = generation.status === 'running';
+  const draftFileName = `${normalizedIcao || 'airport'}-Draft.xml`;
+  const divisionGeojson = useMemo(() => buildDivisionGeojson(divisionPoints), [divisionPoints]);
 
-  // Store generated polygon data for map display
-  const [generatedPolygons, setGeneratedPolygons] = useState({ bars: [], remove: [] });
-
-  // Auto-load airport data on mount
   useEffect(() => {
-    const fetchData = async () => {
-      if (!normalizedIcao || !/^[A-Z0-9]{4}$/.test(normalizedIcao)) {
-        navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
-        return;
-      }
+    if (!normalizedIcao || !/^[A-Z0-9]{4}$/.test(normalizedIcao)) {
+      navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
+      return undefined;
+    }
 
-      setLoading(true);
-      setError('');
-      setGeneratedXML('');
-      setPoints([]);
-
+    const controller = new AbortController();
+    const loadData = async () => {
+      setLoadingData(true);
       try {
-        const [airportResponse, policy] = await Promise.all([
-          fetch(`https://v2.stopbars.com/airports?icao=${normalizedIcao}`),
+        const [airportResponse, pointsResponse, policy] = await Promise.all([
+          fetch(`https://v2.stopbars.com/airports?icao=${normalizedIcao}`, {
+            signal: controller.signal,
+          }),
+          fetch(`https://v2.stopbars.com/airports/${normalizedIcao}/points`, {
+            signal: controller.signal,
+          }),
           fetchContributionPolicy(normalizedIcao),
         ]);
-        if (!airportResponse.ok) {
+        if (!airportResponse.ok || !pointsResponse.ok) {
           throw new Error('Failed to load airport data');
         }
-        const airportData = await airportResponse.json();
-        setContributionPolicy(policy);
+
+        const [airportData, pointsData] = await Promise.all([
+          airportResponse.json(),
+          pointsResponse.json(),
+        ]);
+        if (!Array.isArray(pointsData) || pointsData.length === 0) {
+          navigate(`/contribute/map/${normalizedIcao}`);
+          return;
+        }
 
         setAirport({
           icao: airportData.icao,
@@ -276,259 +98,165 @@ const XMLGenerator = () => {
           longitude: airportData.longitude,
           elevation_m: airportData.elevation_m,
         });
-
-        // Set map view to airport location
-        setViewState((prev) => ({
-          ...prev,
-          latitude: airportData.latitude,
-          longitude: airportData.longitude,
-          zoom: 14,
-        }));
-
-        if (typeof airportData.elevation_m === 'number') {
-          setBaseAltitude(airportData.elevation_m);
-          setDefaultElevation(airportData.elevation_m);
-        }
-
-        const pointsResponse = await fetch(
-          `https://v2.stopbars.com/airports/${normalizedIcao}/points`
+        setDivisionPoints(
+          pointsData.map((point) => ({
+            id: point.id,
+            type: point.type,
+            name: point.name,
+            coordinates: point.coordinates,
+            directionality: point.directionality,
+            color: point.color || undefined,
+            elevated: point.elevated,
+            ihp: point.ihp,
+          }))
         );
-        if (!pointsResponse.ok) {
-          throw new Error('Failed to fetch airport points');
-        }
-        const pointsData = await pointsResponse.json();
-
-        const transformedPoints = pointsData.map((point) => ({
-          id: point.id,
-          type: point.type,
-          name: point.name,
-          coordinates: point.coordinates,
-          directionality: point.directionality,
-          color: point.color || undefined,
-          elevated: point.elevated,
-          ihp: point.ihp,
-        }));
-
-        // Redirect to map if no points found
-        if (transformedPoints.length === 0) {
-          navigate(`/contribute/map/${normalizedIcao}`);
-          return;
-        }
-
-        setPoints(transformedPoints);
-      } catch (err) {
-        console.error(err);
+        setContributionPolicy(policy);
+      } catch (loadError) {
+        if (loadError.name === 'AbortError') return;
+        console.error(loadError);
         navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
-        return;
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoadingData(false);
       }
     };
 
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedIcao]);
+    loadData();
+    return () => controller.abort();
+  }, [navigate, normalizedIcao]);
 
-  // Reset functions
-  const resetPadding = () => setPaddingMeters(DEFAULT_PADDING_METERS);
-  const resetAltitude = () => setBaseAltitude(defaultElevation);
-
-  // Generate XML from points
-  const generateXML = useCallback(() => {
-    if (points.length === 0 || contributionsDisabled) return;
-
-    setLoading(true);
-
-    try {
-      const polylines = [];
-      const removePolygons = [];
-      let groupIndex = 1;
-
-      for (const point of points) {
-        const coords = point.coordinates;
-        if (!Array.isArray(coords) || coords.length < 2) continue;
-
-        const lineCoords = coords
-          .filter((c) => typeof c?.lat === 'number' && typeof c?.lng === 'number')
-          .map((c) => [c.lng, c.lat]);
-
-        if (lineCoords.length < 2) continue;
-
-        // If only 2 points, add a midpoint so MSFS has at least 3 vertices for the polygon
-        let finalCoords = lineCoords;
-        if (lineCoords.length === 2) {
-          const midLng = (lineCoords[0][0] + lineCoords[1][0]) / 2;
-          const midLat = (lineCoords[0][1] + lineCoords[1][1]) / 2;
-          finalCoords = [lineCoords[0], [midLng, midLat], lineCoords[1]];
-        }
-
-        polylines.push({
-          id: point.id,
-          name: point.id,
-          coordinates: finalCoords,
-          groupIndex: groupIndex++,
-        });
-      }
-
-      const bufferedPolygons = [];
-      for (const line of polylines) {
-        const buffered = createBufferedPolygon(line.coordinates, paddingMeters);
-        if (buffered) {
-          bufferedPolygons.push(buffered);
-        }
-      }
-
-      // For now, use individual polygons without merging
-      // Merging overlapping polygons requires expensive computation
-      // and at small padding values, overlaps are rare anyway
-      for (const polygon of bufferedPolygons) {
-        removePolygons.push({
-          name: 'remove',
-          polygon: polygon,
-          groupIndex: groupIndex++,
-        });
-      }
-
-      // Store polygon data for map display
-      setGeneratedPolygons({
-        bars: polylines.map((p) => ({
-          id: p.id,
-          coordinates: [...p.coordinates, p.coordinates[0]],
-        })),
-        remove: removePolygons.map((r, i) => ({
-          id: `remove-${i}`,
-          coordinates: r.polygon,
-        })),
-      });
-
-      const allPolygonXML = [];
-
-      for (const p of polylines) {
-        const closedPath = [...p.coordinates, p.coordinates[0]];
-        allPolygonXML.push(generatePolygonXML(p.name, p.groupIndex, baseAltitude, closedPath));
-      }
-
-      for (const r of removePolygons) {
-        allPolygonXML.push(generatePolygonXML(r.name, r.groupIndex, baseAltitude, r.polygon));
-      }
-
-      const xmlContent = `<?xml version="1.0"?>
-<FSData version="9.0">
-${allPolygonXML.join('\n')}
-</FSData>`;
-
-      setGeneratedXML(xmlContent);
-    } catch (err) {
-      setError('Failed to generate XML: ' + err.message);
-      setShowErrorToast(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [points, paddingMeters, baseAltitude, contributionsDisabled]);
-
-  // Auto-generate when points change
   useEffect(() => {
-    if (contributionsDisabled) {
-      setGeneratedXML('');
-      setGeneratedPolygons({ bars: [], remove: [] });
-      return;
+    if (!result?.geojsonBlob) {
+      setGeojsonUrl('');
+      return undefined;
     }
+    const url = URL.createObjectURL(result.geojsonBlob);
+    setGeojsonUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [result]);
 
-    if (points.length > 0) {
-      generateXML();
+  useEffect(() => {
+    if (!result?.simulatorGeojsonBlob) {
+      setSimulatorGeojsonUrl('');
+      return undefined;
     }
-  }, [points, generateXML, contributionsDisabled]);
+    const url = URL.createObjectURL(result.simulatorGeojsonBlob);
+    setSimulatorGeojsonUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [result]);
 
-  // Download XML
-  const handleDownload = () => {
-    if (!generatedXML) return;
+  const terminateWorker = useCallback(() => {
+    workerRef.current?.terminate();
+    workerRef.current = null;
+  }, []);
 
-    const blob = new Blob([generatedXML], { type: 'application/xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${airport?.icao || 'airport'}-Draft.xml`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  useEffect(() => terminateWorker, [terminateWorker]);
 
-  // Copy XML to clipboard
-  const handleCopy = async () => {
-    if (!generatedXML) return;
+  const showError = useCallback((message) => {
+    setError(message);
+    setShowErrorToast(true);
+  }, []);
 
+  const applySelection = useCallback((nextSelection) => {
+    if (!nextSelection?.entries?.length) {
+      throw new Error('No files were found. Choose the airport package or its scenery folder.');
+    }
+    setSelection(nextSelection);
+    setResult(null);
+    setGeneration({ status: 'idle', stage: '', progress: 0 });
+  }, []);
+
+  const handleFolderChange = (event) => {
     try {
-      await navigator.clipboard.writeText(generatedXML);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError('Failed to copy to clipboard');
-      setShowErrorToast(true);
+      const nextSelection = selectionFromInput(event.target.files);
+      if (nextSelection) applySelection(nextSelection);
+    } catch (selectionError) {
+      showError(selectionError instanceof Error ? selectionError.message : String(selectionError));
+    } finally {
+      event.target.value = '';
     }
   };
 
-  // Count polygons in generated XML
-  const polygonCount = generatedXML ? (generatedXML.match(/<Polygon/g) || []).length : 0;
-  const barsCount = generatedXML
-    ? (generatedXML.match(/displayName="(?!remove)/g) || []).length
-    : 0;
-  const removeCount = generatedXML ? (generatedXML.match(/displayName="remove"/g) || []).length : 0;
+  const handleDrop = async (event) => {
+    event.preventDefault();
+    setIsDragActive(false);
+    if (isGenerating) return;
 
-  // Toggle map style
-  const toggleStyle = () => {
-    if (styleName === 'Satellite') {
-      setMapStyle(STREET_STYLE);
-      setStyleName('Street Map');
-    } else {
-      setMapStyle(SATELLITE_STYLE);
-      setStyleName('Satellite');
+    setIsReadingDrop(true);
+    try {
+      const nextSelection = await selectionFromDrop(event.dataTransfer);
+      if (nextSelection) applySelection(nextSelection);
+    } catch (dropError) {
+      showError(dropError instanceof Error ? dropError.message : String(dropError));
+    } finally {
+      setIsReadingDrop(false);
     }
   };
 
-  // Generate GeoJSON for map display
-  const barsGeoJSON = useMemo(
-    () => ({
-      type: 'FeatureCollection',
-      features: generatedPolygons.bars.map((bar) => ({
-        type: 'Feature',
-        properties: { id: bar.id },
-        geometry: {
-          type: 'LineString',
-          // Remove the closing point for display (it's added for XML)
-          coordinates: bar.coordinates.slice(0, -1),
-        },
-      })),
-    }),
-    [generatedPolygons.bars]
-  );
+  const handleGenerate = () => {
+    if (!selection || !airport || generationPolicyBlocked || isGenerating) return;
 
-  const removeGeoJSON = useMemo(
-    () => ({
-      type: 'FeatureCollection',
-      features: generatedPolygons.remove.map((r) => ({
-        type: 'Feature',
-        properties: { id: r.id },
-        geometry: {
-          type: 'Polygon',
-          coordinates: [r.coordinates],
-        },
-      })),
-    }),
-    [generatedPolygons.remove]
-  );
+    terminateWorker();
+    setResult(null);
+    setGeneration({ status: 'running', stage: 'Starting local generator', progress: 3 });
+    const requestId = ++requestIdRef.current;
+    const worker = new Worker(
+      new URL('../features/draft-generator/draft-generator.worker.js', import.meta.url),
+      { type: 'module' }
+    );
+    workerRef.current = worker;
 
-  if (loading) {
+    worker.addEventListener('message', (event) => {
+      const message = event.data;
+      if (message.id !== requestId) return;
+      if (message.type === 'stage') {
+        setGeneration({ status: 'running', stage: message.stage, progress: message.progress });
+        return;
+      }
+      if (message.type === 'complete') {
+        setResult(message.result);
+        setGeneration({ status: 'complete', stage: 'Draft ready', progress: 100 });
+        terminateWorker();
+        return;
+      }
+      if (message.type === 'error') {
+        setGeneration({ status: 'error', stage: '', progress: 0 });
+        showError(message.error || 'The draft could not be generated.');
+        terminateWorker();
+      }
+    });
+    worker.addEventListener('error', (event) => {
+      setGeneration({ status: 'error', stage: '', progress: 0 });
+      showError(event.message || 'The local generator stopped unexpectedly.');
+      terminateWorker();
+    });
+    worker.postMessage({
+      type: 'generate',
+      id: requestId,
+      entries: selection.entries,
+      icao: normalizedIcao,
+      altitude: Number.isFinite(airport.elevation_m) ? airport.elevation_m : 0,
+      divisionPoints,
+    });
+  };
+
+  const handleDownload = () => {
+    if (!result?.xmlBlob || result.matchedCount === 0) return;
+    downloadBlob(result.xmlBlob, draftFileName);
+  };
+
+  const handleContinue = async () => {
+    if (!result?.xmlBlob || result.matchedCount === 0) return;
+    const draftXml = await result.xmlBlob.text();
+    navigate(`/contribute/test/${normalizedIcao}`, {
+      state: { draftXml, draftFileName },
+    });
+  };
+
+  if (loadingData) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20 flex items-center">
-          <div className="w-full max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-center h-64">
-              <div className="flex flex-col items-center">
-                <Loader className="w-8 h-8 animate-spin text-zinc-400" />
-              </div>
-            </div>
-          </div>
+        <div className="flex min-h-screen items-center justify-center pt-24">
+          <LoaderCircle className="h-8 w-8 animate-spin text-zinc-400" aria-label="Loading" />
         </div>
       </Layout>
     );
@@ -536,242 +264,152 @@ ${allPolygonXML.join('\n')}
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-12 mt-6">
-            <div className="flex items-center space-x-2 mb-12">
-              <Breadcrumb>
-                <BreadcrumbItem title="Map" link={`/contribute/map/${icao}`} />
-                <BreadcrumbItem title="Generator" />
-              </Breadcrumb>
+      <main className="min-h-screen pb-20 pt-32">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="mb-8 mt-6">
+            <Breadcrumb>
+              <BreadcrumbItem title="Map" link={`/contribute/map/${normalizedIcao}`} />
+              <BreadcrumbItem title="Draft generator" />
+            </Breadcrumb>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-white">
+                  Draft generator
+                </h1>
+                <p className="mt-2 text-sm text-zinc-400">
+                  {airport?.icao} · {airport?.name}
+                </p>
+              </div>
+              {result ? (
+                <p className="text-sm text-zinc-500">
+                  Generated locally in {result.elapsedSeconds}s
+                </p>
+              ) : null}
             </div>
           </div>
 
-          {contributionsDisabled && (
-            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
-              <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
-              <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              {/* Map */}
-              <div className="h-150 rounded-lg overflow-hidden border border-zinc-800 relative">
-                {airport ? (
-                  <>
-                    <Map
-                      ref={mapRef}
-                      {...viewState}
-                      onMove={(evt) => setViewState(evt.viewState)}
-                      mapStyle={mapStyle}
-                      style={{ width: '100%', height: '100%' }}
-                    >
-                      <NavigationControl position="top-left" />
-                      <ScaleControl />
-
-                      {/* Remove Areas (render first, underneath) */}
-                      <Source id="remove-polygons" type="geojson" data={removeGeoJSON}>
-                        <Layer
-                          id="remove-polygons-fill"
-                          type="fill"
-                          paint={{
-                            'fill-color': '#ef4444',
-                            'fill-opacity': 0.3,
-                          }}
-                        />
-                        <Layer
-                          id="remove-polygons-outline"
-                          type="line"
-                          paint={{
-                            'line-color': '#ef4444',
-                            'line-width': 1,
-                            'line-opacity': 0.6,
-                          }}
-                        />
-                      </Source>
-
-                      {/* BARS Lines (render on top) */}
-                      <Source id="bars-lines" type="geojson" data={barsGeoJSON}>
-                        <Layer
-                          id="bars-lines-layer"
-                          type="line"
-                          paint={{
-                            'line-color': '#3b82f6',
-                            'line-width': 3,
-                          }}
-                          layout={{
-                            'line-cap': 'round',
-                            'line-join': 'round',
-                          }}
-                        />
-                      </Source>
-                    </Map>
-
-                    {/* Layer Control */}
-                    <div className="absolute top-4 right-4 bg-zinc-900/90 border border-zinc-700 rounded-md p-1 z-10">
-                      <button
-                        onClick={toggleStyle}
-                        className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 rounded transition-colors"
-                      >
-                        <Layers className="w-4 h-4" />
-                        <span>{styleName}</span>
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="flex flex-col items-center text-zinc-500">
-                      <AlertCircle className="w-12 h-12 mb-3" />
-                      <p>Failed to load airport data</p>
-                    </div>
-                  </div>
-                )}
+          {contributionsDisabled ? (
+            <div className="mb-6 flex items-start rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+              <AlertCircle className="mr-3 h-5 w-5 shrink-0 text-amber-400" />
+              <div>
+                <p className="text-sm text-amber-300">{disabledContributionMessage}</p>
+                {import.meta.env.DEV ? (
+                  <p className="mt-1 text-xs text-amber-200">
+                    Draft generation is temporarily enabled in local development.
+                  </p>
+                ) : null}
               </div>
             </div>
+          ) : null}
 
-            <div className="space-y-6">
-              {airport && (
-                <>
-                  {/* XML Statistics */}
-                  {generatedXML && (
-                    <Card className="p-6">
-                      <div className="mb-4 flex items-start justify-between">
-                        <div>
-                          <h2 className="text-xl font-medium">{airport.icao}</h2>
-                          <p className="text-sm text-zinc-400">{airport.name}</p>
-                        </div>
-                        <button
-                          onClick={() => setShowSettings(!showSettings)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition-colors"
-                          title="Toggle Settings"
-                        >
-                          <Settings className="w-4 h-4" />
-                          {showSettings ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex justify-between">
-                          <span className="text-sm text-zinc-400">Objects Loaded</span>
-                          <span className="text-lg font-semibold text-white">{points.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-zinc-400">BARS Polygons</span>
-                          <span className="text-lg font-semibold text-blue-400">{barsCount}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-zinc-400">Remove Areas</span>
-                          <span className="text-lg font-semibold text-red-400">{removeCount}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-zinc-400">Total Polygons</span>
-                          <span className="text-lg font-semibold text-white">{polygonCount}</span>
-                        </div>
-                      </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_23rem]">
+            <DraftGeneratorMap
+              airport={airport}
+              geojsonUrl={geojsonUrl}
+              simulatorGeojsonUrl={simulatorGeojsonUrl}
+              divisionGeojson={divisionGeojson}
+              bounds={result?.bounds}
+            />
 
-                      {/* Settings Section */}
-                      {showSettings && (
-                        <div className="mt-6 pt-6 border-t border-zinc-700 space-y-4">
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="block text-sm font-medium">
-                                Remove Area Padding (m)
-                              </label>
-                              <button
-                                onClick={resetPadding}
-                                className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
-                                title="Reset to default"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                Reset
-                              </button>
-                            </div>
-                            <input
-                              type="number"
-                              value={paddingMeters}
-                              onChange={(e) =>
-                                setPaddingMeters(Math.max(1, parseInt(e.target.value) || 1))
-                              }
-                              min={1}
-                              max={50}
-                              className="w-full px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                            />
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="block text-sm font-medium">Base Altitude (m)</label>
-                              <button
-                                onClick={resetAltitude}
-                                className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
-                                title="Reset to default"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                Reset
-                              </button>
-                            </div>
-                            <input
-                              type="number"
-                              value={baseAltitude}
-                              onChange={(e) => setBaseAltitude(parseFloat(e.target.value) || 0)}
-                              step={0.1}
-                              className="w-full px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </Card>
-                  )}
+            <aside className="space-y-5 lg:sticky lg:top-28 lg:self-start">
+              <Card className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                    <FileCode2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-medium text-white">Scenery package</h2>
+                    <p className="text-xs text-zinc-500">MSFS package or scenery folder</p>
+                  </div>
+                </div>
 
-                  {/* Download Actions */}
-                  {generatedXML && (
-                    <Card className="p-6">
-                      <div className="space-y-3">
-                        <Button onClick={handleDownload} className="w-full">
-                          <Download className="w-4 h-4 mr-2" />
-                          Download XML
-                        </Button>
-                        <Button onClick={handleCopy} variant="secondary" className="w-full" static>
-                          {copied ? (
-                            <>
-                              <Check className="w-4 h-4 mr-2" />
-                              Copied!
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-4 h-4 mr-2" />
-                              Copy to Clipboard
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </Card>
-                  )}
+                <div
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    if (!isGenerating) setIsDragActive(true);
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDragLeave={(event) => {
+                    if (event.currentTarget === event.target) setIsDragActive(false);
+                  }}
+                  onDrop={handleDrop}
+                  className={`mt-4 rounded-lg border border-dashed p-4 transition-colors ${
+                    isDragActive
+                      ? 'border-emerald-400 bg-emerald-400/10'
+                      : 'border-zinc-700 bg-zinc-950/40'
+                  }`}
+                >
+                  <p className="truncate text-sm font-medium text-zinc-200">
+                    {selection?.name || 'Choose your scenery folder'}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {selection
+                      ? `${selection.entries.length.toLocaleString()} files indexed`
+                      : 'You can also drag the folder here.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => folderInputRef.current?.click()}
+                    disabled={isGenerating || isReadingDrop || generationPolicyBlocked}
+                    className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-600 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isReadingDrop ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FolderOpen className="h-4 w-4" />
+                    )}
+                    {selection ? 'Choose another folder' : 'Choose scenery folder'}
+                  </button>
+                  <input
+                    ref={folderInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFolderChange}
+                    webkitdirectory=""
+                    multiple
+                    aria-label="Choose scenery package folder"
+                  />
+                </div>
 
-                  {/* Info Notice */}
-                  {generatedXML && (
-                    <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
-                      <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
-                      <p className="text-sm text-blue-400">
-                        This is a draft XML generated from existing airport lighting data. You will
-                        need to adjust and fine-tune polygon positions in your scenery for best
-                        results. This file is a draft and should not be used for a final submission.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                <div className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-zinc-500">
+                  <LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                  <span>
+                    Scenery data is processed on this device and does not leave your browser.
+                  </span>
+                </div>
+
+                {isGenerating ? (
+                  <GenerationProgress generation={generation} />
+                ) : (
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={!selection || generationPolicyBlocked}
+                    className="mt-5 w-full"
+                  >
+                    {result ? (
+                      <RefreshCcw className="h-4 w-4" />
+                    ) : (
+                      <FileCode2 className="h-4 w-4" />
+                    )}
+                    {result ? 'Generate again' : 'Generate draft'}
+                  </Button>
+                )}
+              </Card>
+
+              {result ? (
+                <ResultPanel
+                  result={result}
+                  onDownload={handleDownload}
+                  onContinue={handleContinue}
+                />
+              ) : null}
+            </aside>
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Error Toast */}
       <Toast
-        title="Error"
+        title="Draft generator"
         description={error}
         variant="destructive"
         show={showErrorToast}
@@ -782,6 +420,191 @@ ${allPolygonXML.join('\n')}
       />
     </Layout>
   );
+};
+
+function buildDivisionGeojson(points) {
+  const features = [];
+  for (const point of points) {
+    const rawCoordinates = Array.isArray(point.coordinates)
+      ? point.coordinates
+      : point.coordinates
+        ? [point.coordinates]
+        : [];
+    const coordinates = rawCoordinates
+      .filter(
+        (coordinate) => Number.isFinite(coordinate?.lat) && Number.isFinite(coordinate?.lng)
+      )
+      .map((coordinate) => [coordinate.lng, coordinate.lat]);
+    if (coordinates.length === 0) continue;
+
+    features.push({
+      type: 'Feature',
+      properties: {
+        featureType: 'division-original',
+        divisionId: String(point.id ?? ''),
+        divisionType: point.type || 'unknown',
+        title: point.name || String(point.id || 'Division object'),
+      },
+      geometry:
+        coordinates.length === 1
+          ? { type: 'Point', coordinates: coordinates[0] }
+          : { type: 'LineString', coordinates },
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function GenerationProgress({ generation }) {
+  return (
+    <div
+      className="mt-5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4"
+      aria-live="polite"
+    >
+      <div className="flex items-center gap-2 text-sm text-emerald-300">
+        <LoaderCircle className="h-4 w-4 animate-spin" />
+        <span>{generation.stage}</span>
+      </div>
+      <div
+        className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800"
+        role="progressbar"
+        aria-label="Draft generation progress"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow={generation.progress}
+      >
+        <div
+          className="h-full rounded-full bg-emerald-400 transition-[width] duration-500 ease-out"
+          style={{ width: `${generation.progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ResultPanel({ result, onDownload, onContinue }) {
+  const hasMatches = result.matchedCount > 0;
+  const hasManualWork = result.manualCount > 0;
+  const hasRemovalReview = result.removalReview.length > 0;
+  const consolidatedObjects = result.duplicateDivisionLeadOns + result.duplicateSimulatorLeadOns;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+            hasMatches ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+          }`}
+        >
+          {hasMatches ? (
+            <CheckCircle2 className="h-5 w-5" />
+          ) : (
+            <TriangleAlert className="h-5 w-5" />
+          )}
+        </div>
+        <div>
+          <h2 className="font-medium text-white">
+            {hasMatches ? 'Draft ready' : 'No automatic matches'}
+          </h2>
+          <p className="mt-1 text-sm leading-relaxed text-zinc-400">
+            {result.matchedCount} matched
+            {hasManualWork ? ` · ${result.manualCount} need manual work` : ' · no missing objects'}
+          </p>
+        </div>
+      </div>
+
+      {hasManualWork ? (
+        <div className="mt-4 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3">
+          <p className="text-xs leading-relaxed text-rose-300">
+            Red objects were not added to the XML. Add them manually during scenery editing.
+          </p>
+          <div className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
+            {result.manualReview.map((item) => (
+              <div key={`${item.id}:${item.type}`} className="rounded-md bg-zinc-950/60 px-3 py-2">
+                <p className="truncate text-xs font-medium text-zinc-200">{item.name}</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">{formatType(item.type)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {hasRemovalReview ? (
+        <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+          <p className="text-xs leading-relaxed text-amber-200">
+            {result.removalReview.length} matched{' '}
+            {result.removalReview.length === 1 ? 'object was' : 'objects were'} added to the XML,
+            but the automatic remover was skipped to protect nearby simulator lighting. Review the
+            amber geometry during testing.
+          </p>
+        </div>
+      ) : null}
+
+      {consolidatedObjects > 0 ? (
+        <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
+          {consolidatedObjects} overlapping{' '}
+          {consolidatedObjects === 1 ? 'object was' : 'objects were'} consolidated before matching.
+        </p>
+      ) : null}
+
+      <div className="mt-5 space-y-3 border-t border-zinc-800 pt-5">
+        <Button onClick={onDownload} disabled={!hasMatches} variant="secondary" className="w-full">
+          <Download className="h-4 w-4" />
+          Download XML
+        </Button>
+        <Button onClick={onContinue} disabled={!hasMatches} className="w-full">
+          Continue to testing
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function formatType(type) {
+  return String(type || 'object')
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+GenerationProgress.propTypes = {
+  generation: PropTypes.shape({
+    stage: PropTypes.string.isRequired,
+    progress: PropTypes.number.isRequired,
+  }).isRequired,
+};
+
+ResultPanel.propTypes = {
+  result: PropTypes.shape({
+    matchedCount: PropTypes.number.isRequired,
+    manualCount: PropTypes.number.isRequired,
+    manualReview: PropTypes.arrayOf(
+      PropTypes.shape({
+        id: PropTypes.string.isRequired,
+        name: PropTypes.string.isRequired,
+        type: PropTypes.string.isRequired,
+      })
+    ).isRequired,
+    removalReview: PropTypes.arrayOf(
+      PropTypes.shape({
+        id: PropTypes.string.isRequired,
+        name: PropTypes.string.isRequired,
+        type: PropTypes.string.isRequired,
+      })
+    ).isRequired,
+    duplicateDivisionLeadOns: PropTypes.number.isRequired,
+    duplicateSimulatorLeadOns: PropTypes.number.isRequired,
+  }).isRequired,
+  onDownload: PropTypes.func.isRequired,
+  onContinue: PropTypes.func.isRequired,
 };
 
 export default XMLGenerator;

@@ -1,6 +1,10 @@
 // vite.config.ts
 import { defineConfig, UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
+
+const draftGeneratorShim = (name: string) =>
+  fileURLToPath(new URL(`./src/features/draft-generator/shims/${name}`, import.meta.url));
 
 function leafletPluginGlobals() {
   return {
@@ -40,6 +44,12 @@ export default defineConfig((): UserConfig => {
     plugins: [leafletPluginGlobals(), react()],
 
     resolve: {
+      alias: [
+        { find: 'node:buffer', replacement: draftGeneratorShim('buffer.js') },
+        { find: 'node:crypto', replacement: draftGeneratorShim('crypto.js') },
+        { find: 'node:fs', replacement: draftGeneratorShim('virtual-fs.js') },
+        { find: 'node:path', replacement: draftGeneratorShim('path.js') },
+      ],
       dedupe: ['react', 'react-dom'],
     },
 

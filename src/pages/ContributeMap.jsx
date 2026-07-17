@@ -718,6 +718,8 @@ const ContributeMap = () => {
   const [styleName, setStyleName] = useState('Satellite');
   const contributionsDisabled =
     contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
+  const draftGeneratorDisabled =
+    points.length === 0 || (contributionsDisabled && !import.meta.env.DEV);
   const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
   const owningDivisionLabel = contributionPolicy?.divisionName || 'the owning Division';
 
@@ -1296,18 +1298,18 @@ const ContributeMap = () => {
                 </div>
               </Card>
 
-              {/* XML Generator Tool */}
+              {/* Draft Generator */}
               <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">XML Generator</h2>
+                <h2 className="text-xl font-medium mb-4">Draft generator</h2>
                 <button
                   onClick={
-                    points.length === 0 || contributionsDisabled
+                    draftGeneratorDisabled
                       ? undefined
                       : () => navigate(`/contribute/generator/${icao}`)
                   }
-                  disabled={points.length === 0 || contributionsDisabled}
+                  disabled={draftGeneratorDisabled}
                   className={`w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 transition-all ${
-                    points.length === 0 || contributionsDisabled
+                    draftGeneratorDisabled
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-zinc-800 hover:border-zinc-600'
                   }`}
@@ -1315,20 +1317,22 @@ const ContributeMap = () => {
                   <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
                     <FileCode2 className="w-5 h-5 text-emerald-400" />
                   </div>
-                  <div className="ml-3 text-left">
-                    <p className="text-sm font-medium text-white">Generate Draft Contribution</p>
-                    <p className="text-xs text-zinc-400">
-                      Create an XML file for your contribution
-                    </p>
-                  </div>
+                  <span className="ml-3 text-sm font-medium text-white">Open Draft Generator</span>
                   <ChevronRight className="w-4 h-4 text-zinc-500 ml-auto" />
                 </button>
               </Card>
 
               {contributionsDisabled ? (
-                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
-                  <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start">
+                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
+                    {import.meta.env.DEV ? (
+                      <p className="mt-1 text-xs text-amber-300">
+                        The draft generator remains available in local development.
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               ) : points.length === 0 ? (
                 <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
