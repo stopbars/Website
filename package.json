@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test src/features/draft-generator/matching.test.js",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\" \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "preview": "vite preview"
   },

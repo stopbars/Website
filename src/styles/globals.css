@@ -141,6 +141,31 @@ button:disabled {
   z-index: 1;
 }
 
+.draft-generator-popup .maplibregl-popup-content {
+  overflow: hidden;
+  border: 1px solid rgb(63 63 70);
+  border-radius: 0.625rem;
+  background: rgb(24 24 27);
+  padding: 0.65rem;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.38);
+}
+
+.draft-generator-popup .maplibregl-popup-close-button {
+  right: 0.3rem;
+  top: 0.2rem;
+  color: rgb(161 161 170);
+  font-size: 1.1rem;
+}
+
+.draft-generator-popup .maplibregl-popup-close-button:hover {
+  background: transparent;
+  color: white;
+}
+
+.draft-generator-popup .maplibregl-popup-tip {
+  border-top-color: rgb(24 24 27);
+}
+
 .leaflet-div-icon {
   background: transparent;
   border: none;
