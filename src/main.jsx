@@ -8,3 +8,22 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>
 );
+
+if (import.meta.env.DEV) {
+  void enableDevDiagnostics();
+}
+
+async function enableDevDiagnostics() {
+  if (import.meta.env.VITE_ENABLE_REACT_GRAB === 'true') {
+    await import('react-grab');
+  }
+
+  if (import.meta.env.VITE_ENABLE_REACT_SCAN === 'true') {
+    const { scan } = await import('react-scan');
+
+    scan({
+      enabled: true,
+      log: true,
+    });
+  }
+}

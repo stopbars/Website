@@ -123,3 +123,6 @@ Thumbs.db
 
 # Runtime files
 *.log
+
+# Local performance captures
+/performance-traces/
