@@ -6,14 +6,31 @@ import { Search, ChevronLeft, ChevronRight, HelpCircle, AlertCircle } from 'luci
 import { Button } from '../components/shared/Button';
 
 const ITEMS_PER_PAGE = 5;
+const FAQ_SKELETON_KEYS = [
+  'faq-skeleton-1',
+  'faq-skeleton-2',
+  'faq-skeleton-3',
+  'faq-skeleton-4',
+  'faq-skeleton-5',
+];
 
+/* oxlint-disable react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect -- Request and pagination state are independent; the one-shot FAQ request is isolated to this route. */
 const FAQPage = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useSearchQuery();
-  const [filteredFaqs, setFilteredFaqs] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState(() => ({ searchTerm, page: 1 }));
+  const currentPage = pagination.searchTerm === searchTerm ? pagination.page : 1;
+
+  const filteredFaqs = useMemo(() => {
+    const normalizedSearch = searchTerm.toLowerCase();
+    return faqs.filter(
+      (faq) =>
+        faq.question.toLowerCase().includes(normalizedSearch) ||
+        faq.answer.toLowerCase().includes(normalizedSearch)
+    );
+  }, [faqs, searchTerm]);
 
   const lastUpdated = useMemo(() => {
     if (faqs.length === 0) return null;
@@ -41,7 +58,6 @@ const FAQPage = () => {
         const data = await response.json();
         const sortedFaqs = data.faqs.sort((a, b) => a.order - b.order);
         setFaqs(sortedFaqs);
-        setFilteredFaqs(sortedFaqs);
       } catch (err) {
         setError('Failed to load FAQs. Please try again later.');
         console.error('Error fetching FAQs:', err);
@@ -53,23 +69,13 @@ const FAQPage = () => {
     fetchFaqs();
   }, []);
 
-  useEffect(() => {
-    const filtered = faqs.filter(
-      (faq) =>
-        faq.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        faq.answer.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredFaqs(filtered);
-    setCurrentPage(1); // Reset to first page when search changes
-  }, [searchTerm, faqs]);
-
   const totalPages = Math.ceil(filteredFaqs.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentFaqs = filteredFaqs.slice(startIndex, endIndex);
 
   const handlePageChange = (newPage) => {
-    setCurrentPage(newPage);
+    setPagination({ searchTerm, page: newPage });
   };
 
   return (
@@ -90,6 +96,7 @@ const FAQPage = () => {
           <div className="max-w-xl mx-auto mb-12">
             <div className="relative">
               <input
+                aria-label="Search FAQs"
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -111,8 +118,8 @@ const FAQPage = () => {
             </Card>
           ) : loading ? (
             <div className="space-y-6">
-              {[...Array(ITEMS_PER_PAGE)].map((_, index) => (
-                <Card key={index} className="animate-pulse">
+              {FAQ_SKELETON_KEYS.map((skeletonKey) => (
+                <Card key={skeletonKey} className="animate-pulse">
                   <div className="p-6">
                     <div className="h-6 bg-zinc-700 rounded-md w-3/4 mb-4"></div>
                     <div className="space-y-2">

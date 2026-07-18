@@ -11,6 +11,7 @@ const TOKEN_KEY = 'vatsimToken';
  */
 export const setVatsimToken = (token) => {
   try {
+    // oxlint-disable-next-line react-doctor/auth-token-in-web-storage -- VATSIM's client-only OAuth flow currently has no server endpoint capable of issuing an HttpOnly session cookie.
     localStorage.setItem(TOKEN_KEY, token);
   } catch (e) {
     // Fails silently (e.g. private mode / quota exceeded)

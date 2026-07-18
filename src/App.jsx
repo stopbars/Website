@@ -1,56 +1,41 @@
-import { Suspense, lazy } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { lazy } from 'react';
+import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
 import { ErrorBoundary, RouteError } from './components/shared/ErrorBoundary';
 import { PostHogConsentBootstrap } from './components/shared/PostHogConsentBootstrap';
+import { Layout } from './components/layout/Layout';
+import { routeModules } from './utils/routeModules';
 import Home from './pages/Home.jsx';
-import { Loader } from 'lucide-react';
 
-const Account = lazy(() => import('./pages/Account.jsx'));
-const Privacy = lazy(() => import('./pages/Privacy.jsx'));
-const Terms = lazy(() => import('./pages/Terms.jsx'));
-const FAQPage = lazy(() => import('./pages/FAQs.jsx'));
-const GlobalStatus = lazy(() => import('./pages/GlobalStatus.jsx'));
-const Changelog = lazy(() => import('./pages/Changelog.jsx'));
-const Contact = lazy(() => import('./pages/Contact.jsx'));
-const About = lazy(() => import('./pages/About.jsx'));
-const Credits = lazy(() => import('./pages/Credits.jsx'));
-const NotFound = lazy(() => import('./pages/NotFound.jsx'));
-const Banned = lazy(() => import('./pages/Banned.jsx'));
-const AuthGrant = lazy(() => import('./pages/AuthGrant.jsx'));
-const DivisionAirportManager = lazy(() => import('./pages/DivisionAirportManager.jsx'));
-const DebugGenerator = lazy(() => import('./pages/DebugGenerator.jsx'));
-const ContributionDashboard = lazy(() => import('./pages/ContributionDashboard.jsx'));
-const ContributeNew = lazy(() => import('./pages/ContributeNew.jsx'));
-const ContributeMap = lazy(() => import('./pages/ContributeMap.jsx'));
-const ContributeDetails = lazy(() => import('./pages/ContributeDetails.jsx'));
-const ContributeTest = lazy(() => import('./pages/ContributeTest.jsx'));
-const XMLGenerator = lazy(() => import('./pages/XMLGenerator.jsx'));
-const DivisionManagement = lazy(() => import('./components/divisions/DivisionManagement.jsx'));
-const StaffDashboard = lazy(() => import('./pages/StaffDashboard.jsx'));
-const AuthCallback = lazy(() =>
-  import('./components/auth/AuthCallback.jsx').then((module) => ({
-    default: module.AuthCallback,
-  }))
-);
-const DiscordRedirect = lazy(() =>
-  import('./components/shared/DiscordRedirect.jsx').then((module) => ({
-    default: module.DiscordRedirect,
-  }))
-);
-const DocsRedirect = lazy(() =>
-  import('./components/shared/DocsRedirect.jsx').then((module) => ({
-    default: module.DocsRedirect,
-  }))
-);
-const DonateRedirect = lazy(() =>
-  import('./components/shared/DonateRedirect.jsx').then((module) => ({
-    default: module.DonateRedirect,
-  }))
-);
+const Account = lazy(routeModules.account);
+const Privacy = lazy(routeModules.privacy);
+const Terms = lazy(routeModules.terms);
+const FAQPage = lazy(routeModules.faq);
+const GlobalStatus = lazy(routeModules.status);
+const Changelog = lazy(routeModules.changelog);
+const Contact = lazy(routeModules.contact);
+const About = lazy(routeModules.about);
+const Credits = lazy(routeModules.credits);
+const NotFound = lazy(routeModules.notFound);
+const Banned = lazy(routeModules.banned);
+const AuthGrant = lazy(routeModules.authGrant);
+const DivisionAirportManager = lazy(routeModules.divisionAirportManager);
+const DebugGenerator = lazy(routeModules.debugGenerator);
+const ContributionDashboard = lazy(routeModules.contributionDashboard);
+const ContributeNew = lazy(routeModules.contributeNew);
+const ContributeMap = lazy(routeModules.contributeMap);
+const ContributeDetails = lazy(routeModules.contributeDetails);
+const ContributeTest = lazy(routeModules.contributeTest);
+const XMLGenerator = lazy(routeModules.xmlGenerator);
+const DivisionManagement = lazy(routeModules.divisionManagement);
+const StaffDashboard = lazy(routeModules.staffDashboard);
+const AuthCallback = lazy(routeModules.authCallback);
+const DiscordRedirect = lazy(routeModules.discordRedirect);
+const DocsRedirect = lazy(routeModules.docsRedirect);
+const DonateRedirect = lazy(routeModules.donateRedirect);
 
-const router = createBrowserRouter([
+const appRoutes = [
   {
     path: '/',
     element: <Home />,
@@ -212,24 +197,27 @@ const router = createBrowserRouter([
     element: <NotFound />,
     errorElement: <RouteError />,
   },
-]);
+];
 
-const suspenseFallback = (
-  <div className="flex h-screen items-center justify-center bg-zinc-950 text-zinc-200">
-    <Loader className="h-10 w-10 animate-spin" aria-label="Loading" />
-  </div>
-);
+const router = createBrowserRouter([
+  {
+    element: (
+      <AuthProvider>
+        <Layout>
+          <Outlet />
+        </Layout>
+      </AuthProvider>
+    ),
+    children: appRoutes,
+  },
+]);
 
 export default function App() {
   return (
     <PostHogConsentBootstrap>
-      <AuthProvider>
-        <ErrorBoundary>
-          <Suspense fallback={suspenseFallback}>
-            <RouterProvider router={router} />
-          </Suspense>
-        </ErrorBoundary>
-      </AuthProvider>
+      <ErrorBoundary>
+        <RouterProvider router={router} />
+      </ErrorBoundary>
     </PostHogConsentBootstrap>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 export const DocsRedirect = () => {
   useEffect(() => {
-    window.location.href = 'https://docs.stopbars.com';
+    window.location.assign('https://docs.stopbars.com');
   }, []);
 
   return;

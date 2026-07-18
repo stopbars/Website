@@ -4,8 +4,19 @@ import { ConsentBanner } from '../components/shared/ConsentBanner';
 import { Button } from '../components/shared/Button';
 import { useState } from 'react';
 
-const Privacy = () => {
+const CookiePreferencesControl = () => {
   const [showConsentBanner, setShowConsentBanner] = useState(false);
+
+  return (
+    <>
+      <Button onClick={() => setShowConsentBanner(true)}>Manage Cookie Settings</Button>
+      <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
+    </>
+  );
+};
+
+/* oxlint-disable react-doctor/no-giant-component -- The privacy policy is cohesive static legal content; splitting it would obscure document structure. */
+const Privacy = () => {
   return (
     <Layout>
       <div className="pt-45 pb-20">
@@ -321,12 +332,11 @@ const Privacy = () => {
               <p className="text-zinc-300 mb-4">
                 You can manage your analytics cookie preferences at any time using the button below.
               </p>
-              <Button onClick={() => setShowConsentBanner(true)}>Manage Cookie Settings</Button>
+              <CookiePreferencesControl />
             </Card>
           </div>
         </div>
       </div>
-      <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
     </Layout>
   );
 };

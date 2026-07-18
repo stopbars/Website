@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Cookie } from 'lucide-react';
 import { Button } from './Button';
+import { RouteLink } from './RouteLink';
 import PropTypes from 'prop-types';
 import {
   applyConsentDenied,
@@ -55,9 +56,9 @@ export const ConsentBanner = ({ show, setShow }) => {
         <p className="text-zinc-400 text-xs mb-4 leading-relaxed">
           We use PostHog Cloud EU to understand usage and improve BARS. No tracking occurs until you
           accept. See our{' '}
-          <a href="/privacy" className="underline hover:text-white">
+          <RouteLink to="/privacy" className="underline hover:text-white">
             Privacy Policy
-          </a>
+          </RouteLink>
           .
         </p>
         <div className="flex items-center justify-end gap-3">

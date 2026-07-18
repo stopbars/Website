@@ -43,5 +43,3 @@ export const DonationBanner = () => {
     </section>
   );
 };
-
-export default DonationBanner;

@@ -11,12 +11,8 @@ export function useWindowSize() {
     if (typeof window === 'undefined') return undefined;
     const handler = () => setSize({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener('resize', handler);
-    // Trigger once on mount in case something changed before effect ran
-    handler();
     return () => window.removeEventListener('resize', handler);
   }, []);
 
   return size;
 }
-
-export default useWindowSize;

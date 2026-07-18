@@ -3,12 +3,88 @@
 
 :root {
   color-scheme: dark;
+  background-color: rgb(9 9 11);
 }
 
 html {
+  min-height: 100%;
+  background-color: rgb(9 9 11);
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+@keyframes route-surface-settle {
+  from {
+    transform: translate3d(0, 5px, 0);
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.route-surface {
+  animation: route-surface-settle 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes loading-skeleton-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes loading-skeleton-breathe {
+  0%,
+  100% {
+    background-color: rgb(39 39 42 / 0.58);
+  }
+
+  50% {
+    background-color: rgb(63 63 70 / 0.72);
+  }
+}
+
+.loading-skeleton-enter {
+  animation: loading-skeleton-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) 90ms both;
+}
+
+.loading-skeleton-block {
+  border-radius: 0.5rem;
+  background-color: rgb(39 39 42 / 0.58);
+  animation: loading-skeleton-breathe 1.8s ease-in-out infinite;
+}
+
+[data-reveal] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+[data-reveal].reveal-pending {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+}
+
+[data-reveal].reveal-visible {
+  transition:
+    opacity 480ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 480ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.deferred-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
+}
+
+.deferred-content {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 520px;
 }
 
 /* Remove any blockquote styles if they exist */
@@ -17,8 +93,14 @@ blockquote {
 }
 
 body {
+  min-height: 100%;
   background-color: rgb(9 9 11);
   color: white;
+}
+
+#root {
+  min-height: 100%;
+  background-color: rgb(9 9 11);
 }
 
 /* Ensure all clickable buttons have pointer cursor */
@@ -46,6 +128,21 @@ button:disabled {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  [data-reveal],
+  [data-reveal].reveal-pending {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .route-surface {
+    animation: none;
+  }
+
+  .loading-skeleton-enter,
+  .loading-skeleton-block {
+    animation: none;
   }
 }
 
@@ -240,4 +337,108 @@ button:disabled {
 .custom-popup select:focus {
   outline: none;
   border-color: rgb(161 161 170);
+}
+
+/* Staff workspace ---------------------------------------------------------
+   Staff tools are maintained independently, so this scoped layer gives every
+   tool the same shell, rhythm, control states, and data-table vocabulary. */
+.staff-dashboard {
+  --staff-surface: rgb(24 24 27);
+  --staff-surface-raised: rgb(39 39 42 / 0.58);
+  --staff-border: rgb(63 63 70 / 0.72);
+  --staff-muted: rgb(161 161 170);
+  --staff-accent: rgb(96 165 250);
+}
+
+.staff-tool-surface {
+  background:
+    linear-gradient(180deg, rgb(39 39 42 / 0.12), transparent 8rem),
+    var(--staff-surface);
+}
+
+.staff-tool {
+  min-width: 0;
+  padding: 1.5rem;
+}
+
+.staff-tool-header {
+  margin: 0 !important;
+  padding-bottom: 1.25rem;
+}
+
+.staff-tool-header h2 {
+  color: rgb(250 250 250);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.staff-tool-header h2 + p {
+  max-width: 65ch;
+  margin-top: 0.25rem;
+  color: var(--staff-muted);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.staff-tool-header > :last-child:not(:first-child) {
+  flex-wrap: wrap;
+}
+
+.staff-tool :where(input:not([type='file']), textarea, select) {
+  border-color: var(--staff-border);
+  background-color: rgb(39 39 42 / 0.62);
+  color: rgb(244 244 245);
+}
+
+.staff-tool :where(input:not([type='file']), textarea, select)::placeholder {
+  color: rgb(161 161 170);
+  opacity: 1;
+}
+
+.staff-tool :where(input:not([type='file']), textarea, select):hover:not(:disabled) {
+  border-color: rgb(82 82 91);
+}
+
+.staff-tool :where(input:not([type='file']), textarea, select):focus {
+  border-color: rgb(59 130 246 / 0.72);
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(59 130 246 / 0.2);
+}
+
+.staff-tool :where(button, a):focus-visible {
+  outline: 2px solid rgb(96 165 250 / 0.78);
+  outline-offset: 2px;
+}
+
+.staff-tool table {
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-tool thead {
+  background-color: rgb(39 39 42 / 0.3);
+}
+
+.staff-tool tbody tr {
+  transition: background-color 150ms ease-out;
+}
+
+.staff-tool tbody tr:hover {
+  background-color: rgb(39 39 42 / 0.34);
+}
+
+@media (max-width: 639px) {
+  .staff-tool {
+    padding: 1rem;
+  }
+
+  .staff-tool-header {
+    padding-bottom: 1rem;
+  }
+
+  .staff-tool-header > :last-child:not(:first-child) {
+    width: 100%;
+  }
 }

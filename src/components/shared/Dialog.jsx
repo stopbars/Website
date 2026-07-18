@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { X, Loader } from 'lucide-react';
@@ -61,7 +61,26 @@ const colorClasses = {
   },
 };
 
+const DIALOG_MAX_WIDTH_CLASSES = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
+};
+
+const DIALOG_BUTTON_POSITION_CLASSES = {
+  left: 'justify-start',
+  center: 'justify-center',
+  right: 'justify-end',
+};
+
+const EMPTY_DIALOG_ITEMS = [];
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const DialogField = ({ field, colorScheme }) => {
+  const fieldId = useId();
   const {
     type = 'text',
     label,
@@ -79,10 +98,15 @@ const DialogField = ({ field, colorScheme }) => {
 
   return (
     <div className="space-y-2">
-      {label && <label className="block text-sm font-medium text-zinc-300">{label}</label>}
+      {label && (
+        <label htmlFor={fieldId} className="block text-sm font-medium text-zinc-300">
+          {label}
+        </label>
+      )}
 
       {type === 'text' || type === 'confirmation' ? (
         <input
+          id={fieldId}
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -94,6 +118,7 @@ const DialogField = ({ field, colorScheme }) => {
         />
       ) : type === 'textarea' ? (
         <textarea
+          id={fieldId}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -105,6 +130,7 @@ const DialogField = ({ field, colorScheme }) => {
         />
       ) : type === 'email' ? (
         <input
+          id={fieldId}
           type="email"
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -115,6 +141,7 @@ const DialogField = ({ field, colorScheme }) => {
         />
       ) : type === 'password' ? (
         <input
+          id={fieldId}
           type="password"
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -211,8 +238,8 @@ export const Dialog = ({
   titleColor,
   description,
   children,
-  fields = [],
-  buttons = [],
+  fields = EMPTY_DIALOG_ITEMS,
+  buttons = EMPTY_DIALOG_ITEMS,
   buttonsPosition = 'left',
   isLoading = false,
   showCloseButton = true,
@@ -222,6 +249,9 @@ export const Dialog = ({
   onSubmit,
 }) => {
   const dialogRef = useRef(null);
+  const previouslyFocusedRef = useRef(null);
+  const titleId = useId();
+  const descriptionId = useId();
 
   const resolvedTitleColor = titleColor || iconColor;
   const iconColorScheme = colorClasses[iconColor] || colorClasses.zinc;
@@ -237,7 +267,32 @@ export const Dialog = ({
   const handleKeyDown = useCallback(
     (e) => {
       if (e.key === 'Escape' && closeOnEscape && !isLoading) {
+        e.preventDefault();
         onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusableElements = Array.from(
+          dialogRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
+        );
+
+        if (focusableElements.length === 0) {
+          e.preventDefault();
+          dialogRef.current.focus();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements.at(-1);
+
+        if (e.shiftKey && document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        } else if (!e.shiftKey && document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
       }
     },
     [closeOnEscape, isLoading, onClose]
@@ -264,15 +319,10 @@ export const Dialog = ({
 
   useEffect(() => {
     if (open) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-      };
-    }
-  }, [open, handleKeyDown]);
+      previouslyFocusedRef.current = document.activeElement;
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
 
-  useEffect(() => {
-    if (open) {
       const timer = setTimeout(() => {
         if (dialogRef.current && !dialogRef.current.contains(document.activeElement)) {
           dialogRef.current.focus();
@@ -281,34 +331,22 @@ export const Dialog = ({
 
       return () => {
         clearTimeout(timer);
+        document.body.style.overflow = previousOverflow;
+        previouslyFocusedRef.current?.focus?.();
       };
     }
   }, [open]);
 
   if (!open) return null;
 
-  const maxWidthClasses = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    xl: 'max-w-xl',
-    '2xl': 'max-w-2xl',
-  };
-
-  const buttonPositionClasses = {
-    left: 'justify-start',
-    center: 'justify-center',
-    right: 'justify-end',
-  };
-
   const dialogContent = (
+    // The backdrop owns pointer dismissal while the inner panel is the accessible dialog.
+    // oxlint-disable-next-line react-doctor/no-noninteractive-element-interactions
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-300 ease-out"
+      role="presentation"
+      className="fixed inset-0 z-50 flex min-h-dvh w-screen items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
       onClick={handleBackdropClick}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={title ? 'dialog-title' : undefined}
-      aria-describedby={description ? 'dialog-description' : undefined}
+      onKeyDown={handleKeyDown}
       style={{
         animation: 'dialogBackdropIn 0.2s ease-out forwards',
       }}
@@ -336,7 +374,11 @@ export const Dialog = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className={`bg-zinc-900 rounded-xl ${maxWidthClasses[maxWidth] || maxWidthClasses.md} w-full border border-zinc-800 focus:outline-none`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
+        className={`my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto bg-zinc-900 rounded-xl ${DIALOG_MAX_WIDTH_CLASSES[maxWidth] || DIALOG_MAX_WIDTH_CLASSES.md} w-full border border-zinc-800 shadow-2xl shadow-black/30 focus:outline-none`}
         style={{
           animation: 'dialogContentIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         }}
@@ -345,7 +387,7 @@ export const Dialog = ({
           <div className="flex items-center space-x-3">
             {Icon && <Icon className={`w-6 h-6 ${iconColorScheme.icon} shrink-0`} />}
             {title && (
-              <h3 id="dialog-title" className={`text-xl font-semibold ${titleColorScheme.title}`}>
+              <h3 id={titleId} className={`text-xl font-semibold ${titleColorScheme.title}`}>
                 {title}
               </h3>
             )}
@@ -365,9 +407,15 @@ export const Dialog = ({
 
         <div className="p-6">
           {description && (
-            <p id="dialog-description" className="text-zinc-300 mb-6">
-              {description}
-            </p>
+            typeof description === 'string' ? (
+              <p id={descriptionId} className="text-zinc-300 mb-6">
+                {description}
+              </p>
+            ) : (
+              <div id={descriptionId} className="mb-6 text-zinc-300">
+                {description}
+              </div>
+            )
           )}
 
           {children}
@@ -375,9 +423,9 @@ export const Dialog = ({
           {fields.length > 0 && (
             <form onSubmit={handleFormSubmit}>
               <div className="space-y-4">
-                {fields.map((field, index) => (
+                {fields.map((field) => (
                   <DialogField
-                    key={index}
+                    key={field.id ?? field.label ?? field.placeholder}
                     field={{ ...field, disabled: field.disabled || isLoading }}
                     colorScheme={iconColorScheme}
                   />
@@ -386,11 +434,11 @@ export const Dialog = ({
 
               {buttons.length > 0 && (
                 <div
-                  className={`flex flex-wrap gap-3 mt-6 ${buttonPositionClasses[buttonsPosition]}`}
+                  className={`flex flex-wrap gap-3 mt-6 ${DIALOG_BUTTON_POSITION_CLASSES[buttonsPosition]}`}
                 >
-                  {buttons.map((button, index) => (
+                  {buttons.map((button) => (
                     <DialogButton
-                      key={index}
+                      key={button.id ?? button.label}
                       button={button}
                       isValid={isFormValid}
                       isLoading={isLoading}
@@ -402,9 +450,16 @@ export const Dialog = ({
           )}
 
           {fields.length === 0 && buttons.length > 0 && (
-            <div className={`flex flex-wrap gap-3 mt-6 ${buttonPositionClasses[buttonsPosition]}`}>
-              {buttons.map((button, index) => (
-                <DialogButton key={index} button={button} isValid={true} isLoading={isLoading} />
+            <div
+              className={`flex flex-wrap gap-3 mt-6 ${DIALOG_BUTTON_POSITION_CLASSES[buttonsPosition]}`}
+            >
+              {buttons.map((button) => (
+                <DialogButton
+                  key={button.id ?? button.label}
+                  button={button}
+                  isValid={true}
+                  isLoading={isLoading}
+                />
               ))}
             </div>
           )}
@@ -423,7 +478,7 @@ Dialog.propTypes = {
   iconColor: PropTypes.oneOf(['red', 'orange', 'blue', 'green', 'zinc', 'white']),
   title: PropTypes.string,
   titleColor: PropTypes.oneOf(['red', 'orange', 'blue', 'green', 'zinc', 'white']),
-  description: PropTypes.string,
+  description: PropTypes.node,
   children: PropTypes.node,
   fields: PropTypes.arrayOf(
     PropTypes.shape({
@@ -461,5 +516,3 @@ Dialog.propTypes = {
   maxWidth: PropTypes.oneOf(['sm', 'md', 'lg', 'xl', '2xl']),
   onSubmit: PropTypes.func,
 };
-
-export default Dialog;

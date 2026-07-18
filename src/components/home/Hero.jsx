@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '../shared/Button';
 
+/* oxlint-disable react-doctor/no-fetch-in-effect -- The one-shot installer request owns AbortController cleanup and is isolated to the hero. */
 export const Hero = () => {
-  const [downloadInfo, setDownloadInfo] = useState(null);
+  const downloadInfoRef = useRef(null);
   const [downloadAvailable, setDownloadAvailable] = useState(true);
   const [visible, setVisible] = useState(false);
 
@@ -13,29 +14,28 @@ export const Hero = () => {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
+    const controller = new AbortController();
     const url = 'https://v2.stopbars.com/releases/latest?product=Installer';
 
     (async () => {
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) {
-          if (mounted) setDownloadAvailable(false);
+          setDownloadAvailable(false);
           throw new Error(`HTTP ${res.status}`);
         }
         const json = await res.json();
-        if (mounted) {
-          setDownloadInfo(json);
-          setDownloadAvailable(true);
-        }
+        downloadInfoRef.current = json;
+        setDownloadAvailable(true);
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error('Failed to fetch latest installer release:', err);
-        if (mounted) setDownloadAvailable(false);
+        setDownloadAvailable(false);
       }
     })();
 
     return () => {
-      mounted = false;
+      controller.abort();
     };
   }, []);
 
@@ -47,20 +47,20 @@ export const Hero = () => {
       <div className="max-w-5xl mx-auto text-center space-y-10">
         <h1 id="hero-heading" className="text-5xl md:text-7xl font-bold tracking-tight">
           <span
-            className={`block transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
+            className={`block transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
             style={{ transitionDelay: '0ms' }}
           >
             Advanced Airport
           </span>
           <span
-            className={`block transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
+            className={`block transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
             style={{ transitionDelay: '80ms' }}
           >
             Lighting Simulation
           </span>
         </h1>
         <p
-          className={`text-base md:text-lg text-zinc-400 leading-relaxed transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
+          className={`text-base md:text-lg text-zinc-400 leading-relaxed transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
           style={{ transitionDelay: '180ms' }}
         >
           BARS revolutionizes your VATSIM experience with completely free realistic airport lighting
@@ -68,12 +68,12 @@ export const Hero = () => {
           integrated with both default and major third-party sceneries.
         </p>
         <div
-          className={`flex flex-col sm:flex-row gap-4 justify-center transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
+          className={`flex flex-col sm:flex-row gap-4 justify-center transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
           style={{ transitionDelay: '280ms' }}
         >
           <Button
             variant="primary"
-            className={`h-14 px-10 text-base md:text-lg gap-2 transition-all duration-200 ${
+            className={`h-14 px-10 text-base md:text-lg gap-2 transition-[filter,transform,opacity] duration-200 ${
               downloadAvailable
                 ? 'hover:scale-[1.02] hover:brightness-110'
                 : 'opacity-50 cursor-not-allowed'
@@ -81,7 +81,7 @@ export const Hero = () => {
             disabled={!downloadAvailable}
             onClick={async () => {
               const trackingUrl = 'https://v2.stopbars.com/download?product=Installer';
-              const downloadUrl = downloadInfo?.downloadUrl;
+              const downloadUrl = downloadInfoRef.current?.downloadUrl;
 
               try {
                 if (navigator && typeof navigator.sendBeacon === 'function') {
@@ -99,7 +99,7 @@ export const Hero = () => {
               try {
                 window.open(downloadUrl, '_blank', 'noopener,noreferrer');
               } catch {
-                window.location.href = downloadUrl;
+                window.location.assign(downloadUrl);
               }
             }}
             aria-label="Download BARS"
@@ -121,7 +121,7 @@ export const Hero = () => {
         </div>
 
         <div
-          className={`max-w-5xl mx-auto mt-16 transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
+          className={`max-w-5xl mx-auto mt-16 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
           style={{ transitionDelay: '380ms' }}
         >
           <div className="h-96 md:h-128 relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
@@ -136,5 +136,3 @@ export const Hero = () => {
     </section>
   );
 };
-
-export default Hero;

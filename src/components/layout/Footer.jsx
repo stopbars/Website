@@ -1,15 +1,39 @@
-import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { ConsentBanner } from '../shared/ConsentBanner';
+import { RouteLink } from '../shared/RouteLink';
 
-export const Footer = () => {
-  const [statusColor, setStatusColor] = useState('bg-gray-400'); // Default gray
+const CURRENT_YEAR = new Date().getFullYear();
+
+const ManageCookiesControl = () => {
   const [showConsentBanner, setShowConsentBanner] = useState(false);
 
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowConsentBanner(true)}
+        className="text-base md:text-base text-zinc-400 hover:text-white transition-colors text-left cursor-pointer"
+      >
+        Manage Cookies
+      </button>
+      <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
+    </>
+  );
+};
+
+/* oxlint-disable react-doctor/no-fetch-in-effect react-doctor/no-long-transition-duration -- Health polling owns cancellation, and the long status pulses are deliberate ambient loops. */
+export const Footer = () => {
+  const [statusColor, setStatusColor] = useState('bg-gray-400'); // Default gray
+
   useEffect(() => {
+    let activeController;
     const fetchStatus = async () => {
+      activeController?.abort();
+      activeController = new AbortController();
       try {
-        const response = await fetch('https://v2.stopbars.com/health');
+        const response = await fetch('https://v2.stopbars.com/health', {
+          signal: activeController.signal,
+        });
         const data = await response.json();
         const services = Object.values(data);
         const okCount = services.filter((status) => status === 'ok').length;
@@ -23,6 +47,7 @@ export const Footer = () => {
           setStatusColor('bg-orange-400');
         }
       } catch (error) {
+        if (error.name === 'AbortError') return;
         console.error('Failed to fetch status:', error);
         setStatusColor('bg-gray-400');
       }
@@ -32,12 +57,11 @@ export const Footer = () => {
     // Refresh every 5 minutes (300 seconds)
     const interval = setInterval(fetchStatus, 300000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      activeController?.abort();
+    };
   }, []);
-
-  const handleManageCookies = () => {
-    setShowConsentBanner(true);
-  };
 
   return (
     <footer className="py-8 md:py-16 border-t border-zinc-900">
@@ -47,7 +71,7 @@ export const Footer = () => {
           <div className="col-span-1 lg:col-span-1">
             <h2 className="text-3xl md:text-3xl font-bold mb-4 md:mb-6">BARS</h2>
             <div className="text-base md:text-base text-zinc-400 mb-4 md:mb-6">
-              © Copyright {new Date().getFullYear()} BARS
+              © Copyright {CURRENT_YEAR} BARS
             </div>
             <div className="flex items-center space-x-5 md:space-x-5">
               <a
@@ -90,36 +114,36 @@ export const Footer = () => {
             <h3 className="text-base md:text-base font-medium mb-4 md:mb-6">Resources</h3>
             <ul className="space-y-3 md:space-y-3">
               <li>
-                <Link
+                <RouteLink
                   to="/about"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
                   About
-                </Link>
+                </RouteLink>
               </li>
               <li>
-                <Link
+                <RouteLink
                   to="/credits"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
                   Credits
-                </Link>
+                </RouteLink>
               </li>
               <li>
-                <Link
+                <RouteLink
                   to="/changelog"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
                   Changelog
-                </Link>
+                </RouteLink>
               </li>
               <li>
-                <Link
+                <RouteLink
                   to="/faq"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
                   FAQ
-                </Link>
+                </RouteLink>
               </li>
             </ul>
           </div>
@@ -152,12 +176,12 @@ export const Footer = () => {
                 </a>
               </li>
               <li>
-                <Link
+                <RouteLink
                   to="/contact"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
                   Contact
-                </Link>
+                </RouteLink>
               </li>
               <li>
                 <a
@@ -197,28 +221,23 @@ export const Footer = () => {
                 </a>
               </li>
               <li>
-                <Link
+                <RouteLink
                   to="/privacy"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
                   Privacy Policy
-                </Link>
+                </RouteLink>
               </li>
               <li>
-                <Link
+                <RouteLink
                   to="/terms"
                   className="text-base md:text-base text-zinc-400 hover:text-white transition-colors"
                 >
                   Terms Of Service
-                </Link>
+                </RouteLink>
               </li>
               <li>
-                <button
-                  onClick={handleManageCookies}
-                  className="text-base md:text-base text-zinc-400 hover:text-white transition-colors text-left cursor-pointer"
-                >
-                  Manage Cookies
-                </button>
+                <ManageCookiesControl />
               </li>
             </ul>
           </div>
@@ -233,8 +252,6 @@ export const Footer = () => {
           </p>
         </div>
       </div>
-
-      <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
     </footer>
   );
 };

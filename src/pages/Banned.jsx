@@ -59,7 +59,7 @@ const Banned = () => {
             </Button>
             <Button
               variant="outline"
-              onClick={() => (window.location.href = '/contact')}
+              onClick={() => navigate('/contact')}
               className="border-zinc-700 hover:bg-zinc-800"
             >
               <Mail className="w-4 h-4 mr-2" /> Contact Support

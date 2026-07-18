@@ -3,21 +3,13 @@ import useSearchQuery from '../hooks/useSearchQuery';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Dropdown } from '../components/shared/Dropdown';
-import {
-  Search,
-  MapPin,
-  Loader,
-  ArrowUpDown,
-  MenuIcon,
-  Square,
-  Users,
-  Plane,
-  X,
-} from 'lucide-react';
+import { Search, MapPin, ArrowUpDown, MenuIcon, Square, Users, Plane, X } from 'lucide-react';
 import { Button } from '../components/shared/Button';
+import { PageLoading } from '../components/shared/PageLoading';
 
 const ITEMS_PER_PAGE = 12;
 
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect react-doctor/async-parallel react-doctor/prefer-module-scope-pure-function react-doctor/no-long-transition-duration -- Live status polling, filters, and ambient status pulses share one view; response parsing is dependent and the long durations are deliberate ambient loops. */
 const GlobalStatus = () => {
   // airports: { [icao]: { packages: string[] } }
   const [airports, setAirports] = useState({});
@@ -242,6 +234,7 @@ const GlobalStatus = () => {
                   />
                   {searchTerm && (
                     <button
+                      type="button"
                       onClick={() => setSearchTerm('')}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer text-zinc-400 hover:text-zinc-300 transition-colors"
                       aria-label="Clear search"
@@ -291,10 +284,7 @@ const GlobalStatus = () => {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center h-64" role="status" aria-live="polite">
-              <Loader className="w-8 h-8 animate-spin text-zinc-400" aria-hidden="true" />
-              <span className="sr-only">Loading global status…</span>
-            </div>
+            <PageLoading label="Loading global status…" />
           ) : error ? (
             <Card className="p-6 text-red-400" role="alert">
               {error}

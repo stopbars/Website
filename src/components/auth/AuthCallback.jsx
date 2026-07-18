@@ -12,6 +12,13 @@ export const AuthCallback = () => {
   const [status, setStatus] = useState('authenticating'); // 'authenticating', 'success', 'error'
 
   useEffect(() => {
+    let redirectTimer;
+    let active = true;
+    const scheduleRedirect = (destination, delay) => {
+      if (!active) return;
+      redirectTimer = window.setTimeout(() => navigate(destination), delay);
+    };
+
     const handleAuthentication = async () => {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
@@ -29,21 +36,25 @@ export const AuthCallback = () => {
           }
           setStatus('success');
           // Brief delay to show success message before redirecting
-          setTimeout(() => navigate(redirectTo), 1000);
+          scheduleRedirect(redirectTo, 1000);
           localStorage.removeItem('authRedirectPage');
         } catch (err) {
           setError(err.message);
           setStatus('error');
-          setTimeout(() => navigate('/'), 3000);
+          scheduleRedirect('/', 3000);
         }
       } else {
         setError('No token found');
         setStatus('error');
-        setTimeout(() => navigate('/'), 3000);
+        scheduleRedirect('/', 3000);
       }
     };
 
     handleAuthentication();
+    return () => {
+      active = false;
+      window.clearTimeout(redirectTimer);
+    };
     // Remove fetchUserData from dependencies to prevent infinite loops
     // Only run this effect once when the component mounts
   }, [navigate, fetchUserData]);

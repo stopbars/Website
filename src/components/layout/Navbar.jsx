@@ -1,13 +1,13 @@
 import { useScroll } from '../../hooks/useScroll';
 import { UserCircle, LogOut, ChevronRight, Menu, X } from 'lucide-react';
 import { Button } from '../shared/Button';
-import { Link } from 'react-router-dom';
+import { RouteLink } from '../shared/RouteLink';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 
 // Function to parse markdown-style links in NOTAM content
-const parseNotamLinks = (content) => {
+const sanitizeNotamLinks = (content) => {
   if (!content) return '';
 
   // RegExp to match markdown style links: [text](url)
@@ -24,19 +24,22 @@ const parseNotamLinks = (content) => {
   return DOMPurify.sanitize(sanitizedContent);
 };
 
+// Navigation, account controls, mobile menu, and the NOTAM banner share responsive layout state.
+// oxlint-disable react-doctor/no-giant-component
 export const Navbar = () => {
   const scrolled = useScroll();
-  const { user, logout, loading } = useAuth();
-  const { initiateVatsimAuth } = useAuth();
+  const { user, logout, loading, initiateVatsimAuth } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotam, setShowNotam] = useState(true);
-  const [notamContent, setNotamContent] = useState('');
-  const [notamType, setNotamType] = useState('warning'); // Types: "warning", "info", "discord", etc.
+  const [notamContent, setNotamContent] = useState(
+    () => localStorage.getItem('notam-content') || ''
+  );
+  const [notamType, setNotamType] = useState(() => localStorage.getItem('notam-type') || 'warning'); // Types: "warning", "info", "discord", etc.
   const notamRef = useRef(null);
   const [notamFitsOnOneLine, setNotamFitsOnOneLine] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
   // Track when NOTAM state has been resolved to avoid initial border flash
-  const [notamInitialized, setNotamInitialized] = useState(false);
+  const [notamInitialized, setNotamInitialized] = useState(() => Boolean(notamContent));
 
   // Close mobile menu when navigating to a new page or resizing to desktop
   useEffect(() => {
@@ -50,14 +53,17 @@ export const Navbar = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   // Fetch NOTAM from backend and handle caching
+  // The request is aborted on unmount; cached values provide the fallback path.
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect
   useEffect(() => {
+    const controller = new AbortController();
     const fetchNotam = async () => {
+      const cachedNotamContent = localStorage.getItem('notam-content');
+      const cachedNotamType = localStorage.getItem('notam-type');
       try {
         // Check when we last fetched the NOTAM
         const lastFetchTime = localStorage.getItem('notam-last-fetch');
         const currentTime = new Date().getTime();
-        const cachedNotamContent = localStorage.getItem('notam-content');
-        const cachedNotamType = localStorage.getItem('notam-type');
 
         // Only fetch from API if:
         // 1. We haven't fetched in the last hour (3600000 ms), or
@@ -66,7 +72,9 @@ export const Navbar = () => {
           !lastFetchTime || currentTime - parseInt(lastFetchTime) > 3600000 || !cachedNotamContent;
 
         if (shouldFetch) {
-          const response = await fetch('https://v2.stopbars.com/notam');
+          const response = await fetch('https://v2.stopbars.com/notam', {
+            signal: controller.signal,
+          });
           if (response.ok) {
             const data = await response.json();
             if (data.notam) {
@@ -96,12 +104,10 @@ export const Navbar = () => {
           }
         }
       } catch (error) {
+        if (error.name === 'AbortError') return;
         console.error('Failed to fetch NOTAM:', error);
 
         // Use cached NOTAM on error
-        const cachedNotamContent = localStorage.getItem('notam-content');
-        const cachedNotamType = localStorage.getItem('notam-type');
-
         if (cachedNotamContent) {
           setNotamContent(cachedNotamContent);
           setNotamType(cachedNotamType || 'warning');
@@ -116,6 +122,7 @@ export const Navbar = () => {
     };
 
     fetchNotam();
+    return () => controller.abort();
   }, []);
   // Check if NOTAM text wraps to multiple lines
   useEffect(() => {
@@ -155,7 +162,9 @@ export const Navbar = () => {
   };
 
   const mobileLinkClasses =
-    'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
+    'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
+
+  const notamVisible = Boolean(notamContent) && showNotam && !scrolled && notamFitsOnOneLine;
 
   return (
     <>
@@ -163,7 +172,7 @@ export const Navbar = () => {
       {/* NOTAM Banner - Always in the DOM but visibility controlled by classes */}
       {notamContent && (
         <div
-          className={`border-b overflow-hidden fixed top-0 left-0 w-full z-60 ${
+          className={`fixed left-0 top-0 z-60 w-full transform-gpu overflow-hidden border-b transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             notamType === 'warning'
               ? 'bg-amber-500/10 border-amber-500/20'
               : notamType === 'info'
@@ -175,7 +184,7 @@ export const Navbar = () => {
                     : notamType === 'error'
                       ? 'bg-red-500/10 border-red-500/20'
                       : 'bg-zinc-700/20 border-zinc-600/30'
-          } ${showNotam && !scrolled && notamFitsOnOneLine ? 'opacity-100' : 'opacity-0 pointer-events-none h-0'}`}
+          } ${notamVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-full opacity-0'}`}
         >
           <div className="container mx-auto px-4 py-3">
             <div className="flex items-center justify-center">
@@ -195,40 +204,43 @@ export const Navbar = () => {
                             ? 'text-red-400'
                             : 'text-zinc-300'
                 }`}
-                dangerouslySetInnerHTML={{ __html: parseNotamLinks(notamContent) }}
+                dangerouslySetInnerHTML={{ __html: sanitizeNotamLinks(notamContent) }}
               />
             </div>
           </div>
         </div>
       )}{' '}
       <nav
-        className={`fixed bg-zinc-950 left-0 w-full z-50 border-b transition-colors duration-100 ${
+        className={`fixed left-0 top-0 z-50 w-full transform-gpu border-b transition-[background-color,border-color,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           // Avoid showing the border until NOTAM state is initialized to prevent white flash
           scrolled || (notamInitialized && (!showNotam || !notamFitsOnOneLine || !notamContent))
-            ? 'backdrop-blur-md border-zinc-800 top-0'
-            : 'border-transparent top-10'
-        }`}
+            ? 'border-zinc-800 bg-zinc-950/90 backdrop-blur-md'
+            : 'border-transparent bg-zinc-950'
+        } ${notamVisible ? 'translate-y-10' : 'translate-y-0'}`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center md:flex-1">
-              <Link
+              <RouteLink
                 to="/"
                 className="text-2xl font-bold tracking-tight hover:text-zinc-300 transition-colors cursor-pointer"
               >
                 BARS
-              </Link>
+              </RouteLink>
             </div>
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex md:flex-1 justify-center">
               <div className="flex items-center space-x-6 lg:space-x-12">
-                <Link to="/about" className="text-zinc-400 hover:text-white transition-colors">
+                <RouteLink to="/about" className="text-zinc-400 hover:text-white transition-colors">
                   About
-                </Link>
-                <Link to="/contribute" className="text-zinc-400 hover:text-white transition-colors">
+                </RouteLink>
+                <RouteLink
+                  to="/contribute"
+                  className="text-zinc-400 hover:text-white transition-colors"
+                >
                   Contribute
-                </Link>
+                </RouteLink>
                 <a
                   href="https://docs.stopbars.com"
                   target="_blank"
@@ -251,12 +263,12 @@ export const Navbar = () => {
             <div className="hidden md:flex md:flex-1 items-center justify-end">
               {user ? (
                 <div className="flex items-center space-x-4">
-                  <Link to="/account">
+                  <RouteLink to="/account">
                     <Button variant="secondary" className="flex items-center space-x-2 px-4">
                       <UserCircle className="w-5 h-5" />
                       <span>{user.display_name}</span>
                     </Button>
-                  </Link>
+                  </RouteLink>
                   <Button variant="outline" onClick={logout} className="px-4">
                     <LogOut className="w-5 h-5" />
                   </Button>
@@ -311,20 +323,20 @@ export const Navbar = () => {
         >
           <div className="mx-2 rounded-b-xl border-b border-zinc-800 bg-zinc-900/95 backdrop-blur-md">
             <div className="px-5 py-4 space-y-1">
-              <Link
+              <RouteLink
                 to="/about"
                 className={mobileLinkClasses}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">About</span>
-              </Link>
-              <Link
+              </RouteLink>
+              <RouteLink
                 to="/contribute"
                 className={mobileLinkClasses}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <span className="font-medium">Contribute</span>
-              </Link>
+              </RouteLink>
               <a
                 href="https://docs.stopbars.com"
                 target="_blank"
@@ -349,7 +361,11 @@ export const Navbar = () => {
 
               {user ? (
                 <div className="space-y-3 pt-1">
-                  <Link to="/account" onClick={() => setMobileMenuOpen(false)} className="block">
+                  <RouteLink
+                    to="/account"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block"
+                  >
                     <Button
                       variant="secondary"
                       className="flex items-center space-x-3 px-4 w-full justify-center h-12"
@@ -357,7 +373,7 @@ export const Navbar = () => {
                       <UserCircle className="w-5 h-5" />
                       <span className="font-medium">{user.vatsim_id}</span>
                     </Button>
-                  </Link>
+                  </RouteLink>
                   <Button
                     variant="outline"
                     onClick={() => {

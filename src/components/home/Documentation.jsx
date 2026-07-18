@@ -1,39 +1,18 @@
 import { Button } from '../shared/Button';
 import { ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
+import { useRevealGroup } from '../../hooks/useRevealGroup';
 
 export const Documentation = () => {
   const navigate = useNavigate();
   const sectionRef = useRef(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('opacity-100', 'translate-y-0');
-            entry.target.classList.remove('opacity-0', 'translate-y-12');
-          }
-        });
-      },
-      { threshold: 0.1, rootMargin: '0px 0px -80px 0px' }
-    );
-
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
+  useRevealGroup(sectionRef);
 
   return (
-    <section className="py-40 mb-10" id="contribute">
+    <section ref={sectionRef} className="deferred-section py-40 mb-10" id="contribute">
       <div className="max-w-7xl mx-auto px-6">
-        <div
-          ref={sectionRef}
-          className="opacity-0 translate-y-12 transition-all duration-1000 ease-out"
-        >
+        <div data-reveal>
           <div className="text-center mb-12">
             <span className="inline-block px-4 py-1.5 text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-full mb-4">
               Open Source
@@ -85,5 +64,3 @@ export const Documentation = () => {
     </section>
   );
 };
-
-export default Documentation;

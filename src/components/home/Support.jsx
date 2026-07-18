@@ -3,7 +3,7 @@ import { Button } from '../shared/Button';
 
 export const Support = () => {
   return (
-    <section className="py-32 relative overflow-hidden" id="support">
+    <section className="deferred-section py-32 relative overflow-hidden" id="support">
       <div className="relative max-w-7xl mx-auto px-6">
         {/* Header */}
         <div className="text-center mb-16">

@@ -1,12 +1,104 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import { useNavigate } from 'react-router-dom';
 import { getVatsimToken, removeVatsimToken } from '../utils/cookieUtils';
 import { AuthContext } from './AuthContextBase';
 
 const apiUrl = 'https://v2.stopbars.com'; // Update this in dev as needed
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
+/* oxlint-disable react-doctor/js-cache-storage react-doctor/client-localstorage-no-version -- Cache reads occur in mutually exclusive helper paths, and retaining the established keys preserves active authenticated sessions. */
+
+const isCacheValid = () => {
+  const cachedData = sessionStorage.getItem('userData');
+  if (!cachedData) return false;
+  try {
+    const { timestamp } = JSON.parse(cachedData);
+    return Date.now() - timestamp < CACHE_DURATION;
+  } catch (error) {
+    console.error('Error parsing cached user data:', error);
+    return false;
+  }
+};
+
+const loadUserFromCache = () => {
+  const cachedData = sessionStorage.getItem('userData');
+  if (!cachedData) return null;
+  try {
+    const { user } = JSON.parse(cachedData);
+    return user;
+  } catch (error) {
+    console.error('Error loading user from cache:', error);
+    return null;
+  }
+};
+
+const isBannedCacheValid = () => {
+  const cached = sessionStorage.getItem('bannedInfo');
+  if (!cached) return false;
+  try {
+    const { timestamp, banned } = JSON.parse(cached);
+    if (banned?.expires_at) {
+      const expMs = Date.parse(banned.expires_at);
+      if (!Number.isNaN(expMs) && Date.now() >= expMs) return false;
+    }
+    return Date.now() - timestamp < CACHE_DURATION;
+  } catch (error) {
+    console.error('Error parsing banned cache:', error);
+    return false;
+  }
+};
+
+const loadBannedFromCache = () => {
+  const cached = sessionStorage.getItem('bannedInfo');
+  if (!cached) return null;
+  try {
+    const { banned } = JSON.parse(cached);
+    return banned;
+  } catch (error) {
+    console.error('Error loading banned cache:', error);
+    return null;
+  }
+};
+
+const saveBannedToCache = (banned) => {
+  try {
+    sessionStorage.setItem('bannedInfo', JSON.stringify({ banned, timestamp: Date.now() }));
+  } catch (error) {
+    console.error('Error saving banned cache:', error);
+  }
+};
+
+const clearBannedCache = () => {
+  try {
+    sessionStorage.removeItem('bannedInfo');
+  } catch (error) {
+    console.warn('Failed clearing banned cache', error);
+  }
+};
+
+const saveUserToCache = (userData) => {
+  try {
+    sessionStorage.setItem('userData', JSON.stringify({ user: userData, timestamp: Date.now() }));
+  } catch (error) {
+    console.error('Error saving user to cache:', error);
+  }
+};
+
+const initiateVatsimAuth = (redirectPage) => {
+  if (redirectPage) localStorage.setItem('authRedirectPage', redirectPage);
+  const params = new URLSearchParams({
+    client_id: import.meta.env.VITE_VATSIM_CLIENT_ID,
+    redirect_uri: `${apiUrl}/auth/vatsim/callback`,
+    response_type: 'code',
+    scope: 'vatsim_details email full_name',
+  });
+  window.location.assign(`https://auth.vatsim.net/oauth/authorize?${params}`);
+};
+
+/* oxlint-disable react-doctor/js-cache-storage react-doctor/client-localstorage-no-version react-doctor/no-cascading-set-state -- Cache reads occur in mutually exclusive validation paths; existing keys preserve active sessions, and auth hydration batches related guarded state transitions. */
 export function AuthProvider({ children }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [bannedInfo, setBannedInfo] = useState(null); // { banned: true, reason, expires_at }
@@ -18,95 +110,8 @@ export function AuthProvider({ children }) {
     clearBannedCache();
     setUser(null);
     setBannedInfo(null);
-    window.location.href = '/';
-  }, []);
-
-  // Check if cached user data is still valid
-  const isCacheValid = () => {
-    const cachedData = sessionStorage.getItem('userData');
-    if (!cachedData) return false;
-
-    try {
-      const { timestamp } = JSON.parse(cachedData);
-      return Date.now() - timestamp < CACHE_DURATION;
-    } catch (error) {
-      console.error('Error parsing cached user data:', error);
-      return false;
-    }
-  };
-
-  // Load user from cache
-  const loadUserFromCache = () => {
-    const cachedData = sessionStorage.getItem('userData');
-    if (!cachedData) return null;
-
-    try {
-      const { user } = JSON.parse(cachedData);
-      return user;
-    } catch (error) {
-      console.error('Error loading user from cache:', error);
-      return null;
-    }
-  };
-  // Banned cache helpers
-  const isBannedCacheValid = () => {
-    const cached = sessionStorage.getItem('bannedInfo');
-    if (!cached) return false;
-    try {
-      const { timestamp, banned } = JSON.parse(cached);
-      // If the ban has an explicit expiry, treat cache as invalid once expired
-      if (banned?.expires_at) {
-        const expMs = Date.parse(banned.expires_at);
-        if (!Number.isNaN(expMs) && Date.now() >= expMs) {
-          return false;
-        }
-      }
-      return Date.now() - timestamp < CACHE_DURATION;
-    } catch (e) {
-      console.error('Error parsing banned cache:', e);
-      return false;
-    }
-  };
-  const loadBannedFromCache = () => {
-    const cached = sessionStorage.getItem('bannedInfo');
-    if (!cached) return null;
-    try {
-      const { banned } = JSON.parse(cached);
-      return banned;
-    } catch (e) {
-      console.error('Error loading banned cache:', e);
-      return null;
-    }
-  };
-  const saveBannedToCache = (banned) => {
-    try {
-      sessionStorage.setItem('bannedInfo', JSON.stringify({ banned, timestamp: Date.now() }));
-    } catch (e) {
-      console.error('Error saving banned cache:', e);
-    }
-  };
-  const clearBannedCache = () => {
-    try {
-      sessionStorage.removeItem('bannedInfo');
-    } catch (e) {
-      console.warn('Failed clearing banned cache', e);
-    }
-  };
-
-  // Save user to cache
-  const saveUserToCache = (userData) => {
-    try {
-      sessionStorage.setItem(
-        'userData',
-        JSON.stringify({
-          user: userData,
-          timestamp: Date.now(),
-        })
-      );
-    } catch (error) {
-      console.error('Error saving user to cache:', error);
-    }
-  };
+    navigate('/', { replace: true });
+  }, [navigate]);
 
   const fetchUserData = useCallback(
     async (token, forceRefresh = false, options = {}) => {
@@ -227,21 +232,6 @@ export function AuthProvider({ children }) {
     },
     [logout]
   );
-  const initiateVatsimAuth = (RedirectPage) => {
-    // Store the redirect page in localStorage before redirecting
-    if (RedirectPage) {
-      localStorage.setItem('authRedirectPage', RedirectPage);
-    }
-
-    const params = new URLSearchParams({
-      client_id: import.meta.env.VITE_VATSIM_CLIENT_ID,
-      redirect_uri: `${apiUrl}/auth/vatsim/callback`,
-      response_type: 'code',
-      scope: 'vatsim_details email full_name',
-    });
-    window.location.href = `https://auth.vatsim.net/oauth/authorize?${params}`;
-  };
-
   // Function to force refresh user data
   const refreshUserData = useCallback(
     async (options = {}) => {
@@ -279,23 +269,22 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   }, [fetchUserData]);
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        logout,
-        initiateVatsimAuth,
-        fetchUserData,
-        refreshUserData,
-        setUser,
-        bannedInfo,
-        setBannedInfo,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const contextValue = useMemo(
+    () => ({
+      user,
+      loading,
+      logout,
+      initiateVatsimAuth,
+      fetchUserData,
+      refreshUserData,
+      setUser,
+      bannedInfo,
+      setBannedInfo,
+    }),
+    [user, loading, logout, fetchUserData, refreshUserData, bannedInfo]
   );
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
 AuthProvider.propTypes = {
   children: PropTypes.node.isRequired,
