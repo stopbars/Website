@@ -18,6 +18,7 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
+import { PageLoading } from '../components/shared/PageLoading';
 import DraftGeneratorMap from '../features/draft-generator/DraftGeneratorMap';
 import { selectionFromDrop, selectionFromInput } from '../features/draft-generator/local-package';
 import {
@@ -25,6 +26,8 @@ import {
   getContributionDisabledMessage,
 } from '../utils/contributionPolicy';
 
+// This workflow coordinates upload, worker progress, preview, and export in one cohesive screen.
+// oxlint-disable react-doctor/no-giant-component
 const XMLGenerator = () => {
   const { icao: urlIcao } = useParams();
   const navigate = useNavigate();
@@ -205,7 +208,7 @@ const XMLGenerator = () => {
     );
     workerRef.current = worker;
 
-    worker.addEventListener('message', (event) => {
+    worker.onmessage = (event) => {
       const message = event.data;
       if (message.id !== requestId) return;
       if (message.type === 'stage') {
@@ -223,12 +226,12 @@ const XMLGenerator = () => {
         showError(message.error || 'The draft could not be generated.');
         terminateWorker();
       }
-    });
-    worker.addEventListener('error', (event) => {
+    };
+    worker.onerror = (event) => {
       setGeneration({ status: 'error', stage: '', progress: 0 });
       showError(event.message || 'The local generator stopped unexpectedly.');
       terminateWorker();
-    });
+    };
     worker.postMessage({
       type: 'generate',
       id: requestId,
@@ -253,13 +256,7 @@ const XMLGenerator = () => {
   };
 
   if (loadingData) {
-    return (
-      <Layout>
-        <div className="flex min-h-screen items-center justify-center pt-24">
-          <LoaderCircle className="h-8 w-8 animate-spin text-zinc-400" aria-label="Loading" />
-        </div>
-      </Layout>
-    );
+    return <PageLoading page label="Loading draft generator…" />;
   }
 
   return (
@@ -421,6 +418,7 @@ const XMLGenerator = () => {
     </Layout>
   );
 };
+// oxlint-enable react-doctor/no-giant-component
 
 function buildDivisionGeojson(points) {
   const features = [];
@@ -430,11 +428,12 @@ function buildDivisionGeojson(points) {
       : point.coordinates
         ? [point.coordinates]
         : [];
-    const coordinates = rawCoordinates
-      .filter(
-        (coordinate) => Number.isFinite(coordinate?.lat) && Number.isFinite(coordinate?.lng)
-      )
-      .map((coordinate) => [coordinate.lng, coordinate.lat]);
+    const coordinates = [];
+    rawCoordinates.forEach((coordinate) => {
+      if (Number.isFinite(coordinate?.lat) && Number.isFinite(coordinate?.lng)) {
+        coordinates.push([coordinate.lng, coordinate.lat]);
+      }
+    });
     if (coordinates.length === 0) continue;
 
     features.push({

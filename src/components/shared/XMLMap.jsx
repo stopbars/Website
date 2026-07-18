@@ -59,6 +59,8 @@ const LIGHT_SORT_PRIORITY = {
   taxiway: 100,
 };
 
+// The map renderer is cohesive around one MapLibre lifecycle and its layer declarations.
+// oxlint-disable-next-line react-doctor/no-giant-component
 const XMLMap = ({
   xmlData,
   removeAreasXmlData = '',
@@ -66,14 +68,11 @@ const XMLMap = ({
   showPolyLines = false,
   showRemoveAreas = false,
 }) => {
-  const [parsedLights, setParsedLights] = useState([]);
   const [viewState, setViewState] = useState({
     longitude: 0,
     latitude: 0,
     zoom: 15,
   });
-  const [polylines, setPolylines] = useState([]);
-  const [removeAreas, setRemoveAreas] = useState([]);
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
   const mapRef = useRef(null);
@@ -214,68 +213,6 @@ const XMLMap = ({
 
     return ctx.getImageData(0, 0, size, size);
   }, []);
-
-  const lightGeoJSON = useMemo(() => {
-    if (!parsedLights.length) return null;
-
-    const features = parsedLights.map((light, index) => {
-      const { type, color1, color2, heading } = getLightAppearance(light);
-      const c1 = color1.replace(/[^\w]/g, '');
-      const c2 = color2.replace(/[^\w]/g, '');
-      const iconId = `marker-${type}-${c1}-${c2}`;
-      const basePriority = LIGHT_SORT_PRIORITY[light.type] || 0;
-
-      return {
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: light.position,
-        },
-        properties: {
-          id: light.id,
-          heading: heading,
-          icon: iconId,
-          styleType: type,
-          color1,
-          color2,
-          pointType: light.type,
-          sortKey: basePriority * 1_000 + index,
-        },
-      };
-    });
-
-    return {
-      type: 'FeatureCollection',
-      features,
-    };
-  }, [parsedLights, getLightAppearance]);
-
-  const updateMapImages = useCallback(
-    (map) => {
-      if (!map || !lightGeoJSON) return;
-
-      const checkedIcons = new Set();
-
-      lightGeoJSON.features.forEach((feature) => {
-        const { icon, styleType, color1, color2 } = feature.properties;
-        if (!checkedIcons.has(icon)) {
-          checkedIcons.add(icon);
-          if (!map.hasImage(icon)) {
-            const image = createMarkerImage(styleType, color1, color2);
-            map.addImage(icon, image, { pixelRatio: 1 });
-          }
-        }
-      });
-    },
-    [lightGeoJSON, createMarkerImage]
-  );
-
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (map) {
-      updateMapImages(map);
-    }
-  }, [updateMapImages]);
 
   const calculateRectangleCorners = useCallback(
     (centerLat, centerLng, widthMeters, lengthMeters, heading) => {
@@ -438,37 +375,80 @@ const XMLMap = ({
     };
   }, []);
 
-  useEffect(() => {
+  const { parsedLights, polylines } = useMemo(() => {
     if (!xmlData || !xmlData.includes('BarsObject')) {
-      setParsedLights([]);
-      setPolylines([]);
-      return undefined;
+      return { parsedLights: [], polylines: [] };
     }
-
     const { lights, lines } = parseXML(xmlData);
-    const handle = setTimeout(() => {
-      setParsedLights(lights);
-      setPolylines(lines);
-    }, 0);
-
-    return () => clearTimeout(handle);
+    return { parsedLights: lights, polylines: lines };
   }, [xmlData, parseXML]);
 
-  useEffect(() => {
+  const removeAreas = useMemo(() => {
     const areasSource = removeAreasXmlData || xmlData;
-
-    if (!areasSource || !areasSource.includes('LightSupport')) {
-      setRemoveAreas([]);
-      return undefined;
-    }
-
+    if (!areasSource || !areasSource.includes('LightSupport')) return [];
     const { areas } = parseRemoveAreasXML(areasSource);
-    const handle = setTimeout(() => {
-      setRemoveAreas(areas);
-    }, 0);
-
-    return () => clearTimeout(handle);
+    return areas;
   }, [removeAreasXmlData, xmlData, parseRemoveAreasXML]);
+
+  const lightGeoJSON = useMemo(() => {
+    if (!parsedLights.length) return null;
+
+    const features = parsedLights.map((light, index) => {
+      const { type, color1, color2, heading } = getLightAppearance(light);
+      const c1 = color1.replace(/[^\w]/g, '');
+      const c2 = color2.replace(/[^\w]/g, '');
+      const iconId = `marker-${type}-${c1}-${c2}`;
+      const basePriority = LIGHT_SORT_PRIORITY[light.type] || 0;
+
+      return {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: light.position,
+        },
+        properties: {
+          id: light.id,
+          heading,
+          icon: iconId,
+          styleType: type,
+          color1,
+          color2,
+          pointType: light.type,
+          sortKey: basePriority * 1_000 + index,
+        },
+      };
+    });
+
+    return {
+      type: 'FeatureCollection',
+      features,
+    };
+  }, [parsedLights, getLightAppearance]);
+
+  const updateMapImages = useCallback(
+    (map) => {
+      if (!map || !lightGeoJSON) return;
+
+      const checkedIcons = new Set();
+
+      lightGeoJSON.features.forEach((feature) => {
+        const { icon, styleType, color1, color2 } = feature.properties;
+        if (!checkedIcons.has(icon)) {
+          checkedIcons.add(icon);
+          if (!map.hasImage(icon)) {
+            const image = createMarkerImage(styleType, color1, color2);
+            map.addImage(icon, image, { pixelRatio: 1 });
+          }
+        }
+      });
+    },
+    [lightGeoJSON, createMarkerImage]
+  );
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (map) updateMapImages(map);
+  }, [updateMapImages]);
 
   useEffect(() => {
     const coordinates = [];
@@ -657,6 +637,7 @@ const XMLMap = ({
 
           <div className="absolute top-4 right-4 bg-zinc-900/90 border border-zinc-700 rounded-md p-1 z-10">
             <button
+              type="button"
               onClick={toggleStyle}
               className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 rounded transition-colors"
             >

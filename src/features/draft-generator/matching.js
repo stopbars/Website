@@ -141,21 +141,18 @@ const TYPE_CONFIG = {
   },
 };
 
-export function matchDivisionObjects(
-  divisionPoints,
-  lightRows,
-  instances = [],
-  topologyRows = []
-) {
+export function matchDivisionObjects(divisionPoints, lightRows, instances = [], topologyRows = []) {
   const simulatorRows = [...(lightRows ?? []), ...(topologyRows ?? [])];
   const referenceLatitude = findReferenceLatitude(divisionPoints, simulatorRows, instances);
   const preparedDivision = (divisionPoints ?? []).map((point, index) =>
     prepareDivisionPoint(point, index, referenceLatitude)
   );
+  // oxlint-disable-next-line react-doctor/js-combine-iterations, react-doctor/js-flatmap-filter -- Eligibility, preparation, and validity are distinct matching stages.
   const preparedRows = simulatorRows
     .filter(isMatchableSimulatorRow)
     .map((row, index) => prepareSimulatorRow(row, index, referenceLatitude))
     .filter(Boolean);
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Eligibility filtering and projection are intentionally distinct preparation stages.
   const preparedInstances = (instances ?? [])
     .filter(
       (instance) =>
@@ -199,12 +196,7 @@ export function matchDivisionObjects(
       if (!section) continue;
 
       let matchingDivision = division;
-      let metrics = scoreDivisionCandidateSection(
-        division,
-        section,
-        config,
-        referenceLatitude
-      );
+      let metrics = scoreDivisionCandidateSection(division, section, config, referenceLatitude);
       if (!metrics.valid && supportsLocalRegistration) {
         const registration = locallyRegisteredSectionMetrics(division, section, config);
         if (registration) {
@@ -230,13 +222,14 @@ export function matchDivisionObjects(
   );
   const allInstanceEdges = buildInstanceMatchEdges(matchableDivision, preparedInstances);
   const divisionsWithRealStopbarEvidence = new Set([
+    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Evidence filtering and stable-ID projection remain separate matching stages.
     ...ownershipEdges
       .filter(
         (edge) =>
-          edge.division.raw.type === 'stopbar' &&
-          !isHoldShortTopologyRow(edge.candidate.raw)
+          edge.division.raw.type === 'stopbar' && !isHoldShortTopologyRow(edge.candidate.raw)
       )
       .map((edge) => stableIdentifier(edge.division)),
+    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Evidence filtering and stable-ID projection remain separate matching stages.
     ...allInstanceEdges
       .filter((edge) => edge.division.raw.type === 'stopbar')
       .map((edge) => stableIdentifier(edge.division)),
@@ -246,8 +239,7 @@ export function matchDivisionObjects(
     divisionsWithRealStopbarEvidence
   );
   const selectableOwnershipEdges = ownershipEdges.filter(
-    (edge) =>
-      !isHoldShortTopologyRow(edge.candidate.raw) || selectedHoldShortEdges.has(edge)
+    (edge) => !isHoldShortTopologyRow(edge.candidate.raw) || selectedHoldShortEdges.has(edge)
   );
   const selectedHoldShortCandidateIds = new Set(
     [...selectedHoldShortEdges].map((edge) => stableIdentifier(edge.candidate))
@@ -269,10 +261,7 @@ export function matchDivisionObjects(
 
     matchedDivisionIds.add(divisionKey);
     const replacementRow = rowWithDivisionClassification(
-      simplifyReconstructedReplacementRow(
-        edge.section.prepared.raw,
-        edge.division.raw.type
-      ),
+      simplifyReconstructedReplacementRow(edge.section.prepared.raw, edge.division.raw.type),
       configFor(edge.division)
     );
     for (const { section } of sourceSections) {
@@ -296,8 +285,7 @@ export function matchDivisionObjects(
       !matchedDivisionIds.has(stableIdentifier(edge.division)) &&
       edgeSourceInstances(edge).every(
         (instance) =>
-          !usedInstanceIds.has(instance.raw.id) &&
-          !rowBackedInstanceIds.has(instance.raw.id)
+          !usedInstanceIds.has(instance.raw.id) && !rowBackedInstanceIds.has(instance.raw.id)
       )
   );
   for (const edge of instanceEdges) {
@@ -450,6 +438,7 @@ function prepareDivisionPoint(point, index, referenceLatitude) {
 }
 
 function prepareSimulatorRow(row, index, referenceLatitude) {
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Coordinate validation and projection are intentionally separate geometry stages.
   const coordinates = (row?.vertices ?? [])
     .filter((vertex) => Number.isFinite(vertex?.lat) && Number.isFinite(vertex?.lon))
     .map((vertex) => ({ lat: vertex.lat, lon: vertex.lon }));
@@ -498,10 +487,7 @@ function simulatorSectionForDivision(division, candidate, config, referenceLatit
       : bestAlignedProjectionRun(
           projections,
           config.containmentMeanDistance ?? config.meanDistance,
-          Math.max(
-            20,
-            (division.length / Math.max(projections.length - 1, 1)) * 4
-          )
+          Math.max(20, (division.length / Math.max(projections.length - 1, 1)) * 4)
         );
   const sectionProjections = alignedRun ?? projections;
   const projectionStart = Math.max(
@@ -530,14 +516,8 @@ function simulatorSectionForDivision(division, candidate, config, referenceLatit
     };
   }
 
-  const start = Math.max(
-    0,
-    projectionStart - ROW_SECTION_PADDING_METERS
-  );
-  const end = Math.min(
-    candidate.length,
-    projectionEnd + ROW_SECTION_PADDING_METERS
-  );
+  const start = Math.max(0, projectionStart - ROW_SECTION_PADDING_METERS);
+  const end = Math.min(candidate.length, projectionEnd + ROW_SECTION_PADDING_METERS);
   if (end - start < 0.2) return null;
   if (start <= 0.05 && end >= candidate.length - 0.05) {
     return {
@@ -579,11 +559,9 @@ function bestAlignedProjectionRun(projections, maximumDistance, maximumProjectio
     .filter((candidate) => candidate.length >= minimumRunLength)
     .sort((left, right) => {
       const leftSpan =
-        Math.max(...left.map((item) => item.along)) -
-        Math.min(...left.map((item) => item.along));
+        Math.max(...left.map((item) => item.along)) - Math.min(...left.map((item) => item.along));
       const rightSpan =
-        Math.max(...right.map((item) => item.along)) -
-        Math.min(...right.map((item) => item.along));
+        Math.max(...right.map((item) => item.along)) - Math.min(...right.map((item) => item.along));
       return rightSpan - leftSpan || right.length - left.length;
     })[0];
 }
@@ -809,6 +787,7 @@ function buildInstanceMatchEdges(divisions, instances) {
     const config = TYPE_CONFIG[division.raw.type];
     if (!config) continue;
 
+    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Classification, projection, and distance acceptance are distinct matching stages.
     const projectedInstances = instances
       .filter((instance) => config.instanceClassifications.has(instance.raw.classification))
       .map((instance) => ({
@@ -879,7 +858,9 @@ function buildInstanceMatchEdges(divisions, instances) {
 function instanceBackedRow(edge) {
   const rawInstances = edgeSourceInstances(edge).map((instance) => instance.raw);
   const sourceFiles = [
-    ...new Set(rawInstances.map((instance) => instance.sourceFile).filter(Boolean)),
+    ...new Set(
+      rawInstances.flatMap((instance) => (instance.sourceFile ? [instance.sourceFile] : []))
+    ),
   ];
   const confidence =
     rawInstances.reduce((sum, instance) => sum + (Number(instance.confidence) || 0), 0) /
@@ -898,7 +879,9 @@ function instanceBackedRow(edge) {
     reconstructMode: 'division-guided-source-instance-order',
     sourcePlacementCount: rawInstances.length,
     sourceInstanceIds: rawInstances.map((instance) => instance.id),
+    // oxlint-disable-next-line react-doctor/js-flatmap-filter -- Explicit falsy removal documents which instance metadata enters the Set.
     sourcePresets: [...new Set(rawInstances.map((instance) => instance.name).filter(Boolean))],
+    // oxlint-disable-next-line react-doctor/js-flatmap-filter -- Explicit falsy removal documents which instance metadata enters the Set.
     sourceModelGuids: [...new Set(rawInstances.map((instance) => instance.guid).filter(Boolean))],
     vertices: edge.instances.map((instance) => ({
       lat: instance.raw.lat,
@@ -1061,10 +1044,7 @@ function comparePreparedPolylines(division, candidate, config) {
     score: round(score, 4),
     balancedScore: round(balancedScore, 4),
     containmentScore: round(containmentScore, 4),
-    alignmentDistance: round(
-      alignmentMode === 'source-contained' ? reverse.mean : meanDistance,
-      2
-    ),
+    alignmentDistance: round(alignmentMode === 'source-contained' ? reverse.mean : meanDistance, 2),
     meanDistance: round(meanDistance, 2),
     maximumDistance: round(maximumDistance, 2),
     coverage: round(coverage, 3),
@@ -1086,9 +1066,8 @@ function configFor(division) {
 
 function suppressRedundantCompositeEdges(edges) {
   const completeDivisionMatches = new Set(
-    edges
-      .filter(isCompleteDivisionMatch)
-      .map((edge) => stableIdentifier(edge.division))
+    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Completeness filtering and stable-ID projection are distinct matching stages.
+    edges.filter(isCompleteDivisionMatch).map((edge) => stableIdentifier(edge.division))
   );
 
   return edges.filter(
@@ -1205,8 +1184,7 @@ function simplifyReconstructedReplacementRow(row, divisionType) {
     ...row,
     vertices: keptIndices.map((index) => vertices[index]),
     replacementGeometryDerived: 'constrained-source-row-simplification',
-    replacementGeometryToleranceMeters:
-      RECONSTRUCTED_REPLACEMENT_SIMPLIFICATION_TOLERANCE_METERS,
+    replacementGeometryToleranceMeters: RECONSTRUCTED_REPLACEMENT_SIMPLIFICATION_TOLERANCE_METERS,
     replacementSourceVertexCount: vertices.length,
   };
 }
@@ -1258,9 +1236,14 @@ function allocateSimulatorGeometry(edges, referenceLatitude, allCandidates) {
     const naturalBoundaries = naturalBoundaryStations(candidate, allCandidates);
     const partitionGuidance =
       GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification) &&
-      chosen.every((edge) => GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type));
+      chosen.every((edge) => {
+        // oxlint-disable-next-line react-doctor/js-cache-property-access -- This callback reads the chain once; the rule conflates other edge bindings in the surrounding loop.
+        const divisionType = edge.division.raw.type;
+        return GUIDANCE_DIVISION_TYPES.has(divisionType);
+      });
     const nativeLeadOnCandidate = candidate.raw.classification === 'lead-on';
     const reconstructedGuidanceCandidate = isExactPlacementRow(candidate.raw);
+    // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
     const ordered = [...chosen].sort(
       (left, right) =>
         left.section.projectionCenter - right.section.projectionCenter ||
@@ -1286,36 +1269,29 @@ function allocateSimulatorGeometry(edges, referenceLatitude, allCandidates) {
 
     for (let index = 0; index < ordered.length; index += 1) {
       const edge = ordered[index];
-      const extendNativeLeadOn =
-        nativeLeadOnCandidate && edge.division.raw.type === 'lead_on';
+      const { start: sectionStart, end: sectionEnd } = edge.section;
+      const extendNativeLeadOn = nativeLeadOnCandidate && edge.division.raw.type === 'lead_on';
       const extendReconstructedLeadOn =
         reconstructedGuidanceCandidate && edge.division.raw.type === 'lead_on';
       const extendLeadOnWholeSource = extendNativeLeadOn || extendReconstructedLeadOn;
       const reconstructedExtensionLimit = extendReconstructedLeadOn
         ? reconstructedLeadOnExtensionLimit(edge.division.length)
         : Infinity;
-      const matchedStopbarCell = stopbarCellForMatchedSection(
-        edge.section,
-        naturalBoundaries
-      );
-      const startAnchoredByStopbar =
-        extendReconstructedLeadOn && Boolean(matchedStopbarCell.upper);
-      const endAnchoredByStopbar =
-        extendReconstructedLeadOn && Boolean(matchedStopbarCell.lower);
+      const matchedStopbarCell = stopbarCellForMatchedSection(edge.section, naturalBoundaries);
+      const startAnchoredByStopbar = extendReconstructedLeadOn && Boolean(matchedStopbarCell.upper);
+      const endAnchoredByStopbar = extendReconstructedLeadOn && Boolean(matchedStopbarCell.lower);
       const startExtensionLimit =
         startAnchoredByStopbar ||
-        (extendReconstructedLeadOn &&
-          hasNaturalBoundaryAnchor(edge.section.end, naturalBoundaries))
+        (extendReconstructedLeadOn && hasNaturalBoundaryAnchor(sectionEnd, naturalBoundaries))
           ? Infinity
           : reconstructedExtensionLimit;
       const endExtensionLimit =
         endAnchoredByStopbar ||
-        (extendReconstructedLeadOn &&
-          hasNaturalBoundaryAnchor(edge.section.start, naturalBoundaries))
+        (extendReconstructedLeadOn && hasNaturalBoundaryAnchor(sectionStart, naturalBoundaries))
           ? Infinity
           : reconstructedExtensionLimit;
-      let start = edge.section.start;
-      let end = edge.section.end;
+      let start = sectionStart;
+      let end = sectionEnd;
       if (partitionGuidance) {
         const singleOwnerSupportsWholeCandidate =
           ordered.length === 1 &&
@@ -1365,12 +1341,7 @@ function allocateSimulatorGeometry(edges, referenceLatitude, allCandidates) {
         endExtensionLimit,
         endAnchoredByStopbar
       );
-      ({ start, end } = clampAllocationToStopbarCell(
-        start,
-        end,
-        edge.section,
-        naturalBoundaries
-      ));
+      ({ start, end } = clampAllocationToStopbarCell(start, end, edge.section, naturalBoundaries));
       const section = simulatorSectionForRange(
         candidate,
         edge.division,
@@ -1379,10 +1350,7 @@ function allocateSimulatorGeometry(edges, referenceLatitude, allCandidates) {
         referenceLatitude,
         edge.section
       );
-      if (
-        section?.prepared?.valid &&
-        sectionMeetsAllocationMinimum(edge, section.length)
-      ) {
+      if (section?.prepared?.valid && sectionMeetsAllocationMinimum(edge, section.length)) {
         allocated.push({ ...edge, section });
       }
     }
@@ -1424,10 +1392,10 @@ function chooseDistinctCandidateAssignments(edges) {
   const preferred = edges
     .filter((edge) => !contested || edge.metrics.score >= MINIMUM_CONTESTED_ASSIGNMENT_SCORE)
     .sort(
-    (left, right) =>
-      right.metrics.score - left.metrics.score ||
-      left.metrics.alignmentDistance - right.metrics.alignmentDistance ||
-      stableIdentifier(left.division).localeCompare(stableIdentifier(right.division))
+      (left, right) =>
+        right.metrics.score - left.metrics.score ||
+        left.metrics.alignmentDistance - right.metrics.alignmentDistance ||
+        stableIdentifier(left.division).localeCompare(stableIdentifier(right.division))
     );
   const chosen = [];
   for (const edge of preferred) {
@@ -1526,8 +1494,7 @@ function polylineCrossingStations(candidate, crossing) {
         continue;
       }
       stations.push(
-        candidateDistances[candidateIndex - 1] +
-          distance(candidateStart, candidateEnd) * ratio
+        candidateDistances[candidateIndex - 1] + distance(candidateStart, candidateEnd) * ratio
       );
     }
   }
@@ -1579,8 +1546,7 @@ function snapBoundaryToNaturalFeature(boundary, stations) {
   return (
     [...stations]
       .filter(
-        (station) =>
-          Math.abs(station.along - boundary) <= MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
+        (station) => Math.abs(station.along - boundary) <= MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
       )
       .sort(
         (left, right) =>
@@ -1659,55 +1625,42 @@ function stopbarCellForMatchedSection(matchedSection, stations) {
   if (stopbars.length === 0) return {};
 
   const matchedCenter = (matchedSection.start + matchedSection.end) / 2;
-  const coincident = stopbars.find(
-    (station) => Math.abs(station.along - matchedCenter) <= 0.05
-  );
+  const coincident = stopbars.find((station) => Math.abs(station.along - matchedCenter) <= 0.05);
   const preferRightOfCoincident =
-    coincident &&
-    matchedSection.end - coincident.along >= coincident.along - matchedSection.start;
+    coincident && matchedSection.end - coincident.along >= coincident.along - matchedSection.start;
   return {
     lower: [...stopbars]
       .reverse()
       .find(
         (station) =>
-          station.along < matchedCenter ||
-          (station === coincident && preferRightOfCoincident)
+          station.along < matchedCenter || (station === coincident && preferRightOfCoincident)
       ),
     upper: stopbars.find(
       (station) =>
-        station.along > matchedCenter ||
-        (station === coincident && !preferRightOfCoincident)
+        station.along > matchedCenter || (station === coincident && !preferRightOfCoincident)
     ),
   };
 }
 
 function clampAllocationToStopbarCell(start, end, matchedSection, stations) {
   const stopbars = stations
-    .filter(
-      (station) =>
-        station.kind === 'stopbar' && station.along > start && station.along < end
-    )
+    .filter((station) => station.kind === 'stopbar' && station.along > start && station.along < end)
     .sort((left, right) => left.along - right.along);
   if (stopbars.length === 0) return { start, end };
 
   const matchedCenter = (matchedSection.start + matchedSection.end) / 2;
-  const coincident = stopbars.find(
-    (station) => Math.abs(station.along - matchedCenter) <= 0.05
-  );
+  const coincident = stopbars.find((station) => Math.abs(station.along - matchedCenter) <= 0.05);
   const preferRightOfCoincident =
-    coincident &&
-    matchedSection.end - coincident.along >= coincident.along - matchedSection.start;
+    coincident && matchedSection.end - coincident.along >= coincident.along - matchedSection.start;
   const lower = [...stopbars]
     .reverse()
     .find(
       (station) =>
-        station.along < matchedCenter ||
-        (station === coincident && preferRightOfCoincident)
+        station.along < matchedCenter || (station === coincident && preferRightOfCoincident)
     );
   const upper = stopbars.find(
     (station) =>
-      station.along > matchedCenter ||
-      (station === coincident && !preferRightOfCoincident)
+      station.along > matchedCenter || (station === coincident && !preferRightOfCoincident)
   );
   return {
     start: lower ? Math.max(start, lower.along) : start,
@@ -1748,8 +1701,7 @@ function turnAngleDegrees(previous, current, next) {
     -1,
     Math.min(
       1,
-      (incoming.x * outgoing.x + incoming.y * outgoing.y) /
-        (incomingLength * outgoingLength)
+      (incoming.x * outgoing.x + incoming.y * outgoing.y) / (incomingLength * outgoingLength)
     )
   );
   return (Math.acos(cosine) * 180) / Math.PI;
@@ -1770,8 +1722,7 @@ function sharedDivisionBoundary(left, right, candidate, targetAlong) {
   }
   return shared.sort(
     (leftProjection, rightProjection) =>
-      Math.abs(leftProjection.along - targetAlong) -
-      Math.abs(rightProjection.along - targetAlong)
+      Math.abs(leftProjection.along - targetAlong) - Math.abs(rightProjection.along - targetAlong)
   )[0]?.along;
 }
 
@@ -1788,11 +1739,9 @@ function buildConnectedStopbarCandidates(candidates, referenceLatitude) {
     for (let rightIndex = leftIndex + 1; rightIndex < stopbars.length; rightIndex += 1) {
       const left = stopbars[leftIndex];
       const right = stopbars[rightIndex];
-      if (
-        left.raw.sourceFile &&
-        right.raw.sourceFile &&
-        left.raw.sourceFile !== right.raw.sourceFile
-      ) {
+      const leftSourceFile = left.raw.sourceFile;
+      const rightSourceFile = right.raw.sourceFile;
+      if (leftSourceFile && rightSourceFile && leftSourceFile !== rightSourceFile) {
         continue;
       }
 
@@ -1805,15 +1754,12 @@ function buildConnectedStopbarCandidates(candidates, referenceLatitude) {
       const sourceRowIds = [...new Set(sourceRows.map((row) => String(row.id)))];
       const raw = {
         id: `connected-stopbar:${sourceRowIds.sort().join('|')}`,
-        sourceFile: left.raw.sourceFile ?? right.raw.sourceFile,
+        sourceFile: leftSourceFile ?? rightSourceFile,
         sourceType: 'connected-simulator-stopbar-rows',
         sourceGeometryDerived: 'endpoint-connected-source-rows',
         rawTag: 'Connected simulator stopbar rows',
         classification: 'stopbar',
-        confidence: Math.min(
-          Number(left.raw.confidence) || 1,
-          Number(right.raw.confidence) || 1
-        ),
+        confidence: Math.min(Number(left.raw.confidence) || 1, Number(right.raw.confidence) || 1),
         vertices: connection.coordinates.map((coordinate) => ({
           lat: coordinate.lat,
           lon: coordinate.lon,
@@ -1821,9 +1767,7 @@ function buildConnectedStopbarCandidates(candidates, referenceLatitude) {
         sourceRowIds,
         sourceRowCount: sourceRowIds.length,
         sourceCandidateIds: sourceCandidates.map((candidate) => String(candidate.raw.id)),
-        sourceInstanceIds: [
-          ...new Set(sourceRows.flatMap((row) => row.sourceInstanceIds ?? [])),
-        ],
+        sourceInstanceIds: [...new Set(sourceRows.flatMap((row) => row.sourceInstanceIds ?? []))],
         endpointGapMeters: round(connection.gap, 3),
         connectionTurnDegrees: round(connection.turn, 1),
         classificationReasons: [
@@ -1875,10 +1819,7 @@ function connectedStopbarGeometry(left, right) {
   ) {
     return null;
   }
-  const coordinates = [
-    ...connection.left.coordinates,
-    ...connection.right.coordinates,
-  ];
+  const coordinates = [...connection.left.coordinates, ...connection.right.coordinates];
   const projected = [...connection.left.projected, ...connection.right.projected];
   if (polylineLength(projected) > MAXIMUM_CONNECTED_STOPBAR_LENGTH_METERS) return null;
   return { coordinates, gap: connection.gap, turn: connection.turn };
@@ -1928,6 +1869,7 @@ function preferConnectedStopbarCompositeEdges(edges) {
     if (edge.candidate.raw.sourceType === 'connected-simulator-stopbar-rows') {
       return edge === preferred;
     }
+    // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Each preferred composite contains only its two source candidate IDs; constructing a Set would cost more.
     return !(preferred.candidate.raw.sourceCandidateIds ?? []).includes(
       String(edge.candidate.raw.id)
     );
@@ -1936,6 +1878,7 @@ function preferConnectedStopbarCompositeEdges(edges) {
 
 function sourceSectionsForMergedCandidate(edge, referenceLatitude) {
   if (edge.candidate.compositeMembers) {
+    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Flattening, section construction, and validity filtering are distinct geometry stages.
     return edge.candidate.compositeMembers
       .flatMap((candidate) => candidate.members ?? [candidate])
       .map((candidate) => ({
@@ -1951,6 +1894,7 @@ function sourceSectionsForMergedCandidate(edge, referenceLatitude) {
       .filter(({ section }) => section?.prepared?.valid);
   }
   const members = edge.candidate.members ?? [edge.candidate];
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Section construction and validity filtering remain separate for geometry auditability.
   return members
     .map((candidate) => {
       const directionMatches = polylineDirectionMatches(edge.candidate, candidate);
@@ -1964,13 +1908,7 @@ function sourceSectionsForMergedCandidate(edge, referenceLatitude) {
         : (1 - normalizedStart) * candidate.length;
       return {
         candidate,
-        section: simulatorSectionForRange(
-          candidate,
-          edge.division,
-          start,
-          end,
-          referenceLatitude
-        ),
+        section: simulatorSectionForRange(candidate, edge.division, start, end, referenceLatitude),
       };
     })
     .filter(({ section }) => section?.prepared?.valid);
@@ -2013,6 +1951,7 @@ function mergeCoLocatedSimulatorRows(items, referenceLatitude) {
       return { ...group.members[0], members: group.members };
     }
 
+    // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
     const ordered = [...group.members].sort(
       (left, right) =>
         duplicatePreference(right, 'simulator') - duplicatePreference(left, 'simulator') ||
@@ -2064,12 +2003,12 @@ function areCoLocatedSimulatorPolylines(left, right) {
   const forward = nearestDistanceSummary(left.samples, right.projected);
   const reverse = nearestDistanceSummary(right.samples, left.projected);
   return (
-    (forward.mean + reverse.mean) / 2 <= 0.3 &&
-    Math.max(forward.maximum, reverse.maximum) <= 0.6
+    (forward.mean + reverse.mean) / 2 <= 0.3 && Math.max(forward.maximum, reverse.maximum) <= 0.6
   );
 }
 
 function collapseDuplicateLeadOns(items, source) {
+  // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
   const ordered = [...items].sort(
     (left, right) =>
       duplicatePreference(right, source) - duplicatePreference(left, source) ||
@@ -2187,6 +2126,7 @@ function samplePolyline(points, count) {
 
 function normalizeDivisionCoordinates(value) {
   const coordinates = Array.isArray(value) ? value : value ? [value] : [];
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Coordinate validation and object projection are intentionally separate geometry stages.
   return coordinates
     .filter((coordinate) => Number.isFinite(coordinate?.lat) && Number.isFinite(coordinate?.lng))
     .map((coordinate) => ({ lat: coordinate.lat, lon: coordinate.lng }));
@@ -2293,11 +2233,10 @@ function stableIdentifier(item) {
 }
 
 function median(values) {
+  // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
   const ordered = [...values].sort((left, right) => left - right);
   const middle = Math.floor(ordered.length / 2);
-  return ordered.length % 2 === 0
-    ? (ordered[middle - 1] + ordered[middle]) / 2
-    : ordered[middle];
+  return ordered.length % 2 === 0 ? (ordered[middle - 1] + ordered[middle]) / 2 : ordered[middle];
 }
 
 function clamp01(value) {

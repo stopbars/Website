@@ -47,9 +47,7 @@ export function buildDraftOutput(data, matching, options) {
   );
   const replacements = replacementMatches(matching.matches);
   const safeReplacements = replacementMatches(selective.approved);
-  const safetyDivisionIds = new Set(
-    removalWarnings.map((item) => String(item.division?.id ?? ''))
-  );
+  const safetyDivisionIds = new Set(removalWarnings.map((item) => String(item.division?.id ?? '')));
   const unsafeReplacements = replacements.filter((match) =>
     safetyDivisionIds.has(String(match.division.id))
   );
@@ -100,6 +98,7 @@ export function buildDraftOutput(data, matching, options) {
 
 function replacementMatches(matches) {
   const replacements = [];
+  // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
   const ordered = [...matches].sort(
     (left, right) =>
       String(left.division.id).localeCompare(String(right.division.id)) ||
@@ -108,9 +107,7 @@ function replacementMatches(matches) {
   );
 
   for (const match of ordered) {
-    const replacement = match.replacementRow
-      ? { ...match, row: match.replacementRow }
-      : match;
+    const replacement = match.replacementRow ? { ...match, row: match.replacementRow } : match;
     const isCovered = replacements.some(
       (existing) =>
         String(existing.division.id) === String(replacement.division.id) &&
@@ -142,12 +139,8 @@ function rowLengthMeters(row) {
 }
 
 function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
-  const noRemovalMatches = initialMatches.filter(
-    (match) => match.row?.noRemovalRequired === true
-  );
-  let approved = initialMatches.filter(
-    (match) => match.row?.noRemovalRequired !== true
-  );
+  const noRemovalMatches = initialMatches.filter((match) => match.row?.noRemovalRequired === true);
+  let approved = initialMatches.filter((match) => match.row?.noRemovalRequired !== true);
   const originalSelectedRows = approved.map((match) => match.row);
   const rejected = [];
   let geometry;
@@ -193,12 +186,15 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
     const removalRings = geometry.removalPolygons.map((polygon) =>
       polygon.coordinates.map(([lon, lat]) => ({ lon, lat }))
     );
+    // oxlint-disable-next-line react-doctor/js-flatmap-filter -- Explicit transform and validation stages keep this bounded safety pass auditable.
     const unsafe = approved
       .map((match) => {
-        const isCovered = rowIsCoveredByRemovals(match.row, removalRings);
-        const hasUnselectedTargetConflict = unselectedTargetConflicts.has(match.row.id);
-        const hasSelectiveProtectionConflict = selectiveProtectionConflicts.has(match.row.id);
-        const hasProtectedLightConflict = protectedLightConflicts.has(match.row.id);
+        const row = match.row;
+        const isCovered = rowIsCoveredByRemovals(row, removalRings);
+        const rowId = row.id;
+        const hasUnselectedTargetConflict = unselectedTargetConflicts.has(rowId);
+        const hasSelectiveProtectionConflict = selectiveProtectionConflicts.has(rowId);
+        const hasProtectedLightConflict = protectedLightConflicts.has(rowId);
         if (
           isCovered &&
           !hasUnselectedTargetConflict &&
@@ -211,17 +207,17 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
           ...match,
           safetyPass: pass + 1,
           safetyConflictIds: hasSelectiveProtectionConflict
-            ? selectiveProtectionConflicts.get(match.row.id)
+            ? selectiveProtectionConflicts.get(rowId)
             : hasProtectedLightConflict
-              ? protectedLightConflicts.get(match.row.id)
+              ? protectedLightConflicts.get(rowId)
               : [],
           safetyReason: hasUnselectedTargetConflict
             ? 'unselected-target-conflict'
             : hasSelectiveProtectionConflict
               ? 'unselected-target-protection-conflict'
-            : hasProtectedLightConflict
-              ? 'must-keep-conflict'
-              : 'incomplete-removal-coverage',
+              : hasProtectedLightConflict
+                ? 'must-keep-conflict'
+                : 'incomplete-removal-coverage',
         };
       })
       .filter(Boolean);
@@ -274,7 +270,10 @@ function conflictIdsBySourceRow(conflicts, rows) {
     }
   }
   return new Map(
-    [...bySourceRow].map(([sourceRowId, ids]) => [sourceRowId, [...ids].sort()])
+    [...bySourceRow].map(([sourceRowId, ids]) => {
+      // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
+      return [sourceRowId, [...ids].sort()];
+    })
   );
 }
 
@@ -285,8 +284,7 @@ function rowIsCoveredByRemovals(row, removalRings) {
     removalRings.some(
       (ring) =>
         pointInPolygon(vertex, ring) ||
-        pointToPolylineDistanceMeters(vertex, ring) <=
-          REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS
+        pointToPolylineDistanceMeters(vertex, ring) <= REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS
     )
   );
 }
@@ -294,7 +292,7 @@ function rowIsCoveredByRemovals(row, removalRings) {
 function rowsCoveringSelectiveProtectionZones(protectionZones, removalPolygons, rows) {
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const protectedPoints = (protectionZones ?? []).flatMap((zone) =>
-    zone.geometryType === 'Point' ? [zone.point] : zone.vertices ?? []
+    zone.geometryType === 'Point' ? [zone.point] : (zone.vertices ?? [])
   );
   const rowIds = new Set();
   for (const polygon of removalPolygons) {
@@ -310,8 +308,7 @@ function rowsCoveringSelectiveProtectionZones(protectionZones, removalPolygons, 
         (point) =>
           pointInPolygon(point, ring) &&
           row?.vertices?.length > 0 &&
-          pointToPolylineDistanceMeters(point, row.vertices) <=
-            ISOLATED_CROSSING_DISTANCE_METERS
+          pointToPolylineDistanceMeters(point, row.vertices) <= ISOLATED_CROSSING_DISTANCE_METERS
       );
     });
     for (const rowId of hasKnownSourceRow ? localSourceRowIds : sourceRowIds) {
@@ -321,7 +318,11 @@ function rowsCoveringSelectiveProtectionZones(protectionZones, removalPolygons, 
   return rowIds;
 }
 
-function generateForMatches(data, matches, originalSelectedRows = matches.map((match) => match.row)) {
+function generateForMatches(
+  data,
+  matches,
+  originalSelectedRows = matches.map((match) => match.row)
+) {
   const selectedRows = matches.map((match) => match.row);
   const rows = consolidateRemovalRows(data.lightRows ?? [], selectedRows);
   const sourceInstanceIds = new Set(selectedRows.flatMap((row) => row.sourceInstanceIds ?? []));
@@ -342,10 +343,7 @@ function generateForMatches(data, matches, originalSelectedRows = matches.map((m
   const protectedSourceZones = (data.mustKeepZones ?? []).filter(
     (zone) => !isConservativeRunwayEnvelopeSuperseded(zone, selectedRows)
   );
-  const mustKeepZones = [
-    ...protectedSourceZones,
-    ...selectiveProtectionZones,
-  ];
+  const mustKeepZones = [...protectedSourceZones, ...selectiveProtectionZones];
   return {
     ...generateRemovalGeometry(sourceInstances, rows, DEFAULT_SIZES, mustKeepZones),
     selectiveProtectionZones,
@@ -381,8 +379,7 @@ function isConservativeRunwayEnvelopeSuperseded(zone, selectedRows) {
   return selectedRows.some(
     (row) =>
       TARGET_CLASSIFICATIONS.has(sourceClassification(row)) &&
-      polylineNearLength(row.vertices, zone.vertices) >
-        MAXIMUM_ISOLATED_CROSSING_OVERLAP_METERS
+      polylineNearLength(row.vertices, zone.vertices) > MAXIMUM_ISOLATED_CROSSING_OVERLAP_METERS
   );
 }
 
@@ -589,6 +586,7 @@ function unselectedRowSegments(vertices, selectedSections) {
   }
   if (totalLength - cursor > 0.05) ranges.push({ start: cursor, end: totalLength });
 
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Separate slicing and empty-segment rejection make the geometry invariant explicit.
   return ranges
     .map((range) => sliceVerticesByDistance(vertices, distances, range.start, range.end))
     .filter((segment) => segment.length > 0);
@@ -707,6 +705,7 @@ ${vertices}
 }
 
 function rowCoordinates(row) {
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Validation and tuple projection are intentionally distinct geometry stages.
   const coordinates = (row.vertices ?? [])
     .filter((vertex) => Number.isFinite(vertex?.lat) && Number.isFinite(vertex?.lon))
     .map((vertex) => [vertex.lon, vertex.lat]);
@@ -774,15 +773,16 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
   for (const match of matches) {
     const coordinates = rowCoordinates(match.row).slice(0, -1);
     if (coordinates.length < 2) continue;
+    const { id: divisionId, name: divisionName, type: divisionType } = match.division;
     features.push({
       type: 'Feature',
       geometry: { type: 'LineString', coordinates },
       properties: {
         featureType: 'matched',
-        divisionId: String(match.division.id),
-        debugColor: divisionColors.get(String(match.division.id)),
-        title: match.division.name || String(match.division.id),
-        divisionType: match.division.type,
+        divisionId: String(divisionId),
+        debugColor: divisionColors.get(String(divisionId)),
+        title: divisionName || String(divisionId),
+        divisionType,
         simulatorType: match.row.classification,
         matchPercent: Math.round(match.score * 100),
         matchedViaHoldShort: match.row.sourceType === 'bgl-hold-short-topology',
@@ -793,15 +793,16 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
   for (const match of unsafeMatches) {
     const coordinates = rowCoordinates(match.row).slice(0, -1);
     if (coordinates.length < 2) continue;
+    const { id: divisionId, name: divisionName, type: divisionType } = match.division;
     features.push({
       type: 'Feature',
       geometry: { type: 'LineString', coordinates },
       properties: {
         featureType: 'unsafe',
-        divisionId: String(match.division.id),
-        debugColor: divisionColors.get(String(match.division.id)),
-        title: match.division.name || String(match.division.id),
-        divisionType: match.division.type,
+        divisionId: String(divisionId),
+        debugColor: divisionColors.get(String(divisionId)),
+        title: divisionName || String(divisionId),
+        divisionType,
         simulatorType: match.row.classification,
         matchPercent: Math.round(match.score * 100),
         reason: 'Simulator geometry matched, but its removal area needs manual review.',
@@ -810,17 +811,18 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
   }
 
   for (const item of unmatched) {
-    const geometry = divisionGeometry(item.division?.coordinates);
+    const division = item.division;
+    const geometry = divisionGeometry(division?.coordinates);
     if (!geometry) continue;
     features.push({
       type: 'Feature',
       geometry,
       properties: {
         featureType: 'unmatched',
-        divisionId: String(item.division?.id ?? ''),
-        debugColor: divisionColors.get(String(item.division?.id ?? '')),
-        title: item.division?.name || String(item.division?.id || 'Unmatched object'),
-        divisionType: item.division?.type || 'unknown',
+        divisionId: String(division?.id ?? ''),
+        debugColor: divisionColors.get(String(division?.id ?? '')),
+        title: division?.name || String(division?.id || 'Unmatched object'),
+        divisionType: division?.type || 'unknown',
         reason: item.reason,
       },
     });
@@ -845,13 +847,17 @@ function buildDivisionColorMap(matches, unmatched, unsafeMatches) {
   }));
   const positionedNodes = nodes.filter((node) => node.position);
   for (const node of positionedNodes) {
+    // oxlint-disable-next-line react-doctor/js-combine-iterations -- The debug-only node set is small and staged operations keep the scoring pipeline readable.
     const nearest = positionedNodes
       .filter((candidate) => candidate !== node)
       .map((candidate) => ({
         candidate,
         distance: haversineDistanceMeters(node.position, candidate.position),
       }))
-      .sort((left, right) => left.distance - right.distance || left.candidate.id.localeCompare(right.candidate.id))
+      .sort(
+        (left, right) =>
+          left.distance - right.distance || left.candidate.id.localeCompare(right.candidate.id)
+      )
       .slice(0, DEBUG_ID_NEIGHBOR_COUNT);
     for (const { candidate } of nearest) {
       node.neighbors.add(candidate.id);
@@ -861,21 +867,21 @@ function buildDivisionColorMap(matches, unmatched, unsafeMatches) {
 
   const usage = new Map(DEBUG_ID_COLORS.map((color) => [color, 0]));
   const colors = new Map();
+  // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
   const orderedNodes = [...nodes].sort(
     (left, right) => right.neighbors.size - left.neighbors.size || left.id.localeCompare(right.id)
   );
 
   for (const node of orderedNodes) {
-    const neighborColors = [...node.neighbors]
-      .map((id) => colors.get(id))
-      .filter(Boolean);
+    // oxlint-disable-next-line react-doctor/js-flatmap-filter -- Each node has at most DEBUG_ID_NEIGHBOR_COUNT neighbors, making this a bounded tiny pass.
+    const neighborColors = [...node.neighbors].map((id) => colors.get(id)).filter(Boolean);
     const startIndex = stableHash(node.id) % DEBUG_ID_COLORS.length;
-    const color = [...DEBUG_ID_COLORS]
-      .sort((left, right) => {
-        const rightScore = debugColorScore(right, neighborColors, usage, startIndex);
-        const leftScore = debugColorScore(left, neighborColors, usage, startIndex);
-        return rightScore - leftScore;
-      })[0];
+    // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
+    const color = [...DEBUG_ID_COLORS].sort((left, right) => {
+      const rightScore = debugColorScore(right, neighborColors, usage, startIndex);
+      const leftScore = debugColorScore(left, neighborColors, usage, startIndex);
+      return rightScore - leftScore;
+    })[0];
     colors.set(node.id, color);
     usage.set(color, usage.get(color) + 1);
   }
@@ -932,6 +938,7 @@ function stableHash(value) {
 }
 
 function simulatorRowCoordinates(row) {
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Validation and tuple projection are intentionally distinct geometry stages.
   return (row.vertices ?? [])
     .filter((vertex) => Number.isFinite(vertex?.lat) && Number.isFinite(vertex?.lon))
     .map((vertex) => [vertex.lon, vertex.lat]);
@@ -939,6 +946,7 @@ function simulatorRowCoordinates(row) {
 
 function divisionGeometry(value) {
   const values = Array.isArray(value) ? value : value ? [value] : [];
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Validation and tuple projection are intentionally distinct geometry stages.
   const coordinates = values
     .filter((coordinate) => Number.isFinite(coordinate?.lat) && Number.isFinite(coordinate?.lng))
     .map((coordinate) => [coordinate.lng, coordinate.lat]);

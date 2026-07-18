@@ -1,17 +1,17 @@
-import { Buffer } from "node:buffer";
-import { createReadStream, promises as fs } from "node:fs";
-import path from "node:path";
-import { classifyObject, isTargetLightClassification, stableId } from "./classify.js";
-import { haversineDistanceMeters, pointToPolylineDistanceMeters } from "./geo.js";
-import { inferBglPlacementLightRows } from "./placement-rows.js";
+import { Buffer } from 'node:buffer';
+import { createReadStream, promises as fs } from 'node:fs';
+import path from 'node:path';
+import { classifyObject, isTargetLightClassification, stableId } from './classify.js';
+import { haversineDistanceMeters, pointToPolylineDistanceMeters } from './geo.js';
+import { inferBglPlacementLightRows } from './placement-rows.js';
 
 const SECTION_SCENERY_OBJECTS = 0x25;
 const RECORD_SCENERY_OBJECT_LIBRARY_OBJECT = 0x0b;
 const HEADER_SIZE = 0x38;
 const SECTION_POINTER_SIZE = 0x14;
 const SUBSECTION_POINTER_SIZE = 0x10;
-const MODEL_INFO_NEEDLE = Buffer.from("<ModelInfo", "ascii");
-const TAG_END = Buffer.from(">", "ascii");
+const MODEL_INFO_NEEDLE = Buffer.from('<ModelInfo', 'ascii');
+const TAG_END = Buffer.from('>', 'ascii');
 const MAX_BUFFERED_BGL_BYTES = 512 * 1024 * 1024;
 const MAX_RETAINED_BGL_BYTES = 256 * 1024 * 1024;
 const MODEL_INFO_STREAM_TAIL_BYTES = 4096;
@@ -25,12 +25,7 @@ const AIRPORT_LIGHT_ROW_HEADER_SIZE = 0x18;
 const AIRPORT_LIGHT_ROW_MIN_RECORD_SIZE = AIRPORT_LIGHT_ROW_HEADER_SIZE + 2 * 8;
 const AIRPORT_LIGHT_ROW_MAX_RECORD_SIZE = 64 * 1024;
 const AIRPORT_LIGHT_ROW_MAX_PRECEDING_NAME_BYTES = 128;
-const AIRPORT_LIGHT_ROW_VERSION_MARKERS = new Set([
-  0x01000000,
-  0x05000000,
-  0x09000000,
-  0x0d000000
-]);
+const AIRPORT_LIGHT_ROW_VERSION_MARKERS = new Set([0x01000000, 0x05000000, 0x09000000, 0x0d000000]);
 const TAXIWAY_POINT_RECORD_SIZE = 12;
 const TAXIWAY_POINT_TYPE_MASK = 0xff;
 const TAXIWAY_POINT_ORIENTATION_MASK = 0x100;
@@ -44,10 +39,7 @@ const TAXIWAY_PATH_RECORD_SIZE = 0x30;
 const TAXIWAY_PATH_TYPE_MASK = 0x0f;
 const TAXIWAY_PATH_TYPE_TAXI = 0x01;
 const TAXIWAY_PATH_TYPE_PATH = 0x04;
-const TAXIWAY_PATH_BRIDGE_TYPES = new Set([
-  TAXIWAY_PATH_TYPE_TAXI,
-  TAXIWAY_PATH_TYPE_PATH
-]);
+const TAXIWAY_PATH_BRIDGE_TYPES = new Set([TAXIWAY_PATH_TYPE_TAXI, TAXIWAY_PATH_TYPE_PATH]);
 const TAXIWAY_PATH_CENTERLINE_FLAG = 0x01;
 const TAXIWAY_PATH_LIGHTED_CENTERLINE_FLAG = 0x02;
 const TAXIWAY_PATH_LEFT_EDGE_TYPE_MASK = 0x0c;
@@ -77,7 +69,7 @@ const RUNWAY_CHILD_TYPES = new Set([
   0x0066,
   0x00cb,
   RUNWAY_APPROACH_PRIMARY,
-  RUNWAY_APPROACH_SECONDARY
+  RUNWAY_APPROACH_SECONDARY,
 ]);
 const RUNWAY_LIGHT_CLEARANCE_METERS = 0.15;
 const RUNWAY_CENTERLINE_END_INSET_METERS = 22.86;
@@ -88,20 +80,20 @@ const RUNWAY_TOUCHDOWN_BAR_SPACING_METERS = 30.48;
 const RUNWAY_TOUCHDOWN_BAR_LIGHT_SPACING_METERS = 1.5;
 const RUNWAY_EDGE_LIGHT_SPACING_METERS = 60;
 const RUNWAY_VASI_TYPE_NAMES = new Map([
-  [1, "VASI21"],
-  [2, "VASI22"],
-  [3, "VASI23"],
-  [4, "VASI31"],
-  [5, "VASI32"],
-  [6, "VASI33"],
-  [7, "PAPI2"],
-  [8, "PAPI4"],
-  [9, "TRICOLOR"],
-  [10, "PVASI"],
-  [11, "TVASI"],
-  [12, "BALL"],
-  [13, "APAP"],
-  [14, "PANELS"]
+  [1, 'VASI21'],
+  [2, 'VASI22'],
+  [3, 'VASI23'],
+  [4, 'VASI31'],
+  [5, 'VASI32'],
+  [6, 'VASI33'],
+  [7, 'PAPI2'],
+  [8, 'PAPI4'],
+  [9, 'TRICOLOR'],
+  [10, 'PVASI'],
+  [11, 'TVASI'],
+  [12, 'BALL'],
+  [13, 'APAP'],
+  [14, 'PANELS'],
 ]);
 const RUNWAY_VASI_SPACED_ROW_COUNTS = new Map([
   [1, 2],
@@ -110,7 +102,7 @@ const RUNWAY_VASI_SPACED_ROW_COUNTS = new Map([
   [4, 3],
   [5, 3],
   [6, 3],
-  [11, 2]
+  [11, 2],
 ]);
 const RUNWAY_VASI_KNOWN_LIGHT_COUNTS = new Map([
   [1, 2],
@@ -122,7 +114,7 @@ const RUNWAY_VASI_KNOWN_LIGHT_COUNTS = new Map([
   [7, 2],
   [8, 4],
   [9, 1],
-  [10, 1]
+  [10, 1],
 ]);
 const DEFAULT_TAXIWAY_CENTERLINE_SPACING_METERS = 15;
 const MIN_TAXIWAY_PATH_LENGTH_METERS = 0.75;
@@ -160,11 +152,12 @@ export async function extractBglData(bglFiles) {
     inferredPlacementRows: 0,
     inferredPlacementAssignments: 0,
     excludedPlacementOutliers: 0,
-    placementInferenceMilliseconds: 0
+    placementInferenceMilliseconds: 0,
   };
 
   for (const sourceFile of bglFiles ?? []) {
     try {
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Sequential reads enforce the retained-buffer memory budget and stable warning/model precedence.
       const stats = await fs.stat(sourceFile);
       let buffer;
       let modelInfos;
@@ -184,7 +177,9 @@ export async function extractBglData(bglFiles) {
       } else if (buffer) {
         buffers.push({ sourceFile });
       } else {
-        warnings.push(`${sourceFile}: indexed ${modelInfos.length} model-library entries from large BGL; skipped placement parsing`);
+        warnings.push(
+          `${sourceFile}: indexed ${modelInfos.length} model-library entries from large BGL; skipped placement parsing`
+        );
       }
     } catch (error) {
       warnings.push(`${sourceFile}: failed to read BGL file: ${error.message}`);
@@ -196,10 +191,13 @@ export async function extractBglData(bglFiles) {
     const sourceFile = pending.sourceFile;
     let buffer;
     try {
-      buffer = pending.buffer ?? await fs.readFile(sourceFile);
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Placement buffers are released one at a time to keep peak memory bounded.
+      buffer = pending.buffer ?? (await fs.readFile(sourceFile));
     } catch (error) {
       buffers[bufferIndex] = undefined;
-      warnings.push(`${sourceFile}: failed to reopen BGL file for placement parsing: ${error.message}`);
+      warnings.push(
+        `${sourceFile}: failed to reopen BGL file for placement parsing: ${error.message}`
+      );
       continue;
     }
     buffers[bufferIndex] = undefined;
@@ -239,7 +237,7 @@ export async function extractBglData(bglFiles) {
       bridgedTaxiwayPaths: taxiwayBridgeRows.length,
       decodedHoldShortPoints: taxiwayGraph.holdShortRows.length,
       sectionTypes: result.sectionTypes,
-      unsupportedSceneryRecordTypes: result.unsupportedSceneryRecordTypes
+      unsupportedSceneryRecordTypes: result.unsupportedSceneryRecordTypes,
     });
     for (const [recordType, count] of Object.entries(result.unsupportedSceneryRecordTypes ?? {})) {
       unsupportedSceneryRecordTypes.set(
@@ -248,10 +246,22 @@ export async function extractBglData(bglFiles) {
       );
     }
     taxiwayGraphStats.graphs += taxiwayGraph.graphs.length;
-    taxiwayGraphStats.points += taxiwayGraph.graphs.reduce((sum, graph) => sum + graph.points.length, 0);
-    taxiwayGraphStats.parkings += taxiwayGraph.graphs.reduce((sum, graph) => sum + graph.parkings.length, 0);
-    taxiwayGraphStats.paths += taxiwayGraph.graphs.reduce((sum, graph) => sum + graph.paths.length, 0);
-    taxiwayGraphStats.names += taxiwayGraph.graphs.reduce((sum, graph) => sum + graph.taxiNames.length, 0);
+    taxiwayGraphStats.points += taxiwayGraph.graphs.reduce(
+      (sum, graph) => sum + graph.points.length,
+      0
+    );
+    taxiwayGraphStats.parkings += taxiwayGraph.graphs.reduce(
+      (sum, graph) => sum + graph.parkings.length,
+      0
+    );
+    taxiwayGraphStats.paths += taxiwayGraph.graphs.reduce(
+      (sum, graph) => sum + graph.paths.length,
+      0
+    );
+    taxiwayGraphStats.names += taxiwayGraph.graphs.reduce(
+      (sum, graph) => sum + graph.taxiNames.length,
+      0
+    );
     taxiwayGraphStats.lightedTaxiPaths += taxiwayGraph.lightRows.length;
     taxiwayGraphStats.bridgedTaxiPaths += taxiwayBridgeRows.length;
     taxiwayGraphStats.decodedHoldShortPoints += taxiwayGraph.holdShortRows.length;
@@ -260,21 +270,18 @@ export async function extractBglData(bglFiles) {
 
   const placementInference = inferBglPlacementLightRows(instances);
   lightRows.push(...placementInference.rows);
-  const topologyRows = filterHoldShortTopologyRows(
-    decodedHoldShortRows,
-    lightRows,
-    instances
-  );
+  const topologyRows = filterHoldShortTopologyRows(decodedHoldShortRows, lightRows, instances);
   taxiwayGraphStats.eligibleHoldShortPoints = topologyRows.length;
-  taxiwayGraphStats.suppressedHoldShortPoints =
-    decodedHoldShortRows.length - topologyRows.length;
+  taxiwayGraphStats.suppressedHoldShortPoints = decodedHoldShortRows.length - topologyRows.length;
   taxiwayGraphStats.inferredPlacementRows = placementInference.rows.length;
   taxiwayGraphStats.inferredPlacementAssignments = placementInference.stats.assignedPlacements;
   taxiwayGraphStats.excludedPlacementOutliers = placementInference.stats.excludedOutliers;
   taxiwayGraphStats.placementInferenceMilliseconds = placementInference.stats.elapsedMilliseconds;
   taxiwayGraphStats.placementInference = placementInference.stats;
   for (const fileStat of fileStats) {
-    const fileRows = placementInference.rows.filter((row) => row.sourceFile === fileStat.sourceFile);
+    const fileRows = placementInference.rows.filter(
+      (row) => row.sourceFile === fileStat.sourceFile
+    );
     fileStat.inferredPlacementRows = fileRows.length;
     fileStat.inferredPlacementAssignments = fileRows.reduce(
       (sum, row) => sum + (row.sourceInstanceIds?.length ?? 0),
@@ -293,7 +300,7 @@ export async function extractBglData(bglFiles) {
     modelLibraryEntries: modelIndex.size,
     taxiwayGraphStats,
     fileStats,
-    unsupportedSceneryRecordTypes: Object.fromEntries(unsupportedSceneryRecordTypes)
+    unsupportedSceneryRecordTypes: Object.fromEntries(unsupportedSceneryRecordTypes),
   };
 }
 
@@ -366,12 +373,12 @@ function parseNamedAirportLightRowHeaderAt(buffer, sourceFile, headerOffset) {
   const classification = classifyAirportLightRowPreset(preset);
 
   return {
-    id: stableId("bgl-airport-light-row", sourceFile, headerOffset, preset, vertexCount),
+    id: stableId('bgl-airport-light-row', sourceFile, headerOffset, preset, vertexCount),
     sourceFile,
-    sourceType: "bgl-airport-light-row",
+    sourceType: 'bgl-airport-light-row',
     sourceRecordOffset: headerOffset,
     recordSize,
-    rawTag: "BGL Airport Light Row",
+    rawTag: 'BGL Airport Light Row',
     preset,
     rowSubtype,
     ...(Number.isFinite(spacing) && spacing > 0 && spacing < 100 ? { spacing } : {}),
@@ -382,8 +389,8 @@ function parseNamedAirportLightRowHeaderAt(buffer, sourceFile, headerOffset) {
     classificationReasons: [
       `decoded compiled airport light row preset "${preset}"`,
       `decoded ${vertexCount} row vertices`,
-      ...classification.reasons
-    ]
+      ...classification.reasons,
+    ],
   };
 }
 
@@ -401,7 +408,7 @@ function parseTrailingAsciiName(buffer, start, end) {
     }
   }
 
-  const name = nameBytes.toString("ascii").trim();
+  const name = nameBytes.toString('ascii').trim();
   return name.length >= 2 ? name : undefined;
 }
 
@@ -437,75 +444,75 @@ function parsePrecedingAsciiName(buffer, headerOffset) {
     return undefined;
   }
 
-  const name = nameBytes.toString("ascii").trim();
+  const name = nameBytes.toString('ascii').trim();
   return name.length >= 2 ? name : undefined;
 }
 
 function classifyAirportLightRowPreset(preset) {
   const normalizedPreset = preset
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  const compactPreset = normalizedPreset.replaceAll("_", "");
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const compactPreset = normalizedPreset.replaceAll('_', '');
   if (
-    normalizedPreset.includes("stopbar") ||
-    normalizedPreset.includes("stop_bar") ||
-    normalizedPreset.includes("hold_short") ||
-    normalizedPreset.includes("holdshort")
+    normalizedPreset.includes('stopbar') ||
+    normalizedPreset.includes('stop_bar') ||
+    normalizedPreset.includes('hold_short') ||
+    normalizedPreset.includes('holdshort')
   ) {
     return {
-      classification: "stopbar",
+      classification: 'stopbar',
       confidence: 0.84,
-      reasons: ["preset name indicates a stopbar row"]
+      reasons: ['preset name indicates a stopbar row'],
     };
   }
 
   if (
-    normalizedPreset.includes("lead_on") ||
-    normalizedPreset.includes("leadon") ||
-    compactPreset.includes("taxionin") ||
-    normalizedPreset.includes("ils_zone") ||
-    normalizedPreset.includes("exit") ||
-    normalizedPreset === "orangeblank"
+    normalizedPreset.includes('lead_on') ||
+    normalizedPreset.includes('leadon') ||
+    compactPreset.includes('taxionin') ||
+    normalizedPreset.includes('ils_zone') ||
+    normalizedPreset.includes('exit') ||
+    normalizedPreset === 'orangeblank'
   ) {
     return {
-      classification: "lead-on",
+      classification: 'lead-on',
       confidence: 0.82,
-      reasons: ["preset name indicates a lead-on row"]
+      reasons: ['preset name indicates a lead-on row'],
     };
   }
 
   if (
-    normalizedPreset.includes("taxi_center") ||
-    normalizedPreset.includes("taxi_centre") ||
-    compactPreset.includes("taxicenter") ||
-    compactPreset.includes("taxicentre") ||
-    normalizedPreset.includes("taxiway_center") ||
-    normalizedPreset.includes("taxiway_centre") ||
-    normalizedPreset.includes("green_centre") ||
-    normalizedPreset.includes("green_center") ||
-    normalizedPreset === "center_lights" ||
-    normalizedPreset === "center_lights_rev" ||
-    normalizedPreset === "taxi_yellow" ||
-    normalizedPreset === "greenblank"
+    normalizedPreset.includes('taxi_center') ||
+    normalizedPreset.includes('taxi_centre') ||
+    compactPreset.includes('taxicenter') ||
+    compactPreset.includes('taxicentre') ||
+    normalizedPreset.includes('taxiway_center') ||
+    normalizedPreset.includes('taxiway_centre') ||
+    normalizedPreset.includes('green_centre') ||
+    normalizedPreset.includes('green_center') ||
+    normalizedPreset === 'center_lights' ||
+    normalizedPreset === 'center_lights_rev' ||
+    normalizedPreset === 'taxi_yellow' ||
+    normalizedPreset === 'greenblank'
   ) {
     return {
-      classification: "taxi-centerline",
+      classification: 'taxi-centerline',
       confidence: 0.82,
-      reasons: ["preset name indicates a taxiway centerline row"]
+      reasons: ['preset name indicates a taxiway centerline row'],
     };
   }
 
   const classification = classifyObject({
-    sourceType: "lightrow",
-    rawTag: "BGL Airport Light Row",
-    name: preset
+    sourceType: 'lightrow',
+    rawTag: 'BGL Airport Light Row',
+    name: preset,
   });
   return {
     classification: classification.classification,
     confidence: classification.confidence,
-    reasons: classification.reasons
+    reasons: classification.reasons,
   };
 }
 
@@ -519,7 +526,7 @@ export function extractRunwayLightZones(buffer, sourceFile) {
     if (offset + RUNWAY_FIXED_RECORD_SIZE > buffer.length) {
       break;
     }
-    if (buffer[offset + 1] !== (RECORD_AIRPORT_RUNWAY >> 8)) {
+    if (buffer[offset + 1] !== RECORD_AIRPORT_RUNWAY >> 8) {
       offset += 1;
       continue;
     }
@@ -591,9 +598,9 @@ function parseRunwayRecordAt(buffer, sourceFile, offset) {
   const secondaryApproach = children.find((child) => child.type === RUNWAY_APPROACH_SECONDARY);
 
   return {
-    id: stableId("bgl-runway", sourceFile, offset, primaryNumber, primaryDesignator),
+    id: stableId('bgl-runway', sourceFile, offset, primaryNumber, primaryDesignator),
     sourceFile,
-    sourceType: "bgl-runway",
+    sourceType: 'bgl-runway',
     sourceRecordOffset: offset,
     recordSize,
     lat,
@@ -615,7 +622,7 @@ function parseRunwayRecordAt(buffer, sourceFile, offset) {
     ...(primaryApproach ? { primaryApproach } : {}),
     ...(secondaryApproach ? { secondaryApproach } : {}),
     vasi: children.filter((child) => RUNWAY_VASI_TYPES.has(child.type)),
-    children
+    children,
   };
 }
 
@@ -638,7 +645,7 @@ function parseRunwayChildren(buffer, runwayOffset, recordSize) {
     const child = {
       type,
       sourceRecordOffset: offset,
-      recordSize: childSize
+      recordSize: childSize,
     };
     if (type === RUNWAY_APPROACH_PRIMARY || type === RUNWAY_APPROACH_SECONDARY) {
       if (childSize < 0x18) {
@@ -647,7 +654,7 @@ function parseRunwayChildren(buffer, runwayOffset, recordSize) {
       const flags = buffer.readUInt8(offset + 0x06);
       const strobesRaw = buffer.readUInt8(offset + 0x07);
       Object.assign(child, {
-        end: type === RUNWAY_APPROACH_PRIMARY ? "primary" : "secondary",
+        end: type === RUNWAY_APPROACH_PRIMARY ? 'primary' : 'secondary',
         system: flags & 0x1f,
         endLights: (flags & 0x20) !== 0,
         reil: (flags & 0x40) !== 0,
@@ -656,7 +663,7 @@ function parseRunwayChildren(buffer, runwayOffset, recordSize) {
         ...(strobesRaw <= 20 ? {} : { strobesRaw, invalidStrobesValue: true }),
         spacingMeters: buffer.readFloatLE(offset + 0x08),
         offsetMeters: buffer.readFloatLE(offset + 0x0c),
-        slopeDegrees: buffer.readFloatLE(offset + 0x10)
+        slopeDegrees: buffer.readFloatLE(offset + 0x10),
       });
     } else if (
       type === RUNWAY_OFFSET_THRESHOLD_PRIMARY ||
@@ -665,7 +672,7 @@ function parseRunwayChildren(buffer, runwayOffset, recordSize) {
       if (childSize < 0x20) {
         return undefined;
       }
-      child.end = type === RUNWAY_OFFSET_THRESHOLD_PRIMARY ? "primary" : "secondary";
+      child.end = type === RUNWAY_OFFSET_THRESHOLD_PRIMARY ? 'primary' : 'secondary';
       child.lengthMeters = buffer.readFloatLE(offset + 0x18);
       child.widthMeters = buffer.readFloatLE(offset + 0x1c);
     } else if (RUNWAY_VASI_TYPES.has(type)) {
@@ -673,15 +680,15 @@ function parseRunwayChildren(buffer, runwayOffset, recordSize) {
         return undefined;
       }
       Object.assign(child, {
-        end: type <= 0x000c ? "primary" : "secondary",
-        side: type === 0x000b || type === 0x000d ? "left" : "right",
+        end: type <= 0x000c ? 'primary' : 'secondary',
+        side: type === 0x000b || type === 0x000d ? 'left' : 'right',
         vasiType: buffer.readUInt16LE(offset + 0x06),
         biasXMeters: buffer.readFloatLE(offset + 0x08),
         biasZMeters: buffer.readFloatLE(offset + 0x0c),
         spacingMeters: buffer.readFloatLE(offset + 0x10),
-        pitchDegrees: buffer.readFloatLE(offset + 0x14)
+        pitchDegrees: buffer.readFloatLE(offset + 0x14),
       });
-      child.vasiTypeName = RUNWAY_VASI_TYPE_NAMES.get(child.vasiType) ?? "UNKNOWN";
+      child.vasiTypeName = RUNWAY_VASI_TYPE_NAMES.get(child.vasiType) ?? 'UNKNOWN';
       child.spacingApplicable = RUNWAY_VASI_SPACED_ROW_COUNTS.has(child.vasiType);
     }
 
@@ -708,70 +715,103 @@ function buildRunwayLightZones(runway) {
     );
     const startAlong = -halfLength + inset;
     const endAlong = halfLength - inset;
-    for (const along of runwayStationDistances(startAlong, endAlong, RUNWAY_CENTERLINE_SPACING_METERS)) {
-      zones.push(runwayPointZone(runway, `runway-centerline-${Math.round((along + halfLength) * 100)}`,
-        runwayPoint(runway, along, 0), {
+    for (const along of runwayStationDistances(
+      startAlong,
+      endAlong,
+      RUNWAY_CENTERLINE_SPACING_METERS
+    )) {
+      zones.push(
+        runwayPointZone(
+          runway,
+          `runway-centerline-${Math.round((along + halfLength) * 100)}`,
+          runwayPoint(runway, along, 0),
+          {
+            lightLevel: runway.centerLightLevel,
+            centerRed: runway.centerRed,
+            nominalSpacingMeters: RUNWAY_CENTERLINE_SPACING_METERS,
+            geometryMode: 'source-runway-procedural-grid',
+          }
+        )
+      );
+    }
+    zones.push(
+      runwayLineZone(
+        runway,
+        'runway-centerline-continuous-envelope',
+        [runwayPoint(runway, startAlong, 0), runwayPoint(runway, endAlong, 0)],
+        {
           lightLevel: runway.centerLightLevel,
           centerRed: runway.centerRed,
-          nominalSpacingMeters: RUNWAY_CENTERLINE_SPACING_METERS,
-          geometryMode: "source-runway-procedural-grid"
-        }));
-    }
-    zones.push(runwayLineZone(runway, "runway-centerline-continuous-envelope", [
-      runwayPoint(runway, startAlong, 0),
-      runwayPoint(runway, endAlong, 0)
-    ], {
-      lightLevel: runway.centerLightLevel,
-      centerRed: runway.centerRed,
-      geometryMode: "continuous-procedural-envelope",
-      clearanceMeters: 0.1
-    }));
+          geometryMode: 'continuous-procedural-envelope',
+          clearanceMeters: 0.1,
+        }
+      )
+    );
   }
 
   if (runway.edgeLightLevel > 0) {
     for (const side of [-1, 1]) {
-      for (const along of runwayStationDistances(-halfLength, halfLength, RUNWAY_EDGE_LIGHT_SPACING_METERS)) {
-        zones.push(runwayPointZone(
-          runway,
-          `runway-edge-${side < 0 ? "left" : "right"}-${Math.round((along + halfLength) * 100)}`,
-          runwayPoint(runway, along, side * halfWidth),
-          {
-            lightLevel: runway.edgeLightLevel,
-            nominalSpacingMeters: RUNWAY_EDGE_LIGHT_SPACING_METERS,
-            geometryMode: "source-runway-procedural-grid"
-          }
-        ));
+      for (const along of runwayStationDistances(
+        -halfLength,
+        halfLength,
+        RUNWAY_EDGE_LIGHT_SPACING_METERS
+      )) {
+        zones.push(
+          runwayPointZone(
+            runway,
+            `runway-edge-${side < 0 ? 'left' : 'right'}-${Math.round((along + halfLength) * 100)}`,
+            runwayPoint(runway, along, side * halfWidth),
+            {
+              lightLevel: runway.edgeLightLevel,
+              nominalSpacingMeters: RUNWAY_EDGE_LIGHT_SPACING_METERS,
+              geometryMode: 'source-runway-procedural-grid',
+            }
+          )
+        );
       }
     }
   }
 
-  for (const end of ["primary", "secondary"]) {
-    const approach = end === "primary" ? runway.primaryApproach : runway.secondaryApproach;
+  for (const end of ['primary', 'secondary']) {
+    const approach = end === 'primary' ? runway.primaryApproach : runway.secondaryApproach;
     if (!approach) {
       continue;
     }
-    const thresholdAlong = end === "primary" ? primaryThresholdAlong : secondaryThresholdAlong;
-    const direction = end === "primary" ? 1 : -1;
-    const threshold = end === "primary" ? primaryThreshold : secondaryThreshold;
+    const thresholdAlong = end === 'primary' ? primaryThresholdAlong : secondaryThresholdAlong;
+    const direction = end === 'primary' ? 1 : -1;
+    const threshold = end === 'primary' ? primaryThreshold : secondaryThreshold;
 
     if (approach.endLights) {
-      zones.push(runwayLineZone(runway, `runway-threshold-${end}`, [
-        runwayPoint(runway, thresholdAlong, -halfWidth),
-        runwayPoint(runway, thresholdAlong, halfWidth)
-      ], {
-        runwayEnd: end,
-        geometryMode: "continuous-procedural-envelope"
-      }));
+      zones.push(
+        runwayLineZone(
+          runway,
+          `runway-threshold-${end}`,
+          [
+            runwayPoint(runway, thresholdAlong, -halfWidth),
+            runwayPoint(runway, thresholdAlong, halfWidth),
+          ],
+          {
+            runwayEnd: end,
+            geometryMode: 'continuous-procedural-envelope',
+          }
+        )
+      );
     }
 
     if (approach.reil) {
       const reilOffset = halfWidth + 10;
       for (const side of [-1, 1]) {
-        zones.push(runwayPointZone(runway, `runway-reil-${end}-${side < 0 ? "left" : "right"}`,
-          runwayPoint(runway, thresholdAlong, side * reilOffset), {
-            runwayEnd: end,
-            geometryMode: "source-positioned-procedural-point"
-          }));
+        zones.push(
+          runwayPointZone(
+            runway,
+            `runway-reil-${end}-${side < 0 ? 'left' : 'right'}`,
+            runwayPoint(runway, thresholdAlong, side * reilOffset),
+            {
+              runwayEnd: end,
+              geometryMode: 'source-positioned-procedural-point',
+            }
+          )
+        );
       }
     }
 
@@ -790,14 +830,20 @@ function buildRunwayLightZones(runway) {
       const endAlong = startAlong + outsideDirection * approachLength;
       const stationSpacing = Math.max(5, approach.spacingMeters || 30);
       for (const along of runwayStationDistances(startAlong, endAlong, stationSpacing)) {
-        zones.push(runwayPointZone(runway, `runway-approach-${end}-${Math.round(Math.abs(along - thresholdAlong) * 100)}`,
-          runwayPoint(runway, along, 0), {
-            runwayEnd: end,
-            approachSystem: approach.system,
-            strobes: approach.strobes,
-            spacingMeters: approach.spacingMeters,
-            geometryMode: "source-runway-procedural-grid"
-          }));
+        zones.push(
+          runwayPointZone(
+            runway,
+            `runway-approach-${end}-${Math.round(Math.abs(along - thresholdAlong) * 100)}`,
+            runwayPoint(runway, along, 0),
+            {
+              runwayEnd: end,
+              approachSystem: approach.system,
+              strobes: approach.strobes,
+              spacingMeters: approach.spacingMeters,
+              geometryMode: 'source-runway-procedural-grid',
+            }
+          )
+        );
       }
     }
   }
@@ -807,14 +853,22 @@ function buildRunwayLightZones(runway) {
   }
 
   if (runway.edgeLightLevel > 0) {
-    zones.push(runwayLineZone(runway, "runway-end-primary", [
-      runwayPoint(runway, -halfLength, -halfWidth),
-      runwayPoint(runway, -halfLength, halfWidth)
-    ], { geometryMode: "continuous-procedural-envelope", physicalEnd: true }));
-    zones.push(runwayLineZone(runway, "runway-end-secondary", [
-      runwayPoint(runway, halfLength, -halfWidth),
-      runwayPoint(runway, halfLength, halfWidth)
-    ], { geometryMode: "continuous-procedural-envelope", physicalEnd: true }));
+    zones.push(
+      runwayLineZone(
+        runway,
+        'runway-end-primary',
+        [runwayPoint(runway, -halfLength, -halfWidth), runwayPoint(runway, -halfLength, halfWidth)],
+        { geometryMode: 'continuous-procedural-envelope', physicalEnd: true }
+      )
+    );
+    zones.push(
+      runwayLineZone(
+        runway,
+        'runway-end-secondary',
+        [runwayPoint(runway, halfLength, -halfWidth), runwayPoint(runway, halfLength, halfWidth)],
+        { geometryMode: 'continuous-procedural-envelope', physicalEnd: true }
+      )
+    );
   }
 
   return zones;
@@ -826,10 +880,13 @@ function buildTouchdownZones(runway, end, thresholdAlong, direction) {
     0,
     Math.min(
       RUNWAY_TOUCHDOWN_MAX_LENGTH_METERS,
-      (runway.lengthMeters - runway.primaryOffsetThresholdMeters - runway.secondaryOffsetThresholdMeters) / 2
+      (runway.lengthMeters -
+        runway.primaryOffsetThresholdMeters -
+        runway.secondaryOffsetThresholdMeters) /
+        2
     )
   );
-  const lateralCenter = Math.min(11, runway.widthMeters * 0.44 / 2);
+  const lateralCenter = Math.min(11, (runway.widthMeters * 0.44) / 2);
 
   for (
     let distance = RUNWAY_TOUCHDOWN_FIRST_STATION_METERS;
@@ -840,23 +897,25 @@ function buildTouchdownZones(runway, end, thresholdAlong, direction) {
     for (const side of [-1, 1]) {
       const center = side * lateralCenter;
       for (const lightIndex of [-1, 0, 1]) {
-        zones.push(runwayPointZone(
-          runway,
-          `runway-touchdown-${end}-${side < 0 ? "left" : "right"}-${Math.round(distance * 100)}-${lightIndex + 1}`,
-          runwayPoint(
+        zones.push(
+          runwayPointZone(
             runway,
-            along,
-            center + lightIndex * RUNWAY_TOUCHDOWN_BAR_LIGHT_SPACING_METERS
-          ),
-          {
-            runwayEnd: end,
-            distanceFromThresholdMeters: distance,
-            barLightIndex: lightIndex + 1,
-            lightCount: 3,
-            nominalLightSpacingMeters: RUNWAY_TOUCHDOWN_BAR_LIGHT_SPACING_METERS,
-            geometryMode: "source-runway-procedural-grid"
-          }
-        ));
+            `runway-touchdown-${end}-${side < 0 ? 'left' : 'right'}-${Math.round(distance * 100)}-${lightIndex + 1}`,
+            runwayPoint(
+              runway,
+              along,
+              center + lightIndex * RUNWAY_TOUCHDOWN_BAR_LIGHT_SPACING_METERS
+            ),
+            {
+              runwayEnd: end,
+              distanceFromThresholdMeters: distance,
+              barLightIndex: lightIndex + 1,
+              lightCount: 3,
+              nominalLightSpacingMeters: RUNWAY_TOUCHDOWN_BAR_LIGHT_SPACING_METERS,
+              geometryMode: 'source-runway-procedural-grid',
+            }
+          )
+        );
       }
     }
   }
@@ -867,13 +926,9 @@ function buildTouchdownZones(runway, end, thresholdAlong, direction) {
 function buildVasiZone(runway, vasi) {
   const halfLength = runway.lengthMeters / 2;
   const along =
-    vasi.end === "primary"
-      ? -halfLength + vasi.biasZMeters
-      : halfLength - vasi.biasZMeters;
+    vasi.end === 'primary' ? -halfLength + vasi.biasZMeters : halfLength - vasi.biasZMeters;
   const sideSign =
-    vasi.end === "primary"
-      ? (vasi.side === "right" ? 1 : -1)
-      : (vasi.side === "right" ? -1 : 1);
+    vasi.end === 'primary' ? (vasi.side === 'right' ? 1 : -1) : vasi.side === 'right' ? -1 : 1;
   const cross = sideSign * Math.abs(vasi.biasXMeters);
   const extra = {
     runwayEnd: vasi.end,
@@ -886,23 +941,24 @@ function buildVasiZone(runway, vasi) {
     spacingApplicable: vasi.spacingApplicable,
     ...(RUNWAY_VASI_KNOWN_LIGHT_COUNTS.has(vasi.vasiType)
       ? { lightCount: RUNWAY_VASI_KNOWN_LIGHT_COUNTS.get(vasi.vasiType) }
-      : {})
+      : {}),
   };
   const rowCount = RUNWAY_VASI_SPACED_ROW_COUNTS.get(vasi.vasiType);
-  if (
-    rowCount &&
-    Number.isFinite(vasi.spacingMeters) &&
-    vasi.spacingMeters > 0
-  ) {
-    const halfAlong = vasi.spacingMeters * (rowCount - 1) / 2;
-    return runwayLineZone(runway, `runway-vasi-${vasi.end}-${vasi.side}`, [
-      runwayPoint(runway, along - halfAlong, cross),
-      runwayPoint(runway, along + halfAlong, cross)
-    ], {
-      ...extra,
-      rowCount,
-      geometryMode: "source-positioned-procedural-row-centers"
-    });
+  if (rowCount && Number.isFinite(vasi.spacingMeters) && vasi.spacingMeters > 0) {
+    const halfAlong = (vasi.spacingMeters * (rowCount - 1)) / 2;
+    return runwayLineZone(
+      runway,
+      `runway-vasi-${vasi.end}-${vasi.side}`,
+      [
+        runwayPoint(runway, along - halfAlong, cross),
+        runwayPoint(runway, along + halfAlong, cross),
+      ],
+      {
+        ...extra,
+        rowCount,
+        geometryMode: 'source-positioned-procedural-row-centers',
+      }
+    );
   }
   return runwayPointZone(
     runway,
@@ -910,39 +966,39 @@ function buildVasiZone(runway, vasi) {
     runwayPoint(runway, along, cross),
     {
       ...extra,
-      geometryMode: "source-positioned-procedural-reference"
+      geometryMode: 'source-positioned-procedural-reference',
     }
   );
 }
 
 function runwayLineZone(runway, lightType, vertices, extra = {}) {
-  return runwayZone(runway, lightType, "LineString", { vertices }, extra);
+  return runwayZone(runway, lightType, 'LineString', { vertices }, extra);
 }
 
 function runwayPointZone(runway, lightType, point, extra = {}) {
-  return runwayZone(runway, lightType, "Point", { point }, extra);
+  return runwayZone(runway, lightType, 'Point', { point }, extra);
 }
 
 function runwayPolygonZone(runway, lightType, vertices, extra = {}) {
-  return runwayZone(runway, lightType, "Polygon", { vertices }, extra);
+  return runwayZone(runway, lightType, 'Polygon', { vertices }, extra);
 }
 
 function runwayZone(runway, lightType, geometryType, geometry, extra) {
   return {
-    id: stableId("must-keep", runway.id, lightType),
+    id: stableId('must-keep', runway.id, lightType),
     sourceFile: runway.sourceFile,
-    sourceType: "bgl-runway-light-zone",
+    sourceType: 'bgl-runway-light-zone',
     sourceRecordOffset: runway.sourceRecordOffset,
     runwayId: runway.id,
     runway: `${runway.primaryLabel}/${runway.secondaryLabel}`,
-    classification: "runway",
+    classification: 'runway',
     lightType,
     geometryType,
     clearanceMeters: extra.clearanceMeters ?? RUNWAY_LIGHT_CLEARANCE_METERS,
     reason: `${lightType} is enabled by the compiled BGL Runway record`,
-    sourceBasis: "bgl-runway-record",
+    sourceBasis: 'bgl-runway-record',
     ...geometry,
-    ...extra
+    ...extra,
   };
 }
 
@@ -952,11 +1008,10 @@ function runwayPoint(runway, alongMeters, crossMeters) {
     Math.sin(headingRadians) * alongMeters + Math.cos(headingRadians) * crossMeters;
   const northMeters =
     Math.cos(headingRadians) * alongMeters - Math.sin(headingRadians) * crossMeters;
-  const metersPerDegreeLon =
-    111320 * Math.max(Math.cos((runway.lat * Math.PI) / 180), 0.000001);
+  const metersPerDegreeLon = 111320 * Math.max(Math.cos((runway.lat * Math.PI) / 180), 0.000001);
   return {
     lat: runway.lat + northMeters / 111320,
-    lon: runway.lon + eastMeters / metersPerDegreeLon
+    lon: runway.lon + eastMeters / metersPerDegreeLon,
   };
 }
 
@@ -988,9 +1043,9 @@ function isPlausibleRunwayNumberPair(primary, secondary) {
 }
 
 function runwayLabel(number, designator) {
-  const designators = ["", "L", "R", "C", "W", "A", "B"];
-  const numberLabel = number <= 36 ? String(number).padStart(2, "0") : String(number);
-  return `${numberLabel}${designators[designator] ?? ""}`;
+  const designators = ['', 'L', 'R', 'C', 'W', 'A', 'B'];
+  const numberLabel = number <= 36 ? String(number).padStart(2, '0') : String(number);
+  return `${numberLabel}${designators[designator] ?? ''}`;
 }
 
 function isPlausibleCoordinate(lat, lon) {
@@ -1003,18 +1058,20 @@ export function extractTaxiwayGraph(buffer, sourceFile) {
 
   for (const pointTable of pointTables) {
     const nextPointTableOffset =
-      pointTables.find((candidate) => candidate.offset > pointTable.offset)?.offset ?? buffer.length;
+      pointTables.find((candidate) => candidate.offset > pointTable.offset)?.offset ??
+      buffer.length;
     const parkings = findTaxiwayParkingTables(buffer, pointTable.end, nextPointTableOffset);
-    const pathTable = findTaxiwayPathTable(buffer, pointTable.points.length, pointTable.end, nextPointTableOffset);
+    const pathTable = findTaxiwayPathTable(
+      buffer,
+      pointTable.points.length,
+      pointTable.end,
+      nextPointTableOffset
+    );
     if (!pathTable) {
       continue;
     }
 
-    const taxiNames = findTaxiNameTable(
-      buffer,
-      pathTable.end,
-      nextPointTableOffset
-    );
+    const taxiNames = findTaxiNameTable(buffer, pathTable.end, nextPointTableOffset);
     const paths = parseTaxiwayPathTable(buffer, pathTable, pointTable.points, taxiNames);
     graphs.push({
       sourceFile,
@@ -1024,7 +1081,7 @@ export function extractTaxiwayGraph(buffer, sourceFile) {
       taxiNames,
       pathTableOffset: pathTable.offset,
       pathRunOffset: pathTable.entryOffset,
-      paths
+      paths,
     });
   }
 
@@ -1033,17 +1090,15 @@ export function extractTaxiwayGraph(buffer, sourceFile) {
       ...(shouldReconstructTaxiwayPath(pathRecord)
         ? [buildTaxiwayPathLightRow(sourceFile, graph, pathRecord)]
         : []),
-      ...buildTaxiwayPathEdgeLightRows(sourceFile, graph, pathRecord)
+      ...buildTaxiwayPathEdgeLightRows(sourceFile, graph, pathRecord),
     ])
   );
-  const holdShortRows = graphs.flatMap((graph) =>
-    buildHoldShortTopologyRows(sourceFile, graph)
-  );
+  const holdShortRows = graphs.flatMap((graph) => buildHoldShortTopologyRows(sourceFile, graph));
 
   return { graphs, lightRows, holdShortRows };
 }
 
-export function extractTaxiwayLightRows(buffer, sourceFile) {
+function extractTaxiwayLightRows(buffer, sourceFile) {
   return extractTaxiwayGraph(buffer, sourceFile).lightRows;
 }
 
@@ -1054,24 +1109,22 @@ export function buildHoldShortTopologyRows(sourceFile, graph) {
     if (!TAXIWAY_POINT_HOLD_SHORT_TYPES.has(pointType)) continue;
 
     const connectedPaths = (graph.paths ?? []).filter(
-      (pathRecord) =>
-        pathRecord.startIndex === point.index || pathRecord.endIndex === point.index
+      (pathRecord) => pathRecord.startIndex === point.index || pathRecord.endIndex === point.index
     );
+    // oxlint-disable-next-line react-doctor/js-flatmap-filter -- The bounded paths around one graph point are clearest as transform then reject-invalid stages.
     const pathVectors = connectedPaths
       .map((pathRecord) => {
-        const neighbor =
-          pathRecord.startIndex === point.index ? pathRecord.end : pathRecord.start;
+        const neighbor = pathRecord.startIndex === point.index ? pathRecord.end : pathRecord.start;
         const vector = localMeterVector(point, neighbor);
         const length = Math.hypot(vector.x, vector.y);
-        return length >= MIN_TAXIWAY_PATH_LENGTH_METERS
-          ? { ...vector, length, pathRecord }
-          : null;
+        return length >= MIN_TAXIWAY_PATH_LENGTH_METERS ? { ...vector, length, pathRecord } : null;
       })
       .filter(Boolean);
     if (pathVectors.length === 0) continue;
 
     const tangent = averagedUndirectedTangent(pathVectors);
     if (!tangent) continue;
+    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Width extraction and validity constraints are distinct domain stages on a tiny adjacency list.
     const widths = pathVectors
       .map(({ pathRecord }) => pathRecord.widthMeters)
       .filter((width) => Number.isFinite(width) && width > 0 && width <= 250)
@@ -1087,22 +1140,22 @@ export function buildHoldShortTopologyRows(sourceFile, graph) {
 
     rows.push({
       id: stableId(
-        "bgl-hold-short-topology",
+        'bgl-hold-short-topology',
         sourceFile,
         graph.pointTableOffset,
         point.index,
         point.flags
       ),
       sourceFile,
-      sourceType: "bgl-hold-short-topology",
-      rawTag: "BGL TaxiwayPoint HOLD_SHORT",
-      classification: "stopbar",
+      sourceType: 'bgl-hold-short-topology',
+      rawTag: 'BGL TaxiwayPoint HOLD_SHORT',
+      classification: 'stopbar',
       confidence: 0.85,
       vertices: [start, end],
       holdShortPoint: pointFromTaxiwayGraphPoint(point),
       holdShortPointType: pointType,
       holdShortOrientation:
-        (point.flags & TAXIWAY_POINT_ORIENTATION_MASK) === 0 ? "forward" : "reverse",
+        (point.flags & TAXIWAY_POINT_ORIENTATION_MASK) === 0 ? 'forward' : 'reverse',
       graphPointIndex: point.index,
       graphPointTableOffset: graph.pointTableOffset,
       connectedPathIndexes: connectedPaths.map((pathRecord) => pathRecord.index),
@@ -1110,10 +1163,10 @@ export function buildHoldShortTopologyRows(sourceFile, graph) {
       topologyOnly: true,
       noRemovalRequired: true,
       classificationReasons: [
-        "decoded compiled TaxiwayPoint HOLD_SHORT type",
-        "position and orientation derived from connected TaxiwayPath records",
-        "topology fallback only; no simulator light removal is required"
-      ]
+        'decoded compiled TaxiwayPoint HOLD_SHORT type',
+        'position and orientation derived from connected TaxiwayPath records',
+        'topology fallback only; no simulator light removal is required',
+      ],
     });
   }
   return rows;
@@ -1141,7 +1194,7 @@ function localMeterVector(origin, target) {
   const latitudeRadians = (origin.lat * Math.PI) / 180;
   return {
     x: (target.lon - origin.lon) * 111_320 * Math.cos(latitudeRadians),
-    y: (target.lat - origin.lat) * 111_320
+    y: (target.lat - origin.lat) * 111_320,
   };
 }
 
@@ -1151,22 +1204,21 @@ function offsetGraphPoint(origin, direction, distanceMeters) {
     lat: origin.lat + (direction.y * distanceMeters) / 111_320,
     lon:
       origin.lon +
-      (direction.x * distanceMeters) /
-        Math.max(111_320 * Math.cos(latitudeRadians), 0.001)
+      (direction.x * distanceMeters) / Math.max(111_320 * Math.cos(latitudeRadians), 0.001),
   };
 }
 
 export function filterHoldShortTopologyRows(rows, lightRows, instances) {
   const realStopbarRows = (lightRows ?? []).filter(
     (row) =>
-      row.classification === "stopbar" &&
-      row.sourceType !== "bgl-hold-short-topology" &&
+      row.classification === 'stopbar' &&
+      row.sourceType !== 'bgl-hold-short-topology' &&
       Array.isArray(row.vertices) &&
       row.vertices.length > 0
   );
   const realStopbarInstances = (instances ?? []).filter(
     (instance) =>
-      instance.classification === "stopbar" &&
+      instance.classification === 'stopbar' &&
       Number.isFinite(instance.lat) &&
       Number.isFinite(instance.lon)
   );
@@ -1180,8 +1232,7 @@ export function filterHoldShortTopologyRows(rows, lightRows, instances) {
     if (overlapsRealRow) return false;
     return !realStopbarInstances.some(
       (instance) =>
-        haversineDistanceMeters(point, instance) <=
-        HOLD_SHORT_REAL_LIGHT_DEDUPLICATION_METERS
+        haversineDistanceMeters(point, instance) <= HOLD_SHORT_REAL_LIGHT_DEDUPLICATION_METERS
     );
   });
 }
@@ -1223,7 +1274,7 @@ function findTaxiwayPointTables(buffer) {
         index,
         flags,
         lat,
-        lon
+        lon,
       });
     }
 
@@ -1235,7 +1286,7 @@ function findTaxiwayPointTables(buffer) {
     tables.push({
       offset,
       end: offset + recordSize,
-      points
+      points,
     });
     offset += recordSize;
   }
@@ -1275,7 +1326,7 @@ function findTaxiwayParkingTables(buffer, searchStart, searchEnd) {
         radiusMeters: buffer.readFloatLE(parkingOffset + 0x04),
         heading: buffer.readFloatLE(parkingOffset + 0x08),
         lat,
-        lon
+        lon,
       });
     }
 
@@ -1306,15 +1357,15 @@ function findTaxiNameTable(buffer, searchStart, searchEnd) {
     for (let index = 0; index < taxiNameCount; index += 1) {
       const nameOffset = offset + 8 + index * TAXI_NAME_RECORD_SIZE;
       const name = buffer
-        .toString("ascii", nameOffset, nameOffset + TAXI_NAME_RECORD_SIZE)
-        .replace(/\0+$/g, "")
+        .toString('ascii', nameOffset, nameOffset + TAXI_NAME_RECORD_SIZE)
+        .replace(/\0+$/g, '')
         .trim();
-      if (name === "" || /^[A-Z0-9-]{1,8}$/.test(name)) {
+      if (name === '' || /^[A-Z0-9-]{1,8}$/.test(name)) {
         plausibleNames += 1;
       }
       taxiNames.push({
         index,
-        name
+        name,
       });
     }
 
@@ -1350,7 +1401,7 @@ function findTaxiwayPathTable(buffer, pointCount, searchStart, searchEnd) {
       offset,
       entryOffset: offset + 8,
       end: offset + recordSize,
-      count: pathCount
+      count: pathCount,
     };
     if (!isPlausibleTaxiwayPathTable(buffer, table, pointCount)) {
       continue;
@@ -1440,7 +1491,7 @@ function parseTaxiwayPathTable(buffer, pathTable, points, taxiNames) {
       taxiNameIndex,
       ...(taxiName ? { taxiName } : {}),
       widthMeters: buffer.readFloatLE(offset + 0x08),
-      lengthMeters
+      lengthMeters,
     });
   }
 
@@ -1459,7 +1510,7 @@ function shouldReconstructTaxiwayPath(pathRecord) {
 function buildTaxiwayPathLightRow(sourceFile, graph, pathRecord) {
   return {
     id: stableId(
-      "bgl-taxiway-path",
+      'bgl-taxiway-path',
       sourceFile,
       pathRecord.sourceRecordOffset,
       pathRecord.startIndex,
@@ -1467,16 +1518,16 @@ function buildTaxiwayPathLightRow(sourceFile, graph, pathRecord) {
       pathRecord.markingFlags
     ),
     sourceFile,
-    sourceType: "bgl-taxiway-path",
+    sourceType: 'bgl-taxiway-path',
     sourceRecordOffset: pathRecord.sourceRecordOffset,
-    rawTag: "BGL TaxiwayPath",
+    rawTag: 'BGL TaxiwayPath',
     spacing: DEFAULT_TAXIWAY_CENTERLINE_SPACING_METERS,
     snapToVertices: false,
     vertices: [
       pointFromTaxiwayGraphPoint(pathRecord.start),
-      pointFromTaxiwayGraphPoint(pathRecord.end)
+      pointFromTaxiwayGraphPoint(pathRecord.end),
     ],
-    classification: "taxi-centerline",
+    classification: 'taxi-centerline',
     confidence: 0.9,
     centerLine: pathRecord.centerLine,
     centerLineLighted: true,
@@ -1501,10 +1552,10 @@ function buildTaxiwayPathLightRow(sourceFile, graph, pathRecord) {
     lengthMeters: pathRecord.lengthMeters,
     graphPointTableOffset: graph.pointTableOffset,
     classificationReasons: [
-      "decoded compiled TaxiwayPoint and TaxiwayPath records",
-      "TaxiwayPath centerline-light bit is set",
-      "TaxiwayPath type is TAXI"
-    ]
+      'decoded compiled TaxiwayPoint and TaxiwayPath records',
+      'TaxiwayPath centerline-light bit is set',
+      'TaxiwayPath type is TAXI',
+    ],
   };
 }
 
@@ -1519,10 +1570,10 @@ function buildTaxiwayPathEdgeLightRows(sourceFile, graph, pathRecord) {
 
   const rows = [];
   if (pathRecord.leftEdgeLighted) {
-    rows.push(buildTaxiwayPathEdgeLightRow(sourceFile, graph, pathRecord, "left"));
+    rows.push(buildTaxiwayPathEdgeLightRow(sourceFile, graph, pathRecord, 'left'));
   }
   if (pathRecord.rightEdgeLighted) {
-    rows.push(buildTaxiwayPathEdgeLightRow(sourceFile, graph, pathRecord, "right"));
+    rows.push(buildTaxiwayPathEdgeLightRow(sourceFile, graph, pathRecord, 'right'));
   }
   return rows;
 }
@@ -1530,26 +1581,21 @@ function buildTaxiwayPathEdgeLightRows(sourceFile, graph, pathRecord) {
 function buildTaxiwayPathEdgeLightRow(sourceFile, graph, pathRecord, side) {
   const start = pointFromTaxiwayGraphPoint(pathRecord.start);
   const end = pointFromTaxiwayGraphPoint(pathRecord.end);
-  const sideSign = side === "left" ? 1 : -1;
+  const sideSign = side === 'left' ? 1 : -1;
   const offsetMeters = sideSign * Math.max(0, pathRecord.widthMeters / 2);
   const vertices = offsetSegment(start, end, offsetMeters);
   return {
-    id: stableId(
-      "bgl-taxiway-path-edge",
-      sourceFile,
-      pathRecord.sourceRecordOffset,
-      side
-    ),
+    id: stableId('bgl-taxiway-path-edge', sourceFile, pathRecord.sourceRecordOffset, side),
     sourceFile,
-    sourceType: "bgl-taxiway-path-edge",
+    sourceType: 'bgl-taxiway-path-edge',
     sourceRecordOffset: pathRecord.sourceRecordOffset,
-    rawTag: "BGL TaxiwayPath Edge Lights",
+    rawTag: 'BGL TaxiwayPath Edge Lights',
     snapToVertices: false,
     vertices,
-    classification: "taxi-edge",
+    classification: 'taxi-edge',
     confidence: 0.9,
     edgeSide: side,
-    edgeType: side === "left" ? pathRecord.leftEdgeType : pathRecord.rightEdgeType,
+    edgeType: side === 'left' ? pathRecord.leftEdgeType : pathRecord.rightEdgeType,
     edgeLighted: true,
     pathType: pathRecord.pathType,
     pathTypeRaw: pathRecord.pathTypeRaw,
@@ -1562,16 +1608,15 @@ function buildTaxiwayPathEdgeLightRow(sourceFile, graph, pathRecord, side) {
     lengthMeters: pathRecord.lengthMeters,
     graphPointTableOffset: graph.pointTableOffset,
     classificationReasons: [
-      "decoded compiled TaxiwayPoint and TaxiwayPath records",
+      'decoded compiled TaxiwayPoint and TaxiwayPath records',
       `TaxiwayPath ${side} edge-light bit is set`,
-      "TaxiwayPath type is TAXI"
-    ]
+      'TaxiwayPath type is TAXI',
+    ],
   };
 }
 
 function offsetSegment(start, end, offsetMeters) {
-  const metersPerDegreeLon =
-    111320 * Math.max(Math.cos((start.lat * Math.PI) / 180), 0.000001);
+  const metersPerDegreeLon = 111320 * Math.max(Math.cos((start.lat * Math.PI) / 180), 0.000001);
   const dx = (end.lon - start.lon) * metersPerDegreeLon;
   const dy = (end.lat - start.lat) * 111320;
   const length = Math.sqrt(dx * dx + dy * dy);
@@ -1582,24 +1627,27 @@ function offsetSegment(start, end, offsetMeters) {
   const northOffset = (dx / length) * offsetMeters;
   return [start, end].map((point) => ({
     lat: point.lat + northOffset / 111320,
-    lon: point.lon + eastOffset / metersPerDegreeLon
+    lon: point.lon + eastOffset / metersPerDegreeLon,
   }));
 }
 
 function buildTaxiwayPathBridgeRows(sourceFile, graphs, sourceRows) {
-  const targetRows = sourceRows.filter((row) =>
-    isTargetLightClassification(row.classification) &&
-    Array.isArray(row.vertices) &&
-    row.vertices.length >= 2
+  const targetRows = sourceRows.filter(
+    (row) =>
+      isTargetLightClassification(row.classification) &&
+      Array.isArray(row.vertices) &&
+      row.vertices.length >= 2
   );
   if (targetRows.length < 2) {
     return [];
   }
 
   return graphs.flatMap((graph) =>
-    graph.paths
-      .filter((pathRecord) => shouldBridgeTaxiwayPath(pathRecord, targetRows))
-      .map((pathRecord) => buildTaxiwayPathBridgeRow(sourceFile, graph, pathRecord, targetRows))
+    graph.paths.flatMap((pathRecord) =>
+      shouldBridgeTaxiwayPath(pathRecord, targetRows)
+        ? [buildTaxiwayPathBridgeRow(sourceFile, graph, pathRecord, targetRows)]
+        : []
+    )
   );
 }
 
@@ -1618,7 +1666,7 @@ function shouldBridgeTaxiwayPath(pathRecord, targetRows) {
   const end = pointFromTaxiwayGraphPoint(pathRecord.end);
   const midpoint = {
     lat: (start.lat + end.lat) / 2,
-    lon: (start.lon + end.lon) / 2
+    lon: (start.lon + end.lon) / 2,
   };
   const startAnchor = findTaxiwayPathEndpointAnchor(start, end, targetRows);
   const endAnchor = findTaxiwayPathEndpointAnchor(end, start, targetRows);
@@ -1639,7 +1687,7 @@ function buildTaxiwayPathBridgeRow(sourceFile, graph, pathRecord, targetRows) {
 
   return {
     id: stableId(
-      "bgl-taxiway-path-bridge",
+      'bgl-taxiway-path-bridge',
       sourceFile,
       pathRecord.sourceRecordOffset,
       pathRecord.startIndex,
@@ -1647,13 +1695,13 @@ function buildTaxiwayPathBridgeRow(sourceFile, graph, pathRecord, targetRows) {
       pathRecord.taxiName
     ),
     sourceFile,
-    sourceType: "bgl-taxiway-path-bridge",
+    sourceType: 'bgl-taxiway-path-bridge',
     sourceRecordOffset: pathRecord.sourceRecordOffset,
-    rawTag: "BGL TaxiwayPath Bridge",
+    rawTag: 'BGL TaxiwayPath Bridge',
     spacing: DEFAULT_TAXIWAY_CENTERLINE_SPACING_METERS,
     snapToVertices: false,
     vertices: [start, end],
-    classification: "taxi-centerline",
+    classification: 'taxi-centerline',
     confidence: 0.78,
     centerLine: pathRecord.centerLine,
     centerLineLighted: false,
@@ -1679,18 +1727,18 @@ function buildTaxiwayPathBridgeRow(sourceFile, graph, pathRecord, targetRows) {
     graphPointTableOffset: graph.pointTableOffset,
     nearestTargetRowEndpointDistancesMeters: {
       start: startAnchor?.distanceMeters ?? nearestRowDistanceMeters(start, targetRows),
-      end: endAnchor?.distanceMeters ?? nearestRowDistanceMeters(end, targetRows)
+      end: endAnchor?.distanceMeters ?? nearestRowDistanceMeters(end, targetRows),
     },
     targetRowEndpointAnchorTypes: {
       start: startAnchor?.type,
-      end: endAnchor?.type
+      end: endAnchor?.type,
     },
     classificationReasons: [
-      "decoded compiled TaxiwayPoint and TaxiwayPath records",
-      "TaxiwayPath bridges a gap between source-backed target rows",
-      "TaxiwayPath endpoints touch decoded target row geometry or an aligned terminal gap no longer than one source light spacing",
-      "TaxiwayPath midpoint is not already covered by decoded target row geometry"
-    ]
+      'decoded compiled TaxiwayPoint and TaxiwayPath records',
+      'TaxiwayPath bridges a gap between source-backed target rows',
+      'TaxiwayPath endpoints touch decoded target row geometry or an aligned terminal gap no longer than one source light spacing',
+      'TaxiwayPath midpoint is not already covered by decoded target row geometry',
+    ],
   };
 }
 
@@ -1698,7 +1746,7 @@ function findTaxiwayPathEndpointAnchor(point, otherPathPoint, rows) {
   const nearestGeometryAnchor = rows
     .map((row) => ({
       row,
-      distanceMeters: pointToPolylineDistanceMeters(point, row.vertices)
+      distanceMeters: pointToPolylineDistanceMeters(point, row.vertices),
     }))
     .sort((left, right) => left.distanceMeters - right.distanceMeters)[0];
   if (
@@ -1707,7 +1755,7 @@ function findTaxiwayPathEndpointAnchor(point, otherPathPoint, rows) {
   ) {
     return {
       ...nearestGeometryAnchor,
-      type: "row-geometry"
+      type: 'row-geometry',
     };
   }
 
@@ -1723,7 +1771,7 @@ function findTaxiwayPathEndpointAnchor(point, otherPathPoint, rows) {
     );
     const terminalSegments = [
       [row.vertices[0], row.vertices[1]],
-      [row.vertices.at(-1), row.vertices.at(-2)]
+      [row.vertices.at(-1), row.vertices.at(-2)],
     ];
 
     for (const [terminal, adjacent] of terminalSegments) {
@@ -1732,12 +1780,7 @@ function findTaxiwayPathEndpointAnchor(point, otherPathPoint, rows) {
         continue;
       }
 
-      const alignmentDegrees = segmentAlignmentDegrees(
-        point,
-        otherPathPoint,
-        terminal,
-        adjacent
-      );
+      const alignmentDegrees = segmentAlignmentDegrees(point, otherPathPoint, terminal, adjacent);
       if (alignmentDegrees > TAXIWAY_PATH_BRIDGE_MAX_ALIGNMENT_DEGREES) {
         continue;
       }
@@ -1747,7 +1790,7 @@ function findTaxiwayPathEndpointAnchor(point, otherPathPoint, rows) {
           row,
           distanceMeters,
           alignmentDegrees,
-          type: "aligned-row-terminal"
+          type: 'aligned-row-terminal',
         };
       }
     }
@@ -1758,16 +1801,15 @@ function findTaxiwayPathEndpointAnchor(point, otherPathPoint, rows) {
 
 function segmentAlignmentDegrees(firstStart, firstEnd, secondStart, secondEnd) {
   const referenceLatitudeRadians =
-    ((firstStart.lat + firstEnd.lat + secondStart.lat + secondEnd.lat) / 4) *
-    (Math.PI / 180);
+    ((firstStart.lat + firstEnd.lat + secondStart.lat + secondEnd.lat) / 4) * (Math.PI / 180);
   const longitudeScale = Math.cos(referenceLatitudeRadians);
   const firstVector = {
     x: (firstEnd.lon - firstStart.lon) * longitudeScale,
-    y: firstEnd.lat - firstStart.lat
+    y: firstEnd.lat - firstStart.lat,
   };
   const secondVector = {
     x: (secondEnd.lon - secondStart.lon) * longitudeScale,
-    y: secondEnd.lat - secondStart.lat
+    y: secondEnd.lat - secondStart.lat,
   };
   const firstLength = Math.hypot(firstVector.x, firstVector.y);
   const secondLength = Math.hypot(secondVector.x, secondVector.y);
@@ -1776,8 +1818,7 @@ function segmentAlignmentDegrees(firstStart, firstEnd, secondStart, secondEnd) {
   }
 
   const cosine = Math.abs(
-    (firstVector.x * secondVector.x + firstVector.y * secondVector.y) /
-      (firstLength * secondLength)
+    (firstVector.x * secondVector.x + firstVector.y * secondVector.y) / (firstLength * secondLength)
   );
   return Math.acos(Math.max(-1, Math.min(1, cosine))) * (180 / Math.PI);
 }
@@ -1789,7 +1830,7 @@ function nearestRowDistanceMeters(point, rows) {
 function pointFromTaxiwayGraphPoint(point) {
   return {
     lat: point.lat,
-    lon: point.lon
+    lon: point.lon,
   };
 }
 
@@ -1803,14 +1844,14 @@ export function extractModelInfos(buffer, sourceFile) {
       break;
     }
 
-    const tag = buffer.toString("utf8", offset, end + 1);
+    const tag = buffer.toString('utf8', offset, end + 1);
     const guid = tag.match(/\bguid="(\{?[0-9a-fA-F-]{36}\}?)"/i)?.[1];
     const name = tag.match(/\bname="([^"]+)"/i)?.[1];
     if (guid && name) {
       modelInfos.push({
         guid: normalizeGuid(guid),
         name,
-        sourceFile
+        sourceFile,
       });
     }
 
@@ -1834,7 +1875,7 @@ export async function extractModelInfosFromFile(sourceFile) {
         break;
       }
 
-      const modelInfo = parseModelInfoTag(buffer.toString("utf8", offset, end + 1), sourceFile);
+      const modelInfo = parseModelInfoTag(buffer.toString('utf8', offset, end + 1), sourceFile);
       if (modelInfo) {
         modelInfos.push(modelInfo);
       }
@@ -1857,7 +1898,7 @@ function parseModelInfoTag(tag, sourceFile) {
   return {
     guid: normalizeGuid(guid),
     name,
-    sourceFile
+    sourceFile,
   };
 }
 
@@ -1872,7 +1913,7 @@ export function extractBglPlacements(buffer, sourceFile, modelIndex = new Map())
       instances,
       warnings: [`${sourceFile}: BGL file is too small to contain a valid header`],
       sectionTypes,
-      unsupportedSceneryRecordTypes: {}
+      unsupportedSceneryRecordTypes: {},
     };
   }
 
@@ -1886,7 +1927,7 @@ export function extractBglPlacements(buffer, sourceFile, modelIndex = new Map())
       instances,
       warnings: [`${sourceFile}: unsupported or unrecognized BGL header`],
       sectionTypes,
-      unsupportedSceneryRecordTypes: {}
+      unsupportedSceneryRecordTypes: {},
     };
   }
 
@@ -1896,7 +1937,7 @@ export function extractBglPlacements(buffer, sourceFile, modelIndex = new Map())
       instances,
       warnings: [`${sourceFile}: BGL section table is outside file bounds`],
       sectionTypes,
-      unsupportedSceneryRecordTypes: {}
+      unsupportedSceneryRecordTypes: {},
     };
   }
 
@@ -1940,27 +1981,37 @@ export function extractBglPlacements(buffer, sourceFile, modelIndex = new Map())
       }
 
       let recordOffset = recordsOffset;
-      for (let recordIndex = 0; recordIndex < recordCount && recordOffset < recordsOffset + recordsSize; recordIndex += 1) {
+      for (
+        let recordIndex = 0;
+        recordIndex < recordCount && recordOffset < recordsOffset + recordsSize;
+        recordIndex += 1
+      ) {
         if (recordOffset + 4 > buffer.length) {
-          warnings.push(`${sourceFile}: truncated scenery-object record at 0x${recordOffset.toString(16)}`);
+          warnings.push(
+            `${sourceFile}: truncated scenery-object record at 0x${recordOffset.toString(16)}`
+          );
           break;
         }
 
         const recordType = buffer.readUInt16LE(recordOffset);
         const recordSize = buffer.readUInt16LE(recordOffset + 0x02);
         if (recordSize < 4 || recordOffset + recordSize > recordsOffset + recordsSize) {
-          warnings.push(`${sourceFile}: invalid scenery-object record size at 0x${recordOffset.toString(16)}`);
+          warnings.push(
+            `${sourceFile}: invalid scenery-object record size at 0x${recordOffset.toString(16)}`
+          );
           break;
         }
 
         if (recordType === RECORD_SCENERY_OBJECT_LIBRARY_OBJECT && recordSize >= 0x40) {
-          instances.push(parseLibraryObjectRecord(buffer, sourceFile, recordOffset, modelIndex, {
-            sectionIndex: index,
-            subsectionIndex,
-            subsectionQmid,
-            recordIndex,
-            recordSize
-          }));
+          instances.push(
+            parseLibraryObjectRecord(buffer, sourceFile, recordOffset, modelIndex, {
+              sectionIndex: index,
+              subsectionIndex,
+              subsectionQmid,
+              recordIndex,
+              recordSize,
+            })
+          );
         } else {
           skippedRecordTypes.set(recordType, (skippedRecordTypes.get(recordType) ?? 0) + 1);
         }
@@ -1975,7 +2026,9 @@ export function extractBglPlacements(buffer, sourceFile, modelIndex = new Map())
   }
 
   for (const [recordType, count] of skippedRecordTypes) {
-    warnings.push(`${sourceFile}: skipped ${count} unsupported scenery-object records of type 0x${recordType.toString(16)}`);
+    warnings.push(
+      `${sourceFile}: skipped ${count} unsupported scenery-object records of type 0x${recordType.toString(16)}`
+    );
   }
 
   return {
@@ -1985,7 +2038,7 @@ export function extractBglPlacements(buffer, sourceFile, modelIndex = new Map())
     sectionTypes,
     unsupportedSceneryRecordTypes: Object.fromEntries(
       [...skippedRecordTypes.entries()].map(([recordType, count]) => [hexKey(recordType), count])
-    )
+    ),
   };
 }
 
@@ -2014,17 +2067,17 @@ function parseLibraryObjectRecord(buffer, sourceFile, offset, modelIndex, proven
   const scale = buffer.readFloatLE(offset + 0x3c);
   const modelInfo = modelIndex.get(normalizeGuid(guid));
   const classification = classifyObject({
-    sourceType: "library-object",
-    rawTag: "BGL SceneryObject.LibraryObject",
+    sourceType: 'library-object',
+    rawTag: 'BGL SceneryObject.LibraryObject',
     guid,
     name: modelInfo?.name,
-    extraText: path.basename(sourceFile)
+    extraText: path.basename(sourceFile),
   });
 
   return {
     id: stableId(sourceFile, offset, lat, lon, guid),
     sourceFile,
-    sourceType: "library-object",
+    sourceType: 'library-object',
     lat,
     lon,
     alt,
@@ -2034,10 +2087,10 @@ function parseLibraryObjectRecord(buffer, sourceFile, offset, modelIndex, proven
     scale,
     guid,
     ...(modelInfo?.name ? { name: modelInfo.name } : {}),
-    rawTag: "BGL SceneryObject.LibraryObject",
+    rawTag: 'BGL SceneryObject.LibraryObject',
     sourceRecordOffset: offset,
     sourceRecordSize: provenance.recordSize ?? buffer.readUInt16LE(offset + 0x02),
-    sourceSectionType: "0x25",
+    sourceSectionType: '0x25',
     sourceSectionIndex: provenance.sectionIndex,
     sourceSubsectionIndex: provenance.subsectionIndex,
     sourceSubsectionQmid: provenance.subsectionQmid,
@@ -2051,12 +2104,12 @@ function parseLibraryObjectRecord(buffer, sourceFile, offset, modelIndex, proven
       bank: rawBank,
       heading: rawHeading,
       imageComplexity: rawImageComplexity,
-      unknown: rawUnknown
+      unknown: rawUnknown,
     },
     instanceId,
     classification: classification.classification,
     confidence: classification.confidence,
-    classificationReasons: classification.reasons
+    classificationReasons: classification.reasons,
   };
 }
 
@@ -2074,23 +2127,31 @@ function decodeAngle16(value) {
 }
 
 function guidFromBytes(buffer, offset) {
-  const d1 = buffer.readUInt32LE(offset).toString(16).padStart(8, "0");
-  const d2 = buffer.readUInt16LE(offset + 4).toString(16).padStart(4, "0");
-  const d3 = buffer.readUInt16LE(offset + 6).toString(16).padStart(4, "0");
+  const d1 = buffer.readUInt32LE(offset).toString(16).padStart(8, '0');
+  const d2 = buffer
+    .readUInt16LE(offset + 4)
+    .toString(16)
+    .padStart(4, '0');
+  const d3 = buffer
+    .readUInt16LE(offset + 6)
+    .toString(16)
+    .padStart(4, '0');
   const d4 = [...buffer.subarray(offset + 8, offset + 10)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
   const d5 = [...buffer.subarray(offset + 10, offset + 16)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 
   return `{${d1}-${d2}-${d3}-${d4}-${d5}}`;
 }
 
 export function normalizeGuid(guid) {
-  const value = String(guid ?? "").trim().toLowerCase();
+  const value = String(guid ?? '')
+    .trim()
+    .toLowerCase();
   if (!value) {
-    return "";
+    return '';
   }
-  return value.startsWith("{") ? value : `{${value}}`;
+  return value.startsWith('{') ? value : `{${value}}`;
 }
