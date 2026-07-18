@@ -96,27 +96,6 @@ export const formatDateAccordingToLocale = (date) => {
 };
 
 /**
- * Format a date according to user's locale in numeric format
- * This override should work regardless of browser quirks
- * @param {string|Date} date - Date to format
- * @returns {string} Formatted date string
- */
-export const formatLocalDateNumeric = (date) => {
-  if (!date) return 'N/A';
-
-  try {
-    const dateObj = date instanceof Date ? date : new Date(date);
-    if (isNaN(dateObj.getTime())) return 'Invalid date';
-
-    // Use our custom formatter that overrides browser behavior
-    return formatDateAccordingToLocale(dateObj);
-  } catch (err) {
-    console.error('Error formatting date:', err);
-    return 'Date error';
-  }
-};
-
-/**
  * Format a date and time according to user's locale
  * @param {string|Date} dateTime - Date and time to format
  * @param {boolean} includeSeconds - Whether to include seconds in the time
@@ -168,35 +147,4 @@ export const formatLocalDateTime = (dateTime, includeSeconds = false) => {
     console.error('Error formatting date and time:', err);
     return 'Date/time error';
   }
-};
-
-/**
- * Get diagnostic information about user's date formatting
- * @returns {Object} Date formatting diagnostic info
- */
-export const getDateDiagnostics = () => {
-  // Test date: April 9, 2025
-  const testDate = new Date(2025, 3, 9);
-  const locale = getDetectedLocale();
-  const config = getLocaleConfig();
-
-  return {
-    detectedLocale: locale,
-    selectedConfig: config,
-    dateFormats: {
-      formatLocalDateNumeric: formatLocalDateNumeric(testDate),
-      browserDefault: testDate.toLocaleDateString(),
-      intlDefault: new Intl.DateTimeFormat().format(testDate),
-      usStyle: new Intl.DateTimeFormat('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(testDate),
-      ukStyle: new Intl.DateTimeFormat('en-GB', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(testDate),
-    },
-  };
 };
