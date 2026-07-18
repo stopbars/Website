@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import { useSearchParams } from 'react-router-dom';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { formatLocalDateTime } from '../../utils/dateUtils';
@@ -9,6 +10,99 @@ import { AlertOctagon, Ban as BanIcon, Loader, Trash2, UserX, FileText } from 'l
 
 const API_BASE = 'https://v2.stopbars.com';
 
+function BanForm({ initialVatsimId, onSubmit }) {
+  const [vatsimId, setVatsimId] = useState(initialVatsimId);
+  const [reason, setReason] = useState('');
+  const [expiresAtLocal, setExpiresAtLocal] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialVatsimId) setVatsimId(initialVatsimId);
+  }, [initialVatsimId]);
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const succeeded = await onSubmit({ vatsimId, reason, expiresAtLocal });
+      if (succeeded) {
+        setVatsimId('');
+        setReason('');
+        setExpiresAtLocal('');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-5">
+        <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+          <BanIcon className="w-4 h-4 text-red-400" />
+        </div>
+        <h3 className="font-medium text-white">Create / Update Ban</h3>
+      </div>
+      <div className="grid md:grid-cols-12 gap-4 items-end">
+        <div className="md:col-span-3 min-w-0">
+          <label htmlFor="ban-vatsim-id" className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+            VATSIM CID
+          </label>
+          <input
+            id="ban-vatsim-id"
+            type="text"
+            value={vatsimId}
+            onChange={(event) => setVatsimId(event.target.value.replace(/[^0-9]/g, ''))}
+            placeholder="e.g., 1234567"
+            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+            inputMode="numeric"
+          />
+        </div>
+        <div className="md:col-span-5 min-w-0">
+          <label htmlFor="ban-reason" className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+            Reason
+          </label>
+          <input
+            id="ban-reason"
+            type="text"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ban reason (optional)"
+            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+          />
+        </div>
+        <div className="md:col-span-3 min-w-0">
+          <label htmlFor="ban-expires-at" className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+            Expires At
+          </label>
+          <input
+            id="ban-expires-at"
+            type="datetime-local"
+            value={expiresAtLocal}
+            onChange={(event) => setExpiresAtLocal(event.target.value)}
+            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+          />
+        </div>
+        <div className="md:col-span-1 min-w-0">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || !vatsimId}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm whitespace-nowrap"
+          >
+            {submitting ? <Loader className="w-4 h-4 animate-spin" /> : 'Ban'}
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+BanForm.propTypes = {
+  initialVatsimId: PropTypes.string.isRequired,
+  onSubmit: PropTypes.func.isRequired,
+};
+
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- This cohesive admin table shares request and dialog context; splitting it or coupling independent fields would obscure the workflow.
 export default function BanManagement() {
   const token = getVatsimToken();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,15 +118,11 @@ export default function BanManagement() {
   const [removingBan, setRemovingBan] = useState(null); // targetId to remove
   const [isRemovingBan, setIsRemovingBan] = useState(false);
 
-  // New ban form
-  const [vatsimId, setVatsimId] = useState('');
-  const [reason, setReason] = useState('');
-  const [expiresAtLocal, setExpiresAtLocal] = useState(''); // datetime-local string
+  const initialVatsimId = searchParams.get('vatsimId') || '';
 
   useEffect(() => {
     const urlVatsimId = searchParams.get('vatsimId');
     if (urlVatsimId) {
-      setVatsimId(urlVatsimId);
       setSearchParams(
         (prev) => {
           const params = new URLSearchParams(prev);
@@ -70,6 +160,7 @@ export default function BanManagement() {
     }
   };
 
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect -- This authenticated admin view uses a one-shot fetch and has no query-layer dependency to reuse.
   useEffect(() => {
     if (!token) {
       setToast({
@@ -84,7 +175,7 @@ export default function BanManagement() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const handleCreateBan = async () => {
+  const handleCreateBan = async ({ vatsimId, reason, expiresAtLocal }) => {
     if (!vatsimId.trim()) {
       setToast({
         show: true,
@@ -92,7 +183,7 @@ export default function BanManagement() {
         description: 'VATSIM CID is required.',
         variant: 'destructive',
       });
-      return;
+      return false;
     }
     const body = {
       vatsimId: vatsimId.trim(),
@@ -100,7 +191,6 @@ export default function BanManagement() {
       expiresAt: expiresAtLocal ? new Date(expiresAtLocal).toISOString() : null,
     };
     try {
-      setLoading(true);
       const res = await fetch(`${API_BASE}/bans`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -114,10 +204,8 @@ export default function BanManagement() {
         description: 'The ban has been successfully created or updated.',
         variant: 'success',
       });
-      setVatsimId('');
-      setReason('');
-      setExpiresAtLocal('');
       await fetchBans();
+      return true;
     } catch (e) {
       setToast({
         show: true,
@@ -125,8 +213,7 @@ export default function BanManagement() {
         description: e.message || 'Failed to create ban.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
+      return false;
     }
   };
 
@@ -164,7 +251,7 @@ export default function BanManagement() {
 
   // No explicit refresh button; list updates after actions
 
-  const renderBanRow = (b, i) => {
+  const renderBanRow = (b) => {
     // Try to map common fields gracefully
     const targetId = b.vatsimId || b.vatsim_id || b.userId || b.targetId || b.id || 'Unknown';
     const createdAt = b.createdAt || b.created_at || b.created || null;
@@ -178,7 +265,10 @@ export default function BanManagement() {
           : true;
     const reasonText = b.reason || '';
     return (
-      <tr key={`${targetId}-${i}`} className="hover:bg-zinc-800/30 transition-colors">
+      <tr
+        key={b.id || `${targetId}-${createdAt || expiresAt || reasonText}`}
+        className="hover:bg-zinc-800/30 transition-colors"
+      >
         <td className="px-4 py-3 font-mono text-zinc-300">{targetId}</td>
         <td className="px-4 py-3 text-zinc-400">
           {createdBy || <span className="text-zinc-600">—</span>}
@@ -211,6 +301,7 @@ export default function BanManagement() {
         <td className="px-4 py-3">
           <div className="flex items-center justify-end gap-2">
             <button
+              type="button"
               onClick={() => setViewingReason({ targetId: String(targetId), reason: reasonText })}
               className="p-2 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
               title="View Reason"
@@ -218,6 +309,7 @@ export default function BanManagement() {
               <FileText className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={() => setRemovingBan(String(targetId))}
               className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
               title="Remove Ban"
@@ -231,9 +323,9 @@ export default function BanManagement() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="staff-tool space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Ban Management</h2>
           <p className="text-sm text-zinc-400 mt-1">List, create, and manage user bans</p>
@@ -246,62 +338,8 @@ export default function BanManagement() {
         )}
       </div>
 
-      {/* Create / Update Ban */}
-      <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-            <BanIcon className="w-4 h-4 text-red-400" />
-          </div>
-          <h3 className="font-medium text-white">Create / Update Ban</h3>
-        </div>
-        <div className="grid md:grid-cols-12 gap-4 items-end">
-          <div className="md:col-span-3 min-w-0">
-            <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
-              VATSIM CID
-            </label>
-            <input
-              type="text"
-              value={vatsimId}
-              onChange={(e) => setVatsimId(e.target.value.replace(/[^0-9]/g, ''))}
-              placeholder="e.g., 1234567"
-              className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
-              inputMode="numeric"
-            />
-          </div>
-          <div className="md:col-span-5 min-w-0">
-            <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
-              Reason
-            </label>
-            <input
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Ban reason (optional)"
-              className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
-            />
-          </div>
-          <div className="md:col-span-3 min-w-0">
-            <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
-              Expires At
-            </label>
-            <input
-              type="datetime-local"
-              value={expiresAtLocal}
-              onChange={(e) => setExpiresAtLocal(e.target.value)}
-              className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
-            />
-          </div>
-          <div className="md:col-span-1 min-w-0">
-            <button
-              onClick={handleCreateBan}
-              disabled={loading || !vatsimId}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm whitespace-nowrap"
-            >
-              Ban
-            </button>
-          </div>
-        </div>
-      </Card>
+      {/* Draft fields are local so typing does not rerender the existing-bans table. */}
+      <BanForm initialVatsimId={initialVatsimId} onSubmit={handleCreateBan} />
 
       {/* Existing Bans */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">

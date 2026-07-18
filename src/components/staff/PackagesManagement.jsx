@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '../shared/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../shared/Card';
 import { Toast } from '../shared/Toast';
@@ -48,6 +48,8 @@ const PACKAGE_TYPES = [
   },
 ];
 
+/* oxlint-disable react-doctor/prefer-tag-over-role -- The composite drop zone contains nested action buttons and a file input, so it cannot validly become a native button. */
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- Package selection, drag state, request status, and feedback are independent within one upload workflow.
 const PackagesManagement = () => {
   const [selectedType, setSelectedType] = useState('models');
   const [file, setFile] = useState(null);
@@ -67,13 +69,13 @@ const PackagesManagement = () => {
     setToast((t) => ({ ...t, show: false }));
   };
 
-  const validate = (f) => {
+  const validate = useCallback((f) => {
     if (!f) return 'File required';
     const lower = f.name.toLowerCase();
     if (!lower.endsWith('.zip')) return 'File must be a .zip archive (.zip)';
     if (f.size > MAX_BYTES) return 'File exceeds 100MB max size';
     return '';
-  };
+  }, []);
 
   const onFileChange = (e) => {
     const f = e.target.files?.[0];
@@ -166,8 +168,8 @@ const PackagesManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+    <div className="staff-tool space-y-6">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Packages Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Upload installer data packages</p>
@@ -197,6 +199,7 @@ const PackagesManagement = () => {
               const active = selectedType === pt.id;
               return (
                 <button
+                  type="button"
                   key={pt.id}
                   onClick={() => {
                     setSelectedType(pt.id);
@@ -231,7 +234,14 @@ const PackagesManagement = () => {
             }}
             onDrop={onDrop}
             onClick={() => document.getElementById('bars-package-input').click()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                document.getElementById('bars-package-input').click();
+              }
+            }}
             role="button"
+            tabIndex={0}
             aria-label="Upload package ZIP via click or drag and drop"
           >
             {file ? (
@@ -294,6 +304,7 @@ const PackagesManagement = () => {
             )}
             <input
               id="bars-package-input"
+              aria-label="Package ZIP file"
               type="file"
               accept=".zip,application/zip"
               className="hidden"
@@ -320,6 +331,8 @@ const PackagesManagement = () => {
                   </p>
                 </div>
                 <button
+                  type="button"
+                  aria-label="Dismiss upload success message"
                   onClick={() => setSuccess(null)}
                   className="text-emerald-400/60 hover:text-emerald-300"
                 >
@@ -358,6 +371,7 @@ const PackagesManagement = () => {
                 </div>
               )}
               <button
+                type="button"
                 onClick={() => setShowMeta(!showMeta)}
                 className="mt-3 text-xs underline decoration-dotted text-emerald-300/80 hover:text-emerald-200"
               >
@@ -387,5 +401,6 @@ const PackagesManagement = () => {
     </div>
   );
 };
+/* oxlint-enable react-doctor/prefer-tag-over-role */
 
 export default PackagesManagement;

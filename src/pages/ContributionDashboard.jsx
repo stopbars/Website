@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import { memo, useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import { Tooltip } from '../components/shared/Tooltip';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { useNavigate } from 'react-router-dom';
@@ -15,16 +16,40 @@ import {
   Search,
   FileDown,
   Plus,
-  Loader,
   AlertOctagon,
   Trash2,
   AlertCircle,
-  TowerControl,
-  Box,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
 
+const groupContributionsByAirport = (contributions) => {
+  const grouped = contributions.reduce((acc, contribution) => {
+    const airport = contribution.airportIcao;
+
+    if (!acc[airport]) {
+      acc[airport] = { airport, contributions: [] };
+    }
+
+    acc[airport].contributions.push({
+      id: contribution.id,
+      scenery: contribution.packageName,
+      simulator: contribution.simulator,
+      status: contribution.status ?? 'approved',
+      lastUpdated: contribution.submissionDate
+        ? new Date(contribution.submissionDate).toISOString().split('T')[0]
+        : null,
+      rejectionReason: contribution.rejectionReason ?? null,
+      userDisplayName: contribution.userDisplayName ?? null,
+    });
+
+    return acc;
+  }, {});
+
+  return Object.values(grouped);
+};
+
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-initialize-state react-doctor/exhaustive-deps react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/js-combine-iterations -- Dashboard tabs, indicator measurement, request state, and bounded presentation lists are cohesive; staged list transforms remain clearer than accumulator rewrites. */
 const ContributionDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -58,8 +83,6 @@ const ContributionDashboard = () => {
   const [currentTab, setCurrentTab] = useState('all');
   const [viewingRejection, setViewingRejection] = useState(null); // { airport, scenery, reason }
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery }
-  const [deleting, setDeleting] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastConfig, setToastConfig] = useState({
     variant: 'success',
@@ -129,54 +152,42 @@ const ContributionDashboard = () => {
       try {
         setLoading(true);
 
-        // Fetch leaderboard data
-        const leaderboardResponse = await fetch(
-          'https://v2.stopbars.com/contributions/leaderboard'
-        );
-        if (!leaderboardResponse.ok) {
-          throw new Error('Failed to fetch leaderboard data');
-        }
-        const leaderboardData = await leaderboardResponse.json();
+        const [leaderboardResponse, contributionsResponse] = await Promise.all([
+          fetch('https://v2.stopbars.com/contributions/leaderboard'),
+          fetch('https://v2.stopbars.com/contributions?status=approved&simple=true'),
+        ]);
+
+        if (!leaderboardResponse.ok) throw new Error('Failed to fetch leaderboard data');
+        if (!contributionsResponse.ok) throw new Error('Failed to fetch contributions');
+
+        const [leaderboardData, contributionsData] = await Promise.all([
+          leaderboardResponse.json(),
+          contributionsResponse.json(),
+        ]);
+
         // Format leaderboard data
         const formattedLeaderboard = leaderboardData.map((item) => ({
           name: item.name,
           contributions: item.count,
         }));
-
-        // Fetch all approved contributions
-        const contributionsResponse = await fetch(
-          'https://v2.stopbars.com/contributions?status=approved'
+        const initialContributions = groupContributionsByAirport(
+          contributionsData.contributions || []
         );
-        if (!contributionsResponse.ok) {
-          throw new Error('Failed to fetch contributions');
-        }
-        const contributionsData = await contributionsResponse.json();
-        // Group contributions by airport
-        const groupedContributions = contributionsData.contributions.reduce((acc, contribution) => {
-          const airport = contribution.airportIcao;
 
-          if (!acc[airport]) {
-            acc[airport] = {
-              airport,
-              contributions: [],
-            };
-          }
+        setLeaderboard(formattedLeaderboard);
+        setAllContributions(initialContributions);
+        setLoading(false);
 
-          acc[airport].contributions.push({
-            id: contribution.id,
-            scenery: contribution.packageName,
-            simulator: contribution.simulator,
-            status: contribution.status,
-            lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
-            rejectionReason: contribution.rejectionReason,
-            userDisplayName: contribution.userDisplayName,
+        const publicMetadataPromise = fetch('https://v2.stopbars.com/contributions?status=approved')
+          .then((response) => {
+            if (!response.ok) throw new Error('Failed to enrich contribution metadata');
+            return response.json();
+          })
+          .then((data) => groupContributionsByAirport(data.contributions || []))
+          .catch((error) => {
+            console.error(error);
+            return null;
           });
-          (AlertCircle, TowerControl, Box);
-          return acc;
-        }, {});
-
-        // Convert the grouped object to an array
-        const allContribsArray = Object.values(groupedContributions);
 
         // User contributions (if user is logged in)
         let userContribsArray = [];
@@ -187,30 +198,7 @@ const ContributionDashboard = () => {
 
           if (userResponse.ok) {
             const userData = await userResponse.json();
-            // Group user contributions by airport
-            const groupedUserContributions = userData.contributions.reduce((acc, contribution) => {
-              const airport = contribution.airportIcao;
-
-              if (!acc[airport]) {
-                acc[airport] = {
-                  airport,
-                  contributions: [],
-                };
-              }
-
-              acc[airport].contributions.push({
-                id: contribution.id,
-                scenery: contribution.packageName,
-                simulator: contribution.simulator,
-                status: contribution.status,
-                lastUpdated: new Date(contribution.submissionDate).toISOString().split('T')[0],
-                rejectionReason: contribution.rejectionReason,
-                userDisplayName: contribution.userDisplayName,
-              });
-
-              return acc;
-            }, {});
-            userContribsArray = Object.values(groupedUserContributions);
+            userContribsArray = groupContributionsByAirport(userData.contributions || []);
 
             // Store the summary data if available
             if (userData.summary) {
@@ -219,8 +207,8 @@ const ContributionDashboard = () => {
           }
         }
 
-        setLeaderboard(formattedLeaderboard);
-        setAllContributions(allContribsArray);
+        const enrichedContributions = await publicMetadataPromise;
+        if (enrichedContributions) setAllContributions(enrichedContributions);
         setUserContributions(userContribsArray);
       } catch (err) {
         setError('Failed to load contribution data');
@@ -281,11 +269,38 @@ const ContributionDashboard = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20 flex items-center">
-          <div className="w-full max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-center h-64">
-              <div className="flex flex-col items-center">
-                <Loader className="w-9 h-9 animate-spin text-zinc-400" />
+        <div className="min-h-screen pt-32 sm:pt-39 pb-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6" aria-busy="true">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold mb-2">Community Contributions</h1>
+                <p className="text-zinc-400 text-sm sm:text-base">
+                  Help expand the BARS compatibility by contributing your own scenery contributions
+                </p>
+              </div>
+              <div className="h-10 w-56 rounded-lg bg-zinc-800 animate-pulse" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <Card className="order-2 lg:order-1 p-4 sm:p-6 min-h-80">
+                <div className="h-7 w-44 rounded bg-zinc-800 animate-pulse mb-6" />
+                <div className="space-y-4">
+                  {[0, 1, 2, 3].map((item) => (
+                    <div key={item} className="h-13 rounded-lg bg-zinc-800/60 animate-pulse" />
+                  ))}
+                </div>
+              </Card>
+              <div className="lg:col-span-2 order-1 lg:order-2 min-h-150">
+                <div className="h-10 border-b border-zinc-800 mb-6" />
+                <div className="h-10 rounded-lg bg-zinc-800/60 animate-pulse mb-6" />
+                <div className="space-y-6">
+                  {[0, 1, 2].map((item) => (
+                    <div
+                      key={item}
+                      className="h-36 rounded-lg border border-zinc-800 bg-zinc-900/40 animate-pulse"
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -328,49 +343,7 @@ const ContributionDashboard = () => {
           {/* Main content grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left column - Leaderboard */}
-            <div className="order-2 lg:order-1">
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center space-x-3 mb-6">
-                  <Trophy className="w-5 h-5 text-amber-400" />
-                  <h2 className="text-xl font-semibold">Top Contributors</h2>
-                </div>
-
-                <div className="space-y-4">
-                  {leaderboard.map((contributor, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div
-                          className={`
-                          w-7 h-7 rounded-full flex items-center justify-center text-sm
-                          ${
-                            index === 0
-                              ? 'bg-amber-400 text-amber-950'
-                              : index === 1
-                                ? 'bg-zinc-300 text-zinc-800'
-                                : index === 2
-                                  ? 'bg-amber-700 text-amber-100'
-                                  : 'bg-zinc-700'
-                          }
-                        `}
-                        >
-                          {index + 1}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{contributor.name}</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold">{contributor.contributions}</div>
-                        <div className="text-xs text-zinc-400">contributions</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
+            <LeaderboardCard leaderboard={leaderboard} />
 
             {/* Right column - Contributions list & tabs */}
             <div className="lg:col-span-2 order-1 lg:order-2">
@@ -387,6 +360,7 @@ const ContributionDashboard = () => {
                   />
                 )}
                 <button
+                  type="button"
                   ref={allTabRef}
                   className={`px-4 py-2 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
                     currentTab === 'all'
@@ -403,6 +377,7 @@ const ContributionDashboard = () => {
                 {!user ? (
                   <Tooltip content="You must be logged in to view your contributions.">
                     <button
+                      type="button"
                       ref={userTabRef}
                       className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
                         currentTab === 'user'
@@ -420,6 +395,7 @@ const ContributionDashboard = () => {
                   </Tooltip>
                 ) : (
                   <button
+                    type="button"
                     ref={userTabRef}
                     className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
                       currentTab === 'user'
@@ -467,6 +443,7 @@ const ContributionDashboard = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
                 <input
                   type="text"
+                  aria-label="Search contributions"
                   placeholder="Search by airport or scenery..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -551,7 +528,7 @@ const ContributionDashboard = () => {
                                 </div>
                                 <div className="flex items-center space-x-2">
                                   <div className="text-xs text-zinc-400">
-                                    Last updated: {contribution.lastUpdated}
+                                    Last updated: {contribution.lastUpdated ?? 'Loading…'}
                                   </div>
                                   {currentTab === 'user' && (
                                     <span
@@ -569,11 +546,12 @@ const ContributionDashboard = () => {
                                   )}
                                 </div>
                                 <div className="text-xs text-zinc-400">
-                                  Last contributor: {contribution.userDisplayName}
+                                  Last contributor: {contribution.userDisplayName ?? 'Loading…'}
                                 </div>
                               </div>
                               {contribution.status === 'approved' && (
                                 <button
+                                  type="button"
                                   onClick={() => handleDownload(airport.airport, contribution.id)}
                                   className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center justify-center gap-2"
                                   title="Download XML"
@@ -604,6 +582,7 @@ const ContributionDashboard = () => {
                                 (contribution.rejectionReason ? (
                                   <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
                                     <button
+                                      type="button"
                                       onClick={() =>
                                         setViewingRejection({
                                           airport: airport.airport,
@@ -674,100 +653,41 @@ const ContributionDashboard = () => {
         description={viewingRejection?.reason}
       />
 
-      <Dialog
-        open={!!confirmDelete}
-        onClose={() => {
+      <DeleteContributionDialog
+        contribution={confirmDelete}
+        vatsimToken={vatsimToken}
+        onClose={() => setConfirmDelete(null)}
+        onDeleted={(deletedContribution) => {
+          setUserContributions((previous) =>
+            previous
+              .map((group) =>
+                group.airport === deletedContribution.airport
+                  ? {
+                      ...group,
+                      contributions: group.contributions.filter(
+                        (contribution) => contribution.id !== deletedContribution.id
+                      ),
+                    }
+                  : group
+              )
+              .filter((group) => group.contributions.length > 0)
+          );
           setConfirmDelete(null);
-          setDeleteConfirmation('');
+          setToastConfig({
+            variant: 'success',
+            title: 'Contribution Deleted',
+            description: 'Your contribution has been successfully deleted.',
+          });
+          setShowToast(true);
         }}
-        icon={AlertCircle}
-        iconColor={confirmDelete?.status === 'pending' ? 'orange' : 'red'}
-        title="Contribution Deletion"
-        description="All contribution and scenery data will be permanently deleted and will no longer be available for approval. This action cannot be undone."
-        isLoading={deleting}
-        closeOnBackdrop={!deleting}
-        closeOnEscape={!deleting}
-        onSubmit={async () => {
-          if (!confirmDelete) return;
-          try {
-            setDeleting(true);
-            const response = await fetch(
-              `https://v2.stopbars.com/contributions/${confirmDelete.id}`,
-              {
-                method: 'DELETE',
-                headers: {
-                  'X-Vatsim-Token': vatsimToken,
-                },
-              }
-            );
-            if (!response.ok) {
-              throw new Error('Delete failed');
-            }
-
-            setUserContributions((prev) =>
-              prev
-                .map((group) =>
-                  group.airport === confirmDelete.airport
-                    ? {
-                        ...group,
-                        contributions: group.contributions.filter((c) => c.id !== confirmDelete.id),
-                      }
-                    : group
-                )
-                .filter((group) => group.contributions.length > 0)
-            );
-
-            setConfirmDelete(null);
-            setDeleteConfirmation('');
-            setToastConfig({
-              variant: 'success',
-              title: 'Contribution Deleted',
-              description: 'Your contribution has been successfully deleted.',
-            });
-            setShowToast(true);
-          } catch (e) {
-            console.error(e);
-            setToastConfig({
-              variant: 'destructive',
-              title: 'Deletion Failed',
-              description: 'Failed to delete contribution, try again later.',
-            });
-            setShowToast(true);
-          } finally {
-            setDeleting(false);
-          }
+        onError={() => {
+          setToastConfig({
+            variant: 'destructive',
+            title: 'Deletion Failed',
+            description: 'Failed to delete contribution, try again later.',
+          });
+          setShowToast(true);
         }}
-        fields={
-          confirmDelete
-            ? [
-                {
-                  type: 'confirmation',
-                  label: `Type ${confirmDelete.airport}-DELETE to confirm:`,
-                  confirmText: `${confirmDelete.airport}-DELETE`,
-                  value: deleteConfirmation,
-                  onChange: setDeleteConfirmation,
-                },
-              ]
-            : []
-        }
-        buttons={[
-          {
-            label: 'Delete',
-            type: 'submit',
-            variant: confirmDelete?.status === 'pending' ? 'primary' : 'destructive',
-            icon: Trash2,
-            loadingLabel: 'Deleting...',
-            requiresValidation: true,
-          },
-          {
-            label: 'Cancel',
-            variant: 'outline',
-            onClick: () => {
-              setConfirmDelete(null);
-              setDeleteConfirmation('');
-            },
-          },
-        ]}
       />
 
       <Toast
@@ -779,6 +699,143 @@ const ContributionDashboard = () => {
       />
     </Layout>
   );
+};
+
+const LeaderboardCard = memo(function LeaderboardCard({ leaderboard }) {
+  return (
+    <div className="order-2 lg:order-1">
+      <Card className="p-4 sm:p-6">
+        <div className="flex items-center space-x-3 mb-6">
+          <Trophy className="w-5 h-5 text-amber-400" />
+          <h2 className="text-xl font-semibold">Top Contributors</h2>
+        </div>
+
+        <div className="space-y-4">
+          {leaderboard.map((contributor, index) => (
+            <div
+              key={contributor.id ?? contributor.name ?? contributor.userDisplayName}
+              className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50"
+            >
+              <div className="flex items-center space-x-3">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-sm ${
+                    index === 0
+                      ? 'bg-amber-400 text-amber-950'
+                      : index === 1
+                        ? 'bg-zinc-300 text-zinc-800'
+                        : index === 2
+                          ? 'bg-amber-700 text-amber-100'
+                          : 'bg-zinc-700'
+                  }`}
+                >
+                  {index + 1}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{contributor.name}</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-semibold">{contributor.contributions}</div>
+                <div className="text-xs text-zinc-400">contributions</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+});
+
+LeaderboardCard.propTypes = {
+  leaderboard: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      name: PropTypes.string.isRequired,
+      userDisplayName: PropTypes.string,
+      contributions: PropTypes.number.isRequired,
+    })
+  ).isRequired,
+};
+
+function DeleteContributionDialog({ contribution, vatsimToken, onClose, onDeleted, onError }) {
+  const [confirmation, setConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const handleClose = () => {
+    if (deleting) return;
+    setConfirmation('');
+    onClose();
+  };
+
+  const handleSubmit = async () => {
+    if (!contribution) return;
+    try {
+      setDeleting(true);
+      const response = await fetch(`https://v2.stopbars.com/contributions/${contribution.id}`, {
+        method: 'DELETE',
+        headers: { 'X-Vatsim-Token': vatsimToken },
+      });
+      if (!response.ok) throw new Error('Delete failed');
+      setConfirmation('');
+      onDeleted(contribution);
+    } catch (error) {
+      console.error(error);
+      onError();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={!!contribution}
+      onClose={handleClose}
+      icon={AlertCircle}
+      iconColor={contribution?.status === 'pending' ? 'orange' : 'red'}
+      title="Contribution Deletion"
+      description="All contribution and scenery data will be permanently deleted and will no longer be available for approval. This action cannot be undone."
+      isLoading={deleting}
+      closeOnBackdrop={!deleting}
+      closeOnEscape={!deleting}
+      onSubmit={handleSubmit}
+      fields={
+        contribution
+          ? [
+              {
+                type: 'confirmation',
+                label: `Type ${contribution.airport}-DELETE to confirm:`,
+                confirmText: `${contribution.airport}-DELETE`,
+                value: confirmation,
+                onChange: setConfirmation,
+              },
+            ]
+          : []
+      }
+      buttons={[
+        {
+          label: 'Delete',
+          type: 'submit',
+          variant: contribution?.status === 'pending' ? 'primary' : 'destructive',
+          icon: Trash2,
+          loadingLabel: 'Deleting...',
+          requiresValidation: true,
+        },
+        { label: 'Cancel', variant: 'outline', onClick: handleClose },
+      ]}
+    />
+  );
+}
+
+DeleteContributionDialog.propTypes = {
+  contribution: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    airport: PropTypes.string.isRequired,
+    status: PropTypes.string,
+  }),
+  vatsimToken: PropTypes.string,
+  onClose: PropTypes.func.isRequired,
+  onDeleted: PropTypes.func.isRequired,
+  onError: PropTypes.func.isRequired,
 };
 
 export default ContributionDashboard;

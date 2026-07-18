@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   MessageSquareWarning,
   Info,
@@ -20,7 +20,7 @@ import { getVatsimToken } from '../../utils/cookieUtils';
 import DOMPurify from 'dompurify';
 
 // Function to parse markdown-style links in NOTAM content (same as Navbar)
-const parseNotamLinks = (content) => {
+const sanitizeNotamLinks = (content) => {
   if (!content) return '';
 
   // RegExp to match markdown style links: [text](url)
@@ -35,6 +35,62 @@ const parseNotamLinks = (content) => {
   return DOMPurify.sanitize(sanitizedContent);
 };
 
+const getNotamTypeStyles = (type) => {
+  switch (type) {
+    case 'warning':
+      return {
+        bg: 'bg-amber-500/10',
+        border: 'border-amber-500/20',
+        text: 'text-amber-400',
+        icon: MessageSquareWarning,
+        circle: 'bg-amber-400',
+      };
+    case 'info':
+      return {
+        bg: 'bg-blue-500/10',
+        border: 'border-blue-500/20',
+        text: 'text-blue-400',
+        icon: Info,
+        circle: 'bg-blue-400',
+      };
+    case 'discord':
+      return {
+        bg: 'bg-indigo-500/10',
+        border: 'border-indigo-500/20',
+        text: 'text-indigo-300',
+        icon: MessageSquareWarning,
+        circle: 'bg-indigo-300',
+      };
+    case 'success':
+      return {
+        bg: 'bg-emerald-500/10',
+        border: 'border-emerald-500/20',
+        text: 'text-emerald-400',
+        icon: MessageSquareWarning,
+        circle: 'bg-emerald-400',
+      };
+    case 'error':
+      return {
+        bg: 'bg-red-500/10',
+        border: 'border-red-500/20',
+        text: 'text-red-400',
+        icon: MessageSquareWarning,
+        circle: 'bg-red-400',
+      };
+    default:
+      return {
+        bg: 'bg-zinc-700/20',
+        border: 'border-zinc-600/30',
+        text: 'text-zinc-300',
+        icon: MessageSquareWarning,
+        circle: 'bg-zinc-400',
+      };
+  }
+};
+
+const getNotamTypes = () => ['warning', 'info', 'discord', 'success', 'error'];
+
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The single NOTAM editor intentionally keeps independent request, draft, copy, and dialog state local.
 const NotamManagement = () => {
   const [notamData, setNotamData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,9 +110,13 @@ const NotamManagement = () => {
     description: '',
     variant: 'default',
   });
-  const [hasEditChanges, setHasEditChanges] = useState(false);
   const [copied, setCopied] = useState(false);
+  const hasEditChanges =
+    isEditing &&
+    Boolean(notamData?.notam) &&
+    (editContent !== notamData.notam || editType !== (notamData.type || 'warning'));
 
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect -- NOTAM data is a one-shot load for this isolated admin screen with no shared query layer.
   useEffect(() => {
     const fetchNotam = async () => {
       try {
@@ -87,17 +147,6 @@ const NotamManagement = () => {
     fetchNotam();
   }, []);
 
-  // Track changes when editing
-  useEffect(() => {
-    if (isEditing && notamData?.notam) {
-      const hasContentChanged = editContent !== notamData.notam;
-      const hasTypeChanged = editType !== (notamData.type || 'warning');
-      setHasEditChanges(hasContentChanged || hasTypeChanged);
-    } else {
-      setHasEditChanges(false);
-    }
-  }, [editContent, editType, isEditing, notamData]);
-
   // Copy NOTAM markdown content to clipboard
   const copyNotamToClipboard = async () => {
     if (!notamData?.notam) return;
@@ -111,69 +160,10 @@ const NotamManagement = () => {
     }
   };
 
-  const getNotamTypeStyles = (type) => {
-    switch (type) {
-      case 'warning':
-        return {
-          bg: 'bg-amber-500/10',
-          border: 'border-amber-500/20',
-          text: 'text-amber-400',
-          icon: MessageSquareWarning,
-          circle: 'bg-amber-400',
-        };
-      case 'info':
-        return {
-          bg: 'bg-blue-500/10',
-          border: 'border-blue-500/20',
-          text: 'text-blue-400',
-          icon: Info,
-          circle: 'bg-blue-400',
-        };
-      case 'discord':
-        return {
-          bg: 'bg-indigo-500/10',
-          border: 'border-indigo-500/20',
-          text: 'text-indigo-300',
-          icon: MessageSquareWarning,
-          circle: 'bg-indigo-300',
-        };
-      case 'success':
-        return {
-          bg: 'bg-emerald-500/10',
-          border: 'border-emerald-500/20',
-          text: 'text-emerald-400',
-          icon: MessageSquareWarning,
-          circle: 'bg-emerald-400',
-        };
-      case 'error':
-        return {
-          bg: 'bg-red-500/10',
-          border: 'border-red-500/20',
-          text: 'text-red-400',
-          icon: MessageSquareWarning,
-          circle: 'bg-red-400',
-        };
-      default:
-        return {
-          bg: 'bg-zinc-700/20',
-          border: 'border-zinc-600/30',
-          text: 'text-zinc-300',
-          icon: MessageSquareWarning,
-          circle: 'bg-zinc-400',
-        };
-    }
-  };
-
-  // Get all available NOTAM types (excluding default)
-  const getNotamTypes = () => {
-    return ['warning', 'info', 'discord', 'success', 'error'];
-  };
-
   // Handle starting edit mode
   const handleStartEdit = () => {
     setIsEditing(true);
     setIsAdding(false);
-    setHasEditChanges(false);
   };
 
   // Handle starting add mode
@@ -190,7 +180,6 @@ const NotamManagement = () => {
     setIsAdding(false);
     setShowTypeDropdown(false);
     setShowNewTypeDropdown(false);
-    setHasEditChanges(false);
     // Reset edit content to original
     if (notamData?.notam) {
       setEditContent(notamData.notam);
@@ -300,7 +289,7 @@ const NotamManagement = () => {
   };
 
   // Render type tag
-  const renderTypeTag = (type) => {
+  const renderTypeTag = useCallback((type) => {
     const styles = getNotamTypeStyles(type);
     return (
       <div
@@ -310,13 +299,14 @@ const NotamManagement = () => {
         {type || 'default'}
       </div>
     );
-  };
+  }, []);
 
   // Render type dropdown
-  const renderTypeDropdown = (currentType, setType, isOpen, setIsOpen) => {
+  const renderTypeDropdown = useCallback((currentType, setType, isOpen, setIsOpen) => {
     return (
       <div className="relative">
         <button
+          type="button"
           onClick={() => setIsOpen(!isOpen)}
           aria-expanded={isOpen}
           className="flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-white transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
@@ -336,6 +326,7 @@ const NotamManagement = () => {
           <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-150">
             {getNotamTypes().map((type, index) => (
               <button
+                type="button"
                 key={type}
                 onClick={() => {
                   setType(type);
@@ -361,12 +352,12 @@ const NotamManagement = () => {
         )}
       </div>
     );
-  };
+  }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="staff-tool space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">NOTAM Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Update and publish website notices</p>
@@ -375,6 +366,7 @@ const NotamManagement = () => {
           {!isEditing && !isAdding && (
             <>
               <button
+                type="button"
                 onClick={handleStartAdd}
                 className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
               >
@@ -383,6 +375,7 @@ const NotamManagement = () => {
               </button>
               {notamData?.notam && (
                 <button
+                  type="button"
                   onClick={handleStartEdit}
                   className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 >
@@ -395,6 +388,7 @@ const NotamManagement = () => {
           {(isEditing || isAdding) && (
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={
                   (isAdding && newContent.trim().length < 5) ||
@@ -421,6 +415,7 @@ const NotamManagement = () => {
                 )}
               </button>
               <button
+                type="button"
                 onClick={handleCancel}
                 disabled={saving}
                 className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-400 transition-[background-color,color,transform,opacity] duration-150 ease-out hover:bg-zinc-800 hover:text-zinc-300 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
@@ -446,11 +441,15 @@ const NotamManagement = () => {
           <div className="space-y-5">
             {/* Content */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+              <label
+                htmlFor="new-notam-content"
+                className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2"
+              >
                 <FileText className="w-4 h-4 text-zinc-400" />
                 Content
               </label>
               <textarea
+                id="new-notam-content"
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
                 className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white placeholder-zinc-500 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
@@ -460,19 +459,19 @@ const NotamManagement = () => {
 
             {/* Type */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
                 <Tag className="w-4 h-4 text-zinc-400" />
                 Type
-              </label>
+              </div>
               {renderTypeDropdown(newType, setNewType, showNewTypeDropdown, setShowNewTypeDropdown)}
             </div>
 
             {/* Preview */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
                 <Eye className="w-4 h-4 text-zinc-400" />
                 Preview
-              </label>
+              </div>
               <div className="h-24 border border-zinc-700/50 rounded-lg overflow-hidden">
                 {newContent ? (
                   <div
@@ -480,7 +479,7 @@ const NotamManagement = () => {
                   >
                     <div
                       className={`${getNotamTypeStyles(newType).text} text-sm font-medium overflow-auto`}
-                      dangerouslySetInnerHTML={{ __html: parseNotamLinks(newContent) }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeNotamLinks(newContent) }}
                     />
                   </div>
                 ) : (
@@ -507,11 +506,15 @@ const NotamManagement = () => {
           <div className="space-y-5">
             {/* Content */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+              <label
+                htmlFor="edit-notam-content"
+                className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2"
+              >
                 <FileText className="w-4 h-4 text-zinc-400" />
                 Content
               </label>
               <textarea
+                id="edit-notam-content"
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white transition-[background-color,border-color,box-shadow] duration-150 ease-out focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
@@ -520,19 +523,19 @@ const NotamManagement = () => {
 
             {/* Type */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
                 <Tag className="w-4 h-4 text-zinc-400" />
                 Type
-              </label>
+              </div>
               {renderTypeDropdown(editType, setEditType, showTypeDropdown, setShowTypeDropdown)}
             </div>
 
             {/* Preview */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
                 <Eye className="w-4 h-4 text-zinc-400" />
                 Preview
-              </label>
+              </div>
               <div className="h-24 border border-zinc-700/50 rounded-lg overflow-hidden">
                 <div
                   className={`p-4 h-full ${getNotamTypeStyles(editType).bg} border-b ${getNotamTypeStyles(editType).border}`}
@@ -540,7 +543,7 @@ const NotamManagement = () => {
                   <div
                     className={`${getNotamTypeStyles(editType).text} text-sm font-medium overflow-auto`}
                     dangerouslySetInnerHTML={{
-                      __html: DOMPurify.sanitize(parseNotamLinks(editContent)),
+                      __html: sanitizeNotamLinks(editContent),
                     }}
                   />
                 </div>
@@ -577,6 +580,7 @@ const NotamManagement = () => {
               className={`p-4 rounded-lg border-b ${getNotamTypeStyles(notamData.type).bg} ${getNotamTypeStyles(notamData.type).border} relative`}
             >
               <button
+                type="button"
                 onClick={copyNotamToClipboard}
                 className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors"
                 title="Copy NOTAM to clipboard"
@@ -589,7 +593,7 @@ const NotamManagement = () => {
               </button>
               <div
                 className={`${getNotamTypeStyles(notamData.type).text} text-sm font-medium pr-10`}
-                dangerouslySetInnerHTML={{ __html: parseNotamLinks(notamData.notam) }}
+                dangerouslySetInnerHTML={{ __html: sanitizeNotamLinks(notamData.notam) }}
               />
             </div>
           ) : (

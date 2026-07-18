@@ -5,16 +5,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
-import {
-  AlertCircle,
-  ChevronRight,
-  CopyIcon,
-  Info,
-  Loader,
-  Check,
-  Layers,
-  FileCode2,
-} from 'lucide-react';
+import { AlertCircle, ChevronRight, CopyIcon, Info, Check, Layers, FileCode2 } from 'lucide-react';
 import Map, {
   Source,
   Layer,
@@ -180,11 +171,20 @@ PopupRow.propTypes = {
   value: PropTypes.node.isRequired,
 };
 
-const PointPopupContent = React.memo(({ point, copiedId, onCopy }) => {
+/* oxlint-disable react-doctor/prefer-module-scope-pure-function -- Popup event isolation stays beside the MapLibre popup that owns it. */
+const PointPopupContent = React.memo(({ point }) => {
+  const [copiedId, setCopiedId] = useState(null);
   const style = POINT_TYPE_STYLES[point.type] || POINT_TYPE_STYLES.taxiway;
   const stopPopupInteraction = (event) => {
     event.stopPropagation();
     event.nativeEvent?.stopImmediatePropagation?.();
+  };
+  const handleCopy = (event) => {
+    stopPopupInteraction(event);
+    event.preventDefault();
+    navigator.clipboard.writeText(point.id);
+    setCopiedId(point.id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
@@ -201,7 +201,7 @@ const PointPopupContent = React.memo(({ point, copiedId, onCopy }) => {
         <div className="px-3.5">
           <button
             type="button"
-            onClick={(event) => onCopy(point.id, event)}
+            onClick={handleCopy}
             className="w-full group flex items-center justify-between gap-2 bg-zinc-800/60 hover:bg-zinc-800 rounded-md px-2.5 py-2 transition-colors cursor-pointer"
             title="Copy ID"
           >
@@ -265,8 +265,6 @@ PointPopupContent.propTypes = {
     ihp: PropTypes.bool,
     color: PropTypes.string,
   }).isRequired,
-  copiedId: PropTypes.string,
-  onCopy: PropTypes.func.isRequired,
 };
 
 const getPointColor = (point) => {
@@ -698,6 +696,7 @@ const INTERACTIVE_LAYER_IDS = [
 const CLICK_RADIUS_PX = 10;
 const TOUCH_RADIUS_PX = 14;
 
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect -- Map state, viewport, selection, and draft navigation share one MapLibre lifecycle; the request is a guarded route-load fetch. */
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -708,12 +707,6 @@ const ContributeMap = () => {
   const [points, setPoints] = useState([]);
   const [contributionPolicy, setContributionPolicy] = useState(null);
   const [activePointId, setActivePointId] = useState(null);
-  const [viewState, setViewState] = useState({
-    longitude: 0,
-    latitude: 0,
-    zoom: 14,
-  });
-  const [copiedId, setCopiedId] = useState(null);
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
   const contributionsDisabled =
@@ -728,6 +721,7 @@ const ContributeMap = () => {
       try {
         setLoading(true);
 
+        const pointsRequest = fetch(`https://v2.stopbars.com/airports/${icao}/points`);
         const [airportResponse, policy] = await Promise.all([
           fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
           fetchContributionPolicy(icao),
@@ -745,16 +739,6 @@ const ContributeMap = () => {
           longitude: airportData.longitude,
         });
 
-        let centerLat = airportData.latitude;
-        let centerLng = airportData.longitude;
-
-        setViewState((prev) => ({
-          ...prev,
-          latitude: centerLat,
-          longitude: centerLng,
-          zoom: 14,
-        }));
-
         const hasBoundingBox =
           typeof airportData.bbox_min_lat === 'number' &&
           typeof airportData.bbox_min_lon === 'number' &&
@@ -771,7 +755,10 @@ const ContributeMap = () => {
           );
         }
 
-        const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${icao}/points`);
+        setLoading(false);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const pointsResponse = await pointsRequest;
         if (!pointsResponse.ok) {
           throw new Error('Failed to fetch points data');
         }
@@ -971,17 +958,6 @@ const ContributeMap = () => {
     navigate(`/contribute/test/${icao}`);
   };
 
-  const handleCopyId = (id, event) => {
-    if (event) {
-      event.stopPropagation();
-      event.preventDefault();
-      event.nativeEvent?.stopImmediatePropagation?.();
-    }
-    navigator.clipboard.writeText(id);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
   const toggleStyle = () => {
     if (styleName === 'Satellite') {
       setMapStyle(STREET_STYLE);
@@ -1020,11 +996,29 @@ const ContributeMap = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 pb-20 flex items-center">
-          <div className="w-full max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-center h-64">
-              <div className="flex flex-col items-center">
-                <Loader className="w-8 h-8 animate-spin text-zinc-400" />
+        <div className="min-h-screen pt-32 pb-20">
+          <div className="max-w-7xl mx-auto px-6" aria-busy="true">
+            <div className="mb-12 mt-6">
+              <div className="flex items-center space-x-2 mb-12">
+                <Breadcrumb>
+                  <BreadcrumbItem title="Contribute" link="/contribute" />
+                  <BreadcrumbItem title="Airport" link="/contribute/new" />
+                  <BreadcrumbItem title="Map" />
+                </Breadcrumb>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 h-150 rounded-lg border border-zinc-800 bg-zinc-900/50 animate-pulse" />
+              <div className="space-y-6">
+                <Card className="p-6 min-h-48 animate-pulse">
+                  <div className="h-6 w-36 rounded bg-zinc-800 mb-5" />
+                  <div className="space-y-3">
+                    <div className="h-4 w-full rounded bg-zinc-800" />
+                    <div className="h-4 w-4/5 rounded bg-zinc-800" />
+                    <div className="h-10 w-full rounded bg-zinc-800 mt-6" />
+                  </div>
+                </Card>
               </div>
             </div>
           </div>
@@ -1053,8 +1047,11 @@ const ContributeMap = () => {
               <div className="h-150 rounded-lg overflow-hidden border border-zinc-800 relative">
                 <Map
                   ref={mapRef}
-                  {...viewState}
-                  onMove={(evt) => setViewState(evt.viewState)}
+                  initialViewState={{
+                    longitude: airport.longitude,
+                    latitude: airport.latitude,
+                    zoom: 14,
+                  }}
                   onMouseMove={handleInteractiveHover}
                   onMouseLeave={() => setMapCanvasCursor('')}
                   onLoad={onMapLoad}
@@ -1254,11 +1251,7 @@ const ContributeMap = () => {
                       offset={15}
                       className="custom-popup"
                     >
-                      <PointPopupContent
-                        point={activePoint}
-                        copiedId={copiedId}
-                        onCopy={handleCopyId}
-                      />
+                      <PointPopupContent point={activePoint} />
                     </Popup>
                   )}
                 </Map>
@@ -1266,6 +1259,7 @@ const ContributeMap = () => {
                 {/* Custom Layer Control */}
                 <div className="absolute top-4 right-4 bg-zinc-900/90 border border-zinc-700 rounded-md p-1 z-10">
                   <button
+                    type="button"
                     onClick={toggleStyle}
                     className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 rounded transition-colors"
                   >
@@ -1302,6 +1296,7 @@ const ContributeMap = () => {
               <Card className="p-6">
                 <h2 className="text-xl font-medium mb-4">Draft generator</h2>
                 <button
+                  type="button"
                   onClick={
                     draftGeneratorDisabled
                       ? undefined

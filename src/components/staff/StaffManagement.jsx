@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Button } from '../shared/Button';
 import { Card } from '../shared/Card';
@@ -18,6 +19,125 @@ function ensureArray(raw) {
   return Array.isArray(raw) ? raw : [];
 }
 
+function StaffMemberForm({ onSubmit, onValidationError }) {
+  const [form, setForm] = useState({ vatsimId: '', role: 'PRODUCT_MANAGER' });
+  const [submitting, setSubmitting] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+
+  const openConfirmation = (event) => {
+    event.preventDefault();
+    if (!form.vatsimId.trim()) {
+      onValidationError('VATSIM CID is required');
+      return;
+    }
+    setIsConfirmOpen(true);
+  };
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      const succeeded = await onSubmit({ vatsimId: form.vatsimId.trim(), role: form.role });
+      setIsConfirmOpen(false);
+      if (succeeded) setForm((current) => ({ vatsimId: '', role: current.role }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
+        <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-zinc-400" />
+          Add Staff Member
+        </h3>
+        <form onSubmit={openConfirmation} className="grid md:grid-cols-4 gap-4 items-end">
+          <div className="md:col-span-2">
+            <label htmlFor="staff-vatsim-id" className="block text-sm font-medium text-zinc-400 mb-2">
+              VATSIM CID
+            </label>
+            <input
+              id="staff-vatsim-id"
+              type="text"
+              value={form.vatsimId}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, vatsimId: event.target.value }))
+              }
+              placeholder="e.g., 1234567"
+              className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-zinc-500 transition-all"
+            />
+          </div>
+          <div>
+            <div className="block text-sm font-medium text-zinc-400 mb-2">Role</div>
+            <Dropdown
+              options={ROLE_OPTIONS}
+              value={form.role}
+              onChange={(role) => setForm((current) => ({ ...current, role }))}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2">
+              <UserPlus className="w-4 h-4" />
+              Add
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setForm({ vatsimId: '', role: 'PRODUCT_MANAGER' })}
+              disabled={submitting}
+            >
+              Reset
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      <Dialog
+        open={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        icon={UserPlus}
+        iconColor="blue"
+        title="Add Staff Member"
+        description="Grant staff access and permissions to the specified VATSIM user."
+        isLoading={submitting}
+        closeOnBackdrop={!submitting}
+        closeOnEscape={!submitting}
+        buttons={[
+          {
+            label: submitting ? 'Adding...' : 'Add Staff Member',
+            variant: 'primary',
+            icon: submitting ? Loader : UserPlus,
+            disabled: submitting,
+            onClick: submit,
+            className: submitting ? '[&>svg]:animate-spin' : '',
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: () => setIsConfirmOpen(false),
+            disabled: submitting,
+          },
+        ]}
+      >
+        <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-4">
+          <p className="text-zinc-200 mb-2">You are about to add:</p>
+          <div className="space-y-1">
+            <p className="text-blue-200 font-medium">{form.vatsimId}</p>
+            <p className="text-blue-200">
+              {ROLE_OPTIONS.find((role) => role.value === form.role)?.label || form.role}
+            </p>
+          </div>
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
+StaffMemberForm.propTypes = {
+  onSubmit: PropTypes.func.isRequired,
+  onValidationError: PropTypes.func.isRequired,
+};
+
 /**
  * StaffManagement Component
  * Features:
@@ -26,16 +146,13 @@ function ensureArray(raw) {
  * - Remove staff member (DELETE /staff/manage/:vatsimId)
  * All endpoints require header: X-Vatsim-Token: <token>
  */
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The staff table and role dialog are a cohesive CRUD workflow with independent request, form, and modal state.
 export default function StaffManagement() {
   const token = getVatsimToken();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ vatsimId: '', role: 'PRODUCT_MANAGER' });
-  const [submitting, setSubmitting] = useState(false);
-  const [, setRefreshing] = useState(false);
 
   // Dialog states
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [removingMember, setRemovingMember] = useState(null);
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -50,7 +167,6 @@ export default function StaffManagement() {
   const fetchStaff = useCallback(async () => {
     if (!token) return;
     try {
-      setRefreshing(true);
       const res = await fetch(`${apiBase}/staff/manage`, {
         headers: { 'X-Vatsim-Token': token },
       });
@@ -66,7 +182,6 @@ export default function StaffManagement() {
       setShowErrorToast(true);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, [token]);
 
@@ -74,23 +189,7 @@ export default function StaffManagement() {
     fetchStaff();
   }, [fetchStaff]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
-  };
-
-  const openAddDialog = (e) => {
-    e.preventDefault();
-    if (!form.vatsimId.trim()) {
-      setErrorMessage('VATSIM CID is required');
-      setShowErrorToast(true);
-      return;
-    }
-    setIsAddDialogOpen(true);
-  };
-
-  const handleSubmit = async () => {
-    setSubmitting(true);
+  const handleSubmit = async (form) => {
     try {
       const res = await fetch(`${apiBase}/staff/manage`, {
         method: 'POST',
@@ -108,20 +207,18 @@ export default function StaffManagement() {
       await res.json().catch(() => ({}));
       setSuccessMessage('Staff member added successfully');
       setShowSuccessToast(true);
-      setForm({ vatsimId: '', role: form.role });
-      setIsAddDialogOpen(false);
       await fetchStaff();
+      return true;
     } catch (e) {
       setErrorMessage(e.message || 'Failed to save staff');
       setShowErrorToast(true);
-      setIsAddDialogOpen(false);
-    } finally {
-      setSubmitting(false);
+      return false;
     }
   };
 
-  const cancelAdd = () => {
-    setIsAddDialogOpen(false);
+  const handleValidationError = (message) => {
+    setErrorMessage(message);
+    setShowErrorToast(true);
   };
 
   const handleDelete = async () => {
@@ -186,9 +283,9 @@ export default function StaffManagement() {
         onClose={() => setShowErrorToast(false)}
       />
 
-      <div className="space-y-6">
+      <div className="staff-tool space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-white">Staff Management</h2>
             <p className="text-sm text-zinc-400 mt-1">Manage staff roles and permissions</p>
@@ -202,52 +299,8 @@ export default function StaffManagement() {
         </div>
 
         <div className="space-y-6">
-          {/* Add / Update Form */}
-          <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
-            <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
-              <UserPlus className="w-4 h-4 text-zinc-400" />
-              Add Staff Member
-            </h3>
-            <form onSubmit={openAddDialog} className="grid md:grid-cols-4 gap-4 items-end">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-400 mb-2">VATSIM CID</label>
-                <input
-                  type="text"
-                  name="vatsimId"
-                  value={form.vatsimId}
-                  onChange={handleInputChange}
-                  placeholder="e.g., 1234567"
-                  className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-zinc-500 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Role</label>
-                <Dropdown
-                  options={ROLE_OPTIONS}
-                  value={form.role}
-                  onChange={(role) => setForm((f) => ({ ...f, role }))}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 flex items-center justify-center gap-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Add
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setForm({ vatsimId: '', role: 'PRODUCT_MANAGER' })}
-                  disabled={submitting}
-                >
-                  Reset
-                </Button>
-              </div>
-            </form>
-          </Card>
+          {/* Draft fields and confirmation state are local to avoid rerendering the staff table. */}
+          <StaffMemberForm onSubmit={handleSubmit} onValidationError={handleValidationError} />
 
           {/* Staff List */}
           <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
@@ -291,6 +344,7 @@ export default function StaffManagement() {
                         <td className="py-3 px-4">
                           {(member.vatsim_id || member.vatsimId) && (
                             <button
+                              type="button"
                               onClick={() => setRemovingMember(member)}
                               className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-all"
                               title="Remove staff member"
@@ -307,45 +361,6 @@ export default function StaffManagement() {
             )}
           </Card>
         </div>
-
-        {/* Add Staff Dialog */}
-        <Dialog
-          open={isAddDialogOpen}
-          onClose={cancelAdd}
-          icon={UserPlus}
-          iconColor="blue"
-          title="Add Staff Member"
-          description="Grant staff access and permissions to the specified VATSIM user."
-          isLoading={submitting}
-          closeOnBackdrop={!submitting}
-          closeOnEscape={!submitting}
-          buttons={[
-            {
-              label: submitting ? 'Adding...' : 'Add Staff Member',
-              variant: 'primary',
-              icon: submitting ? Loader : UserPlus,
-              disabled: submitting,
-              onClick: handleSubmit,
-              className: submitting ? '[&>svg]:animate-spin' : '',
-            },
-            {
-              label: 'Cancel',
-              variant: 'outline',
-              onClick: cancelAdd,
-              disabled: submitting,
-            },
-          ]}
-        >
-          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-4">
-            <p className="text-zinc-200 mb-2">You are about to add:</p>
-            <div className="space-y-1">
-              <p className="text-blue-200 font-medium">{form.vatsimId}</p>
-              <p className="text-blue-200">
-                {ROLE_OPTIONS.find((r) => r.value === form.role)?.label || form.role}
-              </p>
-            </div>
-          </div>
-        </Dialog>
 
         {/* Remove Staff Dialog */}
         <Dialog

@@ -75,8 +75,11 @@ const UploadContribution = ({ onClose, onUpload }) => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-2">Airport ICAO</label>
+            <label htmlFor="contribution-airport-icao" className="block text-sm font-medium mb-2">
+              Airport ICAO
+            </label>
             <input
+              id="contribution-airport-icao"
               type="text"
               value={airportIcao}
               onChange={(e) => setAirportIcao(e.target.value.toUpperCase())}
@@ -87,9 +90,12 @@ const UploadContribution = ({ onClose, onUpload }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">XML File</label>
+            <label htmlFor="contribution-xml-file" className="block text-sm font-medium mb-2">
+              XML File
+            </label>
             <div className="flex items-center space-x-2">
               <input
+                id="contribution-xml-file"
                 type="file"
                 accept=".xml"
                 ref={fileInputRef}
@@ -143,49 +149,29 @@ UploadContribution.propTypes = {
   onUpload: PropTypes.func.isRequired,
 };
 
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The review form is one cohesive modal; its validation and upload states are intentionally independent.
 const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) => {
   const [step, setStep] = useState(1);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
-  const [, setMapCenter] = useState([0, 0]);
   const [mapZoom] = useState(15);
   const [parsedLights, setParsedLights] = useState([]);
   const [rejectionReason, setRejectionReason] = useState('');
   const mapRef = useRef(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false);
   const [generatedFiles, setGeneratedFiles] = useState(null);
   const [isEditingPackage, setIsEditingPackage] = useState(false);
   const [updatedPackageName, setUpdatedPackageName] = useState(contribution.packageName);
   const [notesCopied, setNotesCopied] = useState(false);
 
-  useEffect(() => {
-    // Set initial map center based on airport coordinates
-    const fetchAirportData = async () => {
-      try {
-        const response = await fetch(
-          `https://v2.stopbars.com/airports?icao=${contribution.airportIcao}`
-        );
-        if (response.ok) {
-          const airportData = await response.json();
-          if (airportData && airportData.latitude && airportData.longitude) {
-            setMapCenter([airportData.latitude, airportData.longitude]);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch airport coordinates:', error);
-      }
-    };
-
-    fetchAirportData();
-  }, [contribution.airportIcao]);
-
   // Auto-generate points when entering step 2
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect -- File metadata is a one-shot companion request scoped to this review modal.
   useEffect(() => {
-    if (step === 2 && !generatedFiles && !isGenerating) {
+    if (step === 2 && !generatedFiles && !isGeneratingRef.current) {
       generateLightsFromXML();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, generatedFiles, isGenerating]);
+  }, [step, generatedFiles]);
 
   // Parse the advanced BARS XML format (from the generator)
   const parseGeneratedXML = (xmlString) => {
@@ -194,7 +180,6 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
       const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
       const objects = xmlDoc.getElementsByTagName('BarsObject');
       const allLights = [];
-      let firstPosition = null;
 
       for (let i = 0; i < objects.length; i++) {
         const obj = objects[i];
@@ -218,9 +203,6 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
           if (position && position.length === 2) {
             const lat = parseFloat(position[0]);
             const lng = parseFloat(position[1]);
-            if (!firstPosition) {
-              firstPosition = [lat, lng];
-            }
             allLights.push({
               id: `${objId}_${j}`,
               position: [lat, lng],
@@ -235,10 +217,6 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
         }
       }
 
-      if (firstPosition) {
-        setMapCenter(firstPosition);
-      }
-
       return allLights;
     } catch (error) {
       console.error('Error parsing generated XML:', error);
@@ -250,7 +228,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
     }
   };
   const generateLightsFromXML = async () => {
-    setIsGenerating(true);
+    isGeneratingRef.current = true;
 
     try {
       // Create a FormData object and append the XML
@@ -282,7 +260,6 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
 
       // If we have lights and a map, center the map on the first light
       if (lights.length > 0 && mapRef.current) {
-        setMapCenter(lights[0].position);
         mapRef.current.setView(lights[0].position, mapZoom);
       }
     } catch (error) {
@@ -292,7 +269,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
         description: error.message,
       });
     } finally {
-      setIsGenerating(false);
+      isGeneratingRef.current = false;
     }
   };
   const handleApprove = async () => {
@@ -458,6 +435,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
                     <div className="flex items-center gap-2 mb-1">
                       <p className="text-sm text-zinc-400">Package</p>
                       <button
+                        type="button"
                         className="text-blue-400 hover:text-blue-300 transition-colors"
                         onClick={() => setIsEditingPackage(!isEditingPackage)}
                         title={isEditingPackage ? 'Finish editing' : 'Edit package name'}
@@ -471,6 +449,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
                     </div>
                     {isEditingPackage ? (
                       <input
+                        aria-label="Updated package name"
                         type="text"
                         value={updatedPackageName}
                         onChange={(e) => setUpdatedPackageName(e.target.value)}
@@ -507,6 +486,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
                         {contribution.notes}
                       </p>
                       <button
+                        type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(contribution.notes);
                           setNotesCopied(true);
@@ -646,6 +626,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
                     }}
                   >
                     <textarea
+                      aria-label="Rejection reason"
                       value={rejectionReason}
                       onChange={(e) => setRejectionReason(e.target.value)}
                       className="w-full px-4 py-2 bg-zinc-800/50 border border-zinc-700 rounded-lg focus:outline-none focus:border-red-500 resize-none mb-3"
@@ -721,6 +702,7 @@ ReviewModal.propTypes = {
 };
 
 // Main Component
+// oxlint-disable-next-line react-doctor/prefer-useReducer -- List filters, selection, and request status are independent state slices.
 const ContributionManagement = () => {
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -733,8 +715,6 @@ const ContributionManagement = () => {
     description: '',
     variant: 'default',
   });
-  const [, setActivePoints] = useState([]);
-  const [, setComparisonResults] = useState(null);
   const fetchContributions = useCallback(async () => {
     setLoading(true);
     try {
@@ -807,11 +787,9 @@ const ContributionManagement = () => {
 
   const handleContributionSelect = (contribution) => {
     setSelectedContribution(contribution);
-    setActivePoints([]);
-    setComparisonResults(null);
   };
 
-  const renderStatusBadge = (status) => {
+  const renderStatusBadge = useCallback((status) => {
     switch (status) {
       case 'pending':
         return (
@@ -840,14 +818,14 @@ const ContributionManagement = () => {
       default:
         return null;
     }
-  };
+  }, []);
 
   // Filter contributions based on search term if needed
   const paginatedContributions = contributions;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+    <div className="staff-tool space-y-6">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Contribution Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Review and manage user contributions</p>

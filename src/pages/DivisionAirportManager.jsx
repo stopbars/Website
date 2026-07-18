@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { MapPin, ArrowLeft, Search, Plus, Loader } from 'lucide-react';
+import { MapPin, ArrowLeft, Search, Plus } from 'lucide-react';
 import AirportPointEditor from '../components/divisions/AirportPointEditor';
 import { getVatsimToken } from '../utils/cookieUtils';
+import { PageLoading } from '../components/shared/PageLoading';
 
 const DivisionAirportManager = () => {
   const { divisionId, airportId } = useParams();
@@ -15,13 +16,15 @@ const DivisionAirportManager = () => {
 
   const [division, setDivision] = useState(null);
   const [airports, setAirports] = useState([]);
-  const [filteredAirports, setFilteredAirports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useSearchQuery();
 
   // Fetch division data and airports
+  // Both requests share a controller that is aborted on dependency changes and unmount.
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect
   useEffect(() => {
+    const controller = new AbortController();
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -29,6 +32,7 @@ const DivisionAirportManager = () => {
         // Fetch division info
         const divisionResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
           headers: { 'X-Vatsim-Token': token },
+          signal: controller.signal,
         });
 
         if (!divisionResponse.ok) throw new Error('Failed to fetch division data');
@@ -40,39 +44,36 @@ const DivisionAirportManager = () => {
           `https://v2.stopbars.com/divisions/${divisionId}/airports`,
           {
             headers: { 'X-Vatsim-Token': token },
+            signal: controller.signal,
           }
         );
 
         if (!airportsResponse.ok) throw new Error('Failed to fetch airports');
         const airportsData = await airportsResponse.json();
         setAirports(airportsData.airports || []);
-        setFilteredAirports(airportsData.airports || []);
       } catch (err) {
+        if (err.name === 'AbortError') return;
         setError(err.message);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     if (divisionId && token) {
       fetchData();
     }
+    return () => controller.abort();
   }, [divisionId, token]);
 
-  // Filter airports based on search term
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredAirports(airports);
-      return;
-    }
-
-    const filtered = airports.filter(
+  // Filtering is render-derived so each search change commits once instead of first rendering
+  // stale results and then scheduling a second render from an effect.
+  const filteredAirports = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return airports;
+    return airports.filter(
       (airport) =>
-        airport.icao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        airport.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        airport.icao.toLowerCase().includes(query) || airport.name?.toLowerCase().includes(query)
     );
-
-    setFilteredAirports(filtered);
   }, [searchTerm, airports]);
 
   const handleSearchChange = (e) => {
@@ -80,19 +81,7 @@ const DivisionAirportManager = () => {
   };
 
   if (loading && !division) {
-    return (
-      <Layout>
-        <div className="min-h-screen pt-32 pb-20 flex items-center">
-          <div className="w-full max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-center h-64">
-              <div className="flex flex-col items-center">
-                <Loader className="w-9 h-9 animate-spin text-zinc-400" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </Layout>
-    );
+    return <PageLoading page label="Loading airport manager…" />;
   }
 
   if (error) {

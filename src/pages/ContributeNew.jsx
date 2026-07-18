@@ -9,9 +9,6 @@ import { AlertCircle, Search, Loader, BookOpen, ChevronRight } from 'lucide-reac
 const ContributeNew = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [icao, setIcao] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [error, setError] = useState('');
   const [showToast, setShowToast] = useState(false);
 
   // Check for error in navigation state on mount
@@ -21,36 +18,6 @@ const ContributeNew = () => {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!icao) {
-      setError('Please enter an airport ICAO code');
-      return;
-    }
-
-    if (!/^[A-Za-z0-9]{4}$/.test(icao)) {
-      setError('ICAO code must be exactly 4 characters (letters and numbers only)');
-      return;
-    }
-
-    setIsSearching(true);
-    setError('');
-
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Navigate to the map view with the ICAO code
-      navigate(`/contribute/map/${icao.toUpperCase()}`);
-    } catch (err) {
-      setError('Failed to verify airport. Please try again.');
-      console.error(err);
-    } finally {
-      setIsSearching(false);
-    }
-  };
 
   return (
     <Layout>
@@ -64,50 +31,7 @@ const ContributeNew = () => {
           <Card className="p-8 max-w-lg mx-auto">
             <h2 className="text-xl font-medium mb-6">Step 1: Select Airport</h2>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="icao" className="block text-sm font-medium mb-2">
-                  Enter Airport ICAO Code
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
-                  <input
-                    id="icao"
-                    type="text"
-                    value={icao}
-                    onChange={(e) => {
-                      setIcao(e.target.value.toUpperCase());
-                      setError('');
-                    }}
-                    placeholder="e.g. YSSY, EGLL, OMDB"
-                    maxLength={4}
-                    className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-lg uppercase"
-                  />
-                </div>
-                {error && (
-                  <div className="mt-2 flex items-center text-red-500 text-sm">
-                    <AlertCircle className="w-4 h-4 mr-1" />
-                    <span>{error}</span>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Button type="submit" className="w-full" disabled={isSearching}>
-                  {isSearching ? (
-                    <div className="flex items-center justify-center">
-                      <Loader className="w-4 h-4 mr-2 animate-spin" />
-                      <span>Searching...</span>
-                    </div>
-                  ) : (
-                    <>
-                      Continue to Next Step
-                      <ChevronRight className="w-4 h-4 ml-2" />
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
+            <AirportSearchForm />
 
             <div className="mt-8 pt-6 border-t border-zinc-800">
               <Button
@@ -140,5 +64,84 @@ const ContributeNew = () => {
     </Layout>
   );
 };
+
+function AirportSearchForm() {
+  const navigate = useNavigate();
+  const [icao, setIcao] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!icao) {
+      setError('Please enter an airport ICAO code');
+      return;
+    }
+
+    if (!/^[A-Za-z0-9]{4}$/.test(icao)) {
+      setError('ICAO code must be exactly 4 characters (letters and numbers only)');
+      return;
+    }
+
+    setIsSearching(true);
+    setError('');
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      navigate(`/contribute/map/${icao.toUpperCase()}`);
+    } catch (submitError) {
+      setError('Failed to verify airport. Please try again.');
+      console.error(submitError);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div>
+        <label htmlFor="icao" className="block text-sm font-medium mb-2">
+          Enter Airport ICAO Code
+        </label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
+          <input
+            id="icao"
+            type="text"
+            value={icao}
+            onChange={(event) => {
+              setIcao(event.target.value.toUpperCase());
+              setError('');
+            }}
+            placeholder="e.g. YSSY, EGLL, OMDB"
+            maxLength={4}
+            className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-lg uppercase"
+          />
+        </div>
+        {error && (
+          <div className="mt-2 flex items-center text-red-500 text-sm">
+            <AlertCircle className="w-4 h-4 mr-1" />
+            <span>{error}</span>
+          </div>
+        )}
+      </div>
+
+      <Button type="submit" className="w-full" disabled={isSearching}>
+        {isSearching ? (
+          <div className="flex items-center justify-center">
+            <Loader className="w-4 h-4 mr-2 animate-spin" />
+            <span>Searching...</span>
+          </div>
+        ) : (
+          <>
+            Continue to Next Step
+            <ChevronRight className="w-4 h-4 ml-2" />
+          </>
+        )}
+      </Button>
+    </form>
+  );
+}
 
 export default ContributeNew;
