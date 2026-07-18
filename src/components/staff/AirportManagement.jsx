@@ -16,12 +16,27 @@ const STATUS_COLORS = {
   rejected: 'text-red-400',
 };
 
-const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
+const AIRPORT_INFO_FIELDS = [
+  ['Name', 'name'],
+  ['Continent', 'continent'],
+  ['Country code', 'country_code'],
+  ['Country', 'country_name'],
+  ['Region', 'region_name'],
+];
+
+const AirportCard = ({ airport, onApprove, onInfoClick }) => {
   const isPending = airport.status === 'pending';
   const isApproved = airport.status === 'approved';
+  const [loadingAction, setLoadingAction] = useState(null);
 
   const handleApprove = async (approved) => {
-    onApprove(airport.division_id, airport.airport_request_id, airport.icao, approved);
+    const action = approved ? 'approve' : 'reject';
+    setLoadingAction(action);
+    try {
+      await onApprove(airport.division_id, airport.airport_request_id, airport.icao, approved);
+    } finally {
+      setLoadingAction(null);
+    }
   };
 
   return (
@@ -75,12 +90,12 @@ const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
         {isPending && (
           <>
             <button
+              type="button"
               onClick={() => handleApprove(true)}
-              disabled={loadingState.id === airport.airport_request_id}
+              disabled={loadingAction !== null}
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loadingState.id === airport.airport_request_id &&
-              loadingState.action === 'approve' ? (
+              {loadingAction === 'approve' ? (
                 <Loader className="w-4 h-4 animate-spin" />
               ) : (
                 <Check className="w-4 h-4" />
@@ -88,12 +103,12 @@ const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
               Approve
             </button>
             <button
+              type="button"
               onClick={() => handleApprove(false)}
-              disabled={loadingState.id === airport.airport_request_id}
+              disabled={loadingAction !== null}
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loadingState.id === airport.airport_request_id &&
-              loadingState.action === 'reject' ? (
+              {loadingAction === 'reject' ? (
                 <Loader className="w-4 h-4 animate-spin" />
               ) : (
                 <X className="w-4 h-4" />
@@ -103,6 +118,7 @@ const AirportCard = ({ airport, onApprove, loadingState, onInfoClick }) => {
           </>
         )}
         <button
+          type="button"
           onClick={() => onInfoClick(airport.icao)}
           className="inline-flex items-center justify-center p-2.5 rounded-lg bg-zinc-700/50 border border-zinc-600 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-500 transition-all"
           title={`View ${airport.icao} info`}
@@ -126,17 +142,13 @@ AirportCard.propTypes = {
     contributions_enabled: PropTypes.bool,
   }).isRequired,
   onApprove: PropTypes.func.isRequired,
-  loadingState: PropTypes.shape({
-    id: PropTypes.number,
-    action: PropTypes.string,
-  }).isRequired,
   onInfoClick: PropTypes.func.isRequired,
 };
 
+// oxlint-disable-next-line react-doctor/prefer-useReducer -- Independent admin filters, pagination, dialog, and request states do not share transitions.
 const AirportManagement = () => {
   const [airports, setAirports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingState, setLoadingState] = useState({ id: null, action: null });
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [toast, setToast] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -164,7 +176,7 @@ const AirportManagement = () => {
       const airportsArray = Array.isArray(data) ? data : data.airports || data.data || [];
 
       // Sort by status: pending first, then approved, then rejected
-      const sortedAirports = [...airportsArray].sort((a, b) => {
+      const sortedAirports = airportsArray.toSorted((a, b) => {
         return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
       });
 
@@ -185,7 +197,6 @@ const AirportManagement = () => {
   }, [fetchAirports]);
 
   const handleApprove = async (divisionId, airportId, icao, approved) => {
-    setLoadingState({ id: airportId, action: approved ? 'approve' : 'reject' });
     try {
       const response = await fetch(
         `https://v2.stopbars.com/divisions/${divisionId}/airports/${airportId}/approve`,
@@ -218,8 +229,6 @@ const AirportManagement = () => {
         description: err.message,
         variant: 'destructive',
       });
-    } finally {
-      setLoadingState({ id: null, action: null });
     }
   };
 
@@ -251,11 +260,8 @@ const AirportManagement = () => {
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
-  };
-
-  useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  };
 
   // Filter airports based on search term
   const filteredAirports = airports.filter((airport) => {
@@ -289,8 +295,8 @@ const AirportManagement = () => {
   const pendingCount = airports.filter((a) => a.status === 'pending').length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+    <div className="staff-tool space-y-6">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Airport Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Manage and review division airports </p>
@@ -303,6 +309,7 @@ const AirportManagement = () => {
           <div className="relative flex-1 sm:flex-initial">
             <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500" />
             <input
+              aria-label="Search airports"
               type="text"
               value={searchTerm}
               onChange={handleSearch}
@@ -332,7 +339,6 @@ const AirportManagement = () => {
                   key={airport.airport_request_id}
                   airport={airport}
                   onApprove={handleApprove}
-                  loadingState={loadingState}
                   onInfoClick={handleInfoClick}
                 />
               ))}
@@ -375,39 +381,8 @@ const AirportManagement = () => {
         onClose={() => setInfoDialogOpen(false)}
         icon={MapPin}
         iconColor="blue"
-        title={`${infoIcao} Info`}
-        description={
-          infoLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-            </div>
-          ) : infoData?.error ? (
-            <div className="text-red-400">{infoData.error}</div>
-          ) : infoData ? (
-            <div className="space-y-3 text-left">
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Name:</span>
-                <span className="text-white">{infoData.name || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Continent:</span>
-                <span className="text-white">{infoData.continent || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Country Code:</span>
-                <span className="text-white">{infoData.country_code || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Country Name:</span>
-                <span className="text-white">{infoData.country_name || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Region:</span>
-                <span className="text-white">{infoData.region_name || 'N/A'}</span>
-              </div>
-            </div>
-          ) : null
-        }
+        title={`${infoIcao} airport details`}
+        description="Reference data returned by the airport directory."
         buttons={[
           {
             label: 'Close',
@@ -415,7 +390,32 @@ const AirportManagement = () => {
             onClick: () => setInfoDialogOpen(false),
           },
         ]}
-      />
+      >
+        {infoLoading ? (
+          <div className="flex min-h-40 items-center justify-center rounded-lg bg-zinc-800/35">
+            <Loader className="h-5 w-5 animate-spin text-zinc-400" />
+            <span className="ml-2 text-sm text-zinc-400">Loading airport details…</span>
+          </div>
+        ) : infoData?.error ? (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+            {infoData.error}
+          </div>
+        ) : infoData ? (
+          <dl className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-800/25">
+            {AIRPORT_INFO_FIELDS.map(([label, key]) => (
+              <div
+                key={key}
+                className="grid grid-cols-[minmax(7rem,0.8fr)_minmax(0,1.4fr)] gap-4 border-b border-zinc-800 px-4 py-3 last:border-b-0"
+              >
+                <dt className="text-sm text-zinc-400">{label}</dt>
+                <dd className="min-w-0 break-words text-sm font-medium text-zinc-100">
+                  {infoData[key] || 'Not available'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </Dialog>
 
       {/* Toast notification */}
       {toast && (

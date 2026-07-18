@@ -1,6 +1,40 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useEffectEvent, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Info, Check, AlertTriangle, X } from 'lucide-react';
+
+const TOAST_ICONS = {
+  default: <Info className="w-5 h-5" />,
+  success: <Check className="w-5 h-5" />,
+  warning: <AlertTriangle className="w-5 h-5" />,
+  destructive: <AlertTriangle className="w-5 h-5" />,
+};
+
+const TOAST_VARIANTS = {
+  default: {
+    container: 'bg-zinc-900/95 border-zinc-700 text-white backdrop-blur-sm',
+    icon: 'text-white/90',
+    title: 'text-white',
+    description: 'text-zinc-400',
+  },
+  success: {
+    container: 'bg-green-900/90 border-green-700 text-white backdrop-blur-sm',
+    icon: 'text-green-400',
+    title: 'text-green-100',
+    description: 'text-green-200',
+  },
+  warning: {
+    container: 'bg-orange-900/90 border-orange-700 text-white backdrop-blur-sm',
+    icon: 'text-orange-400',
+    title: 'text-orange-100',
+    description: 'text-orange-200',
+  },
+  destructive: {
+    container: 'bg-red-900/90 border-red-700 text-white backdrop-blur-sm',
+    icon: 'text-red-400',
+    title: 'text-red-100',
+    description: 'text-red-200',
+  },
+};
 
 export const Toast = ({
   title,
@@ -20,6 +54,7 @@ export const Toast = ({
       if (onClose) onClose();
     }, 300); // Wait for exit animation
   }, [onClose]);
+  const handleAutoDismiss = useEffectEvent(handleClose);
 
   useEffect(() => {
     if (!show) return undefined;
@@ -32,7 +67,7 @@ export const Toast = ({
         setIsAnimating(true);
       }, 50);
       autoDismiss = setTimeout(() => {
-        handleClose();
+        handleAutoDismiss();
       }, duration);
     }, 0);
 
@@ -41,7 +76,7 @@ export const Toast = ({
       if (animationDelay) clearTimeout(animationDelay);
       if (autoDismiss) clearTimeout(autoDismiss);
     };
-  }, [show, duration, handleClose]);
+  }, [show, duration]);
 
   useEffect(() => {
     if (show) return undefined;
@@ -62,43 +97,7 @@ export const Toast = ({
 
   if (!isVisible) return null;
 
-  // Icon components for each variant
-  const icons = {
-    default: <Info className="w-5 h-5" />,
-    success: <Check className="w-5 h-5" />,
-    warning: <AlertTriangle className="w-5 h-5" />,
-    destructive: <AlertTriangle className="w-5 h-5" />,
-  };
-
-  // Variant styles
-  const variants = {
-    default: {
-      container: 'bg-zinc-900/95 border-zinc-700 text-white backdrop-blur-sm',
-      icon: 'text-white/90',
-      title: 'text-white',
-      description: 'text-zinc-400',
-    },
-    success: {
-      container: 'bg-green-900/90 border-green-700 text-white backdrop-blur-sm',
-      icon: 'text-green-400',
-      title: 'text-green-100',
-      description: 'text-green-200',
-    },
-    warning: {
-      container: 'bg-orange-900/90 border-orange-700 text-white backdrop-blur-sm',
-      icon: 'text-orange-400',
-      title: 'text-orange-100',
-      description: 'text-orange-200',
-    },
-    destructive: {
-      container: 'bg-red-900/90 border-red-700 text-white backdrop-blur-sm',
-      icon: 'text-red-400',
-      title: 'text-red-100',
-      description: 'text-red-200',
-    },
-  };
-
-  const currentVariant = variants[variant] || variants.default;
+  const currentVariant = TOAST_VARIANTS[variant] || TOAST_VARIANTS.default;
 
   return (
     <div
@@ -122,6 +121,7 @@ export const Toast = ({
       >
         {/* Close button */}
         <button
+          type="button"
           onClick={handleClose}
           className="absolute right-3 top-3 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full p-1 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-white/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35"
           aria-label="Close notification"
@@ -133,7 +133,7 @@ export const Toast = ({
         <div className="flex items-start space-x-3 pr-8">
           {/* Icon */}
           <div className={`shrink-0 mt-0.5 ${currentVariant.icon}`}>
-            {icons[variant] || icons.default}
+            {TOAST_ICONS[variant] || TOAST_ICONS.default}
           </div>
 
           {/* Text content */}

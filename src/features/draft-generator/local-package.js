@@ -17,6 +17,7 @@ export async function selectionFromDrop(dataTransfer) {
     try {
       const handles = [];
       for (const item of items) {
+        // oxlint-disable-next-line react-doctor/async-await-in-loop -- Preserve browser-provided drop order and per-item fallback behavior.
         const handle = await item.getAsFileSystemHandle?.();
         if (handle) handles.push(handle);
       }
@@ -26,6 +27,7 @@ export async function selectionFromDrop(dataTransfer) {
     }
   }
 
+  // oxlint-disable-next-line react-doctor/js-flatmap-filter -- Browser drops contain few items and explicit rejection documents unsupported legacy entries.
   const legacyEntries = items.map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
   if (legacyEntries.length > 0) return selectionFromLegacyEntries(legacyEntries);
 
@@ -82,6 +84,7 @@ async function selectionFromLegacyEntries(rootEntries) {
 
   for (const entry of rootEntries) {
     if (entry.isDirectory) {
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Legacy FileSystemEntry traversal is ordered and mutates the shared entries accumulator.
       await collectLegacyDirectory(entry, singleDirectory ? '' : entry.name, entries);
     } else {
       await collectLegacyFile(entry, entry.name, entries);
@@ -98,6 +101,7 @@ async function collectLegacyDirectory(directoryEntry, prefix, entries) {
   const children = await readAllLegacyEntries(directoryEntry.createReader());
   for (const child of children) {
     const relativePath = prefix ? `${prefix}/${child.name}` : child.name;
+    // oxlint-disable-next-line react-doctor/async-await-in-loop -- Recursive traversal appends to a shared ordered accumulator.
     if (child.isDirectory) await collectLegacyDirectory(child, relativePath, entries);
     else await collectLegacyFile(child, relativePath, entries);
   }

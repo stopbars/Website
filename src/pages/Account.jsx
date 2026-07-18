@@ -24,8 +24,13 @@ import { formatDateAccordingToLocale } from '../utils/dateUtils';
 import { getVatsimToken } from '../utils/cookieUtils';
 import { Toast } from '../components/shared/Toast';
 import { Tooltip } from '../components/shared/Tooltip';
+import { PageLoading } from '../components/shared/PageLoading';
+import { useNavigate } from 'react-router-dom';
+import { preloadRoute } from '../utils/routeModules';
 
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/exhaustive-deps -- Account hydration, privacy controls, and request lifecycles are one cohesive authenticated workflow; splitting or reducer migration is higher-risk than the validated legacy behavior. */
 const Account = () => {
+  const navigate = useNavigate();
   const { user, loading, logout, setUser, refreshUserData } = useAuth();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -456,11 +461,7 @@ const Account = () => {
   }, [hideEmail]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader className="w-12 h-12 animate-spin text-zinc-300" />
-      </div>
-    );
+    return <PageLoading page label="Loading account…" />;
   }
 
   return (
@@ -489,7 +490,9 @@ const Account = () => {
                   </div>
                   <Button
                     variant="primary"
-                    onClick={() => (window.location.href = '/staff')}
+                    onClick={() => navigate('/staff')}
+                    onFocus={() => preloadRoute('/staff')}
+                    onPointerEnter={() => preloadRoute('/staff')}
                     className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600"
                   >
                     <Link className="w-4 h-4 mr-2" />
@@ -507,7 +510,7 @@ const Account = () => {
 
               <div className="space-y-8">
                 <div>
-                  <label className="text-sm font-medium text-zinc-400 mb-2 block">API Token</label>
+                  <span className="text-sm font-medium text-zinc-400 mb-2 block">API Token</span>
                   <div className="bg-zinc-900/80 p-4 rounded-lg border border-zinc-800 mb-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-mono text-sm truncate pr-4 flex-1">
@@ -535,7 +538,6 @@ const Account = () => {
                         variant="outline"
                         size="sm"
                         onClick={handleCopyApiKey}
-                        static
                         className={`min-w-25 ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
                       >
                         {copySuccess ? (
@@ -567,13 +569,10 @@ const Account = () => {
                 <div className="grid md:grid-cols-2 gap-6">
                   {/* VATSIM CID */}
                   <div className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
-                    <label className="text-sm font-medium text-zinc-400 block mb-1">
-                      VATSIM CID
-                    </label>
+                    <span className="text-sm font-medium text-zinc-400 block mb-1">VATSIM CID</span>
                     <div className="relative inline-block h-6 min-w-18 overflow-hidden align-middle">
-                      <span
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         onClick={user?.vatsim_id ? handleCopyVatsimCid : undefined}
                         onKeyDown={(e) => {
                           if (!user?.vatsim_id) return;
@@ -585,7 +584,7 @@ const Account = () => {
                         className={`absolute left-0 top-0 inline-flex items-center font-medium transition-all duration-200 ${cidCopied ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'} ${user?.vatsim_id ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900' : ''}`}
                       >
                         {user?.vatsim_id || '—'}
-                      </span>
+                      </button>
                       <span
                         className={`absolute left-0 top-0 inline-flex items-center font-medium text-green-400 transition-all duration-200 pointer-events-none ${cidCopied ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
                       >
@@ -597,7 +596,7 @@ const Account = () => {
                   {/* Email */}
                   <div className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <label className="text-sm font-medium text-zinc-400 block mb-1">Email</label>
+                      <span className="text-sm font-medium text-zinc-400 block mb-1">Email</span>
                       <p
                         className={`font-medium break-all ${hideEmail ? 'blur-[3px] select-none' : ''}`}
                       >
@@ -732,9 +731,9 @@ const Account = () => {
                           </div>
                           <Button
                             variant="primary"
-                            onClick={() =>
-                              (window.location.href = `/divisions/${division.id}/manage`)
-                            }
+                            onClick={() => navigate(`/divisions/${division.id}/manage`)}
+                            onFocus={() => preloadRoute(`/divisions/${division.id}/manage`)}
+                            onPointerEnter={() => preloadRoute(`/divisions/${division.id}/manage`)}
                             className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600"
                           >
                             <Link className="w-4 h-4 mr-2" />

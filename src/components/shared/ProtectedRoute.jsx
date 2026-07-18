@@ -1,19 +1,15 @@
 import { Navigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { useAuth } from '../../hooks/useAuth';
-import { Loader } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
+import { PageLoading } from './PageLoading';
 
 export const ProtectedRoute = ({ children }) => {
   const { user, loading, bannedInfo } = useAuth();
   const savedToken = getVatsimToken();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader className="w-8 h-8 animate-spin text-white" />
-      </div>
-    );
+    return <PageLoading page label="Checking your account…" />;
   }
   // If banned, always redirect to banned page
   if (bannedInfo?.banned) {

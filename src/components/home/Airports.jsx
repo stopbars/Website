@@ -3,9 +3,42 @@ import { Button } from '../shared/Button';
 import { useNavigate } from 'react-router-dom';
 import { ExternalLink, ChevronLeft, ChevronRight, Users, Plane, MapPin } from 'lucide-react';
 import { Card } from '../shared/Card';
+import { PageLoading } from '../shared/PageLoading';
 
 const ITEMS_PER_PAGE = 6;
 
+const getAirportContinent = (icao) => {
+  const prefix = icao.charAt(0);
+  switch (prefix) {
+    case 'K':
+    case 'C':
+    case 'M':
+      return 'North America';
+    case 'S':
+      return 'South America';
+    case 'E':
+    case 'L':
+      return 'Europe';
+    case 'R':
+    case 'Z':
+    case 'V':
+    case 'O':
+    case 'U':
+      return 'Asia';
+    case 'Y':
+    case 'N':
+      return 'Oceania';
+    case 'F':
+    case 'D':
+    case 'G':
+    case 'H':
+      return 'Africa';
+    default:
+      return 'Other';
+  }
+};
+
+/* oxlint-disable react-doctor/no-fetch-in-effect react-doctor/no-long-transition-duration -- The polling request owns cancellation, and the long status pulses are deliberate ambient loops. */
 export const Airports = () => {
   const navigate = useNavigate();
   // Approved airports from contributions API: { [icao]: { packages: string[] } }
@@ -16,15 +49,22 @@ export const Airports = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let activeController;
     const fetchData = async () => {
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
       try {
         const [contribRes, stateRes] = await Promise.all([
-          fetch('https://v2.stopbars.com/contributions?status=approved&simple=true'),
-          fetch('https://v2.stopbars.com/state?airport=all'),
+          fetch('https://v2.stopbars.com/contributions?status=approved&simple=true', {
+            signal: controller.signal,
+          }),
+          fetch('https://v2.stopbars.com/state?airport=all', {
+            signal: controller.signal,
+          }),
         ]);
 
-        const contribData = await contribRes.json();
-        const stateData = await stateRes.json();
+        const [contribData, stateData] = await Promise.all([contribRes.json(), stateRes.json()]);
 
         // Build airport -> packages map
         const byAirport = {};
@@ -57,47 +97,19 @@ export const Airports = () => {
         });
         setLiveMap(map);
       } catch (err) {
-        console.error('Error:', err);
+        if (err.name !== 'AbortError') console.error('Error:', err);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchData();
     const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      activeController?.abort();
+    };
   }, []);
-
-  const getAirportContinent = (icao) => {
-    const prefix = icao.charAt(0);
-    switch (prefix) {
-      case 'K':
-      case 'C':
-      case 'M':
-        return 'North America';
-      case 'S':
-        return 'South America';
-      case 'E':
-      case 'L':
-        return 'Europe';
-      case 'R':
-      case 'Z':
-      case 'V':
-      case 'O':
-      case 'U':
-        return 'Asia';
-      case 'Y':
-      case 'N':
-        return 'Oceania';
-      case 'F':
-      case 'D':
-      case 'G':
-      case 'H':
-        return 'Africa';
-      default:
-        return 'Other';
-    }
-  };
 
   const sortedAirports = useMemo(() => {
     return Object.entries(airports).sort(([icaoA], [icaoB]) => {
@@ -114,7 +126,7 @@ export const Airports = () => {
   const paginatedAirports = sortedAirports.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
-    <section className="py-24 bg-zinc-900/50" id="status">
+    <section className="deferred-section py-24 bg-zinc-900/50" id="status">
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 sm:mb-12 gap-4">
           <div>
@@ -153,7 +165,7 @@ export const Airports = () => {
         </div>
 
         {loading ? (
-          <div className="text-center text-zinc-400">Loading status...</div>
+          <PageLoading label="Loading homepage content…" />
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -248,5 +260,3 @@ export const Airports = () => {
     </section>
   );
 };
-
-export default Airports;

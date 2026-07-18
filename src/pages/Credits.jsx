@@ -3,6 +3,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { CodeXml, Users, GitBranch } from 'lucide-react';
 
+/* oxlint-disable react-doctor/prefer-useReducer, react-doctor/no-fetch-in-effect -- Credits state is independent; the one-shot request is explicitly aborted on cleanup. */
 const Credits = () => {
   const [contributors, setContributors] = useState([]);
   const [repositories, setRepositories] = useState([]);
@@ -20,12 +21,12 @@ const Credits = () => {
     }
   };
 
-  const fetchContributors = async () => {
+  const fetchContributors = async (signal) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('https://v2.stopbars.com/contributors');
+      const response = await fetch('https://v2.stopbars.com/contributors', { signal });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch contributors: ${response.status}`);
@@ -36,14 +37,17 @@ const Credits = () => {
       setRepositories(Array.isArray(data.repositories) ? data.repositories : []);
       setStatistics(data.statistics || null);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchContributors();
+    const controller = new AbortController();
+    fetchContributors(controller.signal);
+    return () => controller.abort();
   }, []);
 
   return (
@@ -180,10 +184,7 @@ const Credits = () => {
               ))}
             </div>
           ) : (
-            <ul
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
-              role="list"
-            >
+            <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
               {contributors.map((contributor) => {
                 const repos = contributor.repositories ?? [];
                 return (

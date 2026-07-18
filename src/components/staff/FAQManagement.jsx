@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The FAQ list and editor share one compact CRUD workflow; their state slices do not transition as one unit.
 const FAQManagement = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,7 @@ const FAQManagement = () => {
   const [recentlyMovedFaq, setRecentlyMovedFaq] = useState(null);
   const [moveDirection, setMoveDirection] = useState(null);
 
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect -- FAQ data is loaded once for this isolated admin screen and no query layer is available.
   useEffect(() => {
     fetchFAQs();
   }, []);
@@ -350,9 +352,9 @@ const FAQManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="staff-tool space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">FAQ Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Manage frequently asked questions</p>
@@ -365,6 +367,7 @@ const FAQManagement = () => {
             </span>
           )}
           <button
+            type="button"
             onClick={() => setIsAdding(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
           >
@@ -388,11 +391,15 @@ const FAQManagement = () => {
             <div className="space-y-5">
               {/* Question */}
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <label
+                  htmlFor="new-faq-question"
+                  className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2"
+                >
                   <FileQuestion className="w-4 h-4 text-zinc-400" />
                   Question
                 </label>
                 <input
+                  id="new-faq-question"
                   type="text"
                   value={newFaq.question}
                   onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
@@ -403,11 +410,15 @@ const FAQManagement = () => {
 
               {/* Answer */}
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                <label
+                  htmlFor="new-faq-answer"
+                  className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2"
+                >
                   <MessageSquare className="w-4 h-4 text-zinc-400" />
                   Answer
                 </label>
                 <textarea
+                  id="new-faq-answer"
                   value={newFaq.answer}
                   onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
                   className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
@@ -418,6 +429,7 @@ const FAQManagement = () => {
               {/* Actions */}
               <div className="flex items-center gap-3 pt-2">
                 <button
+                  type="button"
                   onClick={handleAddFaq}
                   disabled={!newFaq.question.trim() || !newFaq.answer.trim() || isPublishing}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
@@ -435,6 +447,7 @@ const FAQManagement = () => {
                   )}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setIsAdding(false);
                     setNewFaq({ question: '', answer: '' });
@@ -482,11 +495,15 @@ const FAQManagement = () => {
 
                     {/* Question */}
                     <div>
-                      <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                      <label
+                        htmlFor="edit-faq-question"
+                        className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2"
+                      >
                         <FileQuestion className="w-4 h-4 text-zinc-400" />
                         Question
                       </label>
                       <input
+                        id="edit-faq-question"
                         type="text"
                         value={editForm.question}
                         onChange={(e) => setEditForm({ ...editForm, question: e.target.value })}
@@ -496,11 +513,15 @@ const FAQManagement = () => {
 
                     {/* Answer */}
                     <div>
-                      <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
+                      <label
+                        htmlFor="edit-faq-answer"
+                        className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2"
+                      >
                         <MessageSquare className="w-4 h-4 text-zinc-400" />
                         Answer
                       </label>
                       <textarea
+                        id="edit-faq-answer"
                         value={editForm.answer}
                         onChange={(e) => setEditForm({ ...editForm, answer: e.target.value })}
                         className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
@@ -510,6 +531,7 @@ const FAQManagement = () => {
                     {/* Actions */}
                     <div className="flex items-center gap-3 pt-2">
                       <button
+                        type="button"
                         onClick={() => handleUpdateFaq(faq.id)}
                         disabled={
                           !editForm.question.trim() ||
@@ -532,6 +554,7 @@ const FAQManagement = () => {
                         )}
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setEditingFaq(null);
                           setEditForm({ question: '', answer: '' });
@@ -560,6 +583,7 @@ const FAQManagement = () => {
                             </span>
                             <div className="flex flex-col gap-0.5">
                               <button
+                                type="button"
                                 onClick={() => handleMoveFaqUp(faq, index)}
                                 disabled={index === 0}
                                 className={`p-1 rounded-md ${index === 0 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'up' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
@@ -568,6 +592,7 @@ const FAQManagement = () => {
                                 <ChevronUp className="w-4 h-4" />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => handleMoveFaqDown(faq, index)}
                                 disabled={index === faqs.length - 1}
                                 className={`p-1 rounded-md ${index === faqs.length - 1 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'down' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
@@ -581,6 +606,7 @@ const FAQManagement = () => {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
+                          type="button"
                           onClick={() => {
                             setEditingFaq(faq.id);
                             setEditForm({ question: faq.question, answer: faq.answer });
@@ -592,6 +618,7 @@ const FAQManagement = () => {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => setDeletingFaq(faq)}
                           className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Delete FAQ"
@@ -617,6 +644,7 @@ const FAQManagement = () => {
                             </span>
                             <div className="flex flex-col gap-0.5">
                               <button
+                                type="button"
                                 onClick={() => handleMoveFaqUp(faq, index)}
                                 disabled={index === 0}
                                 className={`p-1 rounded-md ${index === 0 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'up' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
@@ -625,6 +653,7 @@ const FAQManagement = () => {
                                 <ChevronUp className="w-4 h-4" />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => handleMoveFaqDown(faq, index)}
                                 disabled={index === faqs.length - 1}
                                 className={`p-1 rounded-md ${index === faqs.length - 1 ? 'text-zinc-700 cursor-not-allowed' : recentlyMovedFaq === faq.id && moveDirection === 'down' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'} transition-colors`}
@@ -639,6 +668,7 @@ const FAQManagement = () => {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
+                          type="button"
                           onClick={() => {
                             setEditingFaq(faq.id);
                             setEditForm({ question: faq.question, answer: faq.answer });
@@ -650,6 +680,7 @@ const FAQManagement = () => {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => setDeletingFaq(faq)}
                           className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Delete FAQ"

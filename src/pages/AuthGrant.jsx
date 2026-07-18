@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, KeyRound, Shield, XCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
@@ -44,6 +45,7 @@ const buildCallbackRedirect = (redirectUrl, values) => {
 };
 
 export default function AuthGrant() {
+  const navigate = useNavigate();
   const { user, loading, initiateVatsimAuth, bannedInfo } = useAuth();
 
   const request = useMemo(() => {
@@ -88,7 +90,7 @@ export default function AuthGrant() {
       return;
     }
 
-    window.location.assign('/account');
+    navigate('/account');
   };
 
   return (

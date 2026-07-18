@@ -1,14 +1,17 @@
-import { useState, useRef } from 'react';
+import { memo, useState, useRef } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import XMLMap from '../components/shared/XMLMap';
 
+const StableXMLMap = memo(XMLMap);
+
+/* oxlint-disable react-doctor/prefer-useReducer react-doctor/prefer-module-scope-pure-function -- Debug inputs and output state are independent, and keeping the formatter beside the internal tool makes it easier to audit. */
 const DebugGenerator = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState(null);
-  const [airportIcao, setAirportIcao] = useState('');
+  const airportIcaoRef = useRef('');
   const fileInputRef = useRef(null);
   const [generatedXml, setGeneratedXml] = useState(null);
   const formatXML = (xml) => {
@@ -61,7 +64,7 @@ const DebugGenerator = () => {
     }
 
     // Use user-provided ICAO if available
-    let icao = airportIcao.trim().toUpperCase();
+    let icao = airportIcaoRef.current.trim().toUpperCase();
 
     // If no ICAO provided, try to extract from filename
     if (!icao) {
@@ -153,13 +156,19 @@ const DebugGenerator = () => {
               <Card className="p-6">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                    <label
+                      htmlFor="debug-airport-icao"
+                      className="block text-sm font-medium text-zinc-300 mb-2"
+                    >
                       Airport ICAO:
                     </label>
                     <input
+                      id="debug-airport-icao"
                       type="text"
-                      value={airportIcao}
-                      onChange={(e) => setAirportIcao(e.target.value)}
+                      defaultValue=""
+                      onChange={(e) => {
+                        airportIcaoRef.current = e.target.value;
+                      }}
                       placeholder="E.g., EGLL"
                       className="mt-1 block w-full rounded-md bg-zinc-800 border border-zinc-700 
                         focus:border-blue-500 focus:ring-blue-500 py-2 px-3 text-zinc-300 text-sm"
@@ -170,14 +179,18 @@ const DebugGenerator = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                    <label
+                      htmlFor="debug-xml-file"
+                      className="block text-sm font-medium text-zinc-300 mb-2"
+                    >
                       MSFS XML File:
                     </label>
                     <input
+                      id="debug-xml-file"
                       type="file"
                       ref={fileInputRef}
                       accept=".xml"
-                      className="mt-1 block w-full text-sm text-zinc-300
+                      className="mt-1 block w-full text-sm text-white
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-md file:border-0
                         file:text-sm file:font-semibold
@@ -254,7 +267,7 @@ const DebugGenerator = () => {
 
             <div className="lg:col-span-2">
               <Card className="p-0 overflow-hidden">
-                <XMLMap xmlData={generatedXml} />
+                <StableXMLMap xmlData={generatedXml} />
               </Card>
             </div>
           </div>

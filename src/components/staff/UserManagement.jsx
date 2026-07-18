@@ -56,6 +56,7 @@ const TruncatedName = ({ name }) => {
   }, [tooltipOpen]);
 
   const content = (
+    // oxlint-disable-next-line react-doctor/no-noninteractive-element-interactions -- The heading is interactive only when truncated; the dynamic role, focus, and keyboard handlers mirror that runtime state.
     <h3
       ref={textRef}
       className={`font-medium text-white truncate ${isTruncated ? 'cursor-pointer' : ''}`}
@@ -67,6 +68,19 @@ const TruncatedName = ({ name }) => {
             }
           : undefined
       }
+      onKeyDown={
+        isTruncated
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                setTooltipOpen((open) => !open);
+              }
+            }
+          : undefined
+      }
+      role={isTruncated ? 'button' : undefined}
+      tabIndex={isTruncated ? 0 : undefined}
     >
       {name}
     </h3>
@@ -111,6 +125,7 @@ const getDisplayName = (user) => {
   }
 };
 
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- Filters, pagination, copy feedback, and confirmation dialogs are independent parts of one user-admin workflow.
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -308,9 +323,9 @@ const UserManagement = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="staff-tool space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">User Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Manage user accounts and permissions</p>
@@ -325,6 +340,7 @@ const UserManagement = () => {
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500" />
             <input
+              aria-label="Search users"
               type="text"
               placeholder="Search users..."
               value={searchTerm}
@@ -343,7 +359,7 @@ const UserManagement = () => {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid content-start grid-cols-1 items-stretch gap-4 md:min-h-248 md:grid-cols-2 xl:min-h-164 xl:grid-cols-3">
               {filteredUsers.length === 0 && (
                 <div className="col-span-full p-8 text-center border border-dashed border-zinc-700/50 rounded-xl bg-zinc-800/20">
                   <User className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
@@ -353,9 +369,9 @@ const UserManagement = () => {
               {paginatedUsers.map((user) => (
                 <Card
                   key={user.id}
-                  className="p-5 hover:border-zinc-600/50 transition-all duration-200 hover:bg-zinc-800/30"
+                  className="flex min-h-80 flex-col p-5 transition-all duration-200 hover:border-zinc-600/50 hover:bg-zinc-800/30 md:h-80"
                 >
-                  <div className="space-y-4">
+                  <div className="flex h-full flex-1 flex-col gap-4">
                     {/* User Header */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 min-w-0">
@@ -373,6 +389,7 @@ const UserManagement = () => {
                       </div>
                       <div className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={() => setRegeneratingUser(user)}
                           className="p-1.5 rounded-lg text-zinc-400 hover:text-orange-400 hover:bg-orange-500/10 transition-colors"
                           title="Regenerate API Token"
@@ -380,6 +397,7 @@ const UserManagement = () => {
                           <KeyRound className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleBanUser(user.vatsim_id)}
                           className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Ban User"
@@ -387,6 +405,7 @@ const UserManagement = () => {
                           <Ban className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => setDeletingUser(user)}
                           className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Delete User"
@@ -397,12 +416,11 @@ const UserManagement = () => {
                     </div>
 
                     {/* User Details */}
-                    <div className="space-y-2 pt-2 border-t border-zinc-800">
+                    <div className="flex-1 space-y-2 border-t border-zinc-800 pt-2">
                       <div className="flex items-center gap-2 text-sm">
-                        <Mail className="w-3.5 h-3.5 text-zinc-500" />
-                        <span
-                          role="button"
-                          tabIndex={0}
+                        <Mail className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <button
+                          type="button"
                           onClick={() => handleCopyEmail(user.id, user.email)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -410,18 +428,17 @@ const UserManagement = () => {
                               handleCopyEmail(user.id, user.email);
                             }
                           }}
-                          className={`truncate cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedEmail === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                          className={`min-w-0 truncate cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedEmail === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
                         >
                           {user.email}
-                        </span>
+                        </button>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
-                        <IdCard className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="text-zinc-300">VATSIM: </span>
+                        <IdCard className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <span className="shrink-0 text-zinc-300">VATSIM:</span>
                         {user.vatsim_id ? (
-                          <span
-                            role="button"
-                            tabIndex={0}
+                          <button
+                            type="button"
                             onClick={() => handleCopyCid(user.id, user.vatsim_id)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
@@ -429,48 +446,58 @@ const UserManagement = () => {
                                 handleCopyCid(user.id, user.vatsim_id);
                               }
                             }}
-                            className={`cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedCid === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                            className={`cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedCid === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
                           >
                             {user.vatsim_id}
-                          </span>
+                          </button>
                         ) : (
                           <span className="text-zinc-300">Not set</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-sm">
-                        <Globe className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="text-zinc-300">
+                        <Globe className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <span className="min-w-0 truncate text-zinc-300">
                           {user.region?.name || user.region?.id || 'No region'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
-                        <Map className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="text-zinc-300">
+                        <Map className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <span className="min-w-0 truncate text-zinc-300">
                           {user.division?.name || user.division?.id || 'No division'}
                         </span>
                       </div>
-                      {(user.subdivision?.name || user.subdivision?.id) && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <MapPin className="w-3.5 h-3.5 text-zinc-500" />
-                          <span className="text-zinc-300">
-                            {user.subdivision?.name || user.subdivision?.id}
-                          </span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2 text-sm">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <span
+                          className={`min-w-0 truncate ${user.subdivision?.name || user.subdivision?.id ? 'text-zinc-300' : 'text-zinc-600'}`}
+                        >
+                          {user.subdivision?.name || user.subdivision?.id || 'No subdivision'}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Timestamps */}
-                    <div className="flex items-center justify-between pt-3 border-t border-zinc-800 text-xs text-zinc-500">
+                    <div className="mt-auto grid grid-cols-2 gap-3 border-t border-zinc-800 pt-3 text-zinc-500">
                       <Tooltip content="Created At">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3 h-3" />
-                          <span>{formatLocalDateTime(user.created_at)}</span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] leading-none text-zinc-600">Created</p>
+                            <p className="mt-1 truncate text-xs text-zinc-400">
+                              {formatLocalDateTime(user.created_at)}
+                            </p>
+                          </div>
                         </div>
                       </Tooltip>
                       <Tooltip content="Last Login">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-3 h-3" />
-                          <span>{formatLocalDateTime(user.last_login)}</span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Clock className="h-3.5 w-3.5 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] leading-none text-zinc-600">Last login</p>
+                            <p className="mt-1 truncate text-xs text-zinc-400">
+                              {formatLocalDateTime(user.last_login)}
+                            </p>
+                          </div>
                         </div>
                       </Tooltip>
                     </div>
@@ -586,6 +613,7 @@ const UserManagement = () => {
             {/* Pagination Controls */}
             <div className="grid grid-cols-3 items-center pt-4 border-t border-zinc-800">
               <button
+                type="button"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
                 className="justify-self-start flex items-center justify-center p-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -598,6 +626,7 @@ const UserManagement = () => {
                 <span className="font-medium text-zinc-300">{totalPages}</span>
               </span>
               <button
+                type="button"
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
                 className="justify-self-end flex items-center justify-center p-2 text-sm font-medium text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-lg hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

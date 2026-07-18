@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test src/features/draft-generator/matching.test.js",
+    "doctor": "react-doctor --verbose",
+    "perf:trace": "node scripts/perf-trace.mjs",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\" \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "preview": "vite preview"
   },
@@ -44,7 +46,10 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
     "prettier": "^3.8.3",
-    "react-grab": "^0.1.32",
+    "playwright": "^1.61.1",
+    "react-doctor": "^0.5.8",
+    "react-grab": "^0.1.47",
+    "react-scan": "^0.5.7",
     "tailwindcss": "^4.2.4",
     "vite": "^8.0.10"
   }

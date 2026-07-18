@@ -14,6 +14,7 @@ import { useSearchParams } from 'react-router-dom';
  * @param {string} [options.initial=''] - Fallback initial value when URL has no param
  * @returns {[string, function]} [query, setQuery]
  */
+/* oxlint-disable react-doctor/no-event-handler react-doctor/exhaustive-deps react-doctor/no-derived-state -- URL history is an external source; the effects intentionally reconcile navigation events and a debounced editable query in both directions. */
 export default function useSearchQuery(options = {}) {
   const { paramName = 'q', debounceMs = 300, initial = '' } = options;
   const [searchParams, setSearchParams] = useSearchParams();

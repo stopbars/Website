@@ -1,4 +1,4 @@
-import { isTargetLightClassification, stableId } from "./classify.js";
+import { isTargetLightClassification, stableId } from './classify.js';
 
 const EARTH_RADIUS_METERS = 6371008.8;
 const GRID_CELL_METERS = 40;
@@ -17,7 +17,7 @@ const INSERTION_DISTANCE_METERS = 4;
 const INSERTION_LENGTH_RATIO = 1.08;
 const MAX_FRAGMENT_JOIN_DISTANCE_METERS = 45;
 
-export const INFERRED_PLACEMENT_ROW_SOURCE_TYPE = "inferred-bgl-placement-row";
+export const INFERRED_PLACEMENT_ROW_SOURCE_TYPE = 'inferred-bgl-placement-row';
 
 export function inferBglPlacementLightRows(instances) {
   const startedAt = performance.now();
@@ -62,16 +62,18 @@ export function validateInferredPlacementRows(instances, rows) {
         verticesWithoutExactSource += 1;
       }
       if (index > 0) {
-        const edge = [sourceIds[index - 1], id].sort().join("|");
+        const edge = [sourceIds[index - 1], id].sort().join('|');
         edgeCounts.set(edge, (edgeCounts.get(edge) ?? 0) + 1);
       }
     }
   }
   const eligible = (instances ?? []).filter((instance) => !instance.rowInferenceExcluded);
-  const unassignedEligiblePlacements = eligible.filter((instance) =>
-    !assignmentCounts.has(instance.id)
+  const unassignedEligiblePlacements = eligible.filter(
+    (instance) => !assignmentCounts.has(instance.id)
   ).length;
-  const duplicatePlacementAssignments = [...assignmentCounts.values()].filter((count) => count > 1).length;
+  const duplicatePlacementAssignments = [...assignmentCounts.values()].filter(
+    (count) => count > 1
+  ).length;
   const duplicateEdges = [...edgeCounts.values()].filter((count) => count > 1).length;
   return {
     eligiblePlacements: eligible.length,
@@ -81,12 +83,13 @@ export function validateInferredPlacementRows(instances, rows) {
     verticesWithoutExactSource,
     rowsWithFewerThanTwoVertices,
     excessiveTurnRows,
-    valid: unassignedEligiblePlacements === 0 &&
+    valid:
+      unassignedEligiblePlacements === 0 &&
       duplicatePlacementAssignments === 0 &&
       duplicateEdges === 0 &&
       verticesWithoutExactSource === 0 &&
       rowsWithFewerThanTwoVertices === 0 &&
-      excessiveTurnRows === 0
+      excessiveTurnRows === 0,
   };
 }
 
@@ -109,15 +112,15 @@ function inferRowsForSourceFile(instances) {
       continue;
     }
     point.instance.originalClassification = point.instance.classification;
-    point.instance.classification = "unknown-light";
+    point.instance.classification = 'unknown-light';
     point.instance.rowInferenceExcluded = true;
     point.instance.rowInferenceExclusionReason =
       candidateResult.byPoint[point.index].length === 0
         ? `no heading-compatible target light within ${SEARCH_RADIUS_METERS} m`
-        : "no non-crossing degree-limited row connection remained";
+        : 'no non-crossing degree-limited row connection remained';
     point.instance.classificationReasons = [
       ...(point.instance.classificationReasons ?? []),
-      point.instance.rowInferenceExclusionReason
+      point.instance.rowInferenceExclusionReason,
     ];
     excluded.push(point.index);
   }
@@ -138,27 +141,33 @@ function inferRowsForSourceFile(instances) {
       insertedPlacements: graph.insertedPlacements,
       joinedPathFragments: graph.joinedPathFragments,
       rows: rows.length,
-      maximumObservedLinkDistanceMeters: roundNumber(maximumSelectedEdgeValue(graph, "distanceMeters")),
-      maximumObservedHeadingErrorDegrees: roundNumber(maximumSelectedEdgeValue(graph, "maximumHeadingErrorDegrees")),
-      maximumObservedTurnDeflectionDegrees: roundNumber(maximumPathTurnDeflection(points, paths))
-    }
+      maximumObservedLinkDistanceMeters: roundNumber(
+        maximumSelectedEdgeValue(graph, 'distanceMeters')
+      ),
+      maximumObservedHeadingErrorDegrees: roundNumber(
+        maximumSelectedEdgeValue(graph, 'maximumHeadingErrorDegrees')
+      ),
+      maximumObservedTurnDeflectionDegrees: roundNumber(maximumPathTurnDeflection(points, paths)),
+    },
   };
 }
 
 function isPlacementTarget(instance) {
-  return instance?.sourceType === "library-object" &&
+  return (
+    instance?.sourceType === 'library-object' &&
     isTargetLightClassification(instance.classification) &&
     Number.isFinite(instance.lat) &&
     Number.isFinite(instance.lon) &&
     Number.isFinite(instance.heading) &&
-    typeof instance.guid === "string";
+    typeof instance.guid === 'string'
+  );
 }
 
 function localPoints(instances) {
-  const latitude = instances.reduce((sum, instance) => sum + instance.lat, 0) /
-    Math.max(instances.length, 1);
-  const longitude = instances.reduce((sum, instance) => sum + instance.lon, 0) /
-    Math.max(instances.length, 1);
+  const latitude =
+    instances.reduce((sum, instance) => sum + instance.lat, 0) / Math.max(instances.length, 1);
+  const longitude =
+    instances.reduce((sum, instance) => sum + instance.lon, 0) / Math.max(instances.length, 1);
   const radians = Math.PI / 180;
   const metersPerDegreeLatitude = EARTH_RADIUS_METERS * radians;
   const metersPerDegreeLongitude = metersPerDegreeLatitude * Math.cos(latitude * radians);
@@ -166,7 +175,7 @@ function localPoints(instances) {
     index,
     instance,
     x: (instance.lon - longitude) * metersPerDegreeLongitude,
-    y: (instance.lat - latitude) * metersPerDegreeLatitude
+    y: (instance.lat - latitude) * metersPerDegreeLatitude,
   }));
 }
 
@@ -205,7 +214,7 @@ function buildNearbyLists(points) {
             dx,
             dy,
             distanceMeters,
-            bearingDegrees: modulo180((Math.atan2(dx, dy) * 180) / Math.PI)
+            bearingDegrees: modulo180((Math.atan2(dx, dy) * 180) / Math.PI),
           });
         }
       }
@@ -216,7 +225,7 @@ function buildNearbyLists(points) {
 }
 
 function buildCandidateEdges(points, nearby) {
-  const slotKeys = ["0:negative", "0:positive", "90:negative", "90:positive"];
+  const slotKeys = ['0:negative', '0:positive', '90:negative', '90:positive'];
   const byPointAndSide = points.map(() => Object.fromEntries(slotKeys.map((key) => [key, []])));
   const nearestCompatibleDistance = points.map(() => Number.POSITIVE_INFINITY);
   const candidateEdges = [];
@@ -229,11 +238,23 @@ function buildCandidateEdges(points, nearby) {
       }
       pairsChecked += 1;
       const other = points[neighbor.index];
-      if (!classificationsCanShareRow(point.instance.classification, other.instance.classification)) {
+      if (
+        !classificationsCanShareRow(point.instance.classification, other.instance.classification)
+      ) {
         continue;
       }
-      const leftAlignment = bestHeadingAlignment(point, neighbor.bearingDegrees, neighbor.dx, neighbor.dy);
-      const rightAlignment = bestHeadingAlignment(other, neighbor.bearingDegrees, -neighbor.dx, -neighbor.dy);
+      const leftAlignment = bestHeadingAlignment(
+        point,
+        neighbor.bearingDegrees,
+        neighbor.dx,
+        neighbor.dy
+      );
+      const rightAlignment = bestHeadingAlignment(
+        other,
+        neighbor.bearingDegrees,
+        -neighbor.dx,
+        -neighbor.dy
+      );
       const leftError = leftAlignment.errorDegrees;
       const rightError = rightAlignment.errorDegrees;
       const maximumHeadingErrorDegrees = Math.max(leftError, rightError);
@@ -248,7 +269,8 @@ function buildCandidateEdges(points, nearby) {
       // closest cross-row pair. Treat the decoded placement headings as a real
       // geometric signal: a slightly longer continuation with a near-zero
       // heading error must beat a short, barely-tolerated perpendicular link.
-      const score = neighbor.distanceMeters * crossModelPenalty +
+      const score =
+        neighbor.distanceMeters * crossModelPenalty +
         (leftError + rightError) * HEADING_ERROR_WEIGHT_METERS;
       const edge = {
         key: edgeKey(point.index, other.index),
@@ -260,7 +282,7 @@ function buildCandidateEdges(points, nearby) {
         rightOffsetDegrees: rightAlignment.offsetDegrees,
         distanceMeters: neighbor.distanceMeters,
         maximumHeadingErrorDegrees,
-        score
+        score,
       };
       candidateEdges.push(edge);
       nearestCompatibleDistance[point.index] = Math.min(
@@ -277,17 +299,23 @@ function buildCandidateEdges(points, nearby) {
   }
 
   for (const edge of candidateEdges) {
-    edge.continuationSupport = Number(hasContinuationCandidate(
-      byPointAndSide[edge.left],
-      edge.leftOffsetDegrees,
-      oppositeSide(edge.leftSide),
-      edge
-    )) + Number(hasContinuationCandidate(
-      byPointAndSide[edge.right],
-      edge.rightOffsetDegrees,
-      oppositeSide(edge.rightSide),
-      edge
-    ));
+    edge.continuationSupport =
+      Number(
+        hasContinuationCandidate(
+          byPointAndSide[edge.left],
+          edge.leftOffsetDegrees,
+          oppositeSide(edge.leftSide),
+          edge
+        )
+      ) +
+      Number(
+        hasContinuationCandidate(
+          byPointAndSide[edge.right],
+          edge.rightOffsetDegrees,
+          oppositeSide(edge.rightSide),
+          edge
+        )
+      );
     edge.score -= edge.continuationSupport * CONTINUATION_SUPPORT_BONUS_METERS;
   }
 
@@ -301,13 +329,15 @@ function buildCandidateEdges(points, nearby) {
     }
   }
   const edges = [...retained.values()].sort(compareCandidateEdges);
-  const initialEdges = edges.filter((edge) => edge.distanceMeters <= Math.max(
-      MIN_ADAPTIVE_LINK_DISTANCE_METERS,
-      Math.min(
-        nearestCompatibleDistance[edge.left],
-        nearestCompatibleDistance[edge.right]
-      ) * ADAPTIVE_LINK_DISTANCE_MULTIPLIER
-    ));
+  const initialEdges = edges.filter(
+    (edge) =>
+      edge.distanceMeters <=
+      Math.max(
+        MIN_ADAPTIVE_LINK_DISTANCE_METERS,
+        Math.min(nearestCompatibleDistance[edge.left], nearestCompatibleDistance[edge.right]) *
+          ADAPTIVE_LINK_DISTANCE_MULTIPLIER
+      )
+  );
   const byPoint = points.map(() => []);
   for (const edge of edges) {
     byPoint[edge.left].push(edge);
@@ -320,42 +350,47 @@ function buildCandidateEdges(points, nearby) {
 }
 
 function hasContinuationCandidate(sides, offsetDegrees, side, currentEdge) {
-  return sides[`${offsetDegrees}:${side}`].some((edge) =>
-    edge !== currentEdge && edge.distanceMeters <= MAX_FRAGMENT_JOIN_DISTANCE_METERS
+  return sides[`${offsetDegrees}:${side}`].some(
+    (edge) => edge !== currentEdge && edge.distanceMeters <= MAX_FRAGMENT_JOIN_DISTANCE_METERS
   );
 }
 
 function oppositeSide(side) {
-  return side === "positive" ? "negative" : "positive";
+  return side === 'positive' ? 'negative' : 'positive';
 }
 
 function classificationsCanShareRow(left, right) {
-  return (left === "stopbar") === (right === "stopbar");
+  return (left === 'stopbar') === (right === 'stopbar');
 }
 
 function bestHeadingAlignment(point, bearingDegrees, dx, dy) {
   const parallelError = undirectedAngleDifferenceDegrees(bearingDegrees, point.instance.heading);
-  const perpendicularError = undirectedAngleDifferenceDegrees(bearingDegrees, point.instance.heading + 90);
+  const perpendicularError = undirectedAngleDifferenceDegrees(
+    bearingDegrees,
+    point.instance.heading + 90
+  );
   const offsetDegrees = perpendicularError < parallelError ? 90 : 0;
   const tangentDegrees = modulo180(point.instance.heading + offsetDegrees);
   return {
     offsetDegrees,
     errorDegrees: Math.min(parallelError, perpendicularError),
-    side: sideForVector(tangentDegrees, dx, dy)
+    side: sideForVector(tangentDegrees, dx, dy),
   };
 }
 
 function compareCandidateEdges(left, right) {
-  return left.score - right.score ||
+  return (
+    left.score - right.score ||
     left.distanceMeters - right.distanceMeters ||
     left.left - right.left ||
-    left.right - right.right;
+    left.right - right.right
+  );
 }
 
 function sideForVector(tangentDegrees, dx, dy) {
   const tangentRadians = (tangentDegrees * Math.PI) / 180;
   const projection = dx * Math.sin(tangentRadians) + dy * Math.cos(tangentRadians);
-  return projection >= 0 ? "positive" : "negative";
+  return projection >= 0 ? 'positive' : 'negative';
 }
 
 function buildPathGraph(points, candidates) {
@@ -369,7 +404,7 @@ function buildPathGraph(points, candidates) {
     crossingRejections: 0,
     turnRejections: 0,
     insertedPlacements: 0,
-    joinedPathFragments: 0
+    joinedPathFragments: 0,
   };
   for (const candidate of candidates) {
     tryAddEdge(points, graph, candidate, true);
@@ -379,10 +414,10 @@ function buildPathGraph(points, candidates) {
 
 function tryAddEdge(points, graph, edge, preventCycles) {
   if (
-    graph.tangentOffsets[edge.left] !== undefined &&
-    graph.tangentOffsets[edge.left] !== edge.leftOffsetDegrees ||
-    graph.tangentOffsets[edge.right] !== undefined &&
-    graph.tangentOffsets[edge.right] !== edge.rightOffsetDegrees ||
+    (graph.tangentOffsets[edge.left] !== undefined &&
+      graph.tangentOffsets[edge.left] !== edge.leftOffsetDegrees) ||
+    (graph.tangentOffsets[edge.right] !== undefined &&
+      graph.tangentOffsets[edge.right] !== edge.rightOffsetDegrees) ||
     graph.sideEdges[edge.left][edge.leftSide] ||
     graph.sideEdges[edge.right][edge.rightSide]
   ) {
@@ -391,8 +426,10 @@ function tryAddEdge(points, graph, edge, preventCycles) {
   if (preventCycles && findRoot(graph.parents, edge.left) === findRoot(graph.parents, edge.right)) {
     return false;
   }
-  if (!turnIsValid(points, graph, edge.left, edge.right) ||
-      !turnIsValid(points, graph, edge.right, edge.left)) {
+  if (
+    !turnIsValid(points, graph, edge.left, edge.right) ||
+    !turnIsValid(points, graph, edge.right, edge.left)
+  ) {
     graph.turnRejections += 1;
     return false;
   }
@@ -453,12 +490,14 @@ function edgeCrossesGraph(points, graph, edge) {
     if (!existing || sharesEndpoint(edge, existing)) {
       continue;
     }
-    if (segmentsProperlyIntersect(
-      points[edge.left],
-      points[edge.right],
-      points[existing.left],
-      points[existing.right]
-    )) {
+    if (
+      segmentsProperlyIntersect(
+        points[edge.left],
+        points[edge.right],
+        points[existing.left],
+        points[existing.right]
+      )
+    ) {
       const crossingAngle = undirectedAngleDifferenceDegrees(
         segmentBearingDegrees(points[edge.left], points[edge.right]),
         segmentBearingDegrees(points[existing.left], points[existing.right])
@@ -476,7 +515,11 @@ function segmentBearingDegrees(left, right) {
 }
 
 function indexEdge(points, graph, edge) {
-  for (const cell of edgeGridCells(points[edge.left], points[edge.right], CROSSING_GRID_CELL_METERS)) {
+  for (const cell of edgeGridCells(
+    points[edge.left],
+    points[edge.right],
+    CROSSING_GRID_CELL_METERS
+  )) {
     if (!graph.edgeGrid.has(cell)) {
       graph.edgeGrid.set(cell, []);
     }
@@ -518,16 +561,22 @@ function insertUnassignedPoints(points, graph, candidates) {
       ) {
         continue;
       }
-      const leftDistance = Math.hypot(point.x - points[existing.left].x, point.y - points[existing.left].y);
-      const rightDistance = Math.hypot(point.x - points[existing.right].x, point.y - points[existing.right].y);
+      const leftDistance = Math.hypot(
+        point.x - points[existing.left].x,
+        point.y - points[existing.left].y
+      );
+      const rightDistance = Math.hypot(
+        point.x - points[existing.right].x,
+        point.y - points[existing.right].y
+      );
       if ((leftDistance + rightDistance) / existing.distanceMeters > INSERTION_LENGTH_RATIO) {
         continue;
       }
-      const leftCandidate = candidatesByPoint[point.index].find((edge) =>
-        otherIndex(edge, point.index) === existing.left
+      const leftCandidate = candidatesByPoint[point.index].find(
+        (edge) => otherIndex(edge, point.index) === existing.left
       );
-      const rightCandidate = candidatesByPoint[point.index].find((edge) =>
-        otherIndex(edge, point.index) === existing.right
+      const rightCandidate = candidatesByPoint[point.index].find(
+        (edge) => otherIndex(edge, point.index) === existing.right
       );
       if (!leftCandidate || !rightCandidate) {
         continue;
@@ -565,9 +614,8 @@ function attachBySplittingInternalEdges(points, graph, candidatesByPoint) {
     }
     for (const candidate of candidatesByPoint[point.index]) {
       const neighborIndex = otherIndex(candidate, point.index);
-      const neighborSide = candidate.left === neighborIndex
-        ? candidate.leftSide
-        : candidate.rightSide;
+      const neighborSide =
+        candidate.left === neighborIndex ? candidate.leftSide : candidate.rightSide;
       const occupiedKey = graph.sideEdges[neighborIndex][neighborSide];
       const occupied = graph.edges.get(occupiedKey);
       if (!occupied) {
@@ -637,7 +685,9 @@ function walkComponent(start, adjacency, visited) {
   while (current !== undefined && !visited.has(current)) {
     visited.add(current);
     path.push(current);
-    const next = [...adjacency[current]].find((candidate) => candidate !== previous && !visited.has(candidate));
+    const next = [...adjacency[current]].find(
+      (candidate) => candidate !== previous && !visited.has(candidate)
+    );
     previous = current;
     current = next;
   }
@@ -648,11 +698,13 @@ function buildRow(points, graph, path, pathIndex) {
   const pathPoints = path.map((index) => points[index]);
   const instances = pathPoints.map((point) => point.instance);
   const sourceInstanceIds = instances.map((instance) => instance.id);
+  // oxlint-disable-next-line react-doctor/js-combine-iterations -- Offset extraction and integer validation are separate provenance stages on one short row.
   const sourceOffsets = instances
     .map((instance) => instance.sourceRecordOffset)
     .filter(Number.isInteger)
     .sort((left, right) => left - right);
   const classifications = [...new Set(instances.map((instance) => instance.classification))];
+  // oxlint-disable-next-line react-doctor/js-flatmap-filter -- One row has few instances and explicit falsy-name removal documents the Set input.
   const presets = [...new Set(instances.map((instance) => instance.name).filter(Boolean))];
   const modelGuids = [...new Set(instances.map((instance) => instance.guid))];
   const pathEdges = [];
@@ -666,7 +718,7 @@ function buildRow(points, graph, path, pathIndex) {
   const id = stableId(
     INFERRED_PLACEMENT_ROW_SOURCE_TYPE,
     instances[0].sourceFile,
-    sourceInstanceIds.join(","),
+    sourceInstanceIds.join(','),
     pathIndex
   );
   for (const instance of instances) {
@@ -678,7 +730,7 @@ function buildRow(points, graph, path, pathIndex) {
     sourceType: INFERRED_PLACEMENT_ROW_SOURCE_TYPE,
     sourceRecordOffset: sourceOffsets[0],
     sourceRecordEndOffset: sourceOffsets.at(-1),
-    rawTag: "Inferred BGL placement light row",
+    rawTag: 'Inferred BGL placement light row',
     ...(presets.length === 1 ? { preset: presets[0] } : {}),
     sourcePresets: presets,
     sourceModelGuids: modelGuids,
@@ -688,17 +740,25 @@ function buildRow(points, graph, path, pathIndex) {
     vertices: instances.map((instance) => ({ lat: instance.lat, lon: instance.lon })),
     snapToVertices: true,
     inferred: true,
-    inference: "grid-indexed exact-placement heading graph",
-    reconstructMode: "exact-bgl-placement-control-points",
+    inference: 'grid-indexed exact-placement heading graph',
+    reconstructMode: 'exact-bgl-placement-control-points',
     sourceInstanceIds,
     sourcePlacementCount: instances.length,
-    tangentOffsetUsageByModelGuid: Object.fromEntries(modelGuids.map((guid) => {
-      const matching = pathPoints.filter((point) => point.instance.guid === guid);
-      return [guid, {
-        parallelPlacements: matching.filter((point) => graph.tangentOffsets[point.index] === 0).length,
-        perpendicularPlacements: matching.filter((point) => graph.tangentOffsets[point.index] === 90).length
-      }];
-    })),
+    tangentOffsetUsageByModelGuid: Object.fromEntries(
+      modelGuids.map((guid) => {
+        const matching = pathPoints.filter((point) => point.instance.guid === guid);
+        return [
+          guid,
+          {
+            parallelPlacements: matching.filter((point) => graph.tangentOffsets[point.index] === 0)
+              .length,
+            perpendicularPlacements: matching.filter(
+              (point) => graph.tangentOffsets[point.index] === 90
+            ).length,
+          },
+        ];
+      })
+    ),
     headingAlignmentToleranceDegrees: HEADING_ALIGNMENT_TOLERANCE_DEGREES,
     maximumLinkDistanceMeters: SEARCH_RADIUS_METERS,
     maximumObservedLinkDistanceMeters: roundNumber(
@@ -708,8 +768,8 @@ function buildRow(points, graph, path, pathIndex) {
       Math.max(0, ...pathEdges.map((edge) => edge.maximumHeadingErrorDegrees))
     ),
     maximumObservedTurnDeflectionDegrees: roundNumber(pathTurnDeflection(points, path)),
-    sourceBasis: "exact decoded BGL 0x0B placement coordinates and headings",
-    relationshipBasis: "grid-indexed degree-limited non-crossing heading-compatible graph"
+    sourceBasis: 'exact decoded BGL 0x0B placement coordinates and headings',
+    relationshipBasis: 'grid-indexed degree-limited non-crossing heading-compatible graph',
   };
 }
 
@@ -717,13 +777,13 @@ function rowClassification(classifications) {
   if (classifications.length === 1) {
     return classifications[0];
   }
-  if (classifications.includes("taxi-centerline")) {
-    return "taxi-centerline";
+  if (classifications.includes('taxi-centerline')) {
+    return 'taxi-centerline';
   }
-  if (classifications.includes("lead-on")) {
-    return "lead-on";
+  if (classifications.includes('lead-on')) {
+    return 'lead-on';
   }
-  return "stopbar";
+  return 'stopbar';
 }
 
 function maximumPathTurnDeflection(points, paths) {
@@ -758,15 +818,13 @@ function pointToSegment(point, start, end) {
   if (lengthSquared === 0) {
     return { ratio: 0, distanceMeters: Math.hypot(point.x - start.x, point.y - start.y) };
   }
-  const ratio = Math.max(0, Math.min(1,
-    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared
-  ));
+  const ratio = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+  );
   return {
     ratio,
-    distanceMeters: Math.hypot(
-      point.x - (start.x + dx * ratio),
-      point.y - (start.y + dy * ratio)
-    )
+    distanceMeters: Math.hypot(point.x - (start.x + dx * ratio), point.y - (start.y + dy * ratio)),
   };
 }
 
@@ -783,8 +841,12 @@ function orientation(a, b, c) {
 }
 
 function sharesEndpoint(left, right) {
-  return left.left === right.left || left.left === right.right ||
-    left.right === right.left || left.right === right.right;
+  return (
+    left.left === right.left ||
+    left.left === right.right ||
+    left.right === right.left ||
+    left.right === right.right
+  );
 }
 
 function directedAngleDegrees(ax, ay, bx, by) {
@@ -861,31 +923,31 @@ function emptyStats() {
     maximumObservedLinkDistanceMeters: 0,
     maximumObservedHeadingErrorDegrees: 0,
     maximumObservedTurnDeflectionDegrees: 0,
-    elapsedMilliseconds: 0
+    elapsedMilliseconds: 0,
   };
 }
 
 function addStats(target, source) {
   for (const key of [
-    "inputPlacements",
-    "assignedPlacements",
-    "excludedOutliers",
-    "candidatePairsChecked",
-    "headingCompatibleCandidates",
-    "retainedCandidates",
-    "adaptiveInitialCandidates",
-    "selectedEdges",
-    "crossingCandidatesRejected",
-    "turnCandidatesRejected",
-    "insertedPlacements",
-    "joinedPathFragments"
+    'inputPlacements',
+    'assignedPlacements',
+    'excludedOutliers',
+    'candidatePairsChecked',
+    'headingCompatibleCandidates',
+    'retainedCandidates',
+    'adaptiveInitialCandidates',
+    'selectedEdges',
+    'crossingCandidatesRejected',
+    'turnCandidatesRejected',
+    'insertedPlacements',
+    'joinedPathFragments',
   ]) {
     target[key] += source[key] ?? 0;
   }
   for (const key of [
-    "maximumObservedLinkDistanceMeters",
-    "maximumObservedHeadingErrorDegrees",
-    "maximumObservedTurnDeflectionDegrees"
+    'maximumObservedLinkDistanceMeters',
+    'maximumObservedHeadingErrorDegrees',
+    'maximumObservedTurnDeflectionDegrees',
   ]) {
     target[key] = Math.max(target[key], source[key] ?? 0);
   }

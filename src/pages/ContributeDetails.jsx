@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { memo, useRef, useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -15,10 +16,12 @@ import {
   getContributionDisabledMessage,
 } from '../utils/contributionPolicy';
 
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect -- File preloading, package suggestions, validation, and submission are a cohesive wizard; its guarded one-shot requests and ordered state transitions preserve navigation behavior. */
 const ContributeDetails = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const navigationState = location.state;
   const { user } = useAuth();
   const vatsimToken = getVatsimToken();
 
@@ -27,7 +30,7 @@ const ContributeDetails = () => {
   const [preloaded, setPreloaded] = useState(false);
   const [airport, setAirport] = useState(null);
   const [contributionPolicy, setContributionPolicy] = useState(null);
-  const [notes, setNotes] = useState('');
+  const notesRef = useRef('');
   const [error, setError] = useState('');
   const [errorTitle, setErrorTitle] = useState('Error');
   const [showErrorToast, setShowErrorToast] = useState(false);
@@ -49,9 +52,9 @@ const ContributeDetails = () => {
   // Preload file from navigation state if provided
   useEffect(() => {
     // Only preload if we have the raw original XML passed from previous step
-    if (!preloaded && location.state?.originalXml) {
+    if (!preloaded && navigationState?.originalXml) {
       try {
-        const { originalXml, fileName } = location.state;
+        const { originalXml, fileName } = navigationState;
         const blob = new Blob([originalXml], { type: 'application/xml' });
         const syntheticFile = new File([blob], fileName || `${icao}.xml`, {
           type: 'application/xml',
@@ -62,7 +65,7 @@ const ContributeDetails = () => {
         console.error('Failed to preload tested XML:', e);
       }
     }
-  }, [location.state, preloaded, icao]);
+  }, [navigationState, preloaded, icao]);
 
   // Fetch airport information
   useEffect(() => {
@@ -201,7 +204,7 @@ const ContributeDetails = () => {
         packageName: sceneryName,
         simulator: simulator,
         submittedXml: fileContent,
-        notes: notes || undefined,
+        notes: notesRef.current || undefined,
       };
 
       const response = await fetch('https://v2.stopbars.com/contributions', {
@@ -311,12 +314,16 @@ const ContributeDetails = () => {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Scenery package selection */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">Scenery Package</label>
+                    <label htmlFor="scenery-package" className="block text-sm font-medium mb-2">
+                      Scenery Package
+                    </label>
                     {isLoadingPackages ? (
                       <>
                         <div className="relative">
                           <div className="flex items-center relative">
                             <input
+                              id="scenery-package"
+                              aria-label="Scenery package"
                               type="text"
                               disabled
                               placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
@@ -350,6 +357,8 @@ const ContributeDetails = () => {
                         <div className="relative">
                           <div className="flex items-center relative">
                             <input
+                              id="scenery-package"
+                              aria-label="Scenery package"
                               type="text"
                               value={sceneryName}
                               onChange={handleSceneryNameChange}
@@ -373,13 +382,15 @@ const ContributeDetails = () => {
                           </div>
                           {showSuggestions && suggestions.length > 0 && (
                             <ul className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg max-h-60 overflow-auto">
-                              {suggestions.map((suggestion, index) => (
-                                <li
-                                  key={index}
-                                  className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
-                                  onClick={() => selectSuggestion(suggestion)}
-                                >
-                                  {suggestion}
+                              {suggestions.map((suggestion) => (
+                                <li key={suggestion}>
+                                  <button
+                                    type="button"
+                                    className="w-full px-4 py-2 text-left hover:bg-zinc-700 cursor-pointer"
+                                    onClick={() => selectSuggestion(suggestion)}
+                                  >
+                                    {suggestion}
+                                  </button>
                                 </li>
                               ))}
                             </ul>
@@ -389,9 +400,9 @@ const ContributeDetails = () => {
                         {/* Top Packages */}
                         {topPackages.length > 0 && (
                           <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
-                            {topPackages.map((pkg, index) => (
+                            {topPackages.map((pkg) => (
                               <button
-                                key={index}
+                                key={pkg.packageName}
                                 type="button"
                                 onClick={() => {
                                   setSceneryName(pkg.packageName);
@@ -423,7 +434,7 @@ const ContributeDetails = () => {
 
                   {/* Simulator selection */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">Simulator</label>
+                    <span className="block text-sm font-medium mb-2">Simulator</span>
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
@@ -452,10 +463,15 @@ const ContributeDetails = () => {
 
                   {/* Additional notes */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">Additional Notes</label>
+                    <label htmlFor="contribution-notes" className="block text-sm font-medium mb-2">
+                      Additional Notes
+                    </label>
                     <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
+                      id="contribution-notes"
+                      defaultValue=""
+                      onChange={(event) => {
+                        notesRef.current = event.target.value;
+                      }}
                       placeholder="Any additional notes for the approval team."
                       maxLength={1000}
                       className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-25 resize-none"
@@ -513,60 +529,8 @@ const ContributeDetails = () => {
             </div>
 
             <div className="flex flex-col space-y-6">
-              {/* Airport Information */}
-              <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Airport Information</h2>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-zinc-400">ICAO Code</p>
-                    <p className="font-medium">{icao.toUpperCase()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Airport Name</p>
-                    <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Location</p>
-                    <p className="font-medium">
-                      {airport
-                        ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
-                        : 'Loading...'}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-
-              {/* XML File */}
-              <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">XML File</h2>
-                <div
-                  className={`w-full border-2 border-dashed rounded-lg p-6 text-center ${
-                    selectedFile
-                      ? 'border-emerald-500/50 bg-emerald-500/5'
-                      : 'border-zinc-600 bg-zinc-800/50'
-                  }`}
-                >
-                  {selectedFile ? (
-                    <div className="flex flex-col items-center">
-                      <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
-                        <Check className="w-6 h-6 text-emerald-500" />
-                      </div>
-                      <p className="font-medium mb-1">{selectedFile.name}</p>
-                      <p className="text-sm text-zinc-400">
-                        {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous step
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center">
-                      <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
-                        <FileUp className="w-6 h-6 text-zinc-400" />
-                      </div>
-                      <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
-                      <p className="text-sm text-zinc-500">Please go back and test your XML file</p>
-                    </div>
-                  )}
-                </div>
-              </Card>
+              <AirportInformationCard icao={icao} airport={airport} />
+              <SelectedFileCard selectedFile={selectedFile} />
 
               {/* Submit button */}
               <Button
@@ -621,6 +585,83 @@ const ContributeDetails = () => {
       />
     </Layout>
   );
+};
+
+const AirportInformationCard = memo(function AirportInformationCard({ icao, airport }) {
+  return (
+    <Card className="p-6">
+      <h2 className="text-xl font-medium mb-4">Airport Information</h2>
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm text-zinc-400">ICAO Code</p>
+          <p className="font-medium">{icao.toUpperCase()}</p>
+        </div>
+        <div>
+          <p className="text-sm text-zinc-400">Airport Name</p>
+          <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
+        </div>
+        <div>
+          <p className="text-sm text-zinc-400">Location</p>
+          <p className="font-medium">
+            {airport
+              ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
+              : 'Loading...'}
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+});
+
+AirportInformationCard.propTypes = {
+  icao: PropTypes.string.isRequired,
+  airport: PropTypes.shape({
+    name: PropTypes.string.isRequired,
+    latitude: PropTypes.number.isRequired,
+    longitude: PropTypes.number.isRequired,
+  }),
+};
+
+const SelectedFileCard = memo(function SelectedFileCard({ selectedFile }) {
+  return (
+    <Card className="p-6">
+      <h2 className="text-xl font-medium mb-4">XML File</h2>
+      <div
+        className={`w-full border-2 border-dashed rounded-lg p-6 text-center ${
+          selectedFile
+            ? 'border-emerald-500/50 bg-emerald-500/5'
+            : 'border-zinc-600 bg-zinc-800/50'
+        }`}
+      >
+        {selectedFile ? (
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+              <Check className="w-6 h-6 text-emerald-500" />
+            </div>
+            <p className="font-medium mb-1">{selectedFile.name}</p>
+            <p className="text-sm text-zinc-400">
+              {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous step
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
+              <FileUp className="w-6 h-6 text-zinc-400" />
+            </div>
+            <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
+            <p className="text-sm text-zinc-500">Please go back and test your XML file</p>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+});
+
+SelectedFileCard.propTypes = {
+  selectedFile: PropTypes.shape({
+    name: PropTypes.string.isRequired,
+    size: PropTypes.number.isRequired,
+  }),
 };
 
 export default ContributeDetails;

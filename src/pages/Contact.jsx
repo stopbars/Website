@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -23,19 +23,87 @@ const topicOptions = [
   'Other',
 ];
 
+const SupportOptions = memo(function SupportOptions() {
+  const [copiedEmail, setCopiedEmail] = useState('');
+  const copyResetTimerRef = useRef(null);
+
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+    },
+    []
+  );
+
+  const handleCopyEmail = async (email) => {
+    try {
+      await navigator.clipboard.writeText(email);
+      setCopiedEmail(email);
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+      copyResetTimerRef.current = setTimeout(() => setCopiedEmail(''), 2000);
+    } catch (err) {
+      console.error('Failed to copy email:', err);
+    }
+  };
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <Card
+        className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-blue-500/30 active:scale-[0.96]"
+        onClick={() => window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')}
+      >
+        <div className="flex items-center space-x-3">
+          <MessagesSquare className="w-5 h-5 text-blue-400 group-hover:text-blue-300 transition-colors" />
+          <div>
+            <h3 className="font-medium group-hover:text-blue-100 transition-colors">
+              Discord Community
+            </h3>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-zinc-400">Get instant help from our community</span>
+              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors duration-150 group-hover:text-blue-400" />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card
+        className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-emerald-500/30 active:scale-[0.96]"
+        onClick={() => handleCopyEmail('support@stopbars.com')}
+      >
+        <div className="flex items-center space-x-3">
+          <Mail className="w-5 h-5 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
+          <div>
+            <h3 className="font-medium group-hover:text-emerald-100 transition-colors">
+              Support Email
+            </h3>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-zinc-400">support@stopbars.com</span>
+              {copiedEmail === 'support@stopbars.com' ? (
+                <Check className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Copy className="w-4 h-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+});
+
+/* oxlint-disable react-doctor/no-giant-component, react-doctor/prefer-useReducer, react-doctor/no-render-in-render -- The cohesive contact and support page is JSX-heavy; form states are independent, and the topic renderer is stateless. */
 const Contact = () => {
   const [selectedTopic, setSelectedTopic] = useState('');
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [copiedEmail, setCopiedEmail] = useState('');
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [errorTitle, setErrorTitle] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const dropdownRef = useRef(null);
+  const formRef = useRef(null);
+  const emailRef = useRef(null);
+  const messageRef = useRef(null);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -51,21 +119,12 @@ const Contact = () => {
     };
   }, []);
 
-  const handleCopyEmail = async (email) => {
-    try {
-      await navigator.clipboard.writeText(email);
-      setCopiedEmail(email);
-      setTimeout(() => setCopiedEmail(''), 2000);
-    } catch (err) {
-      console.error('Failed to copy email:', err);
-    }
-  };
-
   // Render topic dropdown
   const renderTopicDropdown = () => {
     return (
       <div className="relative" ref={dropdownRef}>
         <button
+          id="contact-topic"
           type="button"
           onClick={() => setShowTopicDropdown(!showTopicDropdown)}
           aria-expanded={showTopicDropdown}
@@ -127,9 +186,9 @@ const Contact = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email,
+          email: emailRef.current?.value || '',
           topic: selectedTopic,
-          message,
+          message: messageRef.current?.value || '',
         }),
       });
 
@@ -160,8 +219,7 @@ const Contact = () => {
       }
 
       setShowSuccessToast(true);
-      setEmail('');
-      setMessage('');
+      formRef.current?.reset();
       setSelectedTopic('');
       setShowTopicDropdown(false);
     } catch (err) {
@@ -194,18 +252,28 @@ const Contact = () => {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-zinc-300">Topic</label>
+                <label
+                  htmlFor="contact-topic"
+                  className="block text-sm font-medium mb-1.5 text-zinc-300"
+                >
+                  Topic
+                </label>
                 {renderTopicDropdown()}
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-zinc-300">Email</label>
+                <label
+                  htmlFor="contact-email"
+                  className="block text-sm font-medium mb-1.5 text-zinc-300"
+                >
+                  Email
+                </label>
                 <input
+                  id="contact-email"
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  ref={emailRef}
                   className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-sm"
                   placeholder="you@example.com"
                   required
@@ -213,10 +281,15 @@ const Contact = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-zinc-300">Message</label>
+                <label
+                  htmlFor="contact-message"
+                  className="block text-sm font-medium mb-1.5 text-zinc-300"
+                >
+                  Message
+                </label>
                 <textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  id="contact-message"
+                  ref={messageRef}
                   className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 min-h-[120px] text-sm"
                   placeholder="How can we help?"
                   required
@@ -237,53 +310,7 @@ const Contact = () => {
           </Card>
 
           {/* Additional Support Options */}
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Discord Support */}
-            <Card
-              className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-blue-500/30 active:scale-[0.96]"
-              onClick={() =>
-                window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')
-              }
-            >
-              <div className="flex items-center space-x-3">
-                <MessagesSquare className="w-5 h-5 text-blue-400 group-hover:text-blue-300 transition-colors" />
-                <div>
-                  <h3 className="font-medium group-hover:text-blue-100 transition-colors">
-                    Discord Community
-                  </h3>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-zinc-400">
-                      Get instant help from our community
-                    </span>
-                    <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors duration-150 group-hover:text-blue-400" />
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* General Support Email */}
-            <Card
-              className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-emerald-500/30 active:scale-[0.96]"
-              onClick={() => handleCopyEmail('support@stopbars.com')}
-            >
-              <div className="flex items-center space-x-3">
-                <Mail className="w-5 h-5 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
-                <div>
-                  <h3 className="font-medium group-hover:text-emerald-100 transition-colors">
-                    Support Email
-                  </h3>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-zinc-400">support@stopbars.com</span>
-                    {copiedEmail === 'support@stopbars.com' ? (
-                      <Check className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-4 h-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </div>
+          <SupportOptions />
         </div>
       </div>
 

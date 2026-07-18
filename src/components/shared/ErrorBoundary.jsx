@@ -75,6 +75,7 @@ export const RouteError = () => {
 
           <div className="bg-zinc-800/50 p-4 rounded-lg mb-8 overflow-auto max-h-48 relative">
             <button
+              type="button"
               onClick={copyErrorToClipboard}
               className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded"
               title="Copy error to clipboard"
@@ -142,6 +143,7 @@ const DefaultFallback = ({ error, resetError }) => {
 
           <div className="bg-zinc-800/50 p-4 rounded-lg mb-8 overflow-auto max-h-48 relative">
             <button
+              type="button"
               onClick={copyErrorToClipboard}
               className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded"
               title="Copy error to clipboard"

@@ -56,6 +56,7 @@ const SATELLITE_STYLE = {
   layers: [{ id: 'mapbox', type: 'raster', source: 'mapbox', minzoom: 0, maxzoom: 22 }],
 };
 
+// oxlint-disable-next-line react-doctor/no-giant-component -- Map lifecycle, layers, and interactions share one imperative MapLibre instance; splitting would obscure ownership.
 const DraftGeneratorMap = memo(function DraftGeneratorMap({
   airport,
   geojsonUrl,
@@ -70,20 +71,12 @@ const DraftGeneratorMap = memo(function DraftGeneratorMap({
   const [showDivisionGeometry, setShowDivisionGeometry] = useState(false);
   const [colorByBarsId, setColorByBarsId] = useState(false);
   const [popup, setPopup] = useState(null);
-  const [viewState, setViewState] = useState({
-    longitude: airport?.longitude || 0,
-    latitude: airport?.latitude || 0,
-    zoom: 14,
-  });
-
   useEffect(() => {
-    if (!airport) return;
-    setViewState((current) => ({
-      ...current,
-      longitude: airport.longitude,
-      latitude: airport.latitude,
+    if (!airport || !mapRef.current) return;
+    mapRef.current.jumpTo({
+      center: [airport.longitude, airport.latitude],
       zoom: 14,
-    }));
+    });
   }, [airport]);
 
   useEffect(() => {
@@ -131,8 +124,11 @@ const DraftGeneratorMap = memo(function DraftGeneratorMap({
       {airport ? (
         <Map
           ref={mapRef}
-          {...viewState}
-          onMove={(event) => setViewState(event.viewState)}
+          initialViewState={{
+            longitude: airport.longitude,
+            latitude: airport.latitude,
+            zoom: 14,
+          }}
           onClick={handleMapClick}
           onMouseMove={handleMouseMove}
           interactiveLayerIds={
@@ -144,9 +140,7 @@ const DraftGeneratorMap = memo(function DraftGeneratorMap({
                   ...(showSimulatorGeometry && simulatorGeojsonUrl
                     ? SIMULATOR_INTERACTIVE_LAYERS
                     : []),
-                  ...(showDivisionGeometry && divisionGeojson
-                    ? DIVISION_INTERACTIVE_LAYERS
-                    : []),
+                  ...(showDivisionGeometry && divisionGeojson ? DIVISION_INTERACTIVE_LAYERS : []),
                 ]
               : []
           }
@@ -429,39 +423,39 @@ function FeaturePopup({ properties }) {
             ? 'text-rose-400'
             : unsafe
               ? 'text-amber-300'
-            : simulatorSource
-              ? 'text-cyan-300'
-              : simulatorMerged
-                ? 'text-purple-300'
-                : divisionOriginal
-                  ? 'text-pink-300'
-                : 'text-emerald-400'
+              : simulatorSource
+                ? 'text-cyan-300'
+                : simulatorMerged
+                  ? 'text-purple-300'
+                  : divisionOriginal
+                    ? 'text-pink-300'
+                    : 'text-emerald-400'
         }`}
       >
         {unmatched
           ? 'Manual addition required'
           : unsafe
             ? 'Matched · removal needs review'
-          : simulatorSource
-            ? 'Raw extracted simulator row'
-            : simulatorMerged
-              ? 'Merged matcher geometry'
-              : divisionOriginal
-                ? 'Original division geometry'
-              : properties.matchedViaHoldShort
-                ? 'Aligned to simulator hold-short position'
-                : 'Matched to simulator lighting'}
+            : simulatorSource
+              ? 'Raw extracted simulator row'
+              : simulatorMerged
+                ? 'Merged matcher geometry'
+                : divisionOriginal
+                  ? 'Original division geometry'
+                  : properties.matchedViaHoldShort
+                    ? 'Aligned to simulator hold-short position'
+                    : 'Matched to simulator lighting'}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-zinc-400">
         {divisionOriginal
           ? formatType(properties.divisionType)
           : simulatorDebug
-          ? `${formatType(properties.simulatorType)}${
-              simulatorMerged ? ` · ${properties.sourceRowCount} source rows` : ''
-            }`
-          : unmatched || unsafe
-            ? properties.reason
-            : `${formatType(properties.divisionType)} · ${properties.matchPercent}% shape match`}
+            ? `${formatType(properties.simulatorType)}${
+                simulatorMerged ? ` · ${properties.sourceRowCount} source rows` : ''
+              }`
+            : unmatched || unsafe
+              ? properties.reason
+              : `${formatType(properties.divisionType)} · ${properties.matchPercent}% shape match`}
       </p>
       {!simulatorDebug && properties.divisionId ? (
         <p className="mt-2 text-[11px] font-medium text-zinc-300">

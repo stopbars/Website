@@ -1,9 +1,10 @@
 // Changelog.jsx
-import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Dropdown } from '../components/shared/Dropdown';
-import { Loader, AlertTriangle } from 'lucide-react';
+import { PageLoading } from '../components/shared/PageLoading';
+import { AlertTriangle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -26,13 +27,41 @@ const filterOptions = [
 const validFilterIds = new Set(filterOptions.map((opt) => opt.id));
 
 const isValidFilter = (value) => validFilterIds.has(value);
+const normalizeProduct = (product) => (product || '').toLowerCase().replace(/\s+/g, '-');
+const PRODUCT_NAMES = {
+  'Pilot-Client': 'Pilot Client',
+  'vatSys-Plugin': 'vatSys Plugin',
+  'EuroScope-Plugin': 'EuroScope Plugin',
+  'SimConnect.net': 'SimConnect.net',
+  Installer: 'Installer',
+};
+const RELEASE_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+const formatProductName = (product) => PRODUCT_NAMES[product] || product;
+const formatDate = (dateString) => RELEASE_DATE_FORMATTER.format(new Date(dateString));
+const renderMarkdown = (markdown) => {
+  try {
+    if (!markdown) return '';
+    let output = markdown;
+    output = output.replace(/__\*{3}([\s\S]+?)\*{3}__/g, '<u><strong><em>$1</em></strong></u>');
+    output = output.replace(/__\*{2}([\s\S]+?)\*{2}__/g, '<u><strong>$1</strong></u>');
+    output = output.replace(/__\*{1}([\s\S]+?)\*{1}__/g, '<u><em>$1</em></u>');
+    output = output.replace(/__(?!\*)([\s\S]*?)(?<!\*)__/g, '<u>$1</u>');
+    return DOMPurify.sanitize(marked.parse(output));
+  } catch {
+    return '<p class="text-red-400 text-sm">Failed to render markdown.</p>';
+  }
+};
 
+// This page is a cohesive timeline; splitting it is a non-mechanical layout refactor.
+// oxlint-disable react-doctor/no-giant-component
 const Changelog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentFilterParam = (searchParams.get(FILTER_PARAM) || '').toLowerCase();
-  const [activeFilters, setActiveFilters] = useState(() =>
-    isValidFilter(currentFilterParam) ? [currentFilterParam] : []
-  );
+  const activeFilter = isValidFilter(currentFilterParam) ? currentFilterParam : '';
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,80 +69,47 @@ const Changelog = () => {
 
   // Refs to each release block for measuring distances
   const releaseRefs = useRef([]);
-  releaseRefs.current = [];
-
-  const addReleaseRef = (el) => {
-    if (el) releaseRefs.current.push(el);
-  };
-
-  // Filter options
-  const normalizeProduct = (p) => (p || '').toLowerCase().replace(/\s+/g, '-');
 
   // Handle selection via dropdown
   const handleSelectFilter = (value) => {
-    if (!value || value === '__all__') {
-      setActiveFilters([]);
-      return;
-    }
-    const normalized = value.toLowerCase();
-    setActiveFilters(isValidFilter(normalized) ? [normalized] : []);
+    const normalized = value && value !== '__all__' ? value.toLowerCase() : '';
+    const nextFilter = isValidFilter(normalized) ? normalized : '';
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (nextFilter) params.set(FILTER_PARAM, nextFilter);
+      else params.delete(FILTER_PARAM);
+      return params;
+    });
   };
 
   const currentFilterLabel = () => {
-    if (activeFilters.length === 0) return 'All Products';
-    const f = filterOptions.find((o) => o.id === activeFilters[0]);
+    if (!activeFilter) return 'All Products';
+    const f = filterOptions.find((o) => o.id === activeFilter);
     return f ? f.label : 'All Products';
   };
 
   // Filter releases based on active filter
-  const filteredReleases =
-    activeFilters.length === 0
-      ? releases
-      : releases.filter((release) => {
-          const releaseProduct = normalizeProduct(release.product);
-          return activeFilters.some((filterId) => releaseProduct === filterId);
-        });
-
-  // Keep local filter state aligned with ?product query parameter changes
-  useEffect(() => {
-    const nextFilters = isValidFilter(currentFilterParam) ? [currentFilterParam] : [];
-    setActiveFilters((prev) => {
-      if (
-        prev.length === nextFilters.length &&
-        prev.every((val, idx) => val === nextFilters[idx])
-      ) {
-        return prev;
-      }
-      return nextFilters;
-    });
-  }, [currentFilterParam]);
-
-  // Reflect active filter selection in the URL ?product query parameter
-  useEffect(() => {
-    const nextParam = activeFilters[0] || '';
-    if (nextParam === currentFilterParam || (!nextParam && !currentFilterParam)) {
-      return;
-    }
-
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (nextParam) {
-        params.set(FILTER_PARAM, nextParam);
-      } else {
-        params.delete(FILTER_PARAM);
-      }
-      return params;
-    });
-  }, [activeFilters, currentFilterParam, setSearchParams]);
+  const filteredReleases = useMemo(
+    () =>
+      !activeFilter
+        ? releases
+        : releases.filter((release) => normalizeProduct(release.product) === activeFilter),
+    [activeFilter, releases]
+  );
 
   // Fetch releases from API
+  // The one-shot request is cancelled on unmount.
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect
   useEffect(() => {
+    const controller = new AbortController();
     const fetchReleases = async () => {
       try {
         setLoading(true);
         setError('');
 
-        const response = await fetch('https://v2.stopbars.com/releases');
+        const response = await fetch('https://v2.stopbars.com/releases', {
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           throw new Error('Failed to fetch releases');
@@ -128,14 +124,16 @@ const Changelog = () => {
 
         setReleases(sortedReleases);
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error('Error fetching releases:', err);
         setError(err.message || 'Failed to fetch releases');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchReleases();
+    return () => controller.abort();
   }, []);
 
   // Function to calculate dynamic line heights between timeline dots
@@ -187,58 +185,6 @@ const Changelog = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Render markdown with custom processing (same as ReleaseManagement)
-  const renderMarkdown = (md) => {
-    try {
-      // Preprocess custom underline syntaxes before passing to marked.
-      // Supports:
-      // __text__ => underline
-      // __*text*__ => underline + italic
-      // __**text**__ => underline + bold
-      // __***text***__ => underline + bold + italic
-      // Order matters to avoid nested double-processing.
-      const preprocess = (raw) => {
-        if (!raw) return '';
-        let out = raw;
-        // Underlined Bold Italic (triple asterisks)
-        out = out.replace(/__\*{3}([\s\S]+?)\*{3}__/g, '<u><strong><em>$1</em></strong></u>');
-        // Underlined Bold
-        out = out.replace(/__\*{2}([\s\S]+?)\*{2}__/g, '<u><strong>$1</strong></u>');
-        // Underlined Italic
-        out = out.replace(/__\*{1}([\s\S]+?)\*{1}__/g, '<u><em>$1</em></u>');
-        // Plain underline (ensure not already handled by excluding asterisk right after __ or before __)
-        // Use lookarounds to skip patterns starting/ending with * which were handled above.
-        out = out.replace(/__(?!\*)([\s\S]*?)(?<!\*)__/g, '<u>$1</u>');
-        return out;
-      };
-      const preprocessed = preprocess(md);
-      const html = marked.parse(preprocessed || '');
-      return DOMPurify.sanitize(html);
-    } catch {
-      return '<p class="text-red-400 text-sm">Failed to render markdown.</p>';
-    }
-  };
-
-  // Format product name for display
-  const formatProductName = (product) => {
-    const productMap = {
-      'Pilot-Client': 'Pilot Client',
-      'vatSys-Plugin': 'vatSys Plugin',
-      'EuroScope-Plugin': 'EuroScope Plugin',
-      'SimConnect.net': 'SimConnect.net',
-      Installer: 'Installer',
-    };
-    return productMap[product] || product;
-  };
-
-  const formatDate = (dateString) => {
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(dateString));
-  };
 
   return (
     <Layout>
@@ -295,7 +241,7 @@ const Changelog = () => {
                   { value: '__all__', label: 'All Products' },
                   ...filterOptions.map((opt) => ({ value: opt.id, label: opt.label })),
                 ]}
-                value={activeFilters.length === 0 ? '__all__' : activeFilters[0]}
+                value={activeFilter || '__all__'}
                 onChange={handleSelectFilter}
                 placeholder="All Products"
               />
@@ -308,8 +254,7 @@ const Changelog = () => {
           {/* Changelog Content */}
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader className="w-8 h-8 animate-spin text-zinc-400" />
-              <span className="ml-3 text-zinc-400">Loading changelog...</span>
+              <PageLoading label="Loading changelog…" />
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-20">
@@ -324,10 +269,10 @@ const Changelog = () => {
               <div className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center max-w-2xl mx-auto">
                 <AlertTriangle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-zinc-300 mb-2">No Releases Found</h3>
-                {activeFilters.length > 0 ? (
+                {activeFilter ? (
                   <p className="text-zinc-500 mb-2">
                     No releases match the selected filter
-                    {activeFilters.length === 1 ? ` "${currentFilterLabel()}"` : ''}.
+                    {` "${currentFilterLabel()}"`}.
                   </p>
                 ) : (
                   <p className="text-zinc-500 mb-2">
@@ -343,7 +288,9 @@ const Changelog = () => {
                 {filteredReleases.map((release, index) => (
                   <div
                     key={release.id}
-                    ref={addReleaseRef}
+                    ref={(element) => {
+                      releaseRefs.current[index] = element;
+                    }}
                     className={`relative ${index > 0 ? 'mt-12 md:mt-20' : ''}`}
                   >
                     {/* Timeline dot — hidden on mobile, shown md+ */}
@@ -432,5 +379,6 @@ const Changelog = () => {
     </Layout>
   );
 };
+// oxlint-enable react-doctor/no-giant-component
 
 export default Changelog;

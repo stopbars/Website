@@ -53,21 +53,4 @@ CardContent.propTypes = {
   className: PropTypes.string,
 };
 
-// Default Props
-Card.defaultProps = {
-  className: '',
-};
-
-CardHeader.defaultProps = {
-  className: '',
-};
-
-CardTitle.defaultProps = {
-  className: '',
-};
-
-CardContent.defaultProps = {
-  className: '',
-};
-
 export { Card, CardHeader, CardTitle, CardContent };

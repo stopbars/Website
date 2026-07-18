@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
@@ -20,6 +20,7 @@ import {
   Layers,
 } from 'lucide-react';
 
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The CRUD table and dialogs form one cohesive admin workflow with independent request and modal states.
 const DivisionManagement = () => {
   const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +47,7 @@ const DivisionManagement = () => {
   const navigate = useNavigate();
   const token = getVatsimToken();
 
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect -- This admin screen performs a one-shot authenticated load without an installed query layer.
   useEffect(() => {
     const fetchDivisions = async () => {
       try {
@@ -71,16 +73,16 @@ const DivisionManagement = () => {
     if (token) fetchDivisions();
   }, [token]);
 
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     });
-  };
+  }, []);
 
   // Helper function to get status color for airports
-  const getStatusColor = (status) => {
+  const getStatusColor = useCallback((status) => {
     switch (status.toLowerCase()) {
       case 'approved':
         return 'bg-green-400';
@@ -91,9 +93,9 @@ const DivisionManagement = () => {
       default:
         return 'bg-gray-400';
     }
-  };
+  }, []);
 
-  const getDataSubmitted = (airport) => {
+  const getDataSubmitted = useCallback((airport) => {
     const realValue =
       airport?.has_objects ??
       airport?.has_data ??
@@ -103,7 +105,7 @@ const DivisionManagement = () => {
       airport?.submitted;
 
     return Boolean(realValue);
-  };
+  }, []);
 
   const toggleDivisionExpansion = async (divisionId) => {
     const isExpanded = expandedDivisions[divisionId];
@@ -338,8 +340,8 @@ const DivisionManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+    <div className="staff-tool space-y-6">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Division Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Manage, edit, and create divisions</p>

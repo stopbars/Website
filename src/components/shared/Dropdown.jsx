@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { ChevronDown } from 'lucide-react';
 
+const EMPTY_DROPDOWN_OPTIONS = [];
+
 /**
  * Dropdown Component
  *
@@ -14,7 +16,7 @@ import { ChevronDown } from 'lucide-react';
  * @param {boolean} [props.disabled] - Whether the dropdown is disabled
  */
 export function Dropdown({
-  options = [],
+  options = EMPTY_DROPDOWN_OPTIONS,
   value,
   onChange,
   placeholder = 'Select...',
@@ -80,7 +82,7 @@ export function Dropdown({
           {options.map((option, index) => {
             if (option.isHeader) {
               return (
-                <div key={`header-${index}`} className="px-4 pt-3 pb-1">
+                <div key={`header-${option.label}`} className="px-4 pt-3 pb-1">
                   <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
                     {option.label}
                   </p>
@@ -134,5 +136,3 @@ Dropdown.propTypes = {
   className: PropTypes.string,
   disabled: PropTypes.bool,
 };
-
-export default Dropdown;

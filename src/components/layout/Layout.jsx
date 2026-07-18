@@ -1,14 +1,28 @@
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import PropTypes from 'prop-types';
-import { useEffect, useCallback, useRef, useState } from 'react';
+import {
+  createContext,
+  memo,
+  Suspense,
+  use,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useLocation } from 'react-router-dom';
 import { ConsentBanner } from '../shared/ConsentBanner';
+import { PageLoading } from '../shared/PageLoading';
 import { CONSENT_KEY } from '../../utils/posthogLoader';
 
-export const Layout = ({ children }) => {
-  const { pathname } = useLocation();
-  const [showConsentBanner, setShowConsentBanner] = useState(() => {
+const StableNavbar = memo(Navbar);
+const StableFooter = memo(Footer);
+const LayoutContext = createContext(false);
+
+const ConsentLayer = memo(function ConsentLayer() {
+  const [show, setShow] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
       const consent = window.localStorage.getItem(CONSENT_KEY);
@@ -17,19 +31,23 @@ export const Layout = ({ children }) => {
         typeof navigator !== 'undefined' &&
         (navigator.doNotTrack === '1' || window.doNotTrack === '1');
 
-      if (!consent) {
-        if (gpc || dnt) {
-          window.localStorage.setItem(CONSENT_KEY, 'denied');
-          return false;
-        }
-        return true;
+      if (!consent && (gpc || dnt)) {
+        window.localStorage.setItem(CONSENT_KEY, 'denied');
+        return false;
       }
 
-      return false;
+      return !consent;
     } catch {
       return false;
     }
   });
+
+  return <ConsentBanner show={show} setShow={setShow} />;
+});
+
+/* oxlint-disable react-doctor/advanced-event-handler-refs -- The Easter-egg listener intentionally follows its stable text-transform callbacks. */
+const LayoutFrame = ({ children }) => {
+  const { pathname } = useLocation();
   const keyBufferRef = useRef('');
   const layoutRef = useRef(null);
 
@@ -97,7 +115,7 @@ export const Layout = ({ children }) => {
   );
 
   // Page navigation effect
-  useEffect(() => {
+  useLayoutEffect(() => {
     window.scrollTo(0, 0);
 
     // Always restore text when navigating between pages
@@ -140,13 +158,35 @@ Support BARS: https://stopbars.com/donate`,
     <div ref={layoutRef} className="min-h-screen bg-zinc-950 text-white relative">
       <div className="flex flex-col min-h-screen">
         <div className="z-40">
-          <Navbar />
+          <StableNavbar />
         </div>
-        <main className="grow container mx-auto px-6 relative">{children}</main>
-        <ConsentBanner show={showConsentBanner} setShow={setShowConsentBanner} />
-        <Footer onOpenConsent={() => setShowConsentBanner(true)} />
+        <main className="grow container mx-auto px-6 relative">
+          <Suspense fallback={<PageLoading page label="Loading page…" />}>
+            <div key={pathname} className="route-surface">
+              {children}
+            </div>
+          </Suspense>
+        </main>
+        <ConsentLayer />
+        <StableFooter />
       </div>
     </div>
+  );
+};
+
+LayoutFrame.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
+export const Layout = ({ children }) => {
+  const isInsideLayout = use(LayoutContext);
+
+  if (isInsideLayout) return children;
+
+  return (
+    <LayoutContext.Provider value>
+      <LayoutFrame>{children}</LayoutFrame>
+    </LayoutContext.Provider>
   );
 };
 

@@ -13,7 +13,10 @@ export const Breadcrumb = ({ children }) => {
           const isLast = index === totalItems - 1;
 
           return (
-            <li key={index} className="flex items-center gap-2">
+            <li
+              key={child?.key ?? child?.props?.link ?? child?.props?.title}
+              className="flex items-center gap-2"
+            >
               {child && typeof child === 'object'
                 ? { ...child, props: { ...child.props, isActive: isLast } }
                 : child}
@@ -64,5 +67,3 @@ BreadcrumbItem.propTypes = {
   link: PropTypes.string,
   isActive: PropTypes.bool,
 };
-
-export default Breadcrumb;

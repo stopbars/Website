@@ -1,34 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
+import { useRevealGroup } from '../../hooks/useRevealGroup';
 
 export const Features = () => {
-  const featureRefs = useRef([]);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('opacity-100', 'translate-y-0');
-            entry.target.classList.remove('opacity-0', 'translate-y-12');
-          }
-        });
-      },
-      { threshold: 0.1, rootMargin: '0px 0px -80px 0px' }
-    );
-
-    featureRefs.current.forEach((ref) => {
-      if (ref) observer.observe(ref);
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  const setFeatureRef = (index) => (el) => {
-    featureRefs.current[index] = el;
-  };
+  const sectionRef = useRef(null);
+  useRevealGroup(sectionRef);
 
   return (
-    <section className="py-16" id="features">
+    <section ref={sectionRef} className="py-16" id="features">
       <div className="max-w-7xl mx-auto px-6">
         {/* Section Header */}
         <div className="text-center mb-20 max-w-2xl mx-auto">
@@ -42,8 +20,8 @@ export const Features = () => {
         {/* Zigzag Features */}
         <div className="space-y-40 mb-32 max-w-5xl mx-auto">
           <div
-            ref={setFeatureRef(0)}
-            className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+            data-reveal
+            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
           >
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl text-left font-bold">
@@ -67,8 +45,8 @@ export const Features = () => {
           </div>
 
           <div
-            ref={setFeatureRef(1)}
-            className="flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+            data-reveal
+            className="deferred-content flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16"
           >
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Follow The Greens</h3>
@@ -89,8 +67,8 @@ export const Features = () => {
           </div>
 
           <div
-            ref={setFeatureRef(2)}
-            className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+            data-reveal
+            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
           >
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Lead-On Lights</h3>
@@ -111,8 +89,8 @@ export const Features = () => {
           </div>
 
           <div
-            ref={setFeatureRef(3)}
-            className="flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+            data-reveal
+            className="deferred-content flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16"
           >
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">VATSIM Integration</h3>
@@ -133,8 +111,8 @@ export const Features = () => {
           </div>
 
           <div
-            ref={setFeatureRef(4)}
-            className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+            data-reveal
+            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
           >
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Multi-Simulator Support</h3>
@@ -155,8 +133,8 @@ export const Features = () => {
           </div>
 
           <div
-            ref={setFeatureRef(5)}
-            className="flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+            data-reveal
+            className="deferred-content flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16"
           >
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Global Airport Coverage</h3>
@@ -178,8 +156,8 @@ export const Features = () => {
           </div>
 
           <div
-            ref={setFeatureRef(6)}
-            className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16 opacity-0 translate-y-12 transition-all duration-1000 ease-out"
+            data-reveal
+            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
           >
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Division Management</h3>
@@ -204,5 +182,3 @@ export const Features = () => {
     </section>
   );
 };
-
-export default Features;

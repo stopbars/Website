@@ -1,5 +1,20 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
+
+const Badge = ({ children, onClick }) => (
+  <button
+    onClick={onClick}
+    className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 transition-all border border-zinc-700/50 hover:border-zinc-600"
+    type="button"
+  >
+    {children}
+  </button>
+);
+
+Badge.propTypes = {
+  children: PropTypes.node,
+  onClick: PropTypes.func,
+};
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { AlertTriangle, CheckCircle2, Loader2, Trash2, Eraser, Bomb } from 'lucide-react';
 
@@ -110,24 +125,10 @@ export default function CacheManagement() {
     }
   };
 
-  const Badge = ({ children, onClick }) => (
-    <button
-      onClick={onClick}
-      className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 transition-all border border-zinc-700/50 hover:border-zinc-600"
-      type="button"
-    >
-      {children}
-    </button>
-  );
-  Badge.propTypes = {
-    children: PropTypes.node,
-    onClick: PropTypes.func,
-  };
-
   return (
-    <div className="space-y-6">
+    <div className="staff-tool space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Cache Management</h2>
           <p className="text-sm text-zinc-400 mt-1">Purge cache keys and namespaces</p>
@@ -179,10 +180,14 @@ export default function CacheManagement() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+              <label
+                htmlFor="cache-key"
+                className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2"
+              >
                 Key
               </label>
               <input
+                id="cache-key"
                 type="text"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
@@ -191,11 +196,15 @@ export default function CacheManagement() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+              <label
+                htmlFor="cache-namespace"
+                className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2"
+              >
                 Namespace
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
+                  id="cache-namespace"
                   type="text"
                   value={namespace}
                   onChange={(e) => setNamespace(e.target.value)}
@@ -203,6 +212,7 @@ export default function CacheManagement() {
                   className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
                 />
                 <button
+                  type="button"
                   onClick={() => setNamespace('')}
                   className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
                 >
@@ -218,6 +228,7 @@ export default function CacheManagement() {
               </div>
             </div>
             <button
+              type="button"
               onClick={handlePurgeKey}
               disabled={loading || !key || !namespace}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
@@ -246,11 +257,15 @@ export default function CacheManagement() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2">
+              <label
+                htmlFor="cache-clear-namespace"
+                className="block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-2"
+              >
                 Namespace
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
+                  id="cache-clear-namespace"
                   type="text"
                   value={namespace}
                   onChange={(e) => setNamespace(e.target.value)}
@@ -258,6 +273,7 @@ export default function CacheManagement() {
                   className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
                 />
                 <button
+                  type="button"
                   onClick={handlePurgeNamespace}
                   disabled={loading}
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
@@ -297,6 +313,7 @@ export default function CacheManagement() {
             </div>
           </div>
           <button
+            type="button"
             onClick={handlePurgeAll}
             disabled={loading}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"

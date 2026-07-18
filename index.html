@@ -3,13 +3,22 @@
   <head>
     <script type="module">
       if (import.meta.env.DEV) {
-        import("react-grab");
+        import('react-grab');
       }
     </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <style>
+      html,
+      body,
+      #root {
+        min-height: 100%;
+        margin: 0;
+        background: #09090b;
+      }
+    </style>
 
     <!-- Primary Meta Tags -->
     <title>BARS - Advanced Airport Lighting Simulation for VATSIM</title>
@@ -79,11 +88,6 @@
     <link rel="dns-prefetch" href="https://v2.stopbars.com" />
     <link rel="dns-prefetch" href="https://cdn.stopbars.com" />
 
-    <!-- Prefetch frequent navigation targets -->
-    <link rel="prefetch" href="/status" as="document" />
-    <link rel="prefetch" href="/contribute" as="document" />
-    <link rel="prefetch" href="/account" as="document" />
-
     <!-- Structured Data for Organization -->
     <script type="application/ld+json">
       {
@@ -110,11 +114,6 @@
         "url": "https://stopbars.com"
       }
     </script>
-
-    <!-- Browser Cache Control -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
   </head>
   <body>
     <noscript>

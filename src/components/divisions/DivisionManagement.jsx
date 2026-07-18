@@ -6,6 +6,7 @@ import { Button } from '../shared/Button';
 import { Dialog } from '../shared/Dialog';
 import { Dropdown } from '../shared/Dropdown';
 import { Toast } from '../shared/Toast';
+import { PageLoading } from '../shared/PageLoading';
 import PropTypes from 'prop-types';
 import {
   Plus,
@@ -25,6 +26,29 @@ import Map, { Source, Layer, Marker, NavigationControl, ScaleControl } from 'rea
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
+const getStatusColor = (status) => {
+  switch (status.toLowerCase()) {
+    case 'approved':
+      return 'bg-green-400';
+    case 'pending':
+      return 'bg-orange-400';
+    case 'rejected':
+      return 'bg-red-400';
+    default:
+      return 'bg-gray-400';
+  }
+};
+
+const getDataSubmitted = (airport) =>
+  Boolean(
+    airport?.has_objects ??
+    airport?.has_data ??
+    airport?.data_submitted ??
+    airport?.has_submission ??
+    airport?.dataSubmitted ??
+    airport?.submitted
+  );
 
 const COLORS = {
   green: '#4ade80',
@@ -477,6 +501,9 @@ const SATELLITE_STYLE = {
   ],
 };
 
+// The page coordinates several independent dialogs and a map preview; combining that state or
+// splitting the component is a non-mechanical architecture change with substantial behavior risk.
+// oxlint-disable-next-line react-doctor/no-giant-component react-doctor/prefer-useReducer
 const DivisionManagement = () => {
   const { id: divisionId } = useParams();
   const navigate = useNavigate();
@@ -513,7 +540,7 @@ const DivisionManagement = () => {
     latitude: 0,
     zoom: 14,
   });
-  const [mapBounds, setMapBounds] = useState(null);
+  const mapBoundsRef = useRef(null);
 
   const currentMemberRole = useMemo(() => {
     if (!currentUserId) return null;
@@ -535,31 +562,6 @@ const DivisionManagement = () => {
     description: '',
   });
 
-  const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'approved':
-        return 'bg-green-400';
-      case 'pending':
-        return 'bg-orange-400';
-      case 'rejected':
-        return 'bg-red-400';
-      default:
-        return 'bg-gray-400';
-    }
-  };
-
-  const getDataSubmitted = (airport) => {
-    const realValue =
-      airport?.has_objects ??
-      airport?.has_data ??
-      airport?.data_submitted ??
-      airport?.has_submission ??
-      airport?.dataSubmitted ??
-      airport?.submitted;
-
-    return Boolean(realValue);
-  };
-
   useEffect(() => {
     if (typeof document === 'undefined') return;
     if (document.getElementById('bars-map-marker-styles')) return;
@@ -570,11 +572,15 @@ const DivisionManagement = () => {
     document.head.appendChild(style);
   }, []);
 
+  // All requests share a controller that is aborted when the route inputs change or unmount.
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect
   useEffect(() => {
+    const controller = new AbortController();
     const fetchData = async () => {
       try {
         const staffResponse = await fetch('https://v2.stopbars.com/auth/is-staff', {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
         });
         if (staffResponse.ok) {
           const staffData = await staffResponse.json();
@@ -585,6 +591,7 @@ const DivisionManagement = () => {
 
         const accountResponse = await fetch('https://v2.stopbars.com/auth/account', {
           headers: { 'X-Vatsim-Token': token },
+          signal: controller.signal,
         });
         if (accountResponse.ok) {
           const accountData = await accountResponse.json();
@@ -592,6 +599,7 @@ const DivisionManagement = () => {
         }
         const divisionResponse = await fetch(`https://v2.stopbars.com/divisions/${divisionId}`, {
           headers: { 'X-Vatsim-Token': token },
+          signal: controller.signal,
         });
         if (!divisionResponse.ok) throw new Error('Failed to fetch division');
         const divisionData = await divisionResponse.json();
@@ -600,6 +608,7 @@ const DivisionManagement = () => {
           `https://v2.stopbars.com/divisions/${divisionId}/members`,
           {
             headers: { 'X-Vatsim-Token': token },
+            signal: controller.signal,
           }
         );
         if (!membersResponse.ok) throw new Error('Failed to fetch members');
@@ -609,12 +618,14 @@ const DivisionManagement = () => {
           `https://v2.stopbars.com/divisions/${divisionId}/airports`,
           {
             headers: { 'X-Vatsim-Token': token },
+            signal: controller.signal,
           }
         );
         if (!airportsResponse.ok) throw new Error('Failed to fetch airports');
         const airportsData = await airportsResponse.json();
         setAirports(airportsData);
       } catch (err) {
+        if (err.name === 'AbortError') return;
         setToastConfig({
           variant: 'destructive',
           title: 'Error',
@@ -622,10 +633,11 @@ const DivisionManagement = () => {
         });
         setShowToast(true);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     if (token && divisionId) fetchData();
+    return () => controller.abort();
   }, [token, divisionId, navigate]);
 
   useEffect(() => {
@@ -640,7 +652,7 @@ const DivisionManagement = () => {
     setMapLoading(true);
     setMapError('');
     setMapPoints([]);
-    setMapBounds(null);
+    mapBoundsRef.current = null;
 
     try {
       const airportResponse = await fetch(`https://v2.stopbars.com/airports?icao=${airport.icao}`);
@@ -670,10 +682,10 @@ const DivisionManagement = () => {
         typeof airportData.bbox_max_lon === 'number';
 
       if (hasBoundingBox) {
-        setMapBounds([
+        mapBoundsRef.current = [
           [airportData.bbox_min_lon, airportData.bbox_min_lat],
           [airportData.bbox_max_lon, airportData.bbox_max_lat],
-        ]);
+        ];
       }
 
       const pointsResponse = await fetch(`https://v2.stopbars.com/airports/${airport.icao}/points`);
@@ -711,18 +723,15 @@ const DivisionManagement = () => {
     setMapAirport(null);
     setMapPoints([]);
     setMapError('');
-    setMapBounds(null);
+    mapBoundsRef.current = null;
   };
 
-  const onMapLoad = useCallback(
-    (event) => {
-      addCapIcons(event.target);
-      if (mapBounds?.length === 2) {
-        event.target.fitBounds(mapBounds, { padding: 40 });
-      }
-    },
-    [mapBounds]
-  );
+  const onMapLoad = useCallback((event) => {
+    addCapIcons(event.target);
+    if (mapBoundsRef.current?.length === 2) {
+      event.target.fitBounds(mapBoundsRef.current, { padding: 40 });
+    }
+  }, []);
 
   const { mapMarkers, lowerLinesSource, upperLinesSource, lowerCapsSource, upperCapsSource } =
     useMemo(() => {
@@ -1131,14 +1140,9 @@ const DivisionManagement = () => {
     }
   };
 
-  if (loading)
-    return (
-      <Layout>
-        <div className="pt-40 pb-20 min-h-screen flex items-center justify-center">
-          <Loader className="w-8 h-8 animate-spin text-zinc-400" />
-        </div>
-      </Layout>
-    );
+  if (loading) {
+    return <PageLoading page label="Loading division management…" />;
+  }
 
   return (
     <Layout>
@@ -1212,6 +1216,7 @@ const DivisionManagement = () => {
                             </div>
                           </div>
                           <button
+                            type="button"
                             onClick={() => confirmRemoveMember(member)}
                             className={`p-1.5 rounded-lg transition-colors ${
                               removeDisabled
@@ -1284,7 +1289,7 @@ const DivisionManagement = () => {
                   </div>
                 ) : (
                   airports
-                    .sort((a, b) => a.icao.localeCompare(b.icao))
+                    .toSorted((a, b) => a.icao.localeCompare(b.icao))
                     .map((airport) => (
                       <div
                         key={airport.id}
@@ -1300,6 +1305,8 @@ const DivisionManagement = () => {
                           <div className="flex items-center gap-1">
                             {getDataSubmitted(airport) && (
                               <button
+                                type="button"
+                                aria-label={`Preview ${airport.icao} on map`}
                                 onClick={() => openMapPreview(airport)}
                                 className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                               >
@@ -1308,6 +1315,8 @@ const DivisionManagement = () => {
                             )}
                             {airport.status === 'approved' && (
                               <button
+                                type="button"
+                                aria-label={`Manage ${airport.icao}`}
                                 onClick={() =>
                                   navigate(`/divisions/${divisionId}/airports/${airport.icao}`)
                                 }
@@ -1318,6 +1327,8 @@ const DivisionManagement = () => {
                             )}
                             {(airport.status === 'pending' || airport.status === 'rejected') && (
                               <button
+                                type="button"
+                                aria-label={`Delete ${airport.icao} request`}
                                 onClick={() => confirmDeleteAirport(airport)}
                                 className={`p-1.5 rounded-lg transition-colors ${
                                   isDivisionMember || canManageAsStaff
@@ -1424,8 +1435,14 @@ const DivisionManagement = () => {
         <form onSubmit={handleAddMember} className="space-y-4">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">VATSIM CID</label>
+              <label
+                htmlFor="new-member-cid"
+                className="block text-sm font-medium text-zinc-300 mb-2"
+              >
+                VATSIM CID
+              </label>
               <input
+                id="new-member-cid"
                 type="text"
                 inputMode="numeric"
                 pattern="\d*"
@@ -1442,13 +1459,12 @@ const DivisionManagement = () => {
                 }}
                 className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 placeholder="Enter CID"
-                autoFocus
                 required
                 disabled={addingMember}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">Role</label>
+              <div className="block text-sm font-medium text-zinc-300 mb-2">Role</div>
               <Dropdown
                 options={[
                   { value: 'nav_member', label: 'Nav Member' },
@@ -1511,15 +1527,20 @@ const DivisionManagement = () => {
       >
         <form onSubmit={handleAddAirport} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">Airport ICAO</label>
+            <label
+              htmlFor="new-airport-icao"
+              className="block text-sm font-medium text-zinc-300 mb-2"
+            >
+              Airport ICAO
+            </label>
             <input
+              id="new-airport-icao"
               type="text"
               value={newAirportIcao}
               onChange={(e) => setNewAirportIcao(e.target.value.toUpperCase())}
               className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all uppercase"
               maxLength={4}
               pattern="[A-Za-z]{4}"
-              autoFocus
               required
               disabled={addingAirport}
             />

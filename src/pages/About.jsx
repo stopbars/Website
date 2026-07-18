@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Mail, Check } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Tooltip } from '../components/shared/Tooltip';
+import { useRevealGroup } from '../hooks/useRevealGroup';
 
-const TeamMemberCard = ({ name, role, email }) => {
+const TeamMemberCard = ({ name, position, email }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopyEmail = async () => {
@@ -18,11 +19,13 @@ const TeamMemberCard = ({ name, role, email }) => {
     <Card className="flex items-center justify-between p-4!">
       <div>
         <p className="font-medium text-white">{name}</p>
-        <p className="text-sm text-zinc-400">{role}</p>
+        <p className="text-sm text-zinc-400">{position}</p>
       </div>
       <Tooltip content={copied ? 'Copied!' : email}>
         <button
+          type="button"
           onClick={handleCopyEmail}
+          aria-label={`Copy ${name}'s email address`}
           className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
         >
           {copied ? <Check className="w-5 h-5 text-emerald-400" /> : <Mail className="w-5 h-5" />}
@@ -34,44 +37,25 @@ const TeamMemberCard = ({ name, role, email }) => {
 
 TeamMemberCard.propTypes = {
   name: PropTypes.string.isRequired,
-  role: PropTypes.string.isRequired,
+  position: PropTypes.string.isRequired,
   email: PropTypes.string.isRequired,
 };
 
 const About = () => {
-  const sectionRefs = useRef([]);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('opacity-100', 'translate-y-0');
-            entry.target.classList.remove('opacity-0', 'translate-y-10');
-          }
-        });
-      },
-      { threshold: 0.1, rootMargin: '0px 0px -80px 0px' }
-    );
-
-    sectionRefs.current.forEach((ref) => {
-      if (ref) observer.observe(ref);
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  const setSectionRef = (index) => (el) => {
-    sectionRefs.current[index] = el;
-  };
+  const contentRef = useRef(null);
+  useRevealGroup(contentRef);
 
   return (
     <Layout>
       {/* Hero Banner */}
       <div className="relative w-full h-50 sm:h-75 md:h-112.5 mt-23.75 sm:mt-16 overflow-hidden">
         <img
-          src="/AboutBanner.png"
+          src="/AboutBanner.webp"
           alt="About banner"
+          width="1803"
+          height="671"
+          fetchPriority="high"
+          decoding="async"
           className="w-full h-full object-cover object-center"
           draggable={false}
         />
@@ -79,12 +63,9 @@ const About = () => {
         <div className="absolute inset-0 bg-linear-to-t from-zinc-950 via-zinc-950/40 to-transparent pointer-events-none" />
       </div>
 
-      <section className="pt-10 pb-20">
+      <section ref={contentRef} className="pt-10 pb-20">
         <div className="max-w-4xl mx-auto px-6">
-          <div
-            ref={setSectionRef(0)}
-            className="space-y-6 pb-12 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
-          >
+          <div data-reveal className="space-y-6 pb-12">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight">What is BARS?</h1>
             <p className="text-base md:text-lg text-zinc-400 leading-relaxed">
               BARS is an advanced airport lighting simulation platform that synchronizes real-time
@@ -105,10 +86,7 @@ const About = () => {
             </p>
           </div>
 
-          <div
-            ref={setSectionRef(1)}
-            className="pt-10 pb-12 border-t border-zinc-900 space-y-4 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
-          >
+          <div data-reveal className="pt-10 pb-12 border-t border-zinc-900 space-y-4">
             <h2 className="text-2xl md:text-3xl font-semibold">Why it exists</h2>
             <p className="text-zinc-400 leading-relaxed">
               BARS exists because there was a clear gap and demand for such advanced lighting
@@ -124,10 +102,7 @@ const About = () => {
             </p>
           </div>
 
-          <div
-            ref={setSectionRef(2)}
-            className="pt-10 pb-12 border-t border-zinc-900 space-y-4 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
-          >
+          <div data-reveal className="pt-10 pb-12 border-t border-zinc-900 space-y-4">
             <h2 className="text-2xl md:text-3xl font-semibold">Where it started</h2>
             <p className="text-zinc-400 leading-relaxed">
               For years, the idea of controllers managing airport lighting directly into pilots
@@ -203,10 +178,7 @@ const About = () => {
             </p>
           </div>
 
-          <div
-            ref={setSectionRef(3)}
-            className="pt-10 pb-12 border-t border-zinc-900 space-y-4 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
-          >
+          <div data-reveal className="pt-10 pb-12 border-t border-zinc-900 space-y-4">
             <h2 className="text-2xl md:text-3xl font-semibold">What’s planned</h2>
             <p className="text-zinc-400 leading-relaxed">
               We are continuing our mission to deliver an advanced airport lighting platform that is
@@ -222,25 +194,22 @@ const About = () => {
             </p>
           </div>
 
-          <div
-            ref={setSectionRef(4)}
-            className="pt-10 pb-12 border-t border-zinc-900 space-y-6 opacity-0 translate-y-10 transition-all duration-1000 ease-out"
-          >
+          <div data-reveal className="pt-10 pb-12 border-t border-zinc-900 space-y-6">
             <h2 className="text-2xl md:text-3xl font-semibold">The Team</h2>
             <div className="space-y-4">
               <TeamMemberCard
                 name="Edward M"
-                role="Co-founder, Lead Developer"
+                position="Co-founder, Lead Developer"
                 email="edward@stopbars.com"
               />
               <TeamMemberCard
                 name="Charlie H"
-                role="Co-founder, Product Manager"
+                position="Co-founder, Product Manager"
                 email="charlie@stopbars.com"
               />
               <TeamMemberCard
                 name="19wintersp"
-                role="EuroScope Plugin Maintainer"
+                position="EuroScope Plugin Maintainer"
                 email="contact@stopbars.com"
               />
             </div>

@@ -87,6 +87,42 @@ Thank you for your interest in contributing to the BARS website! This guide will
    - `bun run build` - Build for production
    - `bun run preview` - Preview production build locally
    - `bun run lint` - Run ESLint to check code quality
+   - `bun run doctor` - Audit React correctness, accessibility, and performance patterns
+   - `bun run perf:trace` - Capture a Chrome performance trace for the home page
+
+### Performance Profiling
+
+Install the Playwright Chromium binary once after installing dependencies:
+
+```bash
+bunx playwright install chromium
+```
+
+Start the development server, then capture the route you want to investigate:
+
+```bash
+bun run perf:trace
+bun run perf:trace /global-status global-status
+bun run perf:trace http://localhost:5173/contribute contribute
+```
+
+Each run writes a full Chrome trace and a smaller `.summary.json` report to
+`performance-traces/`. The directory is ignored by Git.
+
+For authenticated routes, save a Playwright storage-state file locally and set
+`BARS_TRACE_STORAGE_STATE` to its path before running the trace command. Do not
+commit storage-state files because they can contain session credentials.
+
+React Grab and React Scan are opt-in development diagnostics. Enable either one
+in `.env.local`, then restart Vite:
+
+```bash
+VITE_ENABLE_REACT_GRAB=true
+VITE_ENABLE_REACT_SCAN=true
+```
+
+Keep both disabled during load traces unless you are specifically measuring the
+diagnostic tooling itself.
 
 ## Development Guidelines
 

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -21,6 +21,9 @@ import {
   getContributionDisabledMessage,
 } from '../utils/contributionPolicy';
 
+const StableXMLMap = memo(XMLMap);
+
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/prefer-tag-over-role -- The test/upload workflow is cohesive; the composite drop zone contains nested content and a hidden file input, so it cannot validly become a native button. */
 const ContributeTest = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -327,7 +330,7 @@ const ContributeTest = () => {
                 </div>
 
                 {xmlData || (showRemoveAreas && supportsXmlData) ? (
-                  <XMLMap
+                  <StableXMLMap
                     xmlData={xmlData}
                     removeAreasXmlData={supportsXmlData}
                     height="500px"
@@ -360,6 +363,13 @@ const ContributeTest = () => {
                           : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
                   }`}
                   onClick={() => fileInputRef.current.click()}
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      fileInputRef.current.click();
+                    }
+                  }}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
@@ -399,6 +409,7 @@ const ContributeTest = () => {
                   )}
                   <input
                     type="file"
+                    aria-label="Select XML file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     accept=".xml"
@@ -446,6 +457,7 @@ const ContributeTest = () => {
                 <div className="space-y-3">
                   {/* Toggle Polylines Button */}
                   <button
+                    type="button"
                     onClick={handleTogglePolyLines}
                     disabled={!isXmlTested}
                     className={`w-full flex items-center p-2.5 rounded-lg border-2 transition-all cursor-pointer ${
@@ -503,6 +515,7 @@ const ContributeTest = () => {
 
                   {/* Toggle Remove Areas Button */}
                   <button
+                    type="button"
                     onClick={handleToggleRemoveAreas}
                     disabled={!isXmlTested || !supportsXmlData}
                     className={`w-full flex items-center p-2.5 rounded-lg border-2 transition-all cursor-pointer ${

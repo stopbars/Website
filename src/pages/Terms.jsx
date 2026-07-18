@@ -1,6 +1,7 @@
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 
+/* oxlint-disable react-doctor/no-giant-component -- The terms document is cohesive static legal content; splitting it would obscure document structure. */
 const Terms = () => {
   return (
     <Layout>

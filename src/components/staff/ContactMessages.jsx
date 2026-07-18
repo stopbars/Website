@@ -49,6 +49,7 @@ StatusBadge.propTypes = {
   status: PropTypes.string,
 };
 
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The mailbox list/detail workflow is cohesive and its request, selection, filter, and banner states transition independently.
 export default function ContactMessages() {
   const token = getVatsimToken();
   const apiBase = 'https://v2.stopbars.com';
@@ -65,8 +66,6 @@ export default function ContactMessages() {
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [deletingMessage, setDeletingMessage] = useState(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
-
-  const clearBanners = () => {};
 
   const fetchMessages = useCallback(async () => {
     if (!token) return;
@@ -120,7 +119,6 @@ export default function ContactMessages() {
 
   const updateStatus = async (id, newStatus) => {
     if (!STATUSES.includes(newStatus)) return;
-    clearBanners();
     setUpdatingStatusId(id);
     try {
       const res = await fetch(`${apiBase}/contact/${id}/status`, {
@@ -160,7 +158,6 @@ export default function ContactMessages() {
   };
 
   const deleteMessage = async (id) => {
-    clearBanners();
     setIsDeletingMessage(true);
     try {
       const res = await fetch(`${apiBase}/contact/${id}`, {
@@ -208,9 +205,9 @@ export default function ContactMessages() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="staff-tool space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Contact Messages</h2>
           <p className="text-sm text-zinc-400 mt-1">View and respond to user messages</p>
@@ -238,10 +235,11 @@ export default function ContactMessages() {
                 msg.createdAt || msg.created || msg.submittedAt || msg.timestamp || Date.now()
               );
               return (
-                <div
+                <button
+                  type="button"
                   key={msg.id}
                   onClick={() => setSelectedId(msg.id)}
-                  className={`rounded-xl border bg-zinc-900/50 p-4 cursor-pointer transition-[background-color,border-color,transform] duration-150 ease-out active:scale-[0.96] ${
+                  className={`w-full text-left rounded-xl border bg-zinc-900/50 p-4 cursor-pointer transition-[background-color,border-color,transform] duration-150 ease-out active:scale-[0.96] ${
                     selectedId === msg.id
                       ? 'border-blue-500/50 bg-blue-500/5'
                       : 'border-zinc-800 hover:border-zinc-700'
@@ -270,7 +268,7 @@ export default function ContactMessages() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })
           )}
@@ -301,6 +299,7 @@ export default function ContactMessages() {
               <div className="flex flex-wrap gap-2">
                 {STATUSES.filter((s) => s !== (selectedMessage.status || 'pending')).map((s) => (
                   <button
+                    type="button"
                     key={s}
                     disabled={updatingStatusId === selectedMessage.id}
                     onClick={() => updateStatus(selectedMessage.id, s)}
@@ -313,6 +312,7 @@ export default function ContactMessages() {
                   </button>
                 ))}
                 <button
+                  type="button"
                   onClick={() => {
                     if (selectedMessage.email) {
                       navigator.clipboard.writeText(selectedMessage.email).catch(() => {});
@@ -331,6 +331,7 @@ export default function ContactMessages() {
                   Reply
                 </button>
                 <button
+                  type="button"
                   onClick={() => setDeletingMessage(selectedMessage)}
                   disabled={isDeletingMessage}
                   className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-red-500/20 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
