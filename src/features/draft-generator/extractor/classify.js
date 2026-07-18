@@ -59,12 +59,6 @@ const TOKEN_EXPANSIONS = new Map([
   ['wh', ['white']],
 ]);
 const TARGET_LIGHT_CLASSIFICATIONS = new Set(['stopbar', 'lead-on', 'taxi-centerline']);
-const DEBUG_LIGHT_EXCLUDED_CLASSIFICATIONS = new Set([
-  'not-light',
-  'unknown',
-  'apron',
-  'airfield-light',
-]);
 
 export function classifyObject({ sourceType, rawTag, guid, name, extraText }) {
   const { haystack, expansionReasons } = buildHeuristicHaystack(
@@ -227,10 +221,6 @@ export function isLikelyLightClassification(classification) {
 
 export function isTargetLightClassification(classification) {
   return TARGET_LIGHT_CLASSIFICATIONS.has(classification);
-}
-
-function isDebugLightClassification(classification) {
-  return !DEBUG_LIGHT_EXCLUDED_CLASSIFICATIONS.has(classification);
 }
 
 function buildHeuristicHaystack(value) {

@@ -779,7 +779,6 @@ function buildRunwayLightZones(runway) {
     }
     const thresholdAlong = end === 'primary' ? primaryThresholdAlong : secondaryThresholdAlong;
     const direction = end === 'primary' ? 1 : -1;
-    const threshold = end === 'primary' ? primaryThreshold : secondaryThreshold;
 
     if (approach.endLights) {
       zones.push(
@@ -1096,10 +1095,6 @@ export function extractTaxiwayGraph(buffer, sourceFile) {
   const holdShortRows = graphs.flatMap((graph) => buildHoldShortTopologyRows(sourceFile, graph));
 
   return { graphs, lightRows, holdShortRows };
-}
-
-function extractTaxiwayLightRows(buffer, sourceFile) {
-  return extractTaxiwayGraph(buffer, sourceFile).lightRows;
 }
 
 export function buildHoldShortTopologyRows(sourceFile, graph) {

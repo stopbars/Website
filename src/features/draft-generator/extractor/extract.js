@@ -1,5 +1,4 @@
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { extractBglData } from './bgl.js';
 import {
   classifyObject,
@@ -2130,57 +2129,4 @@ function sourceTypeFromTag(tagName) {
     return 'scenery-object';
   }
   return 'unknown';
-}
-
-function summarizeExtraction(data) {
-  const likelyLights = data.instances.filter((instance) =>
-    isLikelyLightClassification(instance.classification)
-  ).length;
-  const targetLights = data.instances.filter((instance) =>
-    isTargetLightClassification(instance.classification)
-  ).length;
-  const targetLightRows = data.lightRows.filter((row) =>
-    isTargetLightClassification(row.classification)
-  ).length;
-  const sourceLightRows = data.lightRows.filter(isSourceBackedLightRow).length;
-  const sourceTargetLightRows = data.lightRows.filter(
-    (row) => isSourceBackedLightRow(row) && isTargetLightClassification(row.classification)
-  ).length;
-  const inferredLightRows = data.lightRows.filter((row) => row.inferred).length;
-
-  return {
-    filesScanned: data.meta.filesScanned,
-    xmlFilesParsed: data.meta.xmlFilesParsed,
-    bglFilesParsed: data.meta.bglFilesParsed ?? 0,
-    modelLibraryEntries: data.meta.modelLibraryEntries ?? 0,
-    taxiwayGraphsParsed: data.meta.taxiwayGraphsParsed ?? 0,
-    taxiwayPointsParsed: data.meta.taxiwayPointsParsed ?? 0,
-    taxiwayParkingsParsed: data.meta.taxiwayParkingsParsed ?? 0,
-    taxiwayPathsParsed: data.meta.taxiwayPathsParsed ?? 0,
-    taxiwayNamesParsed: data.meta.taxiwayNamesParsed ?? 0,
-    lightedTaxiwayPathsParsed: data.meta.lightedTaxiwayPathsParsed ?? 0,
-    inferredPlacementRows: data.meta.inferredPlacementRows ?? 0,
-    inferredPlacementAssignments: data.meta.inferredPlacementAssignments ?? 0,
-    excludedPlacementOutliers: data.meta.excludedPlacementOutliers ?? 0,
-    placementInferenceMilliseconds: data.meta.placementInferenceMilliseconds ?? 0,
-    runwayRecordsParsed: data.meta.runwayRecordsParsed ?? 0,
-    runwayLightZonesFound: data.meta.runwayLightZonesFound ?? 0,
-    objectsExtracted: data.instances.length,
-    likelyLightsFound: likelyLights,
-    targetLightsFound: targetLights,
-    lightRowsFound: data.lightRows.length,
-    targetLightRowsFound: targetLightRows,
-    sourceLightRowsFound: sourceLightRows,
-    sourceTargetLightRowsFound: sourceTargetLightRows,
-    inferredLightRowsFound: inferredLightRows,
-    removalPolygonsGenerated: data.removalPolygons.length,
-    exclusionCandidatesGenerated: data.exclusionCandidates.length,
-    mustKeepZonesGenerated: data.mustKeepZones?.length ?? 0,
-    protectionConflicts: data.protectionConflicts?.length ?? 0,
-    warnings: data.meta.warnings.length,
-  };
-}
-
-function normalizeOutputPath(outPath) {
-  return path.resolve(outPath);
 }
