@@ -67,7 +67,7 @@ export function buildDraftOutput(data, matching, options) {
     unsafeReplacements
   );
   const simulatorGeojson = buildSimulatorDebugGeoJson(
-    [...(data.lightRows ?? []), ...(data.topologyRows ?? [])],
+    data.lightRows ?? [],
     matching.mergedSimulatorRows ?? []
   );
 
@@ -139,15 +139,14 @@ function rowLengthMeters(row) {
 }
 
 function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
-  const noRemovalMatches = initialMatches.filter((match) => match.row?.noRemovalRequired === true);
-  let approved = initialMatches.filter((match) => match.row?.noRemovalRequired !== true);
+  let approved = [...initialMatches];
   const originalSelectedRows = approved.map((match) => match.row);
   const rejected = [];
   let geometry;
 
   if (approved.length === 0) {
     return {
-      approved: noRemovalMatches,
+      approved,
       rejected,
       geometry: emptyRemovalGeometry(),
     };
@@ -222,7 +221,7 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
       })
       .filter(Boolean);
     if (unsafe.length === 0) {
-      return { approved: [...approved, ...noRemovalMatches], rejected, geometry };
+      return { approved, rejected, geometry };
     }
 
     const unsafeRows = new Set(unsafe.map((match) => match.row.id));
@@ -232,7 +231,7 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
 
   if (approved.length === 0) {
     return {
-      approved: noRemovalMatches,
+      approved,
       rejected,
       geometry: emptyRemovalGeometry(),
     };
@@ -785,7 +784,6 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
         divisionType,
         simulatorType: match.row.classification,
         matchPercent: Math.round(match.score * 100),
-        matchedViaHoldShort: match.row.sourceType === 'bgl-hold-short-topology',
       },
     });
   }

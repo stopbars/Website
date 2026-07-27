@@ -442,9 +442,7 @@ function FeaturePopup({ properties }) {
                 ? 'Merged matcher geometry'
                 : divisionOriginal
                   ? 'Original division geometry'
-                  : properties.matchedViaHoldShort
-                    ? 'Aligned to simulator hold-short position'
-                    : 'Matched to simulator lighting'}
+                  : 'Matched to simulator lighting'}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-zinc-400">
         {divisionOriginal

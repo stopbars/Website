@@ -103,7 +103,7 @@ const TABS = {
     label: 'Airport Management',
     icon: TowerControl,
     roles: ['product_manager', 'lead_developer'],
-    description: 'Review and approve airport submissions',
+    description: 'Review submissions and create or edit airport data',
     component: AirportManagement,
   },
   contributionManagement: {

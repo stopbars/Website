@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/features/draft-generator/matching.test.js",
+    "test": "node --test src/features/draft-generator/matching.test.js src/features/draft-generator/airport-upload-validation.test.js",
     "doctor": "react-doctor --verbose",
     "perf:trace": "node scripts/perf-trace.mjs",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\" \"**/*.{js,jsx,ts,tsx,json,css,md}\"",

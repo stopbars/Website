@@ -3,6 +3,8 @@ import { scanInput } from './extractor/scanner.js';
 import { mountFiles, unmountFiles } from './shims/virtual-fs.js';
 import { matchDivisionObjects } from './matching.js';
 import { buildDraftOutput } from './draft-output.js';
+import { buildGenerationDiagnostic, diagnosticJsonBlob } from './diagnostics.js';
+import { validateAirportUpload } from './airport-upload-validation.js';
 
 const DEFAULT_SIZES = {
   library: 3,
@@ -30,16 +32,21 @@ self.addEventListener('message', async (event) => {
 
 async function generateDraft(message) {
   const startedAt = performance.now();
+  const timings = {};
+  const includeDiagnostics = import.meta.env.DEV && message.includeDiagnostics === true;
   postStage(message.id, 'Indexing selected package', 8);
   const input = mountFiles(message.entries);
 
   try {
+    const scanStartedAt = performance.now();
     const fileScan = await scanInput(input);
+    timings.packageScan = round(performance.now() - scanStartedAt, 3);
     if (fileScan.bglFiles.length === 0 && fileScan.xmlFiles.length === 0) {
       throw new Error('No BGL or XML scenery files were found in the selected folder.');
     }
 
     postStage(message.id, 'Reading BGL data and detecting simulator lights', 28);
+    const extractionStartedAt = performance.now();
     const data = await extractAirportLightData({
       input: fileScan.input,
       icao: message.icao,
@@ -50,16 +57,29 @@ async function generateDraft(message) {
       sizes: DEFAULT_SIZES,
       buildRemovals: false,
     });
+    timings.extraction = round(performance.now() - extractionStartedAt, 3);
+
+    postStage(message.id, 'Verifying selected airport', 64);
+    const validationStartedAt = performance.now();
+    const airportValidation = validateAirportUpload({
+      icao: message.icao,
+      airportPosition: message.airportPosition,
+      divisionPoints: message.divisionPoints,
+      data,
+    });
+    data.meta.airportValidation = airportValidation;
+    timings.airportValidation = round(performance.now() - validationStartedAt, 3);
 
     postStage(message.id, 'Aligning division objects to simulator geometry', 70);
-    const matching = matchDivisionObjects(
-      message.divisionPoints,
-      data.lightRows,
-      data.instances,
-      data.topologyRows
-    );
+    const matchingStartedAt = performance.now();
+    const matching = matchDivisionObjects(message.divisionPoints, data.lightRows, data.instances, {
+      includeDiagnostics,
+      runways: data.runways,
+    });
+    timings.matching = round(performance.now() - matchingStartedAt, 3);
 
     postStage(message.id, 'Building selective, protected removal areas', 84);
+    const outputStartedAt = performance.now();
     const output = buildDraftOutput(data, matching, {
       icao: message.icao,
       altitude: message.altitude,
@@ -71,6 +91,7 @@ async function generateDraft(message) {
         );
       },
     });
+    timings.output = round(performance.now() - outputStartedAt, 3);
 
     postStage(message.id, 'Preparing draft and map preview', 95);
     const xmlBlob = new Blob([output.xml], { type: 'application/xml' });
@@ -92,6 +113,24 @@ async function generateDraft(message) {
       type: item.division?.type || 'unknown',
       reason: item.reason,
     }));
+    timings.beforeDiagnostic = round(performance.now() - startedAt, 3);
+    const diagnosticBlob = includeDiagnostics
+      ? diagnosticJsonBlob(
+          buildGenerationDiagnostic({
+            request: message,
+            entries: message.entries,
+            fileScan,
+            data,
+            matching,
+            output,
+            timings,
+            environment: {
+              userAgent: self.navigator?.userAgent,
+              workerLocation: self.location?.href,
+            },
+          })
+        )
+      : null;
 
     return {
       xmlBlob,
@@ -110,6 +149,7 @@ async function generateDraft(message) {
         bglFilesParsed: data.meta.bglFilesParsed,
         xmlFilesParsed: data.meta.xmlFilesParsed,
       },
+      ...(diagnosticBlob ? { diagnosticBlob } : {}),
     };
   } finally {
     unmountFiles();

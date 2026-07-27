@@ -27,12 +27,6 @@ const AIRPORT_LIGHT_ROW_MAX_RECORD_SIZE = 64 * 1024;
 const AIRPORT_LIGHT_ROW_MAX_PRECEDING_NAME_BYTES = 128;
 const AIRPORT_LIGHT_ROW_VERSION_MARKERS = new Set([0x01000000, 0x05000000, 0x09000000, 0x0d000000]);
 const TAXIWAY_POINT_RECORD_SIZE = 12;
-const TAXIWAY_POINT_TYPE_MASK = 0xff;
-const TAXIWAY_POINT_ORIENTATION_MASK = 0x100;
-const TAXIWAY_POINT_HOLD_SHORT_TYPES = new Set([0x02, 0x05]);
-const HOLD_SHORT_REAL_LIGHT_DEDUPLICATION_METERS = 20;
-const HOLD_SHORT_MINIMUM_HALF_WIDTH_METERS = 4;
-const HOLD_SHORT_MAXIMUM_HALF_WIDTH_METERS = 30;
 const TAXI_NAME_RECORD_SIZE = 8;
 const TAXIWAY_PARKING_RECORD_SIZE = 56;
 const TAXIWAY_PATH_RECORD_SIZE = 0x30;
@@ -129,7 +123,6 @@ export async function extractBglData(bglFiles) {
   const warnings = [];
   const instances = [];
   const lightRows = [];
-  const decodedHoldShortRows = [];
   const runways = [];
   const runwayLightZones = [];
   const modelIndex = new Map();
@@ -146,9 +139,6 @@ export async function extractBglData(bglFiles) {
     names: 0,
     lightedTaxiPaths: 0,
     bridgedTaxiPaths: 0,
-    decodedHoldShortPoints: 0,
-    eligibleHoldShortPoints: 0,
-    suppressedHoldShortPoints: 0,
     inferredPlacementRows: 0,
     inferredPlacementAssignments: 0,
     excludedPlacementOutliers: 0,
@@ -217,7 +207,6 @@ export async function extractBglData(bglFiles) {
     );
     lightRows.push(...airportLightRows);
     lightRows.push(...taxiwayGraph.lightRows);
-    decodedHoldShortRows.push(...taxiwayGraph.holdShortRows);
     lightRows.push(...taxiwayBridgeRows);
     runways.push(...runwayResult.runways);
     runwayLightZones.push(...runwayResult.zones);
@@ -235,7 +224,6 @@ export async function extractBglData(bglFiles) {
       taxiwayNames: taxiwayGraph.graphs.reduce((sum, graph) => sum + graph.taxiNames.length, 0),
       lightedTaxiwayPaths: taxiwayGraph.lightRows.length,
       bridgedTaxiwayPaths: taxiwayBridgeRows.length,
-      decodedHoldShortPoints: taxiwayGraph.holdShortRows.length,
       sectionTypes: result.sectionTypes,
       unsupportedSceneryRecordTypes: result.unsupportedSceneryRecordTypes,
     });
@@ -264,15 +252,11 @@ export async function extractBglData(bglFiles) {
     );
     taxiwayGraphStats.lightedTaxiPaths += taxiwayGraph.lightRows.length;
     taxiwayGraphStats.bridgedTaxiPaths += taxiwayBridgeRows.length;
-    taxiwayGraphStats.decodedHoldShortPoints += taxiwayGraph.holdShortRows.length;
     warnings.push(...result.warnings);
   }
 
   const placementInference = inferBglPlacementLightRows(instances);
   lightRows.push(...placementInference.rows);
-  const topologyRows = filterHoldShortTopologyRows(decodedHoldShortRows, lightRows, instances);
-  taxiwayGraphStats.eligibleHoldShortPoints = topologyRows.length;
-  taxiwayGraphStats.suppressedHoldShortPoints = decodedHoldShortRows.length - topologyRows.length;
   taxiwayGraphStats.inferredPlacementRows = placementInference.rows.length;
   taxiwayGraphStats.inferredPlacementAssignments = placementInference.stats.assignedPlacements;
   taxiwayGraphStats.excludedPlacementOutliers = placementInference.stats.excludedOutliers;
@@ -292,7 +276,6 @@ export async function extractBglData(bglFiles) {
   return {
     instances,
     lightRows,
-    topologyRows,
     runways,
     runwayLightZones,
     warnings,
@@ -1092,144 +1075,7 @@ export function extractTaxiwayGraph(buffer, sourceFile) {
       ...buildTaxiwayPathEdgeLightRows(sourceFile, graph, pathRecord),
     ])
   );
-  const holdShortRows = graphs.flatMap((graph) => buildHoldShortTopologyRows(sourceFile, graph));
-
-  return { graphs, lightRows, holdShortRows };
-}
-
-export function buildHoldShortTopologyRows(sourceFile, graph) {
-  const rows = [];
-  for (const point of graph.points ?? []) {
-    const pointType = point.flags & TAXIWAY_POINT_TYPE_MASK;
-    if (!TAXIWAY_POINT_HOLD_SHORT_TYPES.has(pointType)) continue;
-
-    const connectedPaths = (graph.paths ?? []).filter(
-      (pathRecord) => pathRecord.startIndex === point.index || pathRecord.endIndex === point.index
-    );
-    // oxlint-disable-next-line react-doctor/js-flatmap-filter -- The bounded paths around one graph point are clearest as transform then reject-invalid stages.
-    const pathVectors = connectedPaths
-      .map((pathRecord) => {
-        const neighbor = pathRecord.startIndex === point.index ? pathRecord.end : pathRecord.start;
-        const vector = localMeterVector(point, neighbor);
-        const length = Math.hypot(vector.x, vector.y);
-        return length >= MIN_TAXIWAY_PATH_LENGTH_METERS ? { ...vector, length, pathRecord } : null;
-      })
-      .filter(Boolean);
-    if (pathVectors.length === 0) continue;
-
-    const tangent = averagedUndirectedTangent(pathVectors);
-    if (!tangent) continue;
-    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Width extraction and validity constraints are distinct domain stages on a tiny adjacency list.
-    const widths = pathVectors
-      .map(({ pathRecord }) => pathRecord.widthMeters)
-      .filter((width) => Number.isFinite(width) && width > 0 && width <= 250)
-      .sort((left, right) => left - right);
-    const widthMeters = widths[Math.floor(widths.length / 2)] ?? 16;
-    const halfWidthMeters = Math.max(
-      HOLD_SHORT_MINIMUM_HALF_WIDTH_METERS,
-      Math.min(HOLD_SHORT_MAXIMUM_HALF_WIDTH_METERS, widthMeters / 2)
-    );
-    const perpendicular = { x: -tangent.y, y: tangent.x };
-    const start = offsetGraphPoint(point, perpendicular, -halfWidthMeters);
-    const end = offsetGraphPoint(point, perpendicular, halfWidthMeters);
-
-    rows.push({
-      id: stableId(
-        'bgl-hold-short-topology',
-        sourceFile,
-        graph.pointTableOffset,
-        point.index,
-        point.flags
-      ),
-      sourceFile,
-      sourceType: 'bgl-hold-short-topology',
-      rawTag: 'BGL TaxiwayPoint HOLD_SHORT',
-      classification: 'stopbar',
-      confidence: 0.85,
-      vertices: [start, end],
-      holdShortPoint: pointFromTaxiwayGraphPoint(point),
-      holdShortPointType: pointType,
-      holdShortOrientation:
-        (point.flags & TAXIWAY_POINT_ORIENTATION_MASK) === 0 ? 'forward' : 'reverse',
-      graphPointIndex: point.index,
-      graphPointTableOffset: graph.pointTableOffset,
-      connectedPathIndexes: connectedPaths.map((pathRecord) => pathRecord.index),
-      widthMeters,
-      topologyOnly: true,
-      noRemovalRequired: true,
-      classificationReasons: [
-        'decoded compiled TaxiwayPoint HOLD_SHORT type',
-        'position and orientation derived from connected TaxiwayPath records',
-        'topology fallback only; no simulator light removal is required',
-      ],
-    });
-  }
-  return rows;
-}
-
-function averagedUndirectedTangent(vectors) {
-  const reference = vectors[0];
-  let x = 0;
-  let y = 0;
-  for (const vector of vectors) {
-    let normalizedX = vector.x / vector.length;
-    let normalizedY = vector.y / vector.length;
-    if (normalizedX * reference.x + normalizedY * reference.y < 0) {
-      normalizedX *= -1;
-      normalizedY *= -1;
-    }
-    x += normalizedX;
-    y += normalizedY;
-  }
-  const length = Math.hypot(x, y);
-  return length > 0.001 ? { x: x / length, y: y / length } : null;
-}
-
-function localMeterVector(origin, target) {
-  const latitudeRadians = (origin.lat * Math.PI) / 180;
-  return {
-    x: (target.lon - origin.lon) * 111_320 * Math.cos(latitudeRadians),
-    y: (target.lat - origin.lat) * 111_320,
-  };
-}
-
-function offsetGraphPoint(origin, direction, distanceMeters) {
-  const latitudeRadians = (origin.lat * Math.PI) / 180;
-  return {
-    lat: origin.lat + (direction.y * distanceMeters) / 111_320,
-    lon:
-      origin.lon +
-      (direction.x * distanceMeters) / Math.max(111_320 * Math.cos(latitudeRadians), 0.001),
-  };
-}
-
-export function filterHoldShortTopologyRows(rows, lightRows, instances) {
-  const realStopbarRows = (lightRows ?? []).filter(
-    (row) =>
-      row.classification === 'stopbar' &&
-      row.sourceType !== 'bgl-hold-short-topology' &&
-      Array.isArray(row.vertices) &&
-      row.vertices.length > 0
-  );
-  const realStopbarInstances = (instances ?? []).filter(
-    (instance) =>
-      instance.classification === 'stopbar' &&
-      Number.isFinite(instance.lat) &&
-      Number.isFinite(instance.lon)
-  );
-  return rows.filter((row) => {
-    const point = row.holdShortPoint;
-    const overlapsRealRow = realStopbarRows.some(
-      (realRow) =>
-        pointToPolylineDistanceMeters(point, realRow.vertices) <=
-        HOLD_SHORT_REAL_LIGHT_DEDUPLICATION_METERS
-    );
-    if (overlapsRealRow) return false;
-    return !realStopbarInstances.some(
-      (instance) =>
-        haversineDistanceMeters(point, instance) <= HOLD_SHORT_REAL_LIGHT_DEDUPLICATION_METERS
-    );
-  });
+  return { graphs, lightRows };
 }
 
 function findTaxiwayPointTables(buffer) {

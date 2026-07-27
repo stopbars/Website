@@ -60,6 +60,7 @@ const XMLGenerator = () => {
   const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
   const isGenerating = generation.status === 'running';
   const draftFileName = `${normalizedIcao || 'airport'}-Draft.xml`;
+  const diagnosticFileName = `${normalizedIcao || 'airport'}-Draft-diagnostic.json`;
   const divisionGeojson = useMemo(() => buildDivisionGeojson(divisionPoints), [divisionPoints]);
 
   useEffect(() => {
@@ -238,13 +239,24 @@ const XMLGenerator = () => {
       entries: selection.entries,
       icao: normalizedIcao,
       altitude: Number.isFinite(airport.elevation_m) ? airport.elevation_m : 0,
+      airportPosition: {
+        latitude: airport.latitude,
+        longitude: airport.longitude,
+      },
       divisionPoints,
+      packageName: selection.name,
+      includeDiagnostics: import.meta.env.DEV,
     });
   };
 
   const handleDownload = () => {
     if (!result?.xmlBlob || result.matchedCount === 0) return;
     downloadBlob(result.xmlBlob, draftFileName);
+  };
+
+  const handleDiagnosticDownload = () => {
+    if (!import.meta.env.DEV || !result?.diagnosticBlob) return;
+    downloadBlob(result.diagnosticBlob, diagnosticFileName);
   };
 
   const handleContinue = async () => {
@@ -397,6 +409,7 @@ const XMLGenerator = () => {
                 <ResultPanel
                   result={result}
                   onDownload={handleDownload}
+                  onDownloadDiagnostic={handleDiagnosticDownload}
                   onContinue={handleContinue}
                 />
               ) : null}
@@ -480,7 +493,7 @@ function GenerationProgress({ generation }) {
   );
 }
 
-function ResultPanel({ result, onDownload, onContinue }) {
+function ResultPanel({ result, onDownload, onDownloadDiagnostic, onContinue }) {
   const hasMatches = result.matchedCount > 0;
   const hasManualWork = result.manualCount > 0;
   const hasRemovalReview = result.removalReview.length > 0;
@@ -550,6 +563,12 @@ function ResultPanel({ result, onDownload, onContinue }) {
           <Download className="h-4 w-4" />
           Download XML
         </Button>
+        {import.meta.env.DEV && result.diagnosticBlob ? (
+          <Button onClick={onDownloadDiagnostic} variant="secondary" className="w-full">
+            <Download className="h-4 w-4" />
+            Download diagnostic JSON
+          </Button>
+        ) : null}
         <Button onClick={onContinue} disabled={!hasMatches} className="w-full">
           Continue to testing
           <ArrowRight className="h-4 w-4" />
@@ -601,8 +620,10 @@ ResultPanel.propTypes = {
     ).isRequired,
     duplicateDivisionLeadOns: PropTypes.number.isRequired,
     duplicateSimulatorLeadOns: PropTypes.number.isRequired,
+    diagnosticBlob: PropTypes.instanceOf(Blob),
   }).isRequired,
   onDownload: PropTypes.func.isRequired,
+  onDownloadDiagnostic: PropTypes.func.isRequired,
   onContinue: PropTypes.func.isRequired,
 };
 

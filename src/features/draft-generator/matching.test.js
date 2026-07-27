@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDraftOutput } from './draft-output.js';
-import { matchDivisionObjects, scorePolylineMatch } from './matching.js';
 import {
-  buildHoldShortTopologyRows,
-  filterHoldShortTopologyRows,
-} from './extractor/bgl.js';
+  DRAFT_DIAGNOSTIC_SCHEMA,
+  buildGenerationDiagnostic,
+  diagnosticJsonBlob,
+} from './diagnostics.js';
+import { matchDivisionObjects, scorePolylineMatch } from './matching.js';
 import { pointInPolygon } from './extractor/geo.js';
+import ypphOwnershipRegression from './fixtures/ypph-ownership-regressions.js';
 
 const LATITUDE = -31.94;
 const METERS_PER_LONGITUDE = 111_320 * Math.cos((LATITUDE * Math.PI) / 180);
@@ -20,6 +22,99 @@ test('matches a roughly aligned source row with the required division classifica
   assert.equal(result.matches.length, 1);
   assert.equal(result.matches[0].row.id, 'sim-stop');
   assert.equal(result.unmatched.length, 0);
+  assert.equal(result.diagnostics, undefined);
+});
+
+test('captures complete matcher decisions only when development diagnostics are requested', () => {
+  const division = divisionLine('diagnostic-stop', 'stopbar', [point(0, 0), point(20, 0)]);
+  const simulator = simulatorLine('diagnostic-sim', 'stopbar', [point(1, 2), point(21, 2)]);
+  const instances = [
+    simulatorInstance('diagnostic-instance-west', 'stopbar', point(0, 1)),
+    simulatorInstance('diagnostic-instance-east', 'stopbar', point(10, 1)),
+  ];
+
+  const result = matchDivisionObjects([division], [simulator], instances, {
+    includeDiagnostics: true,
+  });
+
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.diagnostics.divisionObjects[0].id, 'diagnostic-stop');
+  assert.equal(result.diagnostics.simulatorCandidates[0].id, 'diagnostic-sim');
+  assert.equal(result.diagnostics.compatibleRowCandidateEvaluations.length, 1);
+  assert.equal(result.diagnostics.compatibleRowCandidateEvaluations[0].outcome, 'eligible');
+  assert.equal(result.diagnostics.instanceCandidateEvaluations.length, 1);
+  assert.equal(result.diagnostics.instanceCandidateEvaluations[0].outcome, 'rejected');
+  assert.equal(
+    result.diagnostics.instanceCandidateEvaluations[0].reason,
+    'insufficient-source-stations'
+  );
+  assert.equal(result.diagnostics.pipeline.eligibleEdges.length, 1);
+  assert.equal(result.diagnostics.pipeline.allocatedEdges.length, 1);
+  assert.equal(result.diagnostics.configuration.types.stopbar.minimumScore, 0.43);
+});
+
+test('builds a compact self-contained generation diagnostic JSON document', async () => {
+  const division = divisionLine('diagnostic-stop', 'stopbar', [point(0, 0), point(20, 0)]);
+  const simulator = simulatorLine('diagnostic-sim', 'stopbar', [point(1, 2), point(21, 2)]);
+  const matching = matchDivisionObjects([division], [simulator], [], {
+    includeDiagnostics: true,
+  });
+  const data = {
+    meta: { icao: 'TEST' },
+    instances: [],
+    lightRows: [simulator],
+    runways: [],
+    mustKeepZones: [],
+  };
+  const output = {
+    replacements: matching.matches,
+    removalApproved: matching.matches,
+    removalWarnings: [],
+    removals: [],
+    safetyRejections: [],
+    duplicateDivisionLeadOns: [],
+    duplicateSimulatorLeadOns: [],
+    xml: '<FSData />',
+    geojson: { type: 'FeatureCollection', features: [] },
+    simulatorGeojson: { type: 'FeatureCollection', features: [] },
+  };
+  const diagnostic = buildGenerationDiagnostic({
+    request: {
+      icao: 'TEST',
+      altitude: 12,
+      packageName: 'Test package',
+      divisionPoints: [division],
+    },
+    entries: [
+      {
+        path: 'scenery/airport.bgl',
+        size: 1234,
+        lastModified: 5678,
+        file: { name: 'airport.bgl', type: 'application/octet-stream', secretBytes: 'excluded' },
+      },
+    ],
+    fileScan: {
+      input: '/input',
+      filesScanned: 1,
+      bglFiles: ['/input/scenery/airport.bgl'],
+      xmlFiles: [],
+      unsupportedFiles: [],
+    },
+    data,
+    matching,
+    output,
+    timings: { matching: 1.25 },
+    environment: { userAgent: 'test' },
+  });
+  const parsed = JSON.parse(await diagnosticJsonBlob(diagnostic).text());
+
+  assert.equal(parsed.schema, DRAFT_DIAGNOSTIC_SCHEMA);
+  assert.equal(parsed.request.divisionObjects[0].id, 'diagnostic-stop');
+  assert.equal(parsed.package.manifest[0].path, 'scenery/airport.bgl');
+  assert.equal(parsed.package.manifest[0].secretBytes, undefined);
+  assert.equal(parsed.summary.compatibleRowCandidateEvaluations, 1);
+  assert.equal(parsed.matching.diagnostics.pipeline.allocatedEdges.length, 1);
+  assert.equal(parsed.generation.draftXml, '<FSData />');
 });
 
 test('joins connected stopbar fragments to match one cornered BARS stopbar', () => {
@@ -34,17 +129,16 @@ test('joins connected stopbar fragments to match one cornered BARS stopbar', () 
   ];
 
   const result = matchDivisionObjects([division], rows);
-  const output = buildDraftOutput(
-    { instances: [], lightRows: rows, mustKeepZones: [] },
-    result,
-    { icao: 'TEST', altitude: 0 }
-  );
+  const output = buildDraftOutput({ instances: [], lightRows: rows, mustKeepZones: [] }, result, {
+    icao: 'TEST',
+    altitude: 0,
+  });
 
   assert.equal(result.matches.length, 2);
-  assert.deepEqual(
-    result.matches.map((match) => match.row.id).sort(),
-    ['stopbar-east', 'stopbar-west']
-  );
+  assert.deepEqual(result.matches.map((match) => match.row.id).sort(), [
+    'stopbar-east',
+    'stopbar-west',
+  ]);
   assert.ok(
     result.matches.every(
       (match) => match.replacementRow.sourceType === 'connected-simulator-stopbar-rows'
@@ -69,130 +163,6 @@ test('does not join separated stopbar rows into invented geometry', () => {
 
   assert.equal(result.matches.length, 0);
   assert.equal(result.unmatched.length, 1);
-});
-
-test('uses a decoded hold-short point only as a no-removal stopbar fallback', () => {
-  const west = graphPoint(0, point(-40, 0), 0x01);
-  const hold = graphPoint(1, point(0, 0), 0x05);
-  const east = graphPoint(2, point(40, 0), 0x01);
-  const graph = {
-    pointTableOffset: 128,
-    points: [west, hold, east],
-    paths: [
-      graphPath(0, west, hold, 20),
-      graphPath(1, hold, east, 20),
-    ],
-  };
-  const topologyRows = buildHoldShortTopologyRows('airport.bgl', graph);
-  const division = divisionLine('hold-fallback', 'stopbar', [
-    point(2, -10),
-    point(2, 10),
-  ]);
-
-  assert.equal(topologyRows.length, 1);
-  assert.equal(topologyRows[0].noRemovalRequired, true);
-  assert.equal(topologyRows[0].sourceType, 'bgl-hold-short-topology');
-
-  const matching = matchDivisionObjects([division], [], [], topologyRows);
-  assert.equal(matching.matches.length, 1);
-  assert.equal(matching.matches[0].row.noRemovalRequired, true);
-
-  const output = buildDraftOutput(
-    { instances: [], lightRows: [], topologyRows, mustKeepZones: [] },
-    matching,
-    { icao: 'TEST', altitude: 0 }
-  );
-  const matchedFeature = output.geojson.features.find(
-    (feature) => feature.properties.featureType === 'matched'
-  );
-  assert.equal(output.removals.length, 0);
-  assert.equal(output.removalWarnings.length, 0);
-  assert.equal(output.removalApproved.length, 1);
-  assert.equal(matchedFeature.properties.matchedViaHoldShort, true);
-  assert.match(output.xml, /displayName="hold-fallback"/);
-});
-
-test('suppresses a decoded hold-short fallback near real stopbar lighting', () => {
-  const topologyRow = {
-    ...simulatorLine('hold-topology', 'stopbar', [point(0, -10), point(0, 10)]),
-    sourceType: 'bgl-hold-short-topology',
-    topologyOnly: true,
-    noRemovalRequired: true,
-    holdShortPoint: { lat: point(0, 0).lat, lon: point(0, 0).lng },
-  };
-  const realStopbar = simulatorLine('real-stopbar', 'stopbar', [
-    point(-10, 3),
-    point(10, 3),
-  ]);
-
-  assert.deepEqual(
-    filterHoldShortTopologyRows([topologyRow], [realStopbar], []),
-    []
-  );
-});
-
-test('does not add a hold-short fallback when a real row matches the same stopbar', () => {
-  const division = divisionLine('stop-with-real-row', 'stopbar', [point(0, 0), point(20, 0)]);
-  const realRow = simulatorLine('real-stopbar-row', 'stopbar', [point(0, 1), point(20, 1)]);
-  const topologyRow = {
-    ...simulatorLine('offset-hold-topology', 'stopbar', [point(25, 0), point(45, 0)]),
-    sourceType: 'bgl-hold-short-topology',
-    topologyOnly: true,
-    noRemovalRequired: true,
-  };
-
-  const result = matchDivisionObjects([division], [realRow], [], [topologyRow]);
-
-  assert.equal(result.matches.length, 1);
-  assert.equal(result.matches[0].row.id, 'real-stopbar-row');
-  assert.equal(result.matches[0].row.noRemovalRequired, undefined);
-});
-
-test('does not add a hold-short fallback when real stopbar instances match the division', () => {
-  const division = divisionLine('stop-with-real-instances', 'stopbar', [
-    point(0, 0),
-    point(20, 0),
-  ]);
-  const instances = [0, 5, 10, 15, 20].map((x, index) =>
-    simulatorInstance(`real-stop-${index}`, 'stopbar', point(x, 2))
-  );
-  const topologyRow = {
-    ...simulatorLine('offset-hold-topology', 'stopbar', [point(25, 0), point(45, 0)]),
-    sourceType: 'bgl-hold-short-topology',
-    topologyOnly: true,
-    noRemovalRequired: true,
-  };
-
-  const result = matchDivisionObjects([division], [], instances, [topologyRow]);
-
-  assert.equal(result.matches.length, 1);
-  assert.equal(result.matches[0].row.sourceType, 'division-guided-source-instances');
-});
-
-test('selects only the best hold-short fallback for one BARS stopbar', () => {
-  const division = divisionLine('one-stopbar', 'stopbar', [point(0, 0), point(20, 0)]);
-  const bestTopologyRow = {
-    ...simulatorLine('best-hold-topology', 'stopbar', [point(0, 1), point(20, 1)]),
-    sourceType: 'bgl-hold-short-topology',
-    topologyOnly: true,
-    noRemovalRequired: true,
-  };
-  const weakerTopologyRow = {
-    ...simulatorLine('weaker-hold-topology', 'stopbar', [point(25, 0), point(45, 0)]),
-    sourceType: 'bgl-hold-short-topology',
-    topologyOnly: true,
-    noRemovalRequired: true,
-  };
-
-  const result = matchDivisionObjects(
-    [division],
-    [],
-    [],
-    [weakerTopologyRow, bestTopologyRow]
-  );
-
-  assert.equal(result.matches.length, 1);
-  assert.equal(result.matches[0].row.id, 'best-hold-topology');
 });
 
 test('matches an exact-placement inferred row before falling back to loose instances', () => {
@@ -286,17 +256,13 @@ test('selects co-located simulator lead-on layers but writes one replacement', (
   ];
 
   const result = matchDivisionObjects([division], rows);
-  const output = buildDraftOutput(
-    { instances: [], lightRows: rows, mustKeepZones: [] },
-    result,
-    { icao: 'TEST', altitude: 0 }
-  );
+  const output = buildDraftOutput({ instances: [], lightRows: rows, mustKeepZones: [] }, result, {
+    icao: 'TEST',
+    altitude: 0,
+  });
 
   assert.equal(result.matches.length, 2);
-  assert.deepEqual(
-    result.matches.map((match) => match.row.id).sort(),
-    ['sim-high', 'sim-low']
-  );
+  assert.deepEqual(result.matches.map((match) => match.row.id).sort(), ['sim-high', 'sim-low']);
   assert.equal(output.matched.length, 2);
   assert.equal(output.replacements.length, 1);
   const matchedFeature = output.geojson.features.find(
@@ -311,25 +277,20 @@ test('selects co-located simulator lead-on layers but writes one replacement', (
   assert.equal(
     output.simulatorGeojson.features.filter(
       (feature) => feature.properties.featureType === 'simulator-source'
-    )
-      .length,
+    ).length,
     2
   );
   assert.equal(
     output.simulatorGeojson.features.filter(
       (feature) => feature.properties.featureType === 'simulator-merged'
-    )
-      .length,
+    ).length,
     1
   );
 });
 
 test('uses varied high-contrast colors for nearby BARS IDs', () => {
   const divisions = Array.from({ length: 8 }, (_, index) =>
-    divisionLine(`nearby-${index}`, 'taxiway', [
-      point(index * 3, 0),
-      point(index * 3 + 2, 0),
-    ])
+    divisionLine(`nearby-${index}`, 'taxiway', [point(index * 3, 0), point(index * 3 + 2, 0)])
   );
   const output = buildDraftOutput(
     { instances: [], lightRows: [], mustKeepZones: [] },
@@ -353,7 +314,8 @@ test('uses varied high-contrast colors for nearby BARS IDs', () => {
 });
 
 function hexColorDistance(left, right) {
-  const channels = (color) => [1, 3, 5].map((start) => Number.parseInt(color.slice(start, start + 2), 16));
+  const channels = (color) =>
+    [1, 3, 5].map((start) => Number.parseInt(color.slice(start, start + 2), 16));
   const leftChannels = channels(left);
   const rightChannels = channels(right);
   return Math.hypot(...leftChannels.map((channel, index) => channel - rightChannels[index]));
@@ -378,7 +340,11 @@ test('merges co-located simulator geometry before splitting it across division o
     [...new Set(result.matches.map((match) => match.row.sourceParentRowId))].sort(),
     ['sim-green', 'sim-orange']
   );
-  assert.ok(result.matches.every((match) => match.replacementRow.sourceGeometryDerived === 'source-row-subsection'));
+  assert.ok(
+    result.matches.every(
+      (match) => match.replacementRow.sourceGeometryDerived === 'source-row-subsection'
+    )
+  );
   assert.equal(new Set(result.matches.map((match) => match.simulatorGroupId)).size, 1);
 });
 
@@ -472,21 +438,17 @@ test('accepts a shorter source row contained by a longer division shape', () => 
 });
 
 test('keeps one coherent projection run when alignment drifts across the old tight cutoff', () => {
-  const division = divisionLine('taxi-offset-drift', 'taxiway', [
-    point(50, 2.3),
-    point(150, 3.1),
-  ]);
-  const simulator = simulatorLine('sim-long', 'taxi-centerline', [
-    point(0, 0),
-    point(200, 0),
-  ]);
+  const division = divisionLine('taxi-offset-drift', 'taxiway', [point(50, 2.3), point(150, 3.1)]);
+  const simulator = simulatorLine('sim-long', 'taxi-centerline', [point(0, 0), point(200, 0)]);
 
   const result = matchDivisionObjects([division], [simulator]);
 
   assert.equal(result.matches.length, 1);
   assert.equal(result.unmatched.length, 0);
   assert.equal(result.matches[0].row.sourceParentRowId, 'sim-long');
-  assert.ok(result.matches[0].row.sourceRangeEndMeters - result.matches[0].row.sourceRangeStartMeters > 95);
+  assert.ok(
+    result.matches[0].row.sourceRangeEndMeters - result.matches[0].row.sourceRangeStartMeters > 95
+  );
 });
 
 test('rejects a tiny aligned subsection that does not represent enough of the BARS shape', () => {
@@ -522,10 +484,7 @@ test('assigns every compatible source row once when one division owns several so
   const result = matchDivisionObjects([division], rows);
 
   assert.equal(result.matches.length, 2);
-  assert.deepEqual(
-    result.matches.map((match) => match.row.id).sort(),
-    ['sim-east', 'sim-west']
-  );
+  assert.deepEqual(result.matches.map((match) => match.row.id).sort(), ['sim-east', 'sim-west']);
   assert.ok(result.matches.every((match) => match.division.id === 'lead-a'));
   assert.ok(result.matches.every((match) => match.row.outputClassification === 'lead-on'));
   assert.equal(result.unmatched.length, 0);
@@ -539,11 +498,10 @@ test('removes co-located source layers together but writes one replacement shape
   ];
   const matching = matchDivisionObjects([division], rows);
 
-  const output = buildDraftOutput(
-    { instances: [], lightRows: rows, mustKeepZones: [] },
-    matching,
-    { icao: 'TEST', altitude: 0 }
-  );
+  const output = buildDraftOutput({ instances: [], lightRows: rows, mustKeepZones: [] }, matching, {
+    icao: 'TEST',
+    altitude: 0,
+  });
 
   assert.equal(matching.matches.length, 2);
   assert.equal(output.matched.length, 2);
@@ -641,54 +599,6 @@ test('stops outward guidance extension at a simulator stopbar crossing', () => {
   assert.ok(Math.abs(result.matches[0].row.sourceRangeEndMeters - 75) < 0.2);
 });
 
-test('does not cut a guidance row at an unselected hold-short fallback', () => {
-  const division = divisionLine('lead-short', 'lead_on', [point(25, 0), point(55, 0)]);
-  const guidance = inferredPlacementLine('sim-full', 'taxi-centerline', [
-    point(0, 1),
-    point(100, 1),
-  ]);
-  const unusedHoldShort = {
-    ...simulatorLine('unused-hold-short', 'stopbar', [point(75, -10), point(75, 10)]),
-    sourceType: 'bgl-hold-short-topology',
-    topologyOnly: true,
-    noRemovalRequired: true,
-  };
-
-  const result = matchDivisionObjects([division], [guidance], [], [unusedHoldShort]);
-  const leadOn = result.matches[0];
-
-  assert.ok(leadOn);
-  assert.equal(leadOn.row.id, 'sim-full');
-  assert.equal(leadOn.row.sourceParentRowId, undefined);
-  assert.deepEqual(leadOn.row.vertices, guidance.vertices);
-});
-
-test('cuts a guidance row when the hold-short fallback is selected for a BARS stopbar', () => {
-  const divisions = [
-    divisionLine('lead-short', 'lead_on', [point(25, 0), point(55, 0)]),
-    divisionLine('selected-stopbar', 'stopbar', [point(75, -10), point(75, 10)]),
-  ];
-  const guidance = inferredPlacementLine('sim-full', 'taxi-centerline', [
-    point(0, 1),
-    point(100, 1),
-  ]);
-  const selectedHoldShort = {
-    ...simulatorLine('selected-hold-short', 'stopbar', [point(75, -10), point(75, 10)]),
-    sourceType: 'bgl-hold-short-topology',
-    topologyOnly: true,
-    noRemovalRequired: true,
-  };
-
-  const result = matchDivisionObjects(divisions, [guidance], [], [selectedHoldShort]);
-  const leadOn = result.matches.find((match) => match.division.id === 'lead-short');
-  const stopbar = result.matches.find((match) => match.division.id === 'selected-stopbar');
-
-  assert.ok(leadOn);
-  assert.ok(stopbar);
-  assert.ok(Math.abs(leadOn.row.sourceRangeEndMeters - 75) < 0.2);
-  assert.equal(stopbar.row.sourceType, 'bgl-hold-short-topology');
-});
-
 test('uses local row orientation to detect a stopbar on a long curved guidance row', () => {
   const division = divisionLine('lead-curved', 'lead_on', [point(25, 0), point(55, 0)]);
   const rows = [
@@ -709,10 +619,7 @@ test('uses local row orientation to detect a stopbar on a long curved guidance r
 });
 
 test('extends away from a stopbar to the real row endpoint through an unrelated junction', () => {
-  const division = divisionLine('lead-before-stopbar', 'lead_on', [
-    point(100, 0),
-    point(330, 0),
-  ]);
+  const division = divisionLine('lead-before-stopbar', 'lead_on', [point(100, 0), point(330, 0)]);
   const rows = [
     inferredPlacementLine('sim-full', 'taxi-centerline', [point(0, 1), point(400, 1)]),
     inferredPlacementLine('sim-branch', 'taxi-centerline', [point(80, 1), point(80, 40)]),
@@ -806,6 +713,54 @@ test('cuts an already matched guidance section at an interior simulator stopbar'
   assert.ok(Math.abs(leadOn.row.sourceRangeEndMeters - 100) < 0.2);
 });
 
+test('uses a BARS stopbar to trim reconstructed lead-on extension without a simulator stopbar', () => {
+  const division = [
+    divisionLine('bars-stopbar', 'stopbar', [point(50, -10), point(50, 10)]),
+    divisionLine('lead-after-bars-stopbar', 'lead_on', [point(50, 0), point(100, 0)]),
+  ];
+  const row = inferredPlacementLine('sim-guidance', 'taxi-centerline', [
+    point(0, 1),
+    point(150, 1),
+  ]);
+
+  const result = matchDivisionObjects(division, [row]);
+  const leadOn = result.matches.find(
+    (item) => item.division.id === 'lead-after-bars-stopbar'
+  );
+
+  assert.ok(leadOn);
+  assert.ok(Math.abs(leadOn.row.sourceRangeStartMeters - 50) < 0.2);
+  assert.ok(Math.abs(leadOn.row.sourceRangeEndMeters - 150) < 0.2);
+});
+
+test('keeps overlapping reconstructed guidance for BARS lead-ons that share a trunk', () => {
+  const division = [
+    divisionLine('bars-stopbar', 'stopbar', [point(50, -10), point(50, 10)]),
+    divisionLine('lead-short-branch', 'lead_on', [point(50, 0), point(150, 0)]),
+    divisionLine('lead-long-branch', 'lead_on', [
+      point(50, 0),
+      point(150, 0),
+      point(200, 50),
+    ]),
+  ];
+  const row = inferredPlacementLine('sim-shared-trunk', 'taxi-centerline', [
+    point(0, 1),
+    point(150, 1),
+    point(200, 51),
+  ]);
+
+  const result = matchDivisionObjects(division, [row]);
+  const short = result.matches.find((item) => item.division.id === 'lead-short-branch');
+  const long = result.matches.find((item) => item.division.id === 'lead-long-branch');
+
+  assert.ok(short);
+  assert.ok(long);
+  assert.ok(Math.abs(short.row.sourceRangeStartMeters - 50) < 0.2);
+  assert.ok(Math.abs(long.row.sourceRangeStartMeters - 50) < 0.2);
+  assert.ok(short.row.sourceRangeEndMeters > 140);
+  assert.ok(long.row.sourceRangeEndMeters > 210);
+});
+
 test('does not claim a distant airport-wide row endpoint without a local boundary', () => {
   const division = divisionLine('lead-local', 'lead_on', [point(250, 0), point(300, 0)]);
   const row = inferredPlacementLine('sim-airport-wide', 'taxi-centerline', [
@@ -869,6 +824,51 @@ test('partitions one complete native lead-on row between adjacent BARS objects',
   assert.ok(Math.abs(ranges[1][1] - 100) < 0.01);
 });
 
+test('splits reconstructed lead-ons where their shared row leaves the BGL runway corridor', () => {
+  const division = [
+    divisionLine('entry-stopbar', 'stopbar', [point(-220, 60), point(-180, 140)]),
+    divisionLine('runway-entry', 'lead_on', [point(-200, 100), point(-120, 60)]),
+    divisionLine('runway-exit', 'lead_on', [point(300, 0), point(400, 60)]),
+  ];
+  const simulator = inferredPlacementLine('sim-runway-through-row', 'taxi-centerline', [
+    point(-200, 100),
+    point(0, 0),
+    point(300, 0),
+    point(400, 60),
+  ]);
+  const exitJunction = inferredPlacementLine('sim-exit-junction', 'taxi-centerline', [
+    point(350, 30),
+    point(350, 100),
+  ]);
+  const runwayCenter = point(100, 0);
+  const runway = {
+    id: 'bgl-runway-test',
+    sourceType: 'bgl-runway',
+    lat: runwayCenter.lat,
+    lon: runwayCenter.lng,
+    heading: 90,
+    lengthMeters: 600,
+    widthMeters: 40,
+  };
+
+  const result = matchDivisionObjects(division, [simulator, exitJunction], [], {
+    includeDiagnostics: true,
+    runways: [runway],
+  });
+  const entry = result.matches.find((match) => match.division.id === 'runway-entry');
+  const exit = result.matches.find((match) => match.division.id === 'runway-exit');
+  const allocation = result.diagnostics.pipeline.allocationEvaluations.find(
+    (evaluation) => evaluation.divisionId === 'runway-exit'
+  );
+
+  assert.ok(entry);
+  assert.ok(exit);
+  assert.ok(Math.abs(entry.row.sourceRangeEndMeters - exit.row.sourceRangeStartMeters) < 0.01);
+  assert.ok(exit.row.sourceRangeStartMeters > 550);
+  assert.equal(allocation.partitionBoundaries[0].basis, 'runway-corridor-transition');
+  assert.equal(allocation.partitionBoundaries[0].runwayId, 'bgl-runway-test');
+});
+
 test('snaps an ownership hand-off to a nearby simulator stopbar crossing', () => {
   const division = [
     divisionLine('lead-west', 'lead_on', [point(10, 0), point(40, 0)]),
@@ -903,7 +903,10 @@ test('does not let a weak gap-filler steal a contested source row from stronger 
   assert.equal(matchedIds.has('lead-west'), true);
   assert.equal(matchedIds.has('lead-east'), true);
   assert.equal(matchedIds.has('lead-weak'), false);
-  assert.equal(result.unmatched.some((item) => item.division.id === 'lead-weak'), true);
+  assert.equal(
+    result.unmatched.some((item) => item.division.id === 'lead-weak'),
+    true
+  );
 });
 
 test('splits a straight source row at a junction for a composite BARS shape', () => {
@@ -946,8 +949,7 @@ test('splits a straight source row at a junction for a composite BARS shape', ()
   );
   assert.ok(
     Math.abs(
-      straightMatches[0].row.sourceRangeEndMeters -
-        straightMatches[1].row.sourceRangeStartMeters
+      straightMatches[0].row.sourceRangeEndMeters - straightMatches[1].row.sourceRangeStartMeters
     ) < 0.001
   );
   assert.ok(compositeSources.includes('sim-straight'));
@@ -1005,9 +1007,7 @@ test('does not let a complete match steal the continuation of an adjacent source
   const completeSources = result.matches
     .filter((match) => match.division.id === 'lead-complete')
     .map((match) => match.row.sourceParentRowId ?? match.row.id);
-  const adjacentMatch = result.matches.find(
-    (match) => match.division.id === 'lead-adjacent'
-  );
+  const adjacentMatch = result.matches.find((match) => match.division.id === 'lead-adjacent');
 
   assert.deepEqual(completeSources, ['sim-complete']);
   assert.equal(adjacentMatch.row.id, 'sim-adjacent');
@@ -1021,10 +1021,7 @@ test('does not let a weak secondary claimant split a row from its clear primary 
     divisionLine('primary-owner', 'lead_on', [point(25, 1), point(95, 1)]),
   ];
   const rows = [
-    inferredPlacementLine('secondary-own-row', 'taxi-centerline', [
-      point(0, 0.4),
-      point(40, 11.9),
-    ]),
+    inferredPlacementLine('secondary-own-row', 'taxi-centerline', [point(0, 0.4), point(40, 11.9)]),
     inferredPlacementLine('primary-row', 'taxi-centerline', [point(-5, 1), point(100, 1)]),
   ];
 
@@ -1041,6 +1038,81 @@ test('does not let a weak secondary claimant split a row from its clear primary 
   assert.equal(result.unmatched.length, 0);
 });
 
+test('does not let a loop-back subsection split a row from its complete owner', () => {
+  const division = [
+    divisionLine('loop-back-owner', 'lead_on', [
+      point(0, 0),
+      point(30, 0),
+      point(30, 40),
+      point(70, 40),
+    ]),
+    divisionLine('complete-row-owner', 'lead_on', [point(0, 0), point(80, 0)]),
+  ];
+  const rows = [
+    inferredPlacementLine('loop-back-own-row', 'taxi-centerline', [
+      point(0, 0.3),
+      point(30, 0.3),
+      point(30, 40.3),
+      point(70, 40.3),
+    ]),
+    inferredPlacementLine('shared-neighbour-row', 'taxi-centerline', [
+      point(0, 0.4),
+      point(80, 0.4),
+    ]),
+  ];
+
+  const result = matchDivisionObjects(division, rows);
+  const sharedOwners = result.matches
+    .filter(
+      (match) =>
+        (match.simulatorGroupId ?? match.row.sourceParentRowId ?? match.row.id) ===
+        'shared-neighbour-row'
+    )
+    .map((match) => match.division.id);
+  const loopBackSources = result.matches
+    .filter((match) => match.division.id === 'loop-back-owner')
+    .map((match) => match.simulatorGroupId ?? match.row.sourceParentRowId ?? match.row.id);
+
+  assert.deepEqual(sharedOwners, ['complete-row-owner']);
+  assert.deepEqual(loopBackSources, ['loop-back-own-row']);
+  assert.equal(result.unmatched.length, 0);
+});
+
+test('keeps the real YPPH A row with BARS_BQ8C4 instead of giving a branch to BARS_2TSXP', () => {
+  const lightRows = sourceBackedFixtureRows(ypphOwnershipRegression.coLocatedLightRows);
+
+  const result = matchDivisionObjects(ypphOwnershipRegression.divisions, lightRows);
+  const sourcesByDivision = new Map();
+  for (const match of result.matches) {
+    const sources = sourcesByDivision.get(match.division.id) ?? [];
+    sources.push(match.row.sourceParentRowId ?? match.row.id);
+    sourcesByDivision.set(match.division.id, sources);
+  }
+
+  assert.deepEqual(sourcesByDivision.get('BARS_BQ8C4')?.sort(), [
+    '1b74ff160b6ae2c2',
+    '6515a82a851b69e1',
+  ]);
+  assert.deepEqual(sourcesByDivision.get('BARS_2TSXP')?.sort(), [
+    '0c6eada692118f7f',
+    '172a2fd795278f3e',
+  ]);
+});
+
+test('leaves the real YPPH BARS_QHIG2 object manual when nearby rows only touch its ends', () => {
+  const lightRows = sourceBackedFixtureRows(
+    ypphOwnershipRegression.nearbyCoLocatedLightRows
+  );
+
+  const result = matchDivisionObjects([ypphOwnershipRegression.noLightDivision], lightRows);
+
+  assert.equal(result.matches.length, 0);
+  assert.deepEqual(
+    result.unmatched.map((item) => item.division.id),
+    ['BARS_QHIG2']
+  );
+});
+
 test('keeps a short aligned target layer alongside a complete match for removal', () => {
   const division = divisionLine('taxi-layered', 'taxiway', [
     point(0, 0),
@@ -1052,10 +1124,7 @@ test('keeps a short aligned target layer alongside a complete match for removal'
     point(20, 0.3),
     point(30, 10.3),
   ]);
-  const shortLayer = simulatorLine('sim-short-layer', 'lead-on', [
-    point(0, 0.4),
-    point(8, 0.4),
-  ]);
+  const shortLayer = simulatorLine('sim-short-layer', 'lead-on', [point(0, 0.4), point(8, 0.4)]);
 
   const matching = matchDivisionObjects([division], [complete, shortLayer]);
   const output = buildDraftOutput(
@@ -1081,11 +1150,10 @@ test('accepts shared partition endpoints on a removal polygon boundary', () => {
     simulatorLine('sim-yellow', 'lead-on', [point(0, 0.1), point(200, 0.1)]),
   ];
   const matching = matchDivisionObjects(division, rows);
-  const output = buildDraftOutput(
-    { instances: [], lightRows: rows, mustKeepZones: [] },
-    matching,
-    { icao: 'TEST', altitude: 0 }
-  );
+  const output = buildDraftOutput({ instances: [], lightRows: rows, mustKeepZones: [] }, matching, {
+    icao: 'TEST',
+    altitude: 0,
+  });
 
   assert.equal(output.matched.length, 4);
   assert.equal(output.removalWarnings.length, 0);
@@ -1145,11 +1213,10 @@ test('keeps a matched lead-on when another lead-on only crosses its removal corr
 test('keeps a matched lead-on at an isolated unselected taxi-centreline junction', () => {
   const division = divisionLine('lead-east-west', 'lead_on', [point(0, 0), point(80, 0)]);
   const selected = simulatorLine('sim-east-west', 'lead-on', [point(0, 0), point(80, 0)]);
-  const crossing = simulatorLine(
-    'sim-north-south',
-    'taxi-centerline',
-    [point(40, -30), point(40, 30)]
-  );
+  const crossing = simulatorLine('sim-north-south', 'taxi-centerline', [
+    point(40, -30),
+    point(40, 30),
+  ]);
   const matching = matchDivisionObjects([division], [selected, crossing]);
 
   const output = buildDraftOutput(
@@ -1193,9 +1260,7 @@ test('still protects a long unselected lead-on running beside a selected row', (
     removal.coordinates.map(([lon, lat]) => ({ lon, lat }))
   );
   assert.ok(
-    parallel.vertices.every(
-      (vertex) => !removalRings.some((ring) => pointInPolygon(vertex, ring))
-    )
+    parallel.vertices.every((vertex) => !removalRings.some((ring) => pointInPolygon(vertex, ring)))
   );
 });
 
@@ -1227,9 +1292,7 @@ test('keeps a matched BARS object in the XML when only its remover needs review'
   assert.equal(output.unmatched.length, 0);
   assert.equal(output.removalWarnings.length, 1);
   assert.match(output.xml, /displayName="lead-protected"/);
-  assert.ok(
-    output.geojson.features.some((feature) => feature.properties.featureType === 'unsafe')
-  );
+  assert.ok(output.geojson.features.some((feature) => feature.properties.featureType === 'unsafe'));
 });
 
 test('does not cascade one rejected remover into neighbouring matched rows', () => {
@@ -1266,8 +1329,14 @@ test('does not cascade one rejected remover into neighbouring matched rows', () 
     { icao: 'TEST', altitude: 0 }
   );
 
-  assert.deepEqual(output.removalWarnings.map((item) => item.division.id), ['first']);
-  assert.deepEqual(output.removalApproved.map((match) => match.division.id), ['second']);
+  assert.deepEqual(
+    output.removalWarnings.map((item) => item.division.id),
+    ['first']
+  );
+  assert.deepEqual(
+    output.removalApproved.map((match) => match.division.id),
+    ['second']
+  );
 });
 
 test('lets direct target-row evidence override only the inferred runway centreline envelope', () => {
@@ -1310,21 +1379,6 @@ function divisionLine(id, type, coordinates) {
   return { id, name: id, type, coordinates };
 }
 
-function graphPoint(index, coordinate, flags) {
-  return { index, flags, lat: coordinate.lat, lon: coordinate.lng };
-}
-
-function graphPath(index, start, end, widthMeters) {
-  return {
-    index,
-    startIndex: start.index,
-    endIndex: end.index,
-    start,
-    end,
-    widthMeters,
-  };
-}
-
 function simulatorLine(id, classification, coordinates, confidence = 0.9) {
   return {
     id,
@@ -1356,4 +1410,17 @@ function simulatorInstance(id, classification, coordinate, confidence = 0.9) {
     sourceFile: 'airport.bgl',
     sourceType: 'library-object',
   };
+}
+
+function sourceBackedFixtureRows(groups) {
+  return groups.flatMap((group) =>
+    group.ids.map((id) => ({
+      id,
+      sourceFile: 'YPPH_PLC.bgl',
+      sourceType: 'bgl-airport-light-row',
+      classification: 'lead-on',
+      confidence: 0.82,
+      vertices: group.vertices,
+    }))
+  );
 }
