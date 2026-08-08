@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { getVatsimToken, removeVatsimToken } from '../utils/cookieUtils';
 import { AuthContext } from './AuthContextBase';
+import { fetchAuthenticatedUser, shouldInvalidateToken } from './authRequest';
 
 const apiUrl = 'https://v2.stopbars.com'; // Update this in dev as needed
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -135,98 +136,31 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Always fetch account to confirm current status (ban can be lifted or added)
       try {
-        const accountResponse = await fetch(`${apiUrl}/auth/account`, {
-          headers: { 'X-Vatsim-Token': token },
-        });
-        if (!accountResponse.ok) {
-          // If forbidden, check if it's a banned response
-          if (accountResponse.status === 403) {
-            let bannedPayload = null;
-            try {
-              bannedPayload = await accountResponse.json();
-            } catch {
-              console.warn('Failed to parse banned payload');
-            }
-            if (bannedPayload?.banned) {
-              const ban = {
-                banned: true,
-                reason: bannedPayload.reason || 'You are banned from BARS.',
-                expires_at: bannedPayload.expires_at ?? null,
-              };
-              setBannedInfo(ban);
-              saveBannedToCache(ban);
-              sessionStorage.removeItem('userData');
-              setUser(null);
-              if (!silent) setLoading(false);
-              return { status: 'banned', info: ban };
-            }
-          }
-          throw new Error('Failed to fetch account');
-        }
-        const accountData = await accountResponse.json();
-
-        if (accountData?.banned) {
-          const ban = {
-            banned: true,
-            reason: accountData.reason || 'You are banned from BARS.',
-            expires_at: accountData.expires_at ?? null,
-          };
-          setBannedInfo(ban);
-          saveBannedToCache(ban);
-          // Clear any cached user data
+        const result = await fetchAuthenticatedUser(token);
+        if (result.status === 'banned') {
+          setBannedInfo(result.info);
+          saveBannedToCache(result.info);
           sessionStorage.removeItem('userData');
           setUser(null);
           if (!silent) setLoading(false);
-          return { status: 'banned', info: ban };
+          return result;
         }
 
-        // Not banned anymore: clear any stale banned cache
         clearBannedCache();
         setBannedInfo(null);
-
-        // Fetch staff + division in parallel
-        const [staffResponse, divisionResponse] = await Promise.all([
-          fetch(`${apiUrl}/auth/is-staff`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${apiUrl}/divisions/user`, {
-            headers: { 'X-Vatsim-Token': token },
-          }),
-        ]);
-        if (!staffResponse.ok || !divisionResponse.ok) {
-          throw new Error('Failed to fetch user data');
-        }
-        const staffData = await staffResponse.json();
-        const divisionData = await divisionResponse.json();
-
-        // Convert division data into roles
-        const divisionRoles = (Array.isArray(divisionData) ? divisionData : []).reduce(
-          (acc, { role }) => ({
-            ...acc,
-            [role]: 1,
-          }),
-          {}
-        );
-
-        const userData = {
-          ...accountData,
-          roles: {
-            ...(staffData?.role ? { [staffData.role]: 1 } : {}),
-            ...divisionRoles,
-          },
-        };
-
-        // Update state and cache
-        setUser(userData);
-        saveUserToCache(userData);
+        setUser(result.user);
+        saveUserToCache(result.user);
         if (!silent) setLoading(false);
-        return { status: 'ok' };
+        return result;
       } catch (error) {
         console.error('Fetch error:', error);
+        const cachedUser = loadUserFromCache();
+        if (cachedUser) setUser(cachedUser);
         if (!silent) setLoading(false);
-        logout(); // Call the new logout function
+        if (shouldInvalidateToken(error, token, getVatsimToken())) {
+          logout();
+        }
         throw error;
       }
     },
@@ -254,7 +188,7 @@ export function AuthProvider({ children }) {
           setBannedInfo(cachedBan);
           setUser(null);
         }
-        fetchUserData(token);
+        void fetchUserData(token).catch(() => {});
         return;
       }
       // Otherwise, try cached user then fetch if needed
@@ -263,7 +197,7 @@ export function AuthProvider({ children }) {
         setUser(cachedUser);
         setLoading(false);
       } else {
-        fetchUserData(token);
+        void fetchUserData(token).catch(() => {});
       }
     } else {
       setLoading(false);

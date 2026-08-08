@@ -23,6 +23,7 @@ export function buildGenerationDiagnostic({
       icao: request.icao,
       altitudeMeters: request.altitude,
       packageName: request.packageName,
+      simulator: data.meta?.simulator ?? 'msfs',
       divisionObjects: request.divisionPoints,
     },
     package: {
@@ -32,6 +33,8 @@ export function buildGenerationDiagnostic({
         filesScanned: fileScan.filesScanned,
         bglFiles: fileScan.bglFiles,
         xmlFiles: fileScan.xmlFiles,
+        aptFiles: fileScan.aptFiles,
+        dsfFiles: fileScan.dsfFiles,
         unsupportedFiles: fileScan.unsupportedFiles,
       },
     },
@@ -42,6 +45,7 @@ export function buildGenerationDiagnostic({
     generation: {
       replacements: output.replacements,
       removalApproved: output.removalApproved,
+      placementOnlyMatches: output.placementOnlyMatches,
       removalWarnings: output.removalWarnings,
       removals: output.removals,
       safetyRejections: output.safetyRejections,
@@ -92,6 +96,12 @@ function generationSummary(data, matching, output) {
     safetyRejections: output.safetyRejections?.length ?? 0,
     compatibleRowCandidateEvaluations:
       matching.diagnostics?.compatibleRowCandidateEvaluations?.length ?? 0,
+    totalCompatibleRowCandidateEvaluations:
+      matching.diagnostics?.compatibleRowCandidateSummary?.totalEvaluations ??
+      matching.diagnostics?.compatibleRowCandidateEvaluations?.length ??
+      0,
+    omittedCompatibleRowCandidateEvaluations:
+      matching.diagnostics?.compatibleRowCandidateSummary?.omittedEvaluations ?? 0,
     instanceCandidateEvaluations: matching.diagnostics?.instanceCandidateEvaluations?.length ?? 0,
     eligibleRowCandidateEdges: matching.diagnostics?.pipeline?.eligibleEdges?.length ?? 0,
     allocatedRowCandidateEdges: matching.diagnostics?.pipeline?.allocatedEdges?.length ?? 0,

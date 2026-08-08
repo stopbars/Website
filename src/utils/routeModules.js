@@ -27,6 +27,7 @@ export const routeModules = {
   contributeDetails: cachedImport(() => import('../pages/ContributeDetails.jsx')),
   contributeTest: cachedImport(() => import('../pages/ContributeTest.jsx')),
   xmlGenerator: cachedImport(() => import('../pages/XMLGenerator.jsx')),
+  contributionEditor: cachedImport(() => import('../pages/ContributionEditor.jsx')),
   divisionManagement: cachedImport(() => import('../components/divisions/DivisionManagement.jsx')),
   staffDashboard: cachedImport(() => import('../pages/StaffDashboard.jsx')),
   authCallback: cachedImport(() =>

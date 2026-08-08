@@ -59,6 +59,13 @@ const LIGHT_SORT_PRIORITY = {
   taxiway: 100,
 };
 
+const TYPE_COLORS = {
+  stopbar: '#fb7185',
+  lead_on: '#facc15',
+  stand: '#c084fc',
+  taxiway: '#38bdf8',
+};
+
 // The map renderer is cohesive around one MapLibre lifecycle and its layer declarations.
 // oxlint-disable-next-line react-doctor/no-giant-component
 const XMLMap = ({
@@ -67,6 +74,9 @@ const XMLMap = ({
   height = '600px',
   showPolyLines = false,
   showRemoveAreas = false,
+  showLights = true,
+  colorMode = 'operational',
+  visibleTypes,
 }) => {
   const [viewState, setViewState] = useState({
     longitude: 0,
@@ -95,90 +105,116 @@ const XMLMap = ({
     }
   }, []);
 
-  const getLightAppearance = useCallback((light) => {
-    const heading = typeof light.heading === 'number' ? light.heading : 0;
-    let type = 'solid';
-    let color1 = '#cccccc';
-    let color2 = '#cccccc';
+  const getLightAppearance = useCallback(
+    (light) => {
+      const heading = typeof light.heading === 'number' ? light.heading : 0;
+      let type = 'solid';
+      let color1 = '#cccccc';
+      let color2 = '#cccccc';
 
-    if (light.type === 'stopbar') {
-      const isIHP =
-        light.properties?.IHP === 'true' || (typeof light.IHP === 'boolean' && light.IHP);
-      const stopbarColor = isIHP ? 'rgb(250, 204, 21)' : 'rgb(238, 49, 49)';
-      const rawDirectionality = (
-        light.properties?.directionality ||
-        light.directionality ||
-        ''
-      ).toLowerCase();
-      const isBi = rawDirectionality === 'bi-directional' || rawDirectionality === 'bi';
-
-      if (isBi) {
-        type = 'solid';
-        color1 = stopbarColor;
-      } else {
-        type = 'split';
-        color1 = stopbarColor;
-        color2 = 'rgb(77, 77, 77)';
+      if (colorMode === 'type') {
+        color1 = TYPE_COLORS[light.type] || '#a1a1aa';
+        color2 = color1;
+        return { type, color1, color2, heading };
       }
-    } else if (light.type === 'lead_on') {
-      if (!light.color) {
-        type = 'solid';
-        color1 = '#4ade80';
-      } else if (light.color === 'yellow-green-uni') {
-        type = 'split';
-        color1 = 'rgb(255, 212, 41)';
-        color2 = 'rgb(65, 230, 125)';
-      } else if (light.color?.includes('green')) {
-        type = 'solid';
-        color1 = '#4ade80';
-      } else {
-        type = 'solid';
-        color1 = '#facc15';
+
+      if (colorMode === 'directionality') {
+        const directionality = (
+          light.properties?.directionality ||
+          light.directionality ||
+          light.orientation ||
+          ''
+        ).toLowerCase();
+        const isBidirectional =
+          directionality === 'bi-directional' ||
+          directionality === 'bi' ||
+          directionality === 'both';
+        const isDirectional = directionality.length > 0;
+        color1 = isBidirectional ? '#4ade80' : isDirectional ? '#fb923c' : '#a1a1aa';
+        color2 = color1;
+        return { type, color1, color2, heading };
       }
-    } else if (light.type === 'stand') {
-      type = 'split';
-      color1 = '#fbbf24';
-      color2 = 'rgb(77, 77, 77)';
-    } else if (light.type === 'taxiway') {
-      const lightProps = light.properties;
-      const lightOrientation = lightProps?.orientation || light.orientation || 'both';
-      const lightColor = (lightProps?.color || light.color || 'green').toLowerCase();
 
-      const colorMap = {
-        green: '#4ade80',
-        yellow: '#facc15',
-        blue: '#3b82f6',
-        orange: '#f97316',
-      };
+      if (light.type === 'stopbar') {
+        const isIHP =
+          light.properties?.IHP === 'true' || (typeof light.IHP === 'boolean' && light.IHP);
+        const stopbarColor = isIHP ? 'rgb(250, 204, 21)' : 'rgb(238, 49, 49)';
+        const rawDirectionality = (
+          light.properties?.directionality ||
+          light.directionality ||
+          ''
+        ).toLowerCase();
+        const isBi = rawDirectionality === 'bi-directional' || rawDirectionality === 'bi';
 
-      if (lightColor.includes('-uni')) {
-        const baseColor = lightColor.split('-uni')[0];
-        const bgColor = colorMap[baseColor] || colorMap['green'];
-        type = 'split';
-        color1 = bgColor;
-        color2 = 'rgb(77, 77, 77)';
-      } else if (lightColor.includes('-') && (lightOrientation === 'both' || !lightOrientation)) {
-        const colors = lightColor.split('-');
-        if (colors.length === 2) {
-          type = 'split';
-          color1 = colorMap[colors[0]] || colorMap['green'];
-          color2 = colorMap[colors[1]] || colorMap['green'];
-        }
-      } else {
-        const bgColor = colorMap[lightColor] || colorMap['green'];
-        if (lightOrientation === 'both' || !lightOrientation) {
+        if (isBi) {
           type = 'solid';
-          color1 = bgColor;
+          color1 = stopbarColor;
         } else {
+          type = 'split';
+          color1 = stopbarColor;
+          color2 = 'rgb(77, 77, 77)';
+        }
+      } else if (light.type === 'lead_on') {
+        if (!light.color) {
+          type = 'solid';
+          color1 = '#4ade80';
+        } else if (light.color === 'yellow-green-uni') {
+          type = 'split';
+          color1 = 'rgb(255, 212, 41)';
+          color2 = 'rgb(65, 230, 125)';
+        } else if (light.color?.includes('green')) {
+          type = 'solid';
+          color1 = '#4ade80';
+        } else {
+          type = 'solid';
+          color1 = '#facc15';
+        }
+      } else if (light.type === 'stand') {
+        type = 'split';
+        color1 = '#fbbf24';
+        color2 = 'rgb(77, 77, 77)';
+      } else if (light.type === 'taxiway') {
+        const lightProps = light.properties;
+        const lightOrientation = lightProps?.orientation || light.orientation || 'both';
+        const lightColor = (lightProps?.color || light.color || 'green').toLowerCase();
+
+        const colorMap = {
+          green: '#4ade80',
+          yellow: '#facc15',
+          blue: '#3b82f6',
+          orange: '#f97316',
+        };
+
+        if (lightColor.includes('-uni')) {
+          const baseColor = lightColor.split('-uni')[0];
+          const bgColor = colorMap[baseColor] || colorMap.green;
           type = 'split';
           color1 = bgColor;
           color2 = 'rgb(77, 77, 77)';
+        } else if (lightColor.includes('-') && (lightOrientation === 'both' || !lightOrientation)) {
+          const colors = lightColor.split('-');
+          if (colors.length === 2) {
+            type = 'split';
+            color1 = colorMap[colors[0]] || colorMap.green;
+            color2 = colorMap[colors[1]] || colorMap.green;
+          }
+        } else {
+          const bgColor = colorMap[lightColor] || colorMap.green;
+          if (lightOrientation === 'both' || !lightOrientation) {
+            type = 'solid';
+            color1 = bgColor;
+          } else {
+            type = 'split';
+            color1 = bgColor;
+            color2 = 'rgb(77, 77, 77)';
+          }
         }
       }
-    }
 
-    return { type, color1, color2, heading };
-  }, []);
+      return { type, color1, color2, heading };
+    },
+    [colorMode]
+  );
 
   const createMarkerImage = useCallback((type, color1, color2) => {
     const size = 24;
@@ -390,17 +426,24 @@ const XMLMap = ({
     return areas;
   }, [removeAreasXmlData, xmlData, parseRemoveAreasXML]);
 
+  const visibleTypeSet = useMemo(
+    () => (visibleTypes ? new Set(visibleTypes) : null),
+    [visibleTypes]
+  );
+
   const lightGeoJSON = useMemo(() => {
     if (!parsedLights.length) return null;
 
-    const features = parsedLights.map((light, index) => {
+    const features = parsedLights.reduce((visibleFeatures, light, index) => {
+      if (visibleTypeSet && !visibleTypeSet.has(light.type)) return visibleFeatures;
+
       const { type, color1, color2, heading } = getLightAppearance(light);
       const c1 = color1.replace(/[^\w]/g, '');
       const c2 = color2.replace(/[^\w]/g, '');
       const iconId = `marker-${type}-${c1}-${c2}`;
       const basePriority = LIGHT_SORT_PRIORITY[light.type] || 0;
 
-      return {
+      visibleFeatures.push({
         type: 'Feature',
         geometry: {
           type: 'Point',
@@ -416,14 +459,15 @@ const XMLMap = ({
           pointType: light.type,
           sortKey: basePriority * 1_000 + index,
         },
-      };
-    });
+      });
+      return visibleFeatures;
+    }, []);
 
     return {
       type: 'FeatureCollection',
       features,
     };
-  }, [parsedLights, getLightAppearance]);
+  }, [parsedLights, getLightAppearance, visibleTypeSet]);
 
   const updateMapImages = useCallback(
     (map) => {
@@ -535,18 +579,23 @@ const XMLMap = ({
   const polylineGeoJSON = useMemo(() => {
     return {
       type: 'FeatureCollection',
-      features: polylines.map((line) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: line.positions,
-        },
-        properties: {
-          color: line.color,
-        },
-      })),
+      features: polylines.reduce((visibleFeatures, line) => {
+        if (visibleTypeSet && !visibleTypeSet.has(line.type)) return visibleFeatures;
+
+        visibleFeatures.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: line.positions,
+          },
+          properties: {
+            color: colorMode === 'type' ? TYPE_COLORS[line.type] || '#a1a1aa' : line.color,
+          },
+        });
+        return visibleFeatures;
+      }, []),
     };
-  }, [polylines]);
+  }, [polylines, colorMode, visibleTypeSet]);
 
   const removeAreasGeoJSON = useMemo(() => {
     return {
@@ -615,8 +664,7 @@ const XMLMap = ({
               </Source>
             )}
 
-            {/* Always render the light markers in normal mode */}
-            {!showRemoveAreas && lightGeoJSON && (
+            {showLights && lightGeoJSON && (
               <Source id="lights" type="geojson" data={lightGeoJSON}>
                 <Layer
                   id="lights-layer"
@@ -661,6 +709,9 @@ XMLMap.propTypes = {
   height: PropTypes.string,
   showPolyLines: PropTypes.bool,
   showRemoveAreas: PropTypes.bool,
+  showLights: PropTypes.bool,
+  colorMode: PropTypes.oneOf(['operational', 'type', 'directionality']),
+  visibleTypes: PropTypes.arrayOf(PropTypes.string),
 };
 
 export default XMLMap;

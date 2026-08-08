@@ -5,6 +5,9 @@ import { matchDivisionObjects } from './matching.js';
 import { buildDraftOutput } from './draft-output.js';
 import { buildGenerationDiagnostic, diagnosticJsonBlob } from './diagnostics.js';
 import { validateAirportUpload } from './airport-upload-validation.js';
+import { detectScenerySimulator } from './local-package.js';
+import { extractXPlaneAirportData } from './extractor/xplane-apt.js';
+import { buildReferenceScene } from '../contribution-editor/reference-scene.js';
 
 const DEFAULT_SIZES = {
   library: 3,
@@ -34,29 +37,68 @@ async function generateDraft(message) {
   const startedAt = performance.now();
   const timings = {};
   const includeDiagnostics = import.meta.env.DEV && message.includeDiagnostics === true;
+  const simulator = detectScenerySimulator(message.entries);
   postStage(message.id, 'Indexing selected package', 8);
-  const input = mountFiles(message.entries);
+  const input = simulator === 'msfs' ? mountFiles(message.entries) : null;
 
   try {
     const scanStartedAt = performance.now();
-    const fileScan = await scanInput(input);
+    const fileScan =
+      simulator === 'msfs'
+        ? await scanInput(input)
+        : {
+            input: message.packageName || 'X-Plane scenery',
+            filesScanned: message.entries.length,
+            xmlFiles: [],
+            bglFiles: [],
+            aptFiles: message.entries
+              .filter((entry) => /(^|\/)apt\.dat$/i.test(String(entry.path).replaceAll('\\', '/')))
+              .map((entry) => entry.path),
+            dsfFiles: message.entries
+              .filter((entry) =>
+                /(^|\/)[+-]\d{2}[+-]\d{3}\.dsf$/i.test(String(entry.path).replaceAll('\\', '/'))
+              )
+              .map((entry) => entry.path),
+            unsupportedFiles: [],
+          };
     timings.packageScan = round(performance.now() - scanStartedAt, 3);
-    if (fileScan.bglFiles.length === 0 && fileScan.xmlFiles.length === 0) {
+    if (simulator === 'msfs' && fileScan.bglFiles.length === 0 && fileScan.xmlFiles.length === 0) {
       throw new Error('No BGL or XML scenery files were found in the selected folder.');
     }
 
-    postStage(message.id, 'Reading BGL data and detecting simulator lights', 28);
+    postStage(
+      message.id,
+      simulator === 'xplane'
+        ? 'Reading X-Plane airport data, DSF lights, and markings'
+        : 'Reading BGL data and detecting simulator lights',
+      28
+    );
     const extractionStartedAt = performance.now();
-    const data = await extractAirportLightData({
-      input: fileScan.input,
-      icao: message.icao,
-      filesScanned: fileScan.filesScanned,
-      xmlFiles: fileScan.xmlFiles,
-      bglFiles: fileScan.bglFiles,
-      unsupportedFiles: fileScan.unsupportedFiles,
-      sizes: DEFAULT_SIZES,
-      buildRemovals: false,
-    });
+    const data =
+      simulator === 'xplane'
+        ? await extractXPlaneAirportData({
+            entries: message.entries,
+            icao: message.icao,
+            packageName: message.packageName,
+            airportPosition: message.airportPosition,
+            onProgress: ({ fraction }) => {
+              postStage(
+                message.id,
+                `Scanning X-Plane airport data · ${Math.round(fraction * 100)}%`,
+                28 + Math.round(fraction * 30)
+              );
+            },
+          })
+        : await extractAirportLightData({
+            input: fileScan.input,
+            icao: message.icao,
+            filesScanned: fileScan.filesScanned,
+            xmlFiles: fileScan.xmlFiles,
+            bglFiles: fileScan.bglFiles,
+            unsupportedFiles: fileScan.unsupportedFiles,
+            sizes: DEFAULT_SIZES,
+            buildRemovals: false,
+          });
     timings.extraction = round(performance.now() - extractionStartedAt, 3);
 
     postStage(message.id, 'Verifying selected airport', 64);
@@ -78,7 +120,13 @@ async function generateDraft(message) {
     });
     timings.matching = round(performance.now() - matchingStartedAt, 3);
 
-    postStage(message.id, 'Building selective, protected removal areas', 84);
+    postStage(
+      message.id,
+      simulator === 'xplane'
+        ? 'Preparing X-Plane source selectors'
+        : 'Building selective, protected removal areas',
+      84
+    );
     const outputStartedAt = performance.now();
     const output = buildDraftOutput(data, matching, {
       icao: message.icao,
@@ -101,6 +149,10 @@ async function generateDraft(message) {
     const simulatorGeojsonBlob = new Blob([JSON.stringify(output.simulatorGeojson)], {
       type: 'application/geo+json',
     });
+    const referenceScene = buildReferenceScene(data, simulator);
+    const referenceSceneBlob = new Blob([JSON.stringify(referenceScene)], {
+      type: 'application/json',
+    });
     const manualReview = output.unmatched.map((item) => ({
       id: String(item.division?.id ?? ''),
       name: item.division?.name || String(item.division?.id || 'Unmatched object'),
@@ -114,8 +166,11 @@ async function generateDraft(message) {
       reason: item.reason,
     }));
     timings.beforeDiagnostic = round(performance.now() - startedAt, 3);
-    const diagnosticBlob = includeDiagnostics
-      ? diagnosticJsonBlob(
+    let diagnosticBlob = null;
+    let diagnosticError = '';
+    if (includeDiagnostics) {
+      try {
+        diagnosticBlob = diagnosticJsonBlob(
           buildGenerationDiagnostic({
             request: message,
             entries: message.entries,
@@ -129,13 +184,20 @@ async function generateDraft(message) {
               workerLocation: self.location?.href,
             },
           })
-        )
-      : null;
+        );
+      } catch (error) {
+        diagnosticError =
+          error instanceof Error ? error.message : 'Development diagnostic serialization failed.';
+        console.warn('Draft generated without the optional development diagnostic.', error);
+      }
+    }
 
     return {
       xmlBlob,
       geojsonBlob,
       simulatorGeojsonBlob,
+      referenceSceneBlob,
+      simulator,
       bounds: featureBounds(output.geojson.features),
       matchedCount: new Set(output.matched.map((match) => String(match.division.id))).size,
       manualCount: manualReview.length,
@@ -145,9 +207,17 @@ async function generateDraft(message) {
       duplicateSimulatorLeadOns: output.duplicateSimulatorLeadOns.length,
       elapsedSeconds: round((performance.now() - startedAt) / 1000, 1),
       sourceSummary: {
+        simulator,
         filesScanned: fileScan.filesScanned,
         bglFilesParsed: data.meta.bglFilesParsed,
         xmlFilesParsed: data.meta.xmlFilesParsed,
+        aptDatFilesParsed: data.meta.aptDatFilesParsed,
+        aptDatSourceFile: data.meta.aptDatSourceFile,
+        dsfFilesDecoded: data.meta.dsfFilesDecoded,
+        dsfLightStringsDecoded: data.meta.dsfLightStringsDecoded,
+        dsfPaintedLinesDecoded: data.meta.dsfPaintedLinesDecoded,
+        dsfLightObjectsDecoded: data.meta.dsfLightObjectsDecoded,
+        ...(diagnosticError ? { diagnosticError } : {}),
       },
       ...(diagnosticBlob ? { diagnosticBlob } : {}),
     };

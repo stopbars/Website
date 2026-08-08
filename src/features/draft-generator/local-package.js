@@ -1,4 +1,39 @@
-const READABLE_EXTENSIONS = new Set(['.xml', '.bgl']);
+const READABLE_EXTENSIONS = new Set([
+  '.xml',
+  '.bgl',
+  '.dat',
+  '.ini',
+  '.dsf',
+  '.str',
+  '.lin',
+  '.pol',
+  '.obj',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.dds',
+]);
+
+export function detectScenerySimulator(entries) {
+  return (entries ?? []).some((entry) =>
+    /(^|\/)apt\.dat$|(^|\/)[+-]\d{2}[+-]\d{3}\.dsf$/i.test(normalizePath(entry.path))
+  )
+    ? 'xplane'
+    : 'msfs';
+}
+
+export function scenerySelectionFingerprint(entries) {
+  const values = (entries ?? [])
+    .map((entry) => `${entry.path}:${entry.size}:${entry.lastModified || 0}`)
+    .sort();
+  let hash = 2166136261;
+  for (const value of values.join('|')) {
+    hash ^= value.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${values.length}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
 
 export function selectionFromInput(fileList) {
   const files = [...(fileList ?? [])];
@@ -7,6 +42,24 @@ export function selectionFromInput(fileList) {
   const firstPath = files[0].webkitRelativePath || files[0].name;
   const rootName = firstPath.split('/')[0] || 'Airport package';
   return selectionFromFiles(files, rootName);
+}
+
+export function mergeScenerySelections(base, additional) {
+  if (!base?.entries?.length) return additional;
+  if (!additional?.entries?.length) return base;
+  const prefix = normalizePath(additional.name || 'library').replace(/^\/+|\/+$/g, '');
+  const entries = new Map(
+    base.entries.map((entry) => [normalizePath(entry.path).toLowerCase(), entry])
+  );
+  for (const entry of additional.entries) {
+    const path = prefix ? `${prefix}/${normalizePath(entry.path)}` : normalizePath(entry.path);
+    const merged = { ...entry, path };
+    entries.set(path.toLowerCase(), merged);
+  }
+  return {
+    name: `${base.name} + ${additional.name}`,
+    entries: [...entries.values()],
+  };
 }
 
 export async function selectionFromDrop(dataTransfer) {
@@ -122,7 +175,9 @@ async function readAllLegacyEntries(reader) {
 }
 
 function entryForFile(path, file) {
-  const readable = READABLE_EXTENSIONS.has(fileExtension(path));
+  const readable =
+    READABLE_EXTENSIONS.has(fileExtension(path)) ||
+    /(^|\/)library\.txt$/i.test(normalizePath(path));
   return {
     path,
     ...(readable ? { file } : {}),
@@ -135,4 +190,8 @@ function fileExtension(value) {
   const name = String(value).split('/').at(-1) || '';
   const index = name.lastIndexOf('.');
   return index <= 0 ? '' : name.slice(index).toLowerCase();
+}
+
+function normalizePath(value) {
+  return String(value ?? '').replaceAll('\\', '/');
 }

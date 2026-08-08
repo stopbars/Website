@@ -28,6 +28,7 @@ const ContributeMap = lazy(routeModules.contributeMap);
 const ContributeDetails = lazy(routeModules.contributeDetails);
 const ContributeTest = lazy(routeModules.contributeTest);
 const XMLGenerator = lazy(routeModules.xmlGenerator);
+const ContributionEditor = lazy(routeModules.contributionEditor);
 const DivisionManagement = lazy(routeModules.divisionManagement);
 const StaffDashboard = lazy(routeModules.staffDashboard);
 const AuthCallback = lazy(routeModules.authCallback);
@@ -148,6 +149,11 @@ const appRoutes = [
   {
     path: '/contribute/generator/:icao?',
     element: <XMLGenerator />,
+    errorElement: <RouteError />,
+  },
+  {
+    path: '/contribute/editor/:icao',
+    element: <ContributionEditor />,
     errorElement: <RouteError />,
   },
   {

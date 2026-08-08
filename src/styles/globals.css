@@ -263,6 +263,32 @@ button:disabled {
   border-top-color: rgb(24 24 27);
 }
 
+.editor-division-popup .maplibregl-popup-content {
+  overflow: hidden;
+  border: 1px solid rgb(63 63 70 / 0.9);
+  border-radius: 0.625rem;
+  background: rgb(24 24 27 / 0.96);
+  padding: 0.65rem;
+  box-shadow: 0 14px 36px rgb(0 0 0 / 0.34);
+  backdrop-filter: blur(10px);
+}
+
+.editor-division-popup .maplibregl-popup-close-button {
+  right: 0.25rem;
+  top: 0.15rem;
+  color: rgb(113 113 122);
+  font-size: 1rem;
+}
+
+.editor-division-popup .maplibregl-popup-close-button:hover {
+  background: transparent;
+  color: rgb(228 228 231);
+}
+
+.editor-division-popup .maplibregl-popup-tip {
+  border-top-color: rgb(24 24 27 / 0.96);
+}
+
 .leaflet-div-icon {
   background: transparent;
   border: none;

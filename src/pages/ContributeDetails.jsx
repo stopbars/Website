@@ -1,20 +1,22 @@
-import { memo, useRef, useState, useEffect } from 'react';
-import PropTypes from 'prop-types';
+import { useRef, useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
-import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
-import ReactConfetti from 'react-confetti';
-import { useWindowSize } from '../hooks/useWindowSize';
-import { ArrowRight, FileUp, Upload, Check, Loader, Search, UserPen, Plus } from 'lucide-react';
+import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
+import { ArrowRight, FileUp, Upload, Check, Loader, Search } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
 import {
   fetchContributionPolicy,
   getContributionDisabledMessage,
 } from '../utils/contributionPolicy';
+import {
+  contributionProofError,
+  contributionSubmissionError,
+  contributionSubmissionProof,
+} from '../utils/contributionContracts.js';
 
 /* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect -- File preloading, package suggestions, validation, and submission are a cohesive wizard; its guarded one-shot requests and ordered state transitions preserve navigation behavior. */
 const ContributeDetails = () => {
@@ -24,6 +26,7 @@ const ContributeDetails = () => {
   const navigationState = location.state;
   const { user } = useAuth();
   const vatsimToken = getVatsimToken();
+  const submissionProof = contributionSubmissionProof(navigationState);
 
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -31,20 +34,22 @@ const ContributeDetails = () => {
   const [airport, setAirport] = useState(null);
   const [contributionPolicy, setContributionPolicy] = useState(null);
   const notesRef = useRef('');
+  const sceneryInputRef = useRef(null);
+  const simulatorGroupRef = useRef(null);
+  const acknowledgementRef = useRef(null);
+  const selectedFileCardRef = useRef(null);
   const [error, setError] = useState('');
   const [errorTitle, setErrorTitle] = useState('Error');
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState(false);
-  const [topPackages, setTopPackages] = useState([]);
-  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
   const [allPackages, setAllPackages] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const { width, height } = useWindowSize();
-  const [confettiRun, setConfettiRun] = useState(true);
   const [acknowledged, setAcknowledged] = useState(false);
-  const [simulator, setSimulator] = useState('msfs2024');
+  const [simulator, setSimulator] = useState(() =>
+    navigationState?.simulator === 'xplane' ? 'xplane' : 'msfs2024'
+  );
   const contributionsDisabled =
     contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
   const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
@@ -69,6 +74,7 @@ const ContributeDetails = () => {
 
   // Fetch airport information
   useEffect(() => {
+    let cancelled = false;
     const fetchAirport = async () => {
       try {
         const [responseResult, policyResult] = await Promise.allSettled([
@@ -76,6 +82,7 @@ const ContributeDetails = () => {
           fetchContributionPolicy(icao),
         ]);
 
+        if (cancelled) return;
         if (policyResult.status === 'fulfilled') {
           setContributionPolicy(policyResult.value);
         } else {
@@ -85,6 +92,7 @@ const ContributeDetails = () => {
         if (responseResult.status === 'fulfilled' && responseResult.value.ok) {
           const response = responseResult.value;
           const data = await response.json();
+          if (cancelled) return;
           setAirport({
             icao: data.icao,
             name: data.name,
@@ -98,12 +106,15 @@ const ContributeDetails = () => {
     };
 
     fetchAirport();
+    return () => {
+      cancelled = true;
+    };
   }, [icao]);
 
   // Fetch top packages when component loads
   useEffect(() => {
+    let cancelled = false;
     const fetchTopPackages = async () => {
-      setIsLoadingPackages(true);
       try {
         const response = await fetch('https://v2.stopbars.com/contributions/top-packages', {
           headers: {
@@ -113,17 +124,17 @@ const ContributeDetails = () => {
 
         if (response.ok) {
           const data = await response.json();
-          setTopPackages(data.slice(0, 4)); // Get top 4 packages
-          setAllPackages(data.map((pkg) => pkg.packageName));
+          if (!cancelled) setAllPackages(data.map((pkg) => pkg.packageName));
         }
       } catch (error) {
-        console.error('Error fetching top packages:', error);
-      } finally {
-        setIsLoadingPackages(false);
+        if (!cancelled) console.error('Error fetching top packages:', error);
       }
     };
 
     fetchTopPackages();
+    return () => {
+      cancelled = true;
+    };
   }, [vatsimToken]);
 
   // Handle input change for scenery name with suggestions
@@ -150,6 +161,29 @@ const ContributeDetails = () => {
     setShowSuggestions(false);
   };
 
+  const selectAdjacentSimulator = (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    const simulators = ['msfs2024', 'msfs2020', 'xplane'];
+    const currentIndex = simulators.indexOf(simulator);
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? simulators.length - 1
+          : (currentIndex +
+              (['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1) +
+              simulators.length) %
+            simulators.length;
+    setSimulator(simulators[nextIndex]);
+    simulatorGroupRef.current
+      ?.querySelector(`[data-simulator="${simulators[nextIndex]}"]`)
+      ?.focus();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -169,22 +203,42 @@ const ContributeDetails = () => {
 
     if (!sceneryName) {
       setErrorTitle('Error');
-      setError('Please select or enter a scenery name');
+      setError('Enter or select a scenery package name.');
       setShowErrorToast(true);
+      sceneryInputRef.current?.focus();
       return;
     }
 
     if (!selectedFile) {
       setErrorTitle('Error');
-      setError('Please upload an XML file');
+      setError('Return to the test step and prepare a valid contribution draft.');
       setShowErrorToast(true);
+      selectedFileCardRef.current?.focus();
+      return;
+    }
+
+    const proofError = contributionProofError(submissionProof, simulator);
+    if (proofError) {
+      setErrorTitle('Test this draft again');
+      setError(proofError);
+      setShowErrorToast(true);
+      selectedFileCardRef.current?.focus();
       return;
     }
 
     if (!simulator) {
       setErrorTitle('Error');
-      setError('Please select a simulator');
+      setError('Select the simulator this contribution supports.');
       setShowErrorToast(true);
+      simulatorGroupRef.current?.focus();
+      return;
+    }
+
+    if (!acknowledged) {
+      setErrorTitle('Error');
+      setError('Confirm the contribution acknowledgement before submitting.');
+      setShowErrorToast(true);
+      acknowledgementRef.current?.focus();
       return;
     }
 
@@ -204,6 +258,8 @@ const ContributeDetails = () => {
         packageName: sceneryName,
         simulator: simulator,
         submittedXml: fileContent,
+        generationToken: submissionProof.generationToken,
+        generationHash: submissionProof.generationHash,
         notes: notesRef.current || undefined,
       };
 
@@ -223,17 +279,17 @@ const ContributeDetails = () => {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to submit contribution');
+          throw new Error(contributionSubmissionError(response.status, errorData.error));
         } else {
           const errorText = await response.text();
-          throw new Error(errorText || 'Failed to submit contribution');
+          throw new Error(contributionSubmissionError(response.status, errorText));
         }
       }
 
       setSubmissionSuccess(true);
     } catch (err) {
-      setErrorTitle('Submission Failed');
-      setError(err.message || 'Failed to submit contribution, please try again.');
+      setErrorTitle('Unable to submit contribution');
+      setError(err.message || 'Check your connection and try again.');
       setShowErrorToast(true);
       console.error('Submission error:', err);
     } finally {
@@ -244,40 +300,18 @@ const ContributeDetails = () => {
   if (submissionSuccess) {
     return (
       <Layout>
-        <ReactConfetti
-          width={width}
-          height={height}
-          numberOfPieces={700}
-          recycle={false}
-          run={confettiRun}
-          tweenDuration={1000}
-          initialVelocityY={20}
-          onConfettiComplete={() => setConfettiRun(false)}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 60,
-            pointerEvents: 'none',
-          }}
-        />
         <div className="min-h-screen pt-32 pb-20 flex items-center">
           <div className="w-full max-w-3xl mx-auto px-6">
             <Card className="p-8 text-center">
               <div className="mx-auto w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
                 <Check className="w-8 h-8 text-emerald-500" />
               </div>
-              <h1 className="text-2xl font-bold mb-6">Submission Successful</h1>
-              <p className="text-zinc-400 mb-8">
-                Thank you for contributing to BARS! Your submission for {icao} will be reviewed by
-                our team.
-              </p>
+              <h1 className="mb-4 text-2xl font-bold">Contribution submitted</h1>
+              <p className="text-zinc-400 mb-8">Your {icao} contribution is ready for review.</p>
               <div className="flex justify-center">
                 <Button onClick={() => navigate('/contribute')}>
-                  Contribution Dashboard
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  View contributions
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
             </Card>
@@ -290,16 +324,13 @@ const ContributeDetails = () => {
   return (
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-12 mt-6">
-            <div className="flex items-center space-x-2 mb-1">
-              <Breadcrumb>
-                <BreadcrumbItem title="Map" link={`/contribute/map/${icao}`} />
-                <BreadcrumbItem title="Test" link={`/contribute/test/${icao}`} />
-                <BreadcrumbItem title="Details" />
-              </Breadcrumb>
-            </div>
-          </div>
+        <div className="mx-auto max-w-4xl px-6">
+          <ContributionFlowHeader
+            current="submit"
+            title="Submit contribution"
+            icao={icao}
+            context={airport?.name ? `${icao} · ${airport.name}` : icao}
+          />
 
           {contributionsDisabled && (
             <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
@@ -308,138 +339,80 @@ const ContributeDetails = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <Card className="p-6">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Scenery package selection */}
+          <div>
+            <div>
+              <Card className="p-6 sm:p-8">
+                <form onSubmit={handleSubmit} className="space-y-8">
+                  <h2 className="text-xl font-semibold text-white">Final details</h2>
                   <div>
                     <label htmlFor="scenery-package" className="block text-sm font-medium mb-2">
-                      Scenery Package
+                      Scenery package
                     </label>
-                    {isLoadingPackages ? (
-                      <>
-                        <div className="relative">
-                          <div className="flex items-center relative">
-                            <input
-                              id="scenery-package"
-                              aria-label="Scenery package"
-                              type="text"
-                              disabled
-                              placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
-                              className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg opacity-50 cursor-not-allowed"
-                            />
-                            <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
-                          </div>
-                        </div>
-
-                        {/* Skeleton for Top Packages */}
-                        <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
-                          {[...Array(4)].map((_, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/30 animate-pulse"
-                            >
-                              <div className="flex items-center space-x-3 min-w-0 flex-1">
-                                <div className="shrink-0 w-6 h-6 rounded-full bg-zinc-700/50"></div>
-                                <div className="h-4.5 bg-zinc-700/50 rounded flex-1 max-w-[60%]"></div>
-                              </div>
-                              <div className="text-right ml-2 shrink-0 space-y-1">
-                                <div className="h-4.5 w-8 bg-zinc-700/50 rounded ml-auto"></div>
-                                <div className="h-3.5 w-16 bg-zinc-700/50 rounded"></div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="relative">
-                          <div className="flex items-center relative">
-                            <input
-                              id="scenery-package"
-                              aria-label="Scenery package"
-                              type="text"
-                              value={sceneryName}
-                              onChange={handleSceneryNameChange}
-                              onFocus={() =>
-                                sceneryName.length > 1 &&
-                                setSuggestions(
-                                  allPackages
-                                    .filter((pkg) =>
-                                      pkg.toLowerCase().includes(sceneryName.toLowerCase())
-                                    )
-                                    .slice(0, 6)
-                                ) &&
-                                setShowSuggestions(true)
-                              }
-                              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                              placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
-                              maxLength={64}
-                              className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-                            />
-                            <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
-                          </div>
-                          {showSuggestions && suggestions.length > 0 && (
-                            <ul className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg max-h-60 overflow-auto">
-                              {suggestions.map((suggestion) => (
-                                <li key={suggestion}>
-                                  <button
-                                    type="button"
-                                    className="w-full px-4 py-2 text-left hover:bg-zinc-700 cursor-pointer"
-                                    onClick={() => selectSuggestion(suggestion)}
-                                  >
-                                    {suggestion}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-
-                        {/* Top Packages */}
-                        {topPackages.length > 0 && (
-                          <div className="mt-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-2">
-                            {topPackages.map((pkg) => (
+                    <div className="relative">
+                      <div className="flex items-center relative">
+                        <input
+                          id="scenery-package"
+                          ref={sceneryInputRef}
+                          aria-label="Scenery package"
+                          type="text"
+                          value={sceneryName}
+                          onChange={handleSceneryNameChange}
+                          onFocus={() => {
+                            if (sceneryName.length <= 1) return;
+                            const matchingPackages = allPackages
+                              .filter((pkg) =>
+                                pkg.toLowerCase().includes(sceneryName.toLowerCase())
+                              )
+                              .slice(0, 6);
+                            setSuggestions(matchingPackages);
+                            setShowSuggestions(matchingPackages.length > 0);
+                          }}
+                          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                          placeholder="Enter scenery name (e.g., FlyTampa, iniBuilds)"
+                          maxLength={64}
+                          className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+                        />
+                        <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
+                      </div>
+                      {showSuggestions && suggestions.length > 0 && (
+                        <ul className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg max-h-60 overflow-auto">
+                          {suggestions.map((suggestion) => (
+                            <li key={suggestion}>
                               <button
-                                key={pkg.packageName}
                                 type="button"
-                                onClick={() => {
-                                  setSceneryName(pkg.packageName);
-                                  setShowSuggestions(false);
-                                }}
-                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-800/70 transition-colors cursor-pointer text-white"
+                                className="w-full px-4 py-2 text-left hover:bg-zinc-700 cursor-pointer"
+                                onClick={() => selectSuggestion(suggestion)}
                               >
-                                <div className="flex items-center space-x-3 min-w-0 flex-1">
-                                  <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-blue-500/20">
-                                    <Plus className="w-3.5 h-3.5 text-blue-400" />
-                                  </div>
-                                  <div className="font-medium text-left text-sm truncate min-w-0">
-                                    {pkg.packageName}
-                                  </div>
-                                </div>
-                                <div className="text-right ml-2 shrink-0">
-                                  <div className="font-semibold text-sm">{pkg.count}</div>
-                                  <div className="text-xs text-zinc-400">
-                                    contribution{pkg.count !== 1 ? 's' : ''}
-                                  </div>
-                                </div>
+                                {suggestion}
                               </button>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
 
                   {/* Simulator selection */}
                   <div>
-                    <span className="block text-sm font-medium mb-2">Simulator</span>
-                    <div className="grid grid-cols-2 gap-3">
+                    <span id="simulator-label" className="block text-sm font-medium mb-2">
+                      Simulator
+                    </span>
+                    <div
+                      ref={simulatorGroupRef}
+                      role="radiogroup"
+                      aria-labelledby="simulator-label"
+                      tabIndex={-1}
+                      className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                    >
                       <button
                         type="button"
+                        role="radio"
+                        aria-checked={simulator === 'msfs2024'}
+                        tabIndex={simulator === 'msfs2024' ? 0 : -1}
+                        data-simulator="msfs2024"
                         onClick={() => setSimulator('msfs2024')}
-                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 ${
+                        onKeyDown={selectAdjacentSimulator}
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-200 ${
                           simulator === 'msfs2024'
                             ? 'border-blue-500 bg-blue-500/10 text-white'
                             : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -449,8 +422,13 @@ const ContributeDetails = () => {
                       </button>
                       <button
                         type="button"
+                        role="radio"
+                        aria-checked={simulator === 'msfs2020'}
+                        tabIndex={simulator === 'msfs2020' ? 0 : -1}
+                        data-simulator="msfs2020"
                         onClick={() => setSimulator('msfs2020')}
-                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 ${
+                        onKeyDown={selectAdjacentSimulator}
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-200 ${
                           simulator === 'msfs2020'
                             ? 'border-purple-500 bg-purple-500/10 text-white'
                             : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -458,13 +436,28 @@ const ContributeDetails = () => {
                       >
                         <span className="font-medium">MSFS 2020</span>
                       </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={simulator === 'xplane'}
+                        tabIndex={simulator === 'xplane' ? 0 : -1}
+                        data-simulator="xplane"
+                        onClick={() => setSimulator('xplane')}
+                        onKeyDown={selectAdjacentSimulator}
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-200 ${
+                          simulator === 'xplane'
+                            ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                            : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+                        }`}
+                      >
+                        <span className="font-medium">X-Plane</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Additional notes */}
                   <div>
                     <label htmlFor="contribution-notes" className="block text-sm font-medium mb-2">
-                      Additional Notes
+                      Notes <span className="font-normal text-zinc-500">(optional)</span>
                     </label>
                     <textarea
                       id="contribution-notes"
@@ -472,100 +465,78 @@ const ContributeDetails = () => {
                       onChange={(event) => {
                         notesRef.current = event.target.value;
                       }}
-                      placeholder="Any additional notes for the approval team."
+                      placeholder="Anything the review team should know"
                       maxLength={1000}
                       className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 min-h-25 resize-none"
                     ></textarea>
                   </div>
 
-                  {/* Contribution Acknowledgement */}
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => setAcknowledged(!acknowledged)}
-                      className={`w-full flex items-start p-4 rounded-xl border transition-all duration-200 ${
-                        acknowledged
-                          ? 'border-emerald-500/60 bg-emerald-500/5 shadow-sm shadow-emerald-500/10'
-                          : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600 hover:bg-zinc-800/60'
-                      }`}
-                    >
-                      {/* Icon Container */}
-                      <div
-                        className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
-                          acknowledged ? 'bg-emerald-500/15' : 'bg-zinc-700/40'
-                        }`}
-                      >
-                        <UserPen
-                          className={`w-5 h-5 ${acknowledged ? 'text-emerald-400' : 'text-zinc-400'}`}
-                        />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 mx-4 text-left">
-                        <span className="text-sm font-semibold block mb-1.5 text-white">
-                          Contribution Acknowledgement
-                        </span>
-                        <p className="text-xs text-zinc-400 leading-relaxed">
-                          By submitting, you confirm you have followed the contribution guidelines,
-                          that your submission has been tested and works correctly, and that this
-                          work is your own.
-                        </p>
-                      </div>
-
-                      {/* Checkbox Container */}
-                      <div
-                        className={`shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
-                          acknowledged
-                            ? 'border-emerald-500 bg-emerald-500 shadow-sm'
-                            : 'border-zinc-600 bg-transparent'
-                        }`}
-                      >
-                        {acknowledged && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
-                      </div>
-                    </button>
+                  <div
+                    ref={selectedFileCardRef}
+                    tabIndex={-1}
+                    className={`flex items-center gap-3 rounded-lg border p-4 ${
+                      selectedFile
+                        ? 'border-emerald-500/25 bg-emerald-500/10'
+                        : 'border-rose-500/25 bg-rose-500/10'
+                    }`}
+                  >
+                    {selectedFile ? (
+                      <Check className="h-5 w-5 shrink-0 text-emerald-400" aria-hidden="true" />
+                    ) : (
+                      <FileUp className="h-5 w-5 shrink-0 text-rose-400" aria-hidden="true" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-zinc-100">
+                        {selectedFile ? 'Tested draft ready' : 'Tested draft missing'}
+                      </p>
+                      <p className="truncate text-xs text-zinc-500">
+                        {selectedFile?.name || 'Return to the test step before submitting.'}
+                      </p>
+                    </div>
                   </div>
+
+                  <label
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+                      acknowledged
+                        ? 'border-emerald-500/35 bg-emerald-500/10'
+                        : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
+                    }`}
+                  >
+                    <input
+                      ref={acknowledgementRef}
+                      type="checkbox"
+                      checked={acknowledged}
+                      onChange={(event) => setAcknowledged(event.target.checked)}
+                      className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-white">Ready to submit</span>
+                      <span className="mt-1 block text-xs leading-5 text-zinc-400">
+                        I followed the contribution guide, tested this draft, and confirm the work
+                        is my own.
+                      </span>
+                    </span>
+                  </label>
+
+                  <Button
+                    type="submit"
+                    disabled={contributionsDisabled || isSubmitting}
+                    className="w-full"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <span>Submitting contribution…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" aria-hidden="true" />
+                        <span>Submit contribution</span>
+                      </>
+                    )}
+                  </Button>
                 </form>
               </Card>
-            </div>
-
-            <div className="flex flex-col space-y-6">
-              <AirportInformationCard icao={icao} airport={airport} />
-              <SelectedFileCard selectedFile={selectedFile} />
-
-              {/* Submit button */}
-              <Button
-                onClick={handleSubmit}
-                disabled={
-                  contributionsDisabled ||
-                  isSubmitting ||
-                  !selectedFile ||
-                  !sceneryName ||
-                  !simulator ||
-                  !acknowledged
-                }
-                className={`w-full ${
-                  contributionsDisabled ||
-                  isSubmitting ||
-                  !selectedFile ||
-                  !sceneryName ||
-                  !simulator ||
-                  !acknowledged
-                    ? 'opacity-40 cursor-not-allowed'
-                    : ''
-                }`}
-              >
-                {isSubmitting ? (
-                  <div className="flex items-center justify-center">
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    <span>Submitting...</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center">
-                    <Upload className="w-4 h-4 mr-2" />
-                    <span>Submit Contribution</span>
-                  </div>
-                )}
-              </Button>
             </div>
           </div>
         </div>
@@ -585,83 +556,6 @@ const ContributeDetails = () => {
       />
     </Layout>
   );
-};
-
-const AirportInformationCard = memo(function AirportInformationCard({ icao, airport }) {
-  return (
-    <Card className="p-6">
-      <h2 className="text-xl font-medium mb-4">Airport Information</h2>
-      <div className="space-y-3">
-        <div>
-          <p className="text-sm text-zinc-400">ICAO Code</p>
-          <p className="font-medium">{icao.toUpperCase()}</p>
-        </div>
-        <div>
-          <p className="text-sm text-zinc-400">Airport Name</p>
-          <p className="font-medium">{airport ? airport.name : 'Loading...'}</p>
-        </div>
-        <div>
-          <p className="text-sm text-zinc-400">Location</p>
-          <p className="font-medium">
-            {airport
-              ? `${airport.latitude.toFixed(4)}, ${airport.longitude.toFixed(4)}`
-              : 'Loading...'}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-});
-
-AirportInformationCard.propTypes = {
-  icao: PropTypes.string.isRequired,
-  airport: PropTypes.shape({
-    name: PropTypes.string.isRequired,
-    latitude: PropTypes.number.isRequired,
-    longitude: PropTypes.number.isRequired,
-  }),
-};
-
-const SelectedFileCard = memo(function SelectedFileCard({ selectedFile }) {
-  return (
-    <Card className="p-6">
-      <h2 className="text-xl font-medium mb-4">XML File</h2>
-      <div
-        className={`w-full border-2 border-dashed rounded-lg p-6 text-center ${
-          selectedFile
-            ? 'border-emerald-500/50 bg-emerald-500/5'
-            : 'border-zinc-600 bg-zinc-800/50'
-        }`}
-      >
-        {selectedFile ? (
-          <div className="flex flex-col items-center">
-            <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
-              <Check className="w-6 h-6 text-emerald-500" />
-            </div>
-            <p className="font-medium mb-1">{selectedFile.name}</p>
-            <p className="text-sm text-zinc-400">
-              {(selectedFile.size / 1024).toFixed(1)} KB • File loaded from previous step
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <div className="w-12 h-12 bg-zinc-700/50 rounded-full flex items-center justify-center mb-3">
-              <FileUp className="w-6 h-6 text-zinc-400" />
-            </div>
-            <p className="font-medium mb-1 text-zinc-400">No XML file loaded</p>
-            <p className="text-sm text-zinc-500">Please go back and test your XML file</p>
-          </div>
-        )}
-      </div>
-    </Card>
-  );
-});
-
-SelectedFileCard.propTypes = {
-  selectedFile: PropTypes.shape({
-    name: PropTypes.string.isRequired,
-    size: PropTypes.number.isRequired,
-  }),
 };
 
 export default ContributeDetails;

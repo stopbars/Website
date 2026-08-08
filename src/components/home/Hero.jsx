@@ -64,8 +64,8 @@ export const Hero = () => {
           style={{ transitionDelay: '180ms' }}
         >
           BARS revolutionizes your VATSIM experience with completely free realistic airport lighting
-          simulation. Fully compatible with Microsoft Flight Simulator 2020, and 2024, seamlessly
-          integrated with both default and major third-party sceneries.
+          simulation. Compatible with Microsoft Flight Simulator 2020 and 2024, and X-Plane 12,
+          across default and major third-party sceneries.
         </p>
         <div
           className={`flex flex-col sm:flex-row gap-4 justify-center transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}

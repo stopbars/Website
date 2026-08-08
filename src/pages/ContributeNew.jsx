@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
-import { AlertCircle, Search, Loader, BookOpen, ChevronRight } from 'lucide-react';
+import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
+import { AlertCircle, Search, BookOpen, ArrowRight } from 'lucide-react';
 
 const ContributeNew = () => {
   const navigate = useNavigate();
@@ -21,33 +22,27 @@ const ContributeNew = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20 flex items-center">
-        <div className="w-full max-w-3xl mx-auto px-6">
-          <div className="mb-12 text-center">
-            <h1 className="text-3xl font-bold mb-4">Contribute to BARS</h1>
-            <p className="text-zinc-400 max-w-xl mx-auto"></p>
-          </div>
+      <div className="min-h-screen pb-20 pt-32">
+        <div className="mx-auto w-full max-w-4xl px-6">
+          <ContributionFlowHeader
+            current="airport"
+            title="Start a contribution"
+            context="Enter the airport ICAO to review its current BARS layout."
+          />
 
-          <Card className="p-8 max-w-lg mx-auto">
-            <h2 className="text-xl font-medium mb-6">Step 1: Select Airport</h2>
-
+          <Card className="mx-auto max-w-xl p-6 sm:p-8">
             <AirportSearchForm />
 
-            <div className="mt-8 pt-6 border-t border-zinc-800">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  window.open(
-                    'https://docs.stopbars.com/contributions',
-                    '_blank',
-                    'noopener,noreferrer'
-                  )
-                }
-                className="flex items-center justify-center w-full"
+            <div className="mt-6 text-center">
+              <a
+                href="https://docs.stopbars.com/contributions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
               >
-                <BookOpen className="w-4 h-4 mr-2" />
-                View Contribution Guide
-              </Button>
+                <BookOpen className="h-4 w-4" aria-hidden="true" />
+                Read contribution guide
+              </a>
             </div>
           </Card>
         </div>
@@ -55,8 +50,8 @@ const ContributeNew = () => {
 
       {/* Toast for error messages */}
       <Toast
-        title="Error Loading Airport"
-        description="Failed to load airport data, please try again."
+        title="Unable to load airport"
+        description="Check the ICAO and try again."
         variant="destructive"
         show={showToast}
         onClose={() => setShowToast(false)}
@@ -68,77 +63,72 @@ const ContributeNew = () => {
 function AirportSearchForm() {
   const navigate = useNavigate();
   const [icao, setIcao] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState('');
+  const icaoInputRef = useRef(null);
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = (event) => {
     event.preventDefault();
 
     if (!icao) {
-      setError('Please enter an airport ICAO code');
+      setError('Enter a four-character airport ICAO.');
+      icaoInputRef.current?.focus();
       return;
     }
 
     if (!/^[A-Za-z0-9]{4}$/.test(icao)) {
-      setError('ICAO code must be exactly 4 characters (letters and numbers only)');
+      setError('Use exactly four letters or numbers.');
+      icaoInputRef.current?.focus();
       return;
     }
 
-    setIsSearching(true);
     setError('');
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      navigate(`/contribute/map/${icao.toUpperCase()}`);
-    } catch (submitError) {
-      setError('Failed to verify airport. Please try again.');
-      console.error(submitError);
-    } finally {
-      setIsSearching(false);
-    }
+    navigate(`/contribute/map/${icao.toUpperCase()}`);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <label htmlFor="icao" className="block text-sm font-medium mb-2">
-          Enter Airport ICAO Code
+        <label htmlFor="icao" className="mb-2 block text-sm font-medium text-zinc-200">
+          Airport ICAO
         </label>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
+          <Search
+            className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500"
+            aria-hidden="true"
+          />
           <input
             id="icao"
+            ref={icaoInputRef}
+            name="airport-icao"
             type="text"
+            autoComplete="off"
+            spellCheck="false"
             value={icao}
             onChange={(event) => {
               setIcao(event.target.value.toUpperCase());
               setError('');
             }}
-            placeholder="e.g. YSSY, EGLL, OMDB"
+            placeholder="YSSY"
             maxLength={4}
-            className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-lg uppercase"
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'icao-help icao-error' : 'icao-help'}
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 pl-10 text-lg uppercase text-white outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-600 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/35"
           />
         </div>
+        <p id="icao-help" className="mt-2 text-sm text-zinc-500">
+          Four letters or numbers.
+        </p>
         {error && (
-          <div className="mt-2 flex items-center text-red-500 text-sm">
-            <AlertCircle className="w-4 h-4 mr-1" />
+          <div id="icao-error" className="mt-2 flex items-center gap-1.5 text-sm text-red-400">
+            <AlertCircle className="h-4 w-4" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={isSearching}>
-        {isSearching ? (
-          <div className="flex items-center justify-center">
-            <Loader className="w-4 h-4 mr-2 animate-spin" />
-            <span>Searching...</span>
-          </div>
-        ) : (
-          <>
-            Continue to Next Step
-            <ChevronRight className="w-4 h-4 ml-2" />
-          </>
-        )}
+      <Button type="submit" className="w-full">
+        Review map
+        <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </Button>
     </form>
   );

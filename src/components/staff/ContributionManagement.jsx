@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import XMLMap from '../shared/XMLMap';
 import { Toast } from '../shared/Toast';
+import { SimulatorBadge } from '../shared/SimulatorBadge';
+import ReviewModal from './ContributionReviewWorkspace';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
 const CONTRIBUTIONS_PER_PAGE = 5;
@@ -150,7 +152,13 @@ UploadContribution.propTypes = {
 };
 
 // oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The review form is one cohesive modal; its validation and upload states are intentionally independent.
-const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) => {
+export const LegacyContributionReviewModal = ({
+  contribution,
+  onClose,
+  onApprove,
+  onReject,
+  onError,
+}) => {
   const [step, setStep] = useState(1);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
@@ -411,21 +419,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
                   </div>
                   <div>
                     <p className="text-sm text-zinc-400 mb-1">Simulator</p>
-                    <span
-                      className={`inline-flex text-sm px-2.5 py-1 rounded-full border font-medium ${
-                        contribution.simulator === 'msfs2024'
-                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                          : contribution.simulator === 'msfs2020'
-                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                            : 'bg-zinc-700 text-zinc-300 border-zinc-600'
-                      }`}
-                    >
-                      {contribution.simulator === 'msfs2024'
-                        ? 'MSFS 2024'
-                        : contribution.simulator === 'msfs2020'
-                          ? 'MSFS 2020'
-                          : contribution.simulator || 'Not specified'}
-                    </span>
+                    <SimulatorBadge simulator={contribution.simulator} size="sm" />
                   </div>
                 </div>
 
@@ -683,7 +677,7 @@ const ReviewModal = ({ contribution, onClose, onApprove, onReject, onError }) =>
   );
 };
 
-ReviewModal.propTypes = {
+LegacyContributionReviewModal.propTypes = {
   contribution: PropTypes.shape({
     id: PropTypes.string.isRequired,
     airportIcao: PropTypes.string.isRequired,
@@ -709,6 +703,7 @@ const ContributionManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedContribution, setSelectedContribution] = useState(null);
+  const [reviewLoadingId, setReviewLoadingId] = useState(null);
   const [toast, setToast] = useState({
     show: false,
     title: '',
@@ -720,7 +715,7 @@ const ContributionManagement = () => {
     try {
       const token = getVatsimToken();
       const response = await fetch(
-        `https://v2.stopbars.com/contributions?page=${currentPage}&limit=${CONTRIBUTIONS_PER_PAGE}&status=pending`,
+        'https://v2.stopbars.com/contributions?status=pending&projection=metadata',
         {
           headers: {
             'X-Vatsim-Token': token,
@@ -734,7 +729,7 @@ const ContributionManagement = () => {
 
       const data = await response.json();
       setContributions(data.contributions);
-      setTotalPages(Math.ceil(data.totalCount / CONTRIBUTIONS_PER_PAGE));
+      setTotalPages(Math.max(1, Math.ceil(data.total / CONTRIBUTIONS_PER_PAGE)));
       setLoading(false);
     } catch (err) {
       setToast({
@@ -745,14 +740,38 @@ const ContributionManagement = () => {
       });
       setLoading(false);
     }
-  }, [currentPage]);
+  }, []);
 
   useEffect(() => {
     fetchContributions();
   }, [fetchContributions]);
 
-  const handleReview = (contribution) => {
-    setSelectedContribution(contribution);
+  const handleReview = async (contribution) => {
+    if (reviewLoadingId) return;
+    setReviewLoadingId(contribution.id);
+    try {
+      const response = await fetch(`https://v2.stopbars.com/contributions/${contribution.id}`, {
+        headers: { 'X-Vatsim-Token': getVatsimToken() },
+      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || 'Failed to load contribution source');
+      }
+      const detail = await response.json();
+      if (typeof detail.submittedXml !== 'string' || !detail.submittedXml) {
+        throw new Error('Core did not return the submitted source for this contribution');
+      }
+      setSelectedContribution(detail);
+    } catch (error) {
+      setToast({
+        show: true,
+        title: 'Unable to open contribution',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setReviewLoadingId(null);
+    }
   };
 
   const handleApproval = async () => {
@@ -783,10 +802,6 @@ const ContributionManagement = () => {
       description: error.description,
       variant: 'destructive',
     });
-  };
-
-  const handleContributionSelect = (contribution) => {
-    setSelectedContribution(contribution);
   };
 
   const renderStatusBadge = useCallback((status) => {
@@ -821,7 +836,8 @@ const ContributionManagement = () => {
   }, []);
 
   // Filter contributions based on search term if needed
-  const paginatedContributions = contributions;
+  const pageStart = (currentPage - 1) * CONTRIBUTIONS_PER_PAGE;
+  const paginatedContributions = contributions.slice(pageStart, pageStart + CONTRIBUTIONS_PER_PAGE);
 
   return (
     <div className="staff-tool space-y-6">
@@ -867,7 +883,7 @@ const ContributionManagement = () => {
                   className={`bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-all duration-200 cursor-pointer ${
                     selectedContribution?.id === contribution.id ? 'border-blue-500' : ''
                   }`}
-                  onClick={() => handleContributionSelect(contribution)}
+                  onClick={() => handleReview(contribution)}
                 >
                   <div className="flex flex-col sm:flex-row justify-between gap-4">
                     <div className="flex-1">
@@ -879,19 +895,7 @@ const ContributionManagement = () => {
                       <p className="text-base text-zinc-400 mb-3">
                         Package: <span className="text-zinc-300">{contribution.packageName}</span>
                         {contribution.simulator && (
-                          <span
-                            className={`ml-2 text-sm px-2 py-0.5 rounded-full border ${
-                              contribution.simulator === 'msfs2024'
-                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                                : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                            }`}
-                          >
-                            {contribution.simulator === 'msfs2024'
-                              ? 'MSFS 2024'
-                              : contribution.simulator === 'msfs2020'
-                                ? 'MSFS 2020'
-                                : contribution.simulator}
-                          </span>
+                          <SimulatorBadge simulator={contribution.simulator} className="ml-2" />
                         )}
                       </p>
 
@@ -927,11 +931,19 @@ const ContributionManagement = () => {
                           e.stopPropagation();
                           handleReview(contribution);
                         }}
-                        disabled={loading}
+                        disabled={loading || reviewLoadingId === contribution.id}
                         variant={contribution.status === 'pending' ? 'primary' : 'outline'}
                       >
-                        <Eye className="w-4 h-4 mr-2" />
-                        {contribution.status === 'pending' ? 'Review' : 'View'}
+                        {reviewLoadingId === contribution.id ? (
+                          <Loader className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Eye className="w-4 h-4 mr-2" />
+                        )}
+                        {reviewLoadingId === contribution.id
+                          ? 'Loading'
+                          : contribution.status === 'pending'
+                            ? 'Review'
+                            : 'View'}
                       </Button>
                     </div>
                   </div>

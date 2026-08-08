@@ -10,6 +10,9 @@ const MINIMUM_WEAK_SECONDARY_MAXIMUM_DISTANCE_METERS = 12;
 const MAXIMUM_WEAK_SECONDARY_COMPOSITE_DIVISION_COVERAGE = 0.3;
 const MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO = 0.5;
 const MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE = 0.02;
+const MINIMUM_REGISTERED_OWNER_SUPPRESSION_SCORE = 0.9;
+const MINIMUM_REGISTERED_OWNER_SUPPRESSION_ADVANTAGE = 0.12;
+const MINIMUM_REGISTERED_OWNER_OVERLAP_RATIO = 0.8;
 const MINIMUM_ALLOCATED_LENGTH_RATIO = 0.4;
 const MINIMUM_COMPOSITE_SOURCE_COVERAGE = 0.15;
 const MINIMUM_INFERRED_COMPOSITE_SOURCE_COVERAGE = 0.04;
@@ -35,6 +38,18 @@ const RECONSTRUCTED_REPLACEMENT_SIMPLIFICATION_TOLERANCE_METERS = 0.6;
 const MAXIMUM_CONNECTED_STOPBAR_ENDPOINT_GAP_METERS = 8;
 const MAXIMUM_CONNECTED_STOPBAR_TURN_DEGREES = 100;
 const MAXIMUM_CONNECTED_STOPBAR_LENGTH_METERS = 200;
+const MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS = 4;
+const MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS = 120;
+const MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS = 180;
+const MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES = 25;
+const MAXIMUM_STOPBAR_EXTENSION_TURN_DEGREES = 100;
+const LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS = 3;
+const HIGHER_PRIORITY_ENDPOINT_CONTACT_METERS = 0.2;
+const MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS = 1.5;
+const MINIMUM_STOPBAR_ANCHORED_OWNER_SOURCE_COVERAGE = 0.9;
+const MINIMUM_STOPBAR_CONTINUATION_LOCAL_TURN_DEGREES = 10;
+const MINIMUM_ALTERNATIVE_GUIDANCE_EVIDENCE_SCORE = 0.8;
+const MINIMUM_ALTERNATIVE_GUIDANCE_SOURCE_COVERAGE = 0.7;
 const GUIDANCE_SOURCE_CLASSIFICATIONS = new Set(['lead-on', 'taxi-centerline']);
 const GUIDANCE_DIVISION_TYPES = new Set(['lead_on', 'taxiway', 'stand']);
 
@@ -161,14 +176,9 @@ const TYPE_CONFIG = {
   },
 };
 
-export function matchDivisionObjects(
-  divisionPoints,
-  lightRows,
-  instances = [],
-  options = {}
-) {
+export function matchDivisionObjects(divisionPoints, lightRows, instances = [], options = {}) {
   const includeDiagnostics = (import.meta.env?.DEV ?? true) && options.includeDiagnostics === true;
-  const rowCandidateEvaluations = includeDiagnostics ? [] : null;
+  const rowCandidateEvaluations = includeDiagnostics ? createCandidateDiagnosticCollector() : null;
   const instanceCandidateEvaluations = includeDiagnostics ? [] : null;
   const simulatorRows = lightRows ?? [];
   const referenceLatitude = findReferenceLatitude(divisionPoints, simulatorRows, instances);
@@ -235,7 +245,7 @@ export function matchDivisionObjects(
             boundsDistance(division.bounds, candidate.bounds),
             2
           );
-          rowCandidateEvaluations.push(evaluation);
+          rowCandidateEvaluations.add(evaluation);
         }
         continue;
       }
@@ -245,7 +255,7 @@ export function matchDivisionObjects(
         if (evaluation) {
           evaluation.outcome = 'rejected';
           evaluation.reason = 'no-usable-simulator-section';
-          rowCandidateEvaluations.push(evaluation);
+          rowCandidateEvaluations.add(evaluation);
         }
         continue;
       }
@@ -280,7 +290,7 @@ export function matchDivisionObjects(
           : !meetsSectionLength
             ? 'section-too-short'
             : 'eligible-before-ownership-allocation';
-        rowCandidateEvaluations.push(evaluation);
+        rowCandidateEvaluations.add(evaluation);
       }
       if (metrics.valid && meetsSectionLength) {
         edges.push({ division: matchingDivision, candidate, section, metrics });
@@ -291,8 +301,25 @@ export function matchDivisionObjects(
   const matchedDivisionIds = new Set();
   const matches = [];
   const allocationEvaluations = includeDiagnostics ? [] : null;
+  const dominantOwnershipEdges = suppressClearlySubordinateCompositeOwners(edges);
+  const priorityEdges = preferHighestPriorityEvidence(
+    dominantOwnershipEdges,
+    candidates,
+    referenceLatitude
+  );
   const ownershipEdges = preferConnectedStopbarCompositeEdges(
-    suppressWeakSecondaryCandidateOwners(suppressRedundantCompositeEdges(edges))
+    suppressRedundantRegisteredStopbars(
+      suppressSubordinateRegisteredGuidanceOwners(
+        suppressClearlySubordinateCompositeOwners(
+          suppressWeakSecondaryCandidateOwners(suppressRedundantCompositeEdges(priorityEdges))
+        )
+      )
+    )
+  );
+  const connectedOwnershipEdges = addConnectedGuidanceTrunkOwners(
+    ownershipEdges,
+    referenceLatitude,
+    edges
   );
   const allInstanceEdges = buildInstanceMatchEdges(
     matchableDivision,
@@ -300,14 +327,21 @@ export function matchDivisionObjects(
     instanceCandidateEvaluations
   );
   const allocatedEdges = allocateSimulatorGeometry(
-    ownershipEdges,
+    connectedOwnershipEdges,
     referenceLatitude,
     candidates,
     matchableDivision,
     allocationEvaluations,
     preparedRunways
   );
-  for (const edge of allocatedEdges) {
+  const completedAllocatedEdges = completeAllocatedGuidanceRows(
+    allocatedEdges,
+    baseCandidates,
+    matchableDivision,
+    referenceLatitude,
+    edges
+  );
+  for (const edge of completedAllocatedEdges) {
     const divisionKey = stableIdentifier(edge.division);
     const sourceSections = sourceSectionsForMergedCandidate(edge, referenceLatitude);
     if (sourceSections.length === 0) continue;
@@ -424,12 +458,16 @@ export function matchDivisionObjects(
       configuration: matchingConfigurationDiagnostic(),
       divisionObjects: preparedDivision.map(preparedPolylineDiagnostic),
       simulatorCandidates: candidates.map(preparedPolylineDiagnostic),
-      compatibleRowCandidateEvaluations: rowCandidateEvaluations,
+      compatibleRowCandidateEvaluations: rowCandidateEvaluations.values(),
+      compatibleRowCandidateSummary: rowCandidateEvaluations.summary(),
       instanceCandidateEvaluations,
       pipeline: {
         eligibleEdges: edges.map(edgeDiagnostic),
+        priorityEdges: priorityEdges.map(edgeDiagnostic),
         ownershipEdges: ownershipEdges.map(edgeDiagnostic),
+        connectedOwnershipEdges: connectedOwnershipEdges.map(edgeDiagnostic),
         allocatedEdges: allocatedEdges.map(edgeDiagnostic),
+        completedAllocatedEdges: completedAllocatedEdges.map(edgeDiagnostic),
         allocationEvaluations,
         acceptedInstanceEdges: allInstanceEdges.map(instanceEdgeDiagnostic),
         selectedInstanceEdges: selectedInstanceMatchEdges.map(instanceEdgeDiagnostic),
@@ -437,6 +475,108 @@ export function matchDivisionObjects(
     };
   }
   return result;
+}
+
+const DIAGNOSTIC_CANDIDATE_LIMIT_PER_DIVISION = 12;
+
+function createCandidateDiagnosticCollector(
+  limitPerDivision = DIAGNOSTIC_CANDIDATE_LIMIT_PER_DIVISION
+) {
+  const buckets = new Map();
+  const outcomes = new Map();
+  const reasons = new Map();
+  let totalEvaluations = 0;
+
+  return {
+    add(evaluation) {
+      totalEvaluations += 1;
+      incrementDiagnosticCount(outcomes, evaluation.outcome);
+      incrementDiagnosticCount(reasons, evaluation.reason);
+      const divisionId = String(evaluation.divisionId ?? '');
+      const bucket = buckets.get(divisionId) ?? [];
+      const ranked = { evaluation, priority: candidateDiagnosticPriority(evaluation) };
+      if (bucket.length < limitPerDivision) {
+        bucket.push(ranked);
+        buckets.set(divisionId, bucket);
+        return;
+      }
+      let worstIndex = 0;
+      for (let index = 1; index < bucket.length; index += 1) {
+        if (compareRankedDiagnostics(bucket[worstIndex], bucket[index]) < 0) {
+          worstIndex = index;
+        }
+      }
+      if (compareRankedDiagnostics(ranked, bucket[worstIndex]) < 0) {
+        bucket[worstIndex] = ranked;
+      }
+    },
+    values() {
+      return [...buckets.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .flatMap(([, bucket]) =>
+          [...bucket].sort(compareRankedDiagnostics).map((ranked) => ranked.evaluation)
+        );
+    },
+    summary() {
+      const retainedEvaluations = [...buckets.values()].reduce(
+        (total, bucket) => total + bucket.length,
+        0
+      );
+      return {
+        totalEvaluations,
+        retainedEvaluations,
+        omittedEvaluations: Math.max(0, totalEvaluations - retainedEvaluations),
+        limitPerDivision,
+        outcomes: diagnosticCounts(outcomes),
+        reasons: diagnosticCounts(reasons),
+      };
+    },
+  };
+}
+
+function candidateDiagnosticPriority(evaluation) {
+  const score = Number(evaluation.metrics?.score ?? evaluation.directMetrics?.score ?? 0);
+  const distance = Number(
+    evaluation.metrics?.meanDistance ??
+      evaluation.directMetrics?.sourceToDivisionMeanDistance ??
+      evaluation.boundsDistanceMeters ??
+      Number.POSITIVE_INFINITY
+  );
+  const outcomeRank = evaluation.outcome === 'eligible' ? 0 : 1;
+  const reasonRank =
+    evaluation.reason === 'section-too-short'
+      ? 0
+      : evaluation.reason === 'geometry-score-rejected'
+        ? 1
+        : evaluation.reason === 'no-usable-simulator-section'
+          ? 2
+          : 3;
+  return [
+    outcomeRank,
+    reasonRank,
+    -score,
+    Number.isFinite(distance) ? distance : Number.MAX_SAFE_INTEGER,
+    String(evaluation.simulatorCandidateId ?? ''),
+  ];
+}
+
+function compareRankedDiagnostics(left, right) {
+  for (let index = 0; index < left.priority.length - 1; index += 1) {
+    const difference = left.priority[index] - right.priority[index];
+    if (difference !== 0) return difference;
+  }
+  return String(left.priority.at(-1)).localeCompare(String(right.priority.at(-1)));
+}
+
+function incrementDiagnosticCount(counts, value) {
+  const key = String(value ?? 'unknown');
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function diagnosticCounts(counts) {
+  return Object.fromEntries(
+    [...counts.entries()].sort(([left], [right]) => left.localeCompare(right))
+  );
 }
 
 export function scorePolylineMatch(divisionPoint, simulatorRow) {
@@ -468,7 +608,205 @@ function isExactPlacementRow(row) {
 }
 
 function isLocallyRegisterableSimulatorRow(row) {
-  return isExactPlacementRow(row);
+  return (
+    isExactPlacementRow(row) ||
+    (row?.sourceType?.startsWith('xplane-') && row.sourceGeometryDerived !== 'merged-source-row')
+  );
+}
+
+function evidencePriority(row) {
+  const priority = Number(row?.evidencePriority);
+  return Number.isFinite(priority) && priority > 0 ? priority : 99;
+}
+
+function preferHighestPriorityEvidence(edges, candidates, referenceLatitude) {
+  const kept = [];
+  // Priority applies to each piece of simulator geometry, not to the whole
+  // Division object. A lower-priority marking may fill a real gap, but it may
+  // never replace a co-located exact light row.
+  const ordered = [...edges].sort(
+    (left, right) =>
+      evidencePriority(left.candidate.raw) - evidencePriority(right.candidate.raw) ||
+      right.metrics.score - left.metrics.score ||
+      stableIdentifier(left.candidate).localeCompare(stableIdentifier(right.candidate))
+  );
+  for (const edge of ordered) {
+    const higherPriorityGeometry = candidates.filter(
+      (candidate) =>
+        configFor(edge.division).classifications.has(candidate.raw.classification) &&
+        evidencePriority(candidate.raw) < evidencePriority(edge.candidate.raw) &&
+        boundsDistance(edge.section.prepared.bounds, candidate.bounds) <=
+          LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS &&
+        !candidatesShareSourceRows(edge.candidate, candidate)
+    );
+    kept.push(
+      ...edgeSectionsWithoutHigherPriorityGeometry(edge, higherPriorityGeometry, referenceLatitude)
+    );
+  }
+  return kept;
+}
+
+function edgeSectionsWithoutHigherPriorityGeometry(
+  edge,
+  higherPriorityGeometry,
+  referenceLatitude
+) {
+  if (higherPriorityGeometry.length === 0 || evidencePriority(edge.candidate.raw) >= 99) {
+    return [edge];
+  }
+  const ranges = geometryRangesWithoutHigherPriorityEvidence(
+    edge.candidate,
+    edge.section.start,
+    edge.section.end,
+    higherPriorityGeometry
+  );
+  if (
+    ranges.length === 1 &&
+    ranges[0][0] <= edge.section.start + 0.05 &&
+    ranges[0][1] >= edge.section.end - 0.05
+  ) {
+    return [edge];
+  }
+
+  return ranges
+    .filter(([start, end]) => end - start >= 2)
+    .map(([start, end]) => {
+      const section = simulatorSectionForRange(
+        edge.candidate,
+        edge.division,
+        start,
+        end,
+        referenceLatitude,
+        edge.section
+      );
+      if (!section?.prepared?.valid) return null;
+      const metrics = scoreDivisionCandidateSection(
+        edge.division,
+        section,
+        configFor(edge.division),
+        referenceLatitude
+      );
+      if (!metrics.valid) return null;
+      return {
+        ...edge,
+        section,
+        metrics: {
+          ...metrics,
+          evidenceFallbackClipped: true,
+          higherPriorityGeometryRemovedMeters: round(edge.section.length - section.length, 3),
+        },
+      };
+    })
+    .filter(Boolean);
+}
+
+function geometryRangesWithoutHigherPriorityEvidence(
+  candidate,
+  sectionStart,
+  sectionEnd,
+  higherPriorityGeometry
+) {
+  const interval = 1;
+  const higherCoverage = higherPriorityGeometry.map((higher) => ({
+    higher,
+    exactInterval: embeddedHigherPriorityCoverageInterval(candidate, higher),
+  }));
+  const hasEmbeddedCoverage = higherCoverage.some(({ exactInterval }) => exactInterval);
+  const breakpoints = new Set([sectionStart, sectionEnd]);
+  for (let along = sectionStart + interval; along < sectionEnd; along += interval) {
+    breakpoints.add(along);
+  }
+  for (const { exactInterval } of higherCoverage) {
+    if (!exactInterval) continue;
+    breakpoints.add(Math.max(sectionStart, exactInterval.start));
+    breakpoints.add(Math.min(sectionEnd, exactInterval.end));
+  }
+  const orderedBreakpoints = [...breakpoints]
+    .filter((along) => along >= sectionStart && along <= sectionEnd)
+    .sort((left, right) => left - right);
+  const ranges = [];
+  let rangeStart;
+  for (let index = 1; index < orderedBreakpoints.length; index += 1) {
+    const start = orderedBreakpoints[index - 1];
+    const end = orderedBreakpoints[index];
+    if (end - start <= 0.000001) continue;
+    const midpointAlong = (start + end) / 2;
+    const midpoint = projectedPointAtDistance(candidate.projected, midpointAlong);
+    const covered = higherCoverage.some(({ higher, exactInterval }) =>
+      exactInterval
+        ? midpointAlong >= exactInterval.start && midpointAlong <= exactInterval.end
+        : !hasEmbeddedCoverage && higherPriorityGeometryCoversPoint(midpoint, higher)
+    );
+    if (!covered && rangeStart === undefined) rangeStart = start;
+    if (covered && rangeStart !== undefined) {
+      ranges.push([rangeStart, start]);
+      rangeStart = undefined;
+    }
+  }
+  if (rangeStart !== undefined) ranges.push([rangeStart, sectionEnd]);
+  return ranges;
+}
+
+function embeddedHigherPriorityCoverageInterval(candidate, higher) {
+  const start = projectPointToPolyline(higher.projected[0], candidate.projected);
+  const end = projectPointToPolyline(higher.projected.at(-1), candidate.projected);
+  if (
+    start.distance <= LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS &&
+    end.distance <= LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS &&
+    Math.abs(start.along - end.along) >= 0.5
+  ) {
+    const followsCandidate = nearestDistanceSummary(higher.samples, candidate.projected);
+    if (followsCandidate.maximum <= LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS) {
+      return {
+        start: Math.min(start.along, end.along),
+        end: Math.max(start.along, end.along),
+      };
+    }
+  }
+
+  // An allocated exact-light section can overlap almost all of a marking while
+  // extending slightly beyond one of the marking's endpoints. Treat the
+  // sustained co-linear portion as coverage instead of rejecting the whole
+  // interval because that one outer endpoint is a few metres away.
+  const closeSampleProjections = higher.samples
+    .map((sample) => projectPointToPolyline(sample, candidate.projected))
+    .filter(
+      (projection) => projection.distance <= LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS
+    );
+  if (
+    closeSampleProjections.length < 3 ||
+    closeSampleProjections.length / higher.samples.length < 0.7
+  ) {
+    return null;
+  }
+  let overlapStart = Math.min(...closeSampleProjections.map((projection) => projection.along));
+  let overlapEnd = Math.max(...closeSampleProjections.map((projection) => projection.along));
+  if (overlapEnd - overlapStart < 10) return null;
+
+  const candidateStartOnHigher = projectPointToPolyline(candidate.projected[0], higher.projected);
+  const candidateEndOnHigher = projectPointToPolyline(candidate.projected.at(-1), higher.projected);
+  if (candidateStartOnHigher.distance <= LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS) {
+    overlapStart = 0;
+  }
+  if (candidateEndOnHigher.distance <= LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS) {
+    overlapEnd = candidate.length;
+  }
+  return { start: overlapStart, end: overlapEnd };
+}
+
+function higherPriorityGeometryCoversPoint(point, higher) {
+  const projection = projectPointToPolyline(point, higher.projected);
+  if (projection.distance > LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS) {
+    return false;
+  }
+
+  const projectsInsideSource =
+    projection.along > HIGHER_PRIORITY_ENDPOINT_CONTACT_METERS &&
+    higher.length - projection.along > HIGHER_PRIORITY_ENDPOINT_CONTACT_METERS;
+  const contactsSourceEndpoint =
+    distance(point, higher.projected[0]) <= HIGHER_PRIORITY_ENDPOINT_CONTACT_METERS ||
+    distance(point, higher.projected.at(-1)) <= HIGHER_PRIORITY_ENDPOINT_CONTACT_METERS;
+  return projectsInsideSource || contactsSourceEndpoint;
 }
 
 function prepareDivisionPoint(point, index, referenceLatitude) {
@@ -488,7 +826,7 @@ function prepareRunwayCenterlines(runways, referenceLatitude) {
   const prepared = [];
   for (const runway of runways ?? []) {
     if (
-      runway?.sourceType !== 'bgl-runway' ||
+      !['bgl-runway', 'xplane-runway'].includes(runway?.sourceType) ||
       !Number.isFinite(runway.lat) ||
       !Number.isFinite(runway.lon) ||
       !Number.isFinite(runway.heading) ||
@@ -518,8 +856,7 @@ function prepareRunwayCenterlines(runways, referenceLatitude) {
           y: center.y + direction.y * halfLength,
         },
       ],
-      corridorHalfWidth:
-        runway.widthMeters / 2 + RUNWAY_CENTERLINE_CORRIDOR_MARGIN_METERS,
+      corridorHalfWidth: runway.widthMeters / 2 + RUNWAY_CENTERLINE_CORRIDOR_MARGIN_METERS,
     });
   }
   return prepared;
@@ -709,15 +1046,11 @@ function scoreDivisionCandidateSection(division, section, config, referenceLatit
     return fullMetrics;
   }
 
-  const partialMetrics = comparePreparedPolylines(
-    divisionSection.prepared,
-    section.prepared,
-    {
-      ...config,
-      maximumAngle: MAXIMUM_COMPOSITE_SECTION_ANGLE_DEGREES,
-      containmentMaximumAngle: MAXIMUM_COMPOSITE_SECTION_ANGLE_DEGREES,
-    }
-  );
+  const partialMetrics = comparePreparedPolylines(divisionSection.prepared, section.prepared, {
+    ...config,
+    maximumAngle: MAXIMUM_COMPOSITE_SECTION_ANGLE_DEGREES,
+    containmentMaximumAngle: MAXIMUM_COMPOSITE_SECTION_ANGLE_DEGREES,
+  });
   const divisionCoverage = divisionSection.length / Math.max(division.length, 0.001);
   const sourceParentLength =
     Number(section.prepared.raw.sourceParentLengthMeters) || section.length;
@@ -729,12 +1062,10 @@ function scoreDivisionCandidateSection(division, section, config, referenceLatit
       (isExactPlacementRow(section.prepared.raw)
         ? MINIMUM_INFERRED_COMPOSITE_SOURCE_COVERAGE
         : MINIMUM_COMPOSITE_SOURCE_COVERAGE) &&
-    partialMetrics.divisionToSourceMeanDistance <=
-      MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS &&
+    partialMetrics.divisionToSourceMeanDistance <= MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS &&
     partialMetrics.divisionToSourceMaximumDistance <= 5 &&
     partialMetrics.divisionToSourceCoverage >= 0.9 &&
-    partialMetrics.sourceToDivisionMeanDistance <=
-      MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS &&
+    partialMetrics.sourceToDivisionMeanDistance <= MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS &&
     partialMetrics.sourceToDivisionMaximumDistance <= 5 &&
     partialMetrics.sourceToDivisionCoverage >= 0.9;
 
@@ -988,6 +1319,8 @@ function instanceBackedRow(edge) {
     confidence: Math.min(confidence, edge.metrics.score),
     inferred: false,
     sourceBasis: 'division-guided-source-instances',
+    evidencePriority: Math.min(...rawInstances.map(evidencePriority)),
+    removalEligible: rawInstances.every((instance) => instance.removalEligible !== false),
     relationshipBasis: 'division-shape-to-source-instance-proximity',
     reconstructMode: 'division-guided-source-instance-order',
     sourcePlacementCount: rawInstances.length,
@@ -1142,8 +1475,7 @@ function comparePreparedPolylines(division, candidate, config) {
     sourceCoverage >= config.minimumSourceCoverage &&
     divisionCoverage >=
       (isExactPlacementRow(candidate.raw)
-        ? (config.minimumInferredSourceContainedDivisionCoverage ??
-          config.minimumDivisionCoverage)
+        ? (config.minimumInferredSourceContainedDivisionCoverage ?? config.minimumDivisionCoverage)
         : config.minimumDivisionCoverage) &&
     angleDifference <= (config.containmentMaximumAngle ?? config.maximumAngle) &&
     lengthRatio >= config.minimumContainedLengthRatio &&
@@ -1194,12 +1526,10 @@ function matchingConfigurationDiagnostic() {
         MAXIMUM_WEAK_SECONDARY_COMPOSITE_DIVISION_COVERAGE,
       minimumRedundantCompositeSectionOverlapRatio:
         MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO,
-      maximumCompleteOwnerScoreDisadvantage:
-        MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE,
+      maximumCompleteOwnerScoreDisadvantage: MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE,
       minimumAllocatedLengthRatio: MINIMUM_ALLOCATED_LENGTH_RATIO,
       minimumCompositeSourceCoverage: MINIMUM_COMPOSITE_SOURCE_COVERAGE,
-      minimumInferredCompositeSourceCoverage:
-        MINIMUM_INFERRED_COMPOSITE_SOURCE_COVERAGE,
+      minimumInferredCompositeSourceCoverage: MINIMUM_INFERRED_COMPOSITE_SOURCE_COVERAGE,
       maximumCompositeSectionAngleDegrees: MAXIMUM_COMPOSITE_SECTION_ANGLE_DEGREES,
       maximumGuidancePartitionGapMeters: MAXIMUM_GUIDANCE_PARTITION_GAP_METERS,
       maximumGuidanceEndExtensionMeters: MAXIMUM_GUIDANCE_END_EXTENSION_METERS,
@@ -1218,6 +1548,12 @@ function matchingConfigurationDiagnostic() {
       maximumConnectedStopbarEndpointGapMeters: MAXIMUM_CONNECTED_STOPBAR_ENDPOINT_GAP_METERS,
       maximumConnectedStopbarTurnDegrees: MAXIMUM_CONNECTED_STOPBAR_TURN_DEGREES,
       maximumConnectedStopbarLengthMeters: MAXIMUM_CONNECTED_STOPBAR_LENGTH_METERS,
+      maximumGuidanceConnectionGapMeters: MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS,
+      maximumStopbarBoundaryExtensionMeters: MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS,
+      maximumStraightFallbackExtensionMeters: MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS,
+      maximumStraightFallbackTurnDegrees: MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES,
+      maximumStopbarExtensionTurnDegrees: MAXIMUM_STOPBAR_EXTENSION_TURN_DEGREES,
+      lowerPriorityGeometryCoverageDistanceMeters: LOWER_PRIORITY_GEOMETRY_COVERAGE_DISTANCE_METERS,
     },
     types: Object.fromEntries(
       Object.entries(TYPE_CONFIG).map(([type, config]) => [
@@ -1239,6 +1575,9 @@ function preparedPolylineDiagnostic(prepared) {
     type: prepared.raw.type,
     classification: prepared.raw.classification,
     sourceType: prepared.raw.sourceType,
+    sourceBasis: prepared.raw.sourceBasis,
+    evidencePriority: evidencePriority(prepared.raw),
+    removalEligible: prepared.raw.removalEligible !== false,
     inferred: prepared.raw.inferred === true,
     confidence: prepared.raw.confidence,
     coordinateCount: prepared.coordinates?.length ?? 0,
@@ -1292,17 +1631,17 @@ function configFor(division) {
 }
 
 function suppressRedundantCompositeEdges(edges) {
-  const completeDivisionMatches = new Set(
-    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Completeness filtering and stable-ID projection are distinct matching stages.
-    edges.filter(isCompleteDivisionMatch).map((edge) => stableIdentifier(edge.division))
-  );
-
-  return edges.filter(
-    (edge) =>
-      edge.metrics.alignmentMode !== 'composite-section' ||
-      !completeDivisionMatches.has(stableIdentifier(edge.division)) ||
-      isAdditionalContainedTargetLayer(edge)
-  );
+  return edges.filter((edge) => {
+    if (edge.metrics.alignmentMode !== 'composite-section') return true;
+    const hasEqualOrBetterCompleteMatch = edges.some(
+      (other) =>
+        other !== edge &&
+        stableIdentifier(other.division) === stableIdentifier(edge.division) &&
+        isCompleteDivisionMatch(other) &&
+        evidencePriority(other.candidate.raw) <= evidencePriority(edge.candidate.raw)
+    );
+    return !hasEqualOrBetterCompleteMatch || isAdditionalContainedTargetLayer(edge);
+  });
 }
 
 function suppressWeakSecondaryCandidateOwners(edges) {
@@ -1310,9 +1649,9 @@ function suppressWeakSecondaryCandidateOwners(edges) {
   for (const edge of edges) {
     if (!isCompleteDivisionMatch(edge)) continue;
     const divisionKey = stableIdentifier(edge.division);
-    const candidateKeys = completeCandidatesByDivision.get(divisionKey) ?? new Set();
-    candidateKeys.add(stableIdentifier(edge.candidate));
-    completeCandidatesByDivision.set(divisionKey, candidateKeys);
+    const candidates = completeCandidatesByDivision.get(divisionKey) ?? new Map();
+    candidates.set(stableIdentifier(edge.candidate), evidencePriority(edge.candidate.raw));
+    completeCandidatesByDivision.set(divisionKey, candidates);
   }
 
   const edgesByCandidate = new Map();
@@ -1331,20 +1670,19 @@ function suppressWeakSecondaryCandidateOwners(edges) {
 
     for (const edge of candidateEdges) {
       const divisionKey = stableIdentifier(edge.division);
-      const completeElsewhere = [...(completeCandidatesByDivision.get(divisionKey) ?? [])].some(
-        (completeCandidateKey) => completeCandidateKey !== candidateKey
+      const completeElsewhere = [
+        ...(completeCandidatesByDivision.get(divisionKey)?.entries() ?? []),
+      ].some(
+        ([completeCandidateKey, completePriority]) =>
+          completeCandidateKey !== candidateKey &&
+          completePriority <= evidencePriority(edge.candidate.raw)
       );
-      const adjacentPrimaryContinuation = isAdjacentPrimaryContinuation(
-        edge,
-        candidateEdges
-      );
+      const adjacentPrimaryContinuation = isAdjacentPrimaryContinuation(edge, candidateEdges);
       const redundantCompositeAgainstCompleteOwner =
-        completeElsewhere &&
-        isRedundantCompositeAgainstCompleteOwner(edge, candidateEdges);
+        completeElsewhere && isRedundantCompositeAgainstCompleteOwner(edge, candidateEdges);
       if (
         (!completeElsewhere ||
-          (!isWeakSecondaryOwnership(edge) &&
-            !redundantCompositeAgainstCompleteOwner)) &&
+          (!isWeakSecondaryOwnership(edge) && !redundantCompositeAgainstCompleteOwner)) &&
         !adjacentPrimaryContinuation
       ) {
         continue;
@@ -1354,8 +1692,7 @@ function suppressWeakSecondaryCandidateOwners(edges) {
         (other) =>
           stableIdentifier(other.division) !== divisionKey &&
           other.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_SCORE &&
-          (other.metrics.score - edge.metrics.score >=
-            MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE ||
+          (other.metrics.score - edge.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE ||
             (edge.metrics.alignmentMode === 'composite-section' &&
               other.metrics.alignmentMode === 'full-shape' &&
               other.metrics.score >=
@@ -1368,14 +1705,272 @@ function suppressWeakSecondaryCandidateOwners(edges) {
   return edges.filter((edge) => !suppressed.has(edge));
 }
 
+function suppressClearlySubordinateCompositeOwners(edges) {
+  return edges.filter((edge) => {
+    if (edge.metrics.alignmentMode !== 'composite-section') return true;
+    return !edges.some(
+      (other) =>
+        other !== edge &&
+        stableIdentifier(other.candidate) === stableIdentifier(edge.candidate) &&
+        stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
+        ((other.metrics.alignmentMode === 'full-shape' &&
+          other.metrics.score >= edge.metrics.score - 0.02 &&
+          sectionOverlapRatio(edge.section, other.section) >= 0.5) ||
+          (other.metrics.alignmentMode === 'composite-section' &&
+            other.metrics.score >= edge.metrics.score - 0.01 &&
+            (other.metrics.compositeSourceCoverage ?? 0) >= 0.8 &&
+            (edge.metrics.compositeSourceCoverage ?? 0) <= 0.4 &&
+            (other.metrics.compositeDivisionCoverage ?? 0) >=
+              (edge.metrics.compositeDivisionCoverage ?? 0) + 0.2 &&
+            sectionOverlapRatio(edge.section, other.section) >= 0.8))
+    );
+  });
+}
+
+function suppressRedundantRegisteredStopbars(edges) {
+  return edges.filter((edge) => {
+    if (
+      edge.division.raw.type !== 'stopbar' ||
+      edge.metrics.alignmentMode !== 'local-registration'
+    ) {
+      return true;
+    }
+    return !edges.some(
+      (other) =>
+        other !== edge &&
+        stableIdentifier(other.division) === stableIdentifier(edge.division) &&
+        other.metrics.alignmentMode === 'full-shape' &&
+        other.metrics.score >= edge.metrics.score &&
+        evidencePriority(other.candidate.raw) <= evidencePriority(edge.candidate.raw)
+    );
+  });
+}
+
+function suppressSubordinateRegisteredGuidanceOwners(edges) {
+  return edges.filter((edge) => {
+    if (
+      edge.metrics.alignmentMode !== 'local-registration' ||
+      !edge.candidate.raw.sourceType?.startsWith('xplane-') ||
+      !GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification)
+    ) {
+      return true;
+    }
+    return !edges.some(
+      (other) =>
+        other !== edge &&
+        stableIdentifier(other.candidate) === stableIdentifier(edge.candidate) &&
+        stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
+        other.metrics.alignmentMode === 'full-shape' &&
+        other.metrics.score >= MINIMUM_REGISTERED_OWNER_SUPPRESSION_SCORE &&
+        other.metrics.score - edge.metrics.score >=
+          MINIMUM_REGISTERED_OWNER_SUPPRESSION_ADVANTAGE &&
+        sectionOverlapRatio(edge.section, other.section) >= MINIMUM_REGISTERED_OWNER_OVERLAP_RATIO
+    );
+  });
+}
+
+function addConnectedGuidanceTrunkOwners(edges, referenceLatitude, continuationEdges = edges) {
+  const augmented = [...edges];
+  const edgesByCandidate = new Map();
+  for (const edge of edges) {
+    const key = stableIdentifier(edge.candidate);
+    const candidateEdges = edgesByCandidate.get(key) ?? [];
+    candidateEdges.push(edge);
+    edgesByCandidate.set(key, candidateEdges);
+  }
+
+  for (const candidateEdges of edgesByCandidate.values()) {
+    const trunk = candidateEdges[0]?.candidate;
+    if (!trunk?.raw.sourceType?.startsWith('xplane-') || trunk.raw.classification !== 'lead-on') {
+      continue;
+    }
+    const completeOwner = candidateEdges
+      .filter((edge) => edge.metrics.alignmentMode === 'full-shape')
+      .sort((left, right) => right.metrics.score - left.metrics.score)[0];
+    if (!completeOwner || trunk.length < completeOwner.division.length * 4) continue;
+
+    const existingDivisionKeys = new Set(
+      candidateEdges.map((edge) => stableIdentifier(edge.division))
+    );
+    const connectedByDivision = new Map();
+    for (const branchEdge of edges) {
+      const divisionKey = stableIdentifier(branchEdge.division);
+      if (
+        existingDivisionKeys.has(divisionKey) ||
+        stableIdentifier(branchEdge.candidate) === stableIdentifier(trunk) ||
+        !(
+          branchEdge.metrics.alignmentMode === 'full-shape' ||
+          (branchEdge.metrics.alignmentMode === 'composite-section' &&
+            branchEdge.metrics.score >= 0.9 &&
+            branchEdge.metrics.sourceToDivisionCoverage >= 0.9)
+        ) ||
+        branchEdge.metrics.score < 0.8 ||
+        !GUIDANCE_DIVISION_TYPES.has(branchEdge.division.raw.type) ||
+        !GUIDANCE_SOURCE_CLASSIFICATIONS.has(branchEdge.candidate.raw.classification) ||
+        (trunk.raw.sourceFile &&
+          branchEdge.candidate.raw.sourceFile &&
+          trunk.raw.sourceFile !== branchEdge.candidate.raw.sourceFile)
+      ) {
+        continue;
+      }
+
+      for (const endpoint of [
+        branchEdge.candidate.projected[0],
+        branchEdge.candidate.projected.at(-1),
+      ]) {
+        const projection = projectPointToPolyline(endpoint, trunk.projected);
+        if (
+          projection.distance > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS ||
+          projection.along <= 1 ||
+          projection.along >= trunk.length - 1
+        ) {
+          continue;
+        }
+        const strongZeroGapFullShape =
+          branchEdge.metrics.alignmentMode === 'full-shape' &&
+          branchEdge.metrics.score >= 0.8 &&
+          projection.distance <= 0.5;
+        if (branchEdge.metrics.score < 0.85 && !strongZeroGapFullShape) continue;
+        if (
+          hasStraighterConnectedSourceContinuation(
+            branchEdge,
+            endpoint,
+            trunk,
+            projection,
+            continuationEdges
+          )
+        ) {
+          continue;
+        }
+        const current = connectedByDivision.get(divisionKey);
+        if (
+          !current ||
+          branchEdge.metrics.score > current.branchEdge.metrics.score ||
+          (branchEdge.metrics.score === current.branchEdge.metrics.score &&
+            projection.distance < current.projection.distance)
+        ) {
+          connectedByDivision.set(divisionKey, { branchEdge, projection });
+        }
+      }
+    }
+
+    for (const { branchEdge, projection } of connectedByDivision.values()) {
+      const halfSectionLength = Math.max(2, branchEdge.division.length * 0.2);
+      const section = simulatorSectionForRange(
+        trunk,
+        branchEdge.division,
+        Math.max(0, projection.along - halfSectionLength),
+        Math.min(trunk.length, projection.along + halfSectionLength),
+        referenceLatitude
+      );
+      if (!section?.prepared?.valid) continue;
+      augmented.push({
+        ...branchEdge,
+        candidate: trunk,
+        section,
+        metrics: {
+          ...branchEdge.metrics,
+          alignmentMode: 'source-junction-ownership',
+          sourceConnectionBasis: 'connected-guidance-junction',
+          sourceConnectionStationMeters: round(projection.along, 3),
+          sourceConnectionGapMeters: round(projection.distance, 3),
+        },
+      });
+    }
+  }
+  return augmented;
+}
+
+function hasStraighterConnectedSourceContinuation(
+  branchEdge,
+  branchEndpoint,
+  trunk,
+  trunkProjection,
+  edges
+) {
+  const branchSide =
+    distance(branchEndpoint, branchEdge.candidate.projected[0]) <=
+    distance(branchEndpoint, branchEdge.candidate.projected.at(-1))
+      ? 'start'
+      : 'end';
+  const trunkTurn = sourceContinuationTurn(
+    branchEdge.candidate,
+    branchSide,
+    trunk,
+    trunkProjection
+  );
+  if (!Number.isFinite(trunkTurn)) return false;
+
+  return edges.some((alternativeEdge) => {
+    if (
+      stableIdentifier(alternativeEdge.division) !== stableIdentifier(branchEdge.division) ||
+      stableIdentifier(alternativeEdge.candidate) === stableIdentifier(branchEdge.candidate) ||
+      stableIdentifier(alternativeEdge.candidate) === stableIdentifier(trunk) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(alternativeEdge.candidate.raw.classification) ||
+      (trunk.raw.sourceFile &&
+        alternativeEdge.candidate.raw.sourceFile &&
+        trunk.raw.sourceFile !== alternativeEdge.candidate.raw.sourceFile)
+    ) {
+      return false;
+    }
+    const projection = projectPointToPolyline(branchEndpoint, alternativeEdge.candidate.projected);
+    if (
+      projection.distance > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS ||
+      projection.along <= 1 ||
+      projection.along >= alternativeEdge.candidate.length - 1
+    ) {
+      return false;
+    }
+    const alternativeTurn = sourceContinuationTurn(
+      branchEdge.candidate,
+      branchSide,
+      alternativeEdge.candidate,
+      projection
+    );
+    return (
+      alternativeTurn + 10 < trunkTurn ||
+      (alternativeTurn <= trunkTurn + 5 && projection.distance + 1 < trunkProjection.distance)
+    );
+  });
+}
+
+function sourceContinuationTurn(branch, branchSide, continuation, projection) {
+  if (
+    branch.projected.length < 2 ||
+    continuation.projected.length < 2 ||
+    !Number.isFinite(projection.along)
+  ) {
+    return Infinity;
+  }
+  const branchEndpoint = branchSide === 'start' ? branch.projected[0] : branch.projected.at(-1);
+  const branchInward = branchSide === 'start' ? branch.projected[1] : branch.projected.at(-2);
+  const connection = projectedPointAtDistance(continuation.projected, projection.along);
+  const sampleDistance = Math.min(5, Math.max(1, continuation.length * 0.02));
+  const nextPoints = [];
+  if (projection.along >= sampleDistance) {
+    nextPoints.push(
+      projectedPointAtDistance(continuation.projected, projection.along - sampleDistance)
+    );
+  }
+  if (continuation.length - projection.along >= sampleDistance) {
+    nextPoints.push(
+      projectedPointAtDistance(continuation.projected, projection.along + sampleDistance)
+    );
+  }
+  return Math.min(
+    ...nextPoints.map((next) => directedTurnDegrees(branchInward, branchEndpoint, connection, next))
+  );
+}
+
 function isRedundantCompositeAgainstCompleteOwner(edge, candidateEdges) {
   if (edge.metrics.alignmentMode !== 'composite-section') return false;
   return candidateEdges.some(
     (other) =>
       stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
       isCompleteDivisionMatch(other) &&
-      other.metrics.score >=
-        edge.metrics.score - MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE &&
+      evidencePriority(other.candidate.raw) <= evidencePriority(edge.candidate.raw) &&
+      other.metrics.score >= edge.metrics.score - MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE &&
       sectionOverlapRatio(edge.section, other.section) >=
         MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO
   );
@@ -1392,8 +1987,7 @@ function isAdjacentPrimaryContinuation(edge, candidateEdges) {
     (other) =>
       stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
       isCompleteDivisionMatch(other) &&
-      sectionGapMeters(edge.section, other.section) <=
-        MAXIMUM_GUIDANCE_PARTITION_GAP_METERS
+      sectionGapMeters(edge.section, other.section) <= MAXIMUM_GUIDANCE_PARTITION_GAP_METERS
   );
 }
 
@@ -1529,16 +2123,39 @@ function allocateSimulatorGeometry(
 
   const allocated = [];
   for (const candidateEdges of edgesByCandidate.values()) {
-    const chosen = chooseDistinctCandidateAssignments(candidateEdges).filter((edge) =>
+    const initiallyChosen = chooseDistinctCandidateAssignments(candidateEdges).filter((edge) =>
       sectionMeetsAllocationMinimum(edge, edge.section.length)
     );
-    if (chosen.length === 0) continue;
-    const candidate = chosen[0].candidate;
-    const naturalBoundaries = naturalBoundaryStations(
+    if (initiallyChosen.length === 0) continue;
+    const candidate = initiallyChosen[0].candidate;
+    const naturalBoundaries = naturalBoundaryStations(candidate, allCandidates, allDivisions);
+    const ownershipPreference = preferStopbarAnchoredContinuousGuidanceOwner(
+      initiallyChosen,
+      edges,
       candidate,
-      allCandidates,
+      naturalBoundaries,
       allDivisions
     );
+    const chosen = ownershipPreference.chosen;
+    if (diagnosticEvaluations) {
+      for (const edge of ownershipPreference.suppressed) {
+        diagnosticEvaluations.push({
+          divisionId: edge.division.raw.id,
+          simulatorRowId: edge.candidate.raw.id,
+          matchedRange: {
+            startMeters: round(edge.section.start, 3),
+            endMeters: round(edge.section.end, 3),
+          },
+          naturalBoundaries: naturalBoundaries.map((boundary) => ({
+            stationMeters: round(boundary.along, 3),
+            kind: boundary.kind,
+            source: boundary.source,
+          })),
+          outcome: 'suppressed-by-stopbar-anchored-continuation-owner',
+          preferredDivisionId: ownershipPreference.preferredDivisionId,
+        });
+      }
+    }
     const partitionGuidance =
       GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification) &&
       chosen.every((edge) => {
@@ -1561,13 +2178,7 @@ function allocateSimulatorGeometry(
       const extendsReconstructedLeadOn =
         reconstructedGuidanceCandidate &&
         (left.division.raw.type === 'lead_on' || right.division.raw.type === 'lead_on');
-      const partition = partitionBoundary(
-        left,
-        right,
-        candidate,
-        naturalBoundaries,
-        runways
-      );
+      const partition = partitionBoundary(left, right, candidate, naturalBoundaries, runways);
       partitionLinks.push({
         ...partition,
         sharesGuidanceTrunk: divisionsShareGuidanceTrunk(left.division, right.division),
@@ -1609,13 +2220,23 @@ function allocateSimulatorGeometry(
       const extendNativeLeadOn = nativeLeadOnCandidate && edge.division.raw.type === 'lead_on';
       const extendReconstructedLeadOn =
         reconstructedGuidanceCandidate && edge.division.raw.type === 'lead_on';
-      const extendLeadOnWholeSource = extendNativeLeadOn || extendReconstructedLeadOn;
+      const extendCompatibleLeadOn =
+        GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification) &&
+        edge.division.raw.type === 'lead_on';
+      const extendLeadOnWholeSource =
+        extendNativeLeadOn || extendReconstructedLeadOn || extendCompatibleLeadOn;
       const reconstructedExtensionLimit = extendReconstructedLeadOn
         ? reconstructedLeadOnExtensionLimit(edge.division.length)
         : Infinity;
       const matchedStopbarCell = stopbarCellForMatchedSection(edge.section, naturalBoundaries);
       const startAnchoredByStopbar = extendReconstructedLeadOn && Boolean(matchedStopbarCell.upper);
       const endAnchoredByStopbar = extendReconstructedLeadOn && Boolean(matchedStopbarCell.lower);
+      const startPartitioned =
+        Boolean(partitionLinks[index - 1]?.connectsGuidance) &&
+        !partitionLinks[index - 1].sharesGuidanceTrunk;
+      const endPartitioned =
+        Boolean(partitionLinks[index]?.connectsGuidance) &&
+        !partitionLinks[index].sharesGuidanceTrunk;
       const startExtensionLimit =
         startAnchoredByStopbar ||
         (extendReconstructedLeadOn && hasNaturalBoundaryAnchor(sectionEnd, naturalBoundaries))
@@ -1667,6 +2288,10 @@ function allocateSimulatorGeometry(
           end = partitionLinks[index].boundary;
         }
       }
+      if (stableIdentifier(edge.division) === ownershipPreference.forceWholeCandidateDivisionId) {
+        start = 0;
+        end = candidate.length;
+      }
       if (evaluation) {
         evaluation.extendedRange = {
           startMeters: round(start, 3),
@@ -1680,12 +2305,7 @@ function allocateSimulatorGeometry(
           naturalBoundaries,
           'start'
         );
-        end = snapMatchedBoundaryToDivisionStopbar(
-          end,
-          edge.section.end,
-          naturalBoundaries,
-          'end'
-        );
+        end = snapMatchedBoundaryToDivisionStopbar(end, edge.section.end, naturalBoundaries, 'end');
       }
       start = clampOutwardExtensionAtNaturalBoundary(
         start,
@@ -1693,7 +2313,7 @@ function allocateSimulatorGeometry(
         naturalBoundaries,
         'start',
         startExtensionLimit,
-        startAnchoredByStopbar
+        startAnchoredByStopbar || startPartitioned
       );
       end = clampOutwardExtensionAtNaturalBoundary(
         end,
@@ -1701,7 +2321,7 @@ function allocateSimulatorGeometry(
         naturalBoundaries,
         'end',
         endExtensionLimit,
-        endAnchoredByStopbar
+        endAnchoredByStopbar || endPartitioned
       );
       ({ start, end } = clampAllocationToStopbarCell(start, end, edge.section, naturalBoundaries));
       if (evaluation) {
@@ -1726,9 +2346,7 @@ function allocateSimulatorGeometry(
           edge.division.length * MINIMUM_ALLOCATED_LENGTH_RATIO,
           3
         );
-        evaluation.outcome = meetsAllocationMinimum
-          ? 'allocated'
-          : 'rejected-after-boundary-clamp';
+        evaluation.outcome = meetsAllocationMinimum ? 'allocated' : 'rejected-after-boundary-clamp';
         diagnosticEvaluations.push(evaluation);
       }
       if (meetsAllocationMinimum) {
@@ -1746,7 +2364,744 @@ function allocateSimulatorGeometry(
   );
 }
 
+function preferStopbarAnchoredContinuousGuidanceOwner(
+  chosen,
+  allEdges,
+  candidate,
+  naturalBoundaries,
+  allDivisions
+) {
+  if (
+    chosen.length < 2 ||
+    !GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification) ||
+    !candidate.raw.sourceType?.startsWith('xplane-') ||
+    maximumLocalPolylineTurnDegrees(candidate.projected) <
+      MINIMUM_STOPBAR_CONTINUATION_LOCAL_TURN_DEGREES
+  ) {
+    return { chosen, suppressed: [] };
+  }
+
+  const endpointStopbars = candidateEndpointStopbarBoundaries(
+    candidate,
+    naturalBoundaries,
+    allDivisions
+  );
+  if (endpointStopbars.length === 0) return { chosen, suppressed: [] };
+
+  const anchoredOwners = chosen.filter(
+    (edge) =>
+      edge.division.raw.type === 'lead_on' &&
+      edge.metrics.sourceToDivisionCoverage >= MINIMUM_STOPBAR_ANCHORED_OWNER_SOURCE_COVERAGE &&
+      endpointStopbars.some(
+        (boundary) =>
+          boundary.along >= edge.section.start - MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS &&
+          boundary.along <= edge.section.end + MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS &&
+          divisionTouchesCandidateEndpoint(edge.division, candidate, boundary)
+      )
+  );
+  if (
+    anchoredOwners.length !== 1 ||
+    endpointStopbars.some((boundary) =>
+      chosen.some(
+        (edge) =>
+          edge !== anchoredOwners[0] &&
+          boundary.along >= edge.section.start - MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS &&
+          boundary.along <= edge.section.end + MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS
+      )
+    )
+  ) {
+    return { chosen, suppressed: [] };
+  }
+
+  const anchoredOwner = anchoredOwners[0];
+  const suppressed = chosen.filter(
+    (edge) =>
+      edge !== anchoredOwner &&
+      edge.division.raw.type === 'lead_on' &&
+      hasConnectedAlternativeGuidanceEvidence(edge, allEdges, candidate)
+  );
+
+  const suppressedSet = new Set(suppressed);
+  return {
+    chosen: chosen.filter((edge) => !suppressedSet.has(edge)),
+    suppressed,
+    preferredDivisionId: stableIdentifier(anchoredOwner.division),
+    forceWholeCandidateDivisionId: stableIdentifier(anchoredOwner.division),
+  };
+}
+
+function hasConnectedAlternativeGuidanceEvidence(edge, allEdges, contestedCandidate) {
+  return allEdges.some((other) => {
+    if (
+      other === edge ||
+      stableIdentifier(other.division) !== stableIdentifier(edge.division) ||
+      stableIdentifier(other.candidate) === stableIdentifier(contestedCandidate) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(other.candidate.raw.classification) ||
+      evidencePriority(other.candidate.raw) > evidencePriority(contestedCandidate.raw) ||
+      other.metrics.score < MINIMUM_ALTERNATIVE_GUIDANCE_EVIDENCE_SCORE ||
+      other.metrics.sourceToDivisionCoverage < MINIMUM_ALTERNATIVE_GUIDANCE_SOURCE_COVERAGE ||
+      (contestedCandidate.raw.sourceFile &&
+        other.candidate.raw.sourceFile &&
+        contestedCandidate.raw.sourceFile !== other.candidate.raw.sourceFile)
+    ) {
+      return false;
+    }
+
+    return [other.candidate.projected[0], other.candidate.projected.at(-1)].some((endpoint) => {
+      const projection = projectPointToPolyline(endpoint, contestedCandidate.projected);
+      return (
+        projection.distance <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
+        projection.along > MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS &&
+        projection.along < contestedCandidate.length - MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS
+      );
+    });
+  });
+}
+
+function candidateEndpointStopbarBoundaries(candidate, naturalBoundaries, allDivisions) {
+  const boundaries = naturalBoundaries.filter(
+    (boundary) =>
+      boundary.kind === 'stopbar' &&
+      (boundary.along <= MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS ||
+        candidate.length - boundary.along <= MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS)
+  );
+  for (const [along, endpoint] of [
+    [0, candidate.projected[0]],
+    [candidate.length, candidate.projected.at(-1)],
+  ]) {
+    const nearbyStopbar = allDivisions.some(
+      (division) =>
+        division.raw.type === 'stopbar' &&
+        projectPointToPolyline(endpoint, division.projected).distance <=
+          NATURAL_BOUNDARY_PROXIMITY_METERS
+    );
+    if (
+      nearbyStopbar &&
+      !boundaries.some(
+        (boundary) => Math.abs(boundary.along - along) <= MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS
+      )
+    ) {
+      boundaries.push({ along, kind: 'stopbar', source: 'division-endpoint-proximity' });
+    }
+  }
+  return boundaries;
+}
+
+function divisionTouchesCandidateEndpoint(division, candidate, boundary) {
+  const endpoint =
+    boundary.along <= MAXIMUM_STOPBAR_ENDPOINT_OWNER_GAP_METERS
+      ? candidate.projected[0]
+      : candidate.projected.at(-1);
+  return [division.projected[0], division.projected.at(-1)].some(
+    (divisionEndpoint) => distance(divisionEndpoint, endpoint) <= NATURAL_BOUNDARY_PROXIMITY_METERS
+  );
+}
+
+function maximumLocalPolylineTurnDegrees(points) {
+  let maximumTurn = 0;
+  for (let index = 2; index < points.length; index += 1) {
+    maximumTurn = Math.max(
+      maximumTurn,
+      segmentOrientationDifference(
+        points[index - 2],
+        points[index - 1],
+        points[index - 1],
+        points[index]
+      )
+    );
+  }
+  return maximumTurn;
+}
+
+function completeAllocatedGuidanceRows(
+  allocatedEdges,
+  candidates,
+  divisions,
+  referenceLatitude,
+  eligibleEdges
+) {
+  const completed = [...allocatedEdges];
+  const completionKeys = new Set();
+  const endpointIndex = buildGuidanceEndpointIndex(candidates);
+  const preferredEvidenceOwners = preferredCompletionEvidenceOwners(eligibleEdges);
+
+  for (const evidenceEdge of preferredEvidenceOwners.values()) {
+    const candidate = evidenceEdge.candidate;
+    const completionEvidenceOwner = dominantCompletionEvidenceOwner(evidenceEdge, eligibleEdges);
+    const divisionKey = stableIdentifier(evidenceEdge.division);
+    const ownerIsAllocated = allocatedEdges.some(
+      (edge) => stableIdentifier(edge.division) === divisionKey
+    );
+    const candidateIsAlreadyAllocated = allocatedEdges.some(
+      (edge) =>
+        stableIdentifier(edge.division) === divisionKey &&
+        stableIdentifier(edge.candidate) === stableIdentifier(candidate)
+    );
+    const touchesCandidateEnd =
+      evidenceEdge.section.start <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS ||
+      candidate.length - evidenceEdge.section.end <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS;
+    if (
+      !ownerIsAllocated ||
+      candidateIsAlreadyAllocated ||
+      !touchesCandidateEnd ||
+      !GUIDANCE_DIVISION_TYPES.has(evidenceEdge.division.raw.type) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification)
+    ) {
+      continue;
+    }
+
+    // Only allocated higher-priority sections can suppress a fallback row.
+    // Whole raw rows may also serve other Division objects and previously
+    // punched artificial holes through otherwise continuous apt.dat/DSF
+    // marking evidence.
+    const higherPriorityGeometry = allocatedEdges
+      .filter(
+        (higherEdge) =>
+          stableIdentifier(higherEdge.division) === divisionKey &&
+          GUIDANCE_SOURCE_CLASSIFICATIONS.has(higherEdge.candidate.raw.classification) &&
+          evidencePriority(higherEdge.candidate.raw) < evidencePriority(candidate.raw) &&
+          !candidatesShareSourceRows(candidate, higherEdge.candidate) &&
+          boundsDistance(candidate.bounds, higherEdge.section.prepared.bounds) <=
+            MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
+      )
+      .map((higherEdge) => higherEdge.section.prepared);
+    if (higherPriorityGeometry.length === 0) continue;
+
+    const embeddedHigherPriorityGeometry = higherPriorityGeometry.filter((higher) =>
+      embeddedHigherPriorityCoverageInterval(candidate, higher)
+    );
+    const extendsAllocatedEndpoint =
+      embeddedHigherPriorityGeometry.length === 0 &&
+      higherPriorityGeometry.some((higher) =>
+        guidancePolylinesConnectAtEndpoints(candidate, higher)
+      );
+    if (embeddedHigherPriorityGeometry.length === 0 && !extendsAllocatedEndpoint) continue;
+
+    const uncoveredRanges =
+      embeddedHigherPriorityGeometry.length > 0
+        ? geometryRangesWithoutHigherPriorityEvidence(
+            candidate,
+            0,
+            candidate.length,
+            embeddedHigherPriorityGeometry
+          )
+        : [[0, candidate.length]];
+    const uncoveredLength = uncoveredRanges.reduce((sum, [start, end]) => sum + end - start, 0);
+    const coveredLength = candidate.length - uncoveredLength;
+    if (uncoveredLength < 2 || (embeddedHigherPriorityGeometry.length > 0 && coveredLength < 2)) {
+      continue;
+    }
+
+    const naturalBoundaries = naturalBoundaryStations(candidate, candidates, divisions);
+    for (const [unclampedStart, unclampedEnd] of uncoveredRanges) {
+      const clampedRange = clampAllocationToStopbarCell(
+        unclampedStart,
+        unclampedEnd,
+        evidenceEdge.section,
+        naturalBoundaries
+      );
+      const ownershipRanges = completionOwnershipRanges(
+        candidate,
+        clampedRange.start,
+        clampedRange.end,
+        completionEvidenceOwner,
+        allocatedEdges
+      );
+      for (const { start, end, ownerEdge, ownershipBasis } of ownershipRanges) {
+        if (end - start < 2 || end - start > MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS) {
+          continue;
+        }
+        if (
+          completionConnectsAcrossStopbar(
+            candidate,
+            start,
+            end,
+            higherPriorityGeometry,
+            naturalBoundaries
+          )
+        ) {
+          continue;
+        }
+        const section = simulatorSectionForRange(
+          candidate,
+          ownerEdge.division,
+          start,
+          end,
+          referenceLatitude
+        );
+        if (!section?.prepared?.valid) continue;
+
+        const ownerKey = stableIdentifier(ownerEdge.division);
+        const key = [
+          ownerKey,
+          stableIdentifier(candidate),
+          round(section.start, 2),
+          round(section.end, 2),
+        ].join('|');
+        if (completionKeys.has(key)) continue;
+        completionKeys.add(key);
+        completed.push({
+          ...ownerEdge,
+          candidate,
+          section,
+          metrics: {
+            ...ownerEdge.metrics,
+            alignmentMode: 'source-evidence-continuation',
+            sourceConnectionBasis:
+              ownershipBasis ??
+              (stableIdentifier(ownerEdge.division) ===
+              stableIdentifier(completionEvidenceOwner.division)
+                ? embeddedHigherPriorityGeometry.length > 0
+                  ? 'uncovered-lower-priority-evidence'
+                  : 'connected-lower-priority-evidence'
+                : 'midpoint-between-connected-owners'),
+            sourceConnectionExtensionMeters: round(section.length, 3),
+            higherPriorityGeometryRemovedMeters: round(coveredLength, 3),
+          },
+        });
+      }
+    }
+  }
+
+  for (const edge of allocatedEdges) {
+    if (
+      !GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification)
+    ) {
+      continue;
+    }
+
+    for (const endpoint of allocatedEdgeEndpoints(edge)) {
+      const options = [];
+      for (const { connector, connectorSide } of nearbyGuidanceEndpoints(
+        endpointIndex,
+        endpoint.point
+      )) {
+        if (
+          !connector.valid ||
+          !GUIDANCE_SOURCE_CLASSIFICATIONS.has(connector.raw.classification) ||
+          candidatesShareSourceRows(edge.candidate, connector) ||
+          (edge.candidate.raw.sourceFile &&
+            connector.raw.sourceFile &&
+            edge.candidate.raw.sourceFile !== connector.raw.sourceFile)
+        ) {
+          continue;
+        }
+
+        const connectionPoint =
+          connectorSide === 'start' ? connector.projected[0] : connector.projected.at(-1);
+        const nextPoint =
+          connectorSide === 'start' ? connector.projected[1] : connector.projected.at(-2);
+        const gap = distance(endpoint.point, connectionPoint);
+        if (gap > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS || !nextPoint) continue;
+        if (guidanceConnectionTouchesStopbar(endpoint.point, divisions)) continue;
+        const preferredEvidenceOwner = preferredEvidenceOwners.get(stableIdentifier(connector));
+        if (preferredEvidenceOwner) continue;
+
+        const turn = directedTurnDegrees(
+          endpoint.inward,
+          endpoint.point,
+          connectionPoint,
+          nextPoint
+        );
+        const stopbarCompletion = nearestStopbarBoundaryCompletion(
+          connector,
+          connectorSide,
+          divisions
+        );
+        if (stopbarCompletion && turn <= MAXIMUM_STOPBAR_EXTENSION_TURN_DEGREES) {
+          options.push({
+            connector,
+            connectorSide,
+            gap,
+            turn,
+            ...stopbarCompletion,
+            basis: 'stopbar-boundary',
+          });
+          continue;
+        }
+
+        const isLowerPriorityFallback =
+          evidencePriority(connector.raw) > evidencePriority(edge.candidate.raw);
+        if (
+          isLowerPriorityFallback &&
+          turn <= MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES &&
+          connector.length <= MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS
+        ) {
+          options.push({
+            connector,
+            connectorSide,
+            gap,
+            turn,
+            targetAlong: connectorSide === 'start' ? connector.length : 0,
+            extensionLength: connector.length,
+            basis: 'straight-source-fallback',
+          });
+        }
+      }
+
+      const selected = options.sort(
+        (left, right) =>
+          evidencePriority(left.connector.raw) - evidencePriority(right.connector.raw) ||
+          Number(right.basis === 'stopbar-boundary') - Number(left.basis === 'stopbar-boundary') ||
+          left.extensionLength - right.extensionLength ||
+          left.turn - right.turn ||
+          left.gap - right.gap ||
+          stableIdentifier(left.connector).localeCompare(stableIdentifier(right.connector))
+      )[0];
+      if (!selected) continue;
+
+      const requestedStart = selected.connectorSide === 'start' ? 0 : selected.targetAlong;
+      const requestedEnd =
+        selected.connectorSide === 'start' ? selected.targetAlong : selected.connector.length;
+      const section = simulatorSectionForRange(
+        selected.connector,
+        edge.division,
+        requestedStart,
+        requestedEnd,
+        referenceLatitude
+      );
+      if (!section?.prepared?.valid) continue;
+
+      const key = [
+        stableIdentifier(edge.division),
+        stableIdentifier(selected.connector),
+        round(section.start, 2),
+        round(section.end, 2),
+      ].join('|');
+      if (completionKeys.has(key)) continue;
+      completionKeys.add(key);
+      completed.push({
+        ...edge,
+        candidate: selected.connector,
+        section,
+        metrics: {
+          ...edge.metrics,
+          alignmentMode:
+            selected.basis === 'stopbar-boundary'
+              ? 'source-connected-stopbar-boundary'
+              : 'source-connected-fallback',
+          sourceConnectionGapMeters: round(selected.gap, 3),
+          sourceConnectionTurnDegrees: round(selected.turn, 1),
+          sourceConnectionExtensionMeters: round(selected.extensionLength, 3),
+          sourceConnectionBasis: selected.basis,
+          sourceConnectionStopbarId: selected.stopbar
+            ? stableIdentifier(selected.stopbar)
+            : undefined,
+        },
+      });
+    }
+  }
+
+  return completed;
+}
+
+function dominantCompletionEvidenceOwner(evidenceEdge, eligibleEdges) {
+  const alternatives = eligibleEdges.filter(
+    (other) =>
+      stableIdentifier(other.candidate) === stableIdentifier(evidenceEdge.candidate) &&
+      stableIdentifier(other.division) !== stableIdentifier(evidenceEdge.division) &&
+      other.division.raw.type === evidenceEdge.division.raw.type &&
+      other.division.raw.name === evidenceEdge.division.raw.name &&
+      other.metrics.alignmentMode === 'full-shape' &&
+      evidenceEdge.metrics.alignmentMode === 'full-shape' &&
+      other.metrics.score >= evidenceEdge.metrics.score - 0.03 &&
+      other.section.length >= evidenceEdge.section.length * 1.5 &&
+      sectionOverlapRatio(evidenceEdge.section, other.section) >= 0.8
+  );
+  return (
+    alternatives.sort(
+      (left, right) =>
+        right.section.length - left.section.length ||
+        right.metrics.score - left.metrics.score ||
+        stableIdentifier(left.division).localeCompare(stableIdentifier(right.division))
+    )[0] ?? evidenceEdge
+  );
+}
+
+function preferredCompletionEvidenceOwners(eligibleEdges) {
+  const preferred = new Map();
+  for (const edge of eligibleEdges) {
+    if (
+      !GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification)
+    ) {
+      continue;
+    }
+    const key = stableIdentifier(edge.candidate);
+    const current = preferred.get(key);
+    if (
+      !current ||
+      edge.metrics.score > current.metrics.score ||
+      (edge.metrics.score === current.metrics.score &&
+        stableIdentifier(edge.division).localeCompare(stableIdentifier(current.division)) < 0)
+    ) {
+      preferred.set(key, edge);
+    }
+  }
+  return preferred;
+}
+
+function buildGuidanceEndpointIndex(candidates) {
+  const index = new Map();
+  for (const connector of candidates) {
+    if (!connector.valid || !GUIDANCE_SOURCE_CLASSIFICATIONS.has(connector.raw.classification)) {
+      continue;
+    }
+    for (const connectorSide of ['start', 'end']) {
+      const point = connectorSide === 'start' ? connector.projected[0] : connector.projected.at(-1);
+      const key = guidanceEndpointCellKey(point.x, point.y);
+      const entries = index.get(key) ?? [];
+      entries.push({ connector, connectorSide });
+      index.set(key, entries);
+    }
+  }
+  return index;
+}
+
+function nearbyGuidanceEndpoints(index, point) {
+  const cellX = Math.floor(point.x / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS);
+  const cellY = Math.floor(point.y / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS);
+  const entries = [];
+  for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
+    for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
+      entries.push(...(index.get(`${cellX + xOffset}:${cellY + yOffset}`) ?? []));
+    }
+  }
+  return entries;
+}
+
+function guidanceEndpointCellKey(x, y) {
+  return `${Math.floor(x / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS)}:${Math.floor(
+    y / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
+  )}`;
+}
+
+function guidancePolylinesConnectAtEndpoints(left, right) {
+  if (left.projected.length < 2 || right.projected.length < 2) return false;
+  return [orientPreparedPolyline(left, false), orientPreparedPolyline(left, true)].some(
+    (orientedLeft) =>
+      [orientPreparedPolyline(right, false), orientPreparedPolyline(right, true)].some(
+        (orientedRight) =>
+          distance(orientedLeft.projected.at(-1), orientedRight.projected[0]) <=
+            MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
+          directedTurnDegrees(
+            orientedLeft.projected.at(-2),
+            orientedLeft.projected.at(-1),
+            orientedRight.projected[0],
+            orientedRight.projected[1]
+          ) <= MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES
+      )
+  );
+}
+
+function completionConnectsAcrossStopbar(
+  candidate,
+  start,
+  end,
+  higherPriorityGeometry,
+  naturalBoundaries
+) {
+  for (const boundary of [start, end]) {
+    const stopbarAtBoundary = naturalBoundaries.some(
+      (station) =>
+        station.kind === 'stopbar' &&
+        Math.abs(station.along - boundary) <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
+    );
+    if (!stopbarAtBoundary) continue;
+
+    const boundaryPoint = projectedPointAtDistance(candidate.projected, boundary);
+    const higherConnectsAtBoundary = higherPriorityGeometry.some(
+      (higher) =>
+        distance(boundaryPoint, higher.projected[0]) <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS ||
+        distance(boundaryPoint, higher.projected.at(-1)) <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
+    );
+    if (higherConnectsAtBoundary) return true;
+  }
+  return false;
+}
+
+function completionOwnershipRanges(candidate, start, end, evidenceEdge, allocatedEdges) {
+  const ranges = [{ start, end, ownerEdge: evidenceEdge }];
+  const endpointSide = start <= 0.1 ? 'start' : candidate.length - end <= 0.1 ? 'end' : undefined;
+  if (!endpointSide || end - start < 4) return ranges;
+
+  const overlappingOwner = overlappingAllocatedOwner(
+    candidate,
+    start,
+    end,
+    evidenceEdge,
+    allocatedEdges
+  );
+  if (overlappingOwner) {
+    return [
+      {
+        start,
+        end,
+        ownerEdge: overlappingOwner,
+        ownershipBasis: 'overlapping-higher-priority-owner',
+      },
+    ];
+  }
+
+  const alternativeOwner = connectedOwnerAtCandidateEndpoint(
+    candidate,
+    endpointSide,
+    evidenceEdge,
+    allocatedEdges
+  );
+  if (!alternativeOwner) return ranges;
+
+  const midpoint = (start + end) / 2;
+  return endpointSide === 'start'
+    ? [
+        { start, end: midpoint, ownerEdge: alternativeOwner },
+        { start: midpoint, end, ownerEdge: evidenceEdge },
+      ]
+    : [
+        { start, end: midpoint, ownerEdge: evidenceEdge },
+        { start: midpoint, end, ownerEdge: alternativeOwner },
+      ];
+}
+
+function overlappingAllocatedOwner(candidate, start, end, evidenceEdge, allocatedEdges) {
+  const options = [];
+  for (const edge of allocatedEdges) {
+    if (
+      stableIdentifier(edge.division) === stableIdentifier(evidenceEdge.division) ||
+      evidencePriority(edge.candidate.raw) > evidencePriority(candidate.raw) ||
+      !GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification) ||
+      (candidate.raw.sourceFile &&
+        edge.candidate.raw.sourceFile &&
+        candidate.raw.sourceFile !== edge.candidate.raw.sourceFile)
+    ) {
+      continue;
+    }
+    const interval = embeddedHigherPriorityCoverageInterval(candidate, edge.section.prepared);
+    if (!interval) continue;
+    const overlapStart = Math.max(start, interval.start);
+    const overlapEnd = Math.min(end, interval.end);
+    const overlap = Math.max(0, overlapEnd - overlapStart);
+    const rangeLength = end - start;
+    if (
+      overlap < rangeLength * 0.8 ||
+      interval.start > start + MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS ||
+      interval.end < end - MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
+    ) {
+      continue;
+    }
+    options.push({ edge, overlap });
+  }
+  return options.sort(
+    (left, right) =>
+      right.overlap - left.overlap ||
+      right.edge.metrics.score - left.edge.metrics.score ||
+      stableIdentifier(left.edge.division).localeCompare(stableIdentifier(right.edge.division))
+  )[0]?.edge;
+}
+
+function connectedOwnerAtCandidateEndpoint(candidate, side, evidenceEdge, allocatedEdges) {
+  const candidatePoint = side === 'start' ? candidate.projected[0] : candidate.projected.at(-1);
+  const candidateNext = side === 'start' ? candidate.projected[1] : candidate.projected.at(-2);
+  const options = [];
+  for (const edge of allocatedEdges) {
+    if (
+      stableIdentifier(edge.division) === stableIdentifier(evidenceEdge.division) ||
+      evidencePriority(edge.candidate.raw) > evidencePriority(candidate.raw) ||
+      !GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type) ||
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification) ||
+      (candidate.raw.sourceFile &&
+        edge.candidate.raw.sourceFile &&
+        candidate.raw.sourceFile !== edge.candidate.raw.sourceFile)
+    ) {
+      continue;
+    }
+    for (const endpoint of allocatedEdgeEndpoints(edge)) {
+      const gap = distance(candidatePoint, endpoint.point);
+      if (gap > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS) continue;
+      const turn =
+        side === 'start'
+          ? directedTurnDegrees(endpoint.inward, endpoint.point, candidatePoint, candidateNext)
+          : directedTurnDegrees(candidateNext, candidatePoint, endpoint.point, endpoint.inward);
+      if (turn > MAXIMUM_STOPBAR_EXTENSION_TURN_DEGREES) continue;
+      options.push({ edge, gap, turn });
+    }
+  }
+  return options.sort(
+    (left, right) =>
+      left.gap - right.gap ||
+      left.turn - right.turn ||
+      right.edge.metrics.score - left.edge.metrics.score
+  )[0]?.edge;
+}
+
+function guidanceConnectionTouchesStopbar(point, divisions) {
+  return divisions.some(
+    (division) =>
+      division.raw.type === 'stopbar' &&
+      projectPointToPolyline(point, division.projected).distance <=
+        MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
+  );
+}
+
+function allocatedEdgeEndpoints(edge) {
+  const endpoints = [];
+  if (edge.section.start <= 0.1 && edge.candidate.projected.length >= 2) {
+    endpoints.push({
+      side: 'start',
+      point: edge.candidate.projected[0],
+      inward: edge.candidate.projected[1],
+    });
+  }
+  if (edge.candidate.length - edge.section.end <= 0.1 && edge.candidate.projected.length >= 2) {
+    endpoints.push({
+      side: 'end',
+      point: edge.candidate.projected.at(-1),
+      inward: edge.candidate.projected.at(-2),
+    });
+  }
+  return endpoints;
+}
+
+function candidatesShareSourceRows(left, right) {
+  const leftIds = new Set(
+    (left.members ?? [left]).flatMap((member) => [
+      String(member.raw.id),
+      ...(member.raw.sourceRowIds ?? []).map(String),
+    ])
+  );
+  return (right.members ?? [right]).some(
+    (member) =>
+      leftIds.has(String(member.raw.id)) ||
+      (member.raw.sourceRowIds ?? []).some((id) => leftIds.has(String(id)))
+  );
+}
+
+function nearestStopbarBoundaryCompletion(connector, connectorSide, divisions) {
+  const connectionAlong = connectorSide === 'start' ? 0 : connector.length;
+  const options = [];
+  for (const stopbar of divisions) {
+    if (stopbar.raw.type !== 'stopbar') continue;
+    for (const targetAlong of polylineCrossingStations(connector, stopbar)) {
+      const extensionLength = Math.abs(targetAlong - connectionAlong);
+      if (extensionLength <= 0.2 || extensionLength > MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS) {
+        continue;
+      }
+      options.push({ targetAlong, extensionLength, stopbar });
+    }
+  }
+  return options.sort(
+    (left, right) =>
+      left.extensionLength - right.extensionLength ||
+      stableIdentifier(left.stopbar).localeCompare(stableIdentifier(right.stopbar))
+  )[0];
+}
+
 function sectionMeetsAllocationMinimum(edge, sectionLength) {
+  if (edge.metrics.alignmentMode === 'source-junction-ownership') {
+    return sectionLength >= 2;
+  }
   return (
     sectionLength >= edge.division.length * MINIMUM_ALLOCATED_LENGTH_RATIO ||
     isTightPartialMatch(
@@ -1762,8 +3117,7 @@ function isTightPartialMatch(metrics, lengthRatio, config) {
     metrics.valid &&
     metrics.alignmentMode === 'composite-section' &&
     lengthRatio >= (config.minimumContainedLengthRatio ?? MINIMUM_ALLOCATED_LENGTH_RATIO) &&
-    metrics.sourceToDivisionMeanDistance <=
-      MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS &&
+    metrics.sourceToDivisionMeanDistance <= MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS &&
     metrics.sourceToDivisionMaximumDistance <= 5 &&
     metrics.sourceToDivisionCoverage >= 0.9
   );
@@ -1838,14 +3192,8 @@ function runwayAwarePartitionBoundary(left, right, candidate, runways, naturalBo
   ) {
     return undefined;
   }
-  const lowerCenter = Math.min(
-    left.section.projectionCenter,
-    right.section.projectionCenter
-  );
-  const upperCenter = Math.max(
-    left.section.projectionCenter,
-    right.section.projectionCenter
-  );
+  const lowerCenter = Math.min(left.section.projectionCenter, right.section.projectionCenter);
+  const upperCenter = Math.max(left.section.projectionCenter, right.section.projectionCenter);
   const candidates = [];
   for (const runway of runways) {
     const transitions = runwayCorridorTransitions(candidate, runway);
@@ -1854,8 +3202,7 @@ function runwayAwarePartitionBoundary(left, right, candidate, runways, naturalBo
       if (along < lowerCenter || along > upperCenter) continue;
       if (
         !naturalBoundaries.some(
-          (boundary) =>
-            Math.abs(boundary.along - along) <= MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
+          (boundary) => Math.abs(boundary.along - along) <= MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
         )
       ) {
         continue;
@@ -1893,9 +3240,7 @@ function runwayCorridorTransitions(candidate, runway) {
     const ratio =
       Math.abs(distanceChange) <= 0.000001
         ? 0.5
-        : clamp01(
-            (runway.corridorHalfWidth - distances[index - 1]) / distanceChange
-          );
+        : clamp01((runway.corridorHalfWidth - distances[index - 1]) / distanceChange);
     transitions.push(
       cumulativeDistances[index - 1] +
         (cumulativeDistances[index] - cumulativeDistances[index - 1]) * ratio
@@ -1905,12 +3250,14 @@ function runwayCorridorTransitions(candidate, runway) {
 }
 
 function naturalBoundaryStations(candidate, allCandidates, allDivisions = []) {
-  if (
-    !isExactPlacementRow(candidate.raw) ||
-    !GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification)
-  ) {
+  if (!GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification)) {
     return [];
   }
+  const includeJunctions =
+    isExactPlacementRow(candidate.raw) || candidate.raw.sourceType?.startsWith('xplane-');
+  const junctionDistance = isExactPlacementRow(candidate.raw)
+    ? NATURAL_BOUNDARY_PROXIMITY_METERS
+    : MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS;
   const stations = [];
   for (const other of allCandidates) {
     if (stableIdentifier(other) === stableIdentifier(candidate)) continue;
@@ -1921,13 +3268,15 @@ function naturalBoundaryStations(candidate, allCandidates, allDivisions = []) {
       }
       continue;
     }
-    if (!GUIDANCE_SOURCE_CLASSIFICATIONS.has(other.raw.classification)) continue;
+    if (!includeJunctions || !GUIDANCE_SOURCE_CLASSIFICATIONS.has(other.raw.classification)) {
+      continue;
+    }
     for (const endpoint of [other.projected[0], other.projected.at(-1)]) {
       const projection = projectPointToPolyline(endpoint, candidate.projected);
       if (
-        projection.distance <= NATURAL_BOUNDARY_PROXIMITY_METERS &&
-        projection.along > 1 &&
-        projection.along < candidate.length - 1
+        projection.distance <= junctionDistance &&
+        projection.along > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
+        projection.along < candidate.length - MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
       ) {
         stations.push({ along: projection.along, kind: 'junction', source: 'simulator' });
       }
@@ -1936,7 +3285,7 @@ function naturalBoundaryStations(candidate, allCandidates, allDivisions = []) {
   for (const division of allDivisions) {
     if (division.raw.type !== 'stopbar') continue;
     for (const along of polylineCrossingStations(candidate, division)) {
-      stations.push({ along, kind: 'stopbar', source: 'division' });
+      stations.push({ along, kind: 'stopbar', source: 'division', stopbar: division });
     }
   }
   const authoritativeStations = stations.filter(
@@ -2016,22 +3365,14 @@ function segmentOrientationDifference(leftStart, leftEnd, rightStart, rightEnd) 
 }
 
 function divisionsShareGuidanceTrunk(left, right) {
-  if (
-    !GUIDANCE_DIVISION_TYPES.has(left.raw.type) ||
-    !GUIDANCE_DIVISION_TYPES.has(right.raw.type)
-  ) {
+  if (!GUIDANCE_DIVISION_TYPES.has(left.raw.type) || !GUIDANCE_DIVISION_TYPES.has(right.raw.type)) {
     return false;
   }
   const endpointPairs = [
     [left.projected[0], left.projected[1], right.projected[0], right.projected[1]],
     [left.projected[0], left.projected[1], right.projected.at(-1), right.projected.at(-2)],
     [left.projected.at(-1), left.projected.at(-2), right.projected[0], right.projected[1]],
-    [
-      left.projected.at(-1),
-      left.projected.at(-2),
-      right.projected.at(-1),
-      right.projected.at(-2),
-    ],
+    [left.projected.at(-1), left.projected.at(-2), right.projected.at(-1), right.projected.at(-2)],
   ];
   return endpointPairs.some(([leftEnd, leftNext, rightEnd, rightNext]) => {
     if (!leftEnd || !leftNext || !rightEnd || !rightNext) return false;
@@ -2119,12 +3460,7 @@ function clampOutwardExtensionAtNaturalBoundary(
   return allocatedBoundary;
 }
 
-function snapMatchedBoundaryToDivisionStopbar(
-  allocatedBoundary,
-  matchedBoundary,
-  stations,
-  side
-) {
+function snapMatchedBoundaryToDivisionStopbar(allocatedBoundary, matchedBoundary, stations, side) {
   if (Math.abs(allocatedBoundary - matchedBoundary) > 0.05) return allocatedBoundary;
   return (
     stations
@@ -2133,9 +3469,7 @@ function snapMatchedBoundaryToDivisionStopbar(
           station.kind === 'stopbar' &&
           station.source === 'division' &&
           Math.abs(station.along - matchedBoundary) <= MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS &&
-          (side === 'start'
-            ? station.along <= matchedBoundary
-            : station.along >= matchedBoundary)
+          (side === 'start' ? station.along <= matchedBoundary : station.along >= matchedBoundary)
       )
       .sort(
         (left, right) =>
@@ -2215,6 +3549,22 @@ function clampAllocationToStopbarCell(start, end, matchedSection, stations) {
   };
 }
 
+function projectedPointAtDistance(points, target) {
+  if (target <= 0) return points[0];
+  const distances = cumulativePolylineDistances(points);
+  if (target >= distances.at(-1)) return points.at(-1);
+  let index = 1;
+  while (index < distances.length && distances[index] < target) index += 1;
+  const start = points[index - 1];
+  const end = points[index];
+  const segmentLength = Math.max(distances[index] - distances[index - 1], 0.000001);
+  const ratio = clamp01((target - distances[index - 1]) / segmentLength);
+  return {
+    x: start.x + (end.x - start.x) * ratio,
+    y: start.y + (end.y - start.y) * ratio,
+  };
+}
+
 function snapBoundaryToLogicalTurn(candidate, boundary) {
   const distances = cumulativePolylineDistances(candidate.projected);
   let best;
@@ -2275,9 +3625,7 @@ function sharedDivisionBoundary(left, right, candidate, targetAlong) {
 
 function buildConnectedStopbarCandidates(candidates, referenceLatitude) {
   const stopbars = candidates.filter(
-    (candidate) =>
-      candidate.raw.classification === 'stopbar' &&
-      candidate.coordinates.length >= 2
+    (candidate) => candidate.raw.classification === 'stopbar' && candidate.coordinates.length >= 2
   );
   const composites = [];
 
@@ -2287,6 +3635,7 @@ function buildConnectedStopbarCandidates(candidates, referenceLatitude) {
       const right = stopbars[rightIndex];
       const leftSourceFile = left.raw.sourceFile;
       const rightSourceFile = right.raw.sourceFile;
+      if (evidencePriority(left.raw) !== evidencePriority(right.raw)) continue;
       if (leftSourceFile && rightSourceFile && leftSourceFile !== rightSourceFile) {
         continue;
       }
@@ -2306,6 +3655,9 @@ function buildConnectedStopbarCandidates(candidates, referenceLatitude) {
         rawTag: 'Connected simulator stopbar rows',
         classification: 'stopbar',
         confidence: Math.min(Number(left.raw.confidence) || 1, Number(right.raw.confidence) || 1),
+        evidencePriority: evidencePriority(left.raw),
+        removalEligible: left.raw.removalEligible !== false && right.raw.removalEligible !== false,
+        placementOnly: left.raw.removalEligible === false || right.raw.removalEligible === false,
         vertices: connection.coordinates.map((coordinate) => ({
           lat: coordinate.lat,
           lon: coordinate.lon,
@@ -2483,6 +3835,7 @@ function mergeCoLocatedSimulatorRows(items, referenceLatitude) {
       ? groups.find(
           (candidate) =>
             candidate.family === family &&
+            evidencePriority(candidate.members[0].raw) === evidencePriority(item.raw) &&
             candidate.members.some((member) => areCoLocatedSimulatorPolylines(item, member))
         )
       : undefined;

@@ -20,6 +20,18 @@ import { CONSENT_KEY } from '../../utils/posthogLoader';
 const StableNavbar = memo(Navbar);
 const StableFooter = memo(Footer);
 const LayoutContext = createContext(false);
+const SITE_NAME = 'BARS';
+
+const getPageTitle = (pathname) => {
+  if (/^\/contribute\/editor\/[^/]+\/?$/.test(pathname)) return 'Contribution editor';
+  if (/^\/contribute\/generator\/[^/]+\/?$/.test(pathname)) return 'Draft generator';
+  if (/^\/contribute\/test\/[^/]+\/?$/.test(pathname)) return 'Test contribution';
+  if (/^\/contribute\/details\/[^/]+\/?$/.test(pathname)) return 'Submit contribution';
+  if (/^\/contribute\/map\/[^/]+\/?$/.test(pathname)) return 'Review airport';
+  if (pathname === '/contribute/new') return 'Start contribution';
+  if (pathname.startsWith('/contribute')) return 'Contributions';
+  return SITE_NAME;
+};
 
 const ConsentLayer = memo(function ConsentLayer() {
   const [show, setShow] = useState(() => {
@@ -48,8 +60,10 @@ const ConsentLayer = memo(function ConsentLayer() {
 /* oxlint-disable react-doctor/advanced-event-handler-refs -- The Easter-egg listener intentionally follows its stable text-transform callbacks. */
 const LayoutFrame = ({ children }) => {
   const { pathname } = useLocation();
+  const isFullScreenEditor = /^\/contribute\/editor\/[^/]+\/?$/.test(pathname);
   const keyBufferRef = useRef('');
   const layoutRef = useRef(null);
+  const previousPathRef = useRef(pathname);
 
   // Function to reverse all text content
   const reverseAllText = useCallback(() => {
@@ -116,12 +130,30 @@ const LayoutFrame = ({ children }) => {
 
   // Page navigation effect
   useLayoutEffect(() => {
+    const routeChanged = previousPathRef.current !== pathname;
+    previousPathRef.current = pathname;
+    const pageTitle = getPageTitle(pathname);
+    document.title = pageTitle === SITE_NAME ? SITE_NAME : `${pageTitle} · ${SITE_NAME}`;
     window.scrollTo(0, 0);
 
     // Always restore text when navigating between pages
     if (layoutRef.current) {
       restoreAllText();
     }
+
+    if (routeChanged) {
+      const focusTimer = window.requestAnimationFrame(() => {
+        const heading = layoutRef.current?.querySelector('h1');
+        if (heading) {
+          heading.tabIndex = -1;
+          heading.focus({ preventScroll: true });
+        }
+      });
+
+      return () => window.cancelAnimationFrame(focusTimer);
+    }
+
+    return undefined;
   }, [pathname, restoreAllText]);
 
   // Console banner effect
@@ -154,6 +186,20 @@ Support BARS: https://stopbars.com/donate`,
       window.removeEventListener('keydown', handleKeyPress);
     };
   }, [handleKeyPress]);
+
+  if (isFullScreenEditor) {
+    return (
+      <div ref={layoutRef} className="h-dvh overflow-hidden bg-zinc-950 text-white">
+        <Suspense fallback={<PageLoading page label="Loading editorâ€¦" />}>
+          <div key={pathname} className="h-full">
+            {children}
+          </div>
+        </Suspense>
+        <ConsentLayer />
+      </div>
+    );
+  }
+
   return (
     <div ref={layoutRef} className="min-h-screen bg-zinc-950 text-white relative">
       <div className="flex flex-col min-h-screen">

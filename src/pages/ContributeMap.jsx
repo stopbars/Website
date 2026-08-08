@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
-import { Button } from '../components/shared/Button';
-import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
-import { AlertCircle, ChevronRight, CopyIcon, Info, Check, Layers, FileCode2 } from 'lucide-react';
+import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
+import { AlertCircle, ArrowRight, CopyIcon, Info, Check, Layers } from 'lucide-react';
 import Map, {
   Source,
   Layer,
@@ -953,11 +952,6 @@ const ContributeMap = () => {
     [mapRef]
   );
 
-  const handleContinue = () => {
-    if (contributionsDisabled) return;
-    navigate(`/contribute/test/${icao}`);
-  };
-
   const toggleStyle = () => {
     if (styleName === 'Satellite') {
       setMapStyle(STREET_STYLE);
@@ -998,15 +992,7 @@ const ContributeMap = () => {
       <Layout>
         <div className="min-h-screen pt-32 pb-20">
           <div className="max-w-7xl mx-auto px-6" aria-busy="true">
-            <div className="mb-12 mt-6">
-              <div className="flex items-center space-x-2 mb-12">
-                <Breadcrumb>
-                  <BreadcrumbItem title="Contribute" link="/contribute" />
-                  <BreadcrumbItem title="Airport" link="/contribute/new" />
-                  <BreadcrumbItem title="Map" />
-                </Breadcrumb>
-              </div>
-            </div>
+            <ContributionFlowHeader current="review" title="Review airport" icao={icao} />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 h-150 rounded-lg border border-zinc-800 bg-zinc-900/50 animate-pulse" />
@@ -1031,15 +1017,12 @@ const ContributeMap = () => {
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-12 mt-6">
-            <div className="flex items-center space-x-2 mb-12">
-              <Breadcrumb>
-                <BreadcrumbItem title="Contribute" link="/contribute" />
-                <BreadcrumbItem title="Airport" link="/contribute/new" />
-                <BreadcrumbItem title="Map" />
-              </Breadcrumb>
-            </div>
-          </div>
+          <ContributionFlowHeader
+            current="review"
+            title="Review airport"
+            icao={icao}
+            context={`${airport.icao} · ${airport.name}`}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
@@ -1271,50 +1254,40 @@ const ContributeMap = () => {
             </div>
 
             <div className="space-y-6">
-              {/* Airport info */}
               <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Airport Information</h2>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-zinc-400">ICAO Code</p>
-                    <p className="font-medium">{airport.icao}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Airport Name</p>
-                    <p className="font-medium">{airport.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Location</p>
-                    <p className="font-medium">
-                      {airport.latitude.toFixed(4)}, {airport.longitude.toFixed(4)}
-                    </p>
-                  </div>
+                <div>
+                  <p className="font-mono text-xs text-zinc-500">{airport.icao}</p>
+                  <h2 className="mt-1 text-xl font-semibold text-white">{airport.name}</h2>
+                  <p className="mt-2 font-mono text-xs text-zinc-500">
+                    {airport.latitude.toFixed(4)}, {airport.longitude.toFixed(4)}
+                  </p>
                 </div>
-              </Card>
 
-              {/* Draft Generator */}
-              <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Draft generator</h2>
-                <button
-                  type="button"
-                  onClick={
+                <Link
+                  to={draftGeneratorDisabled ? '#' : `/contribute/generator/${icao}`}
+                  aria-disabled={draftGeneratorDisabled}
+                  tabIndex={draftGeneratorDisabled ? -1 : undefined}
+                  onClick={(event) => {
+                    if (draftGeneratorDisabled) event.preventDefault();
+                  }}
+                  className={`mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-lg border px-6 py-4 text-center font-semibold transition-[background-color,border-color,color,transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
                     draftGeneratorDisabled
-                      ? undefined
-                      : () => navigate(`/contribute/generator/${icao}`)
-                  }
-                  disabled={draftGeneratorDisabled}
-                  className={`w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 transition-all ${
-                    draftGeneratorDisabled
-                      ? 'opacity-50 cursor-not-allowed'
-                      : 'hover:bg-zinc-800 hover:border-zinc-600'
+                      ? 'pointer-events-none cursor-not-allowed border-transparent bg-white text-zinc-950 opacity-40'
+                      : 'border-transparent bg-white text-zinc-950 hover:bg-zinc-100 active:scale-[0.96]'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
-                    <FileCode2 className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <span className="ml-3 text-sm font-medium text-white">Open Draft Generator</span>
-                  <ChevronRight className="w-4 h-4 text-zinc-500 ml-auto" />
-                </button>
+                  Create contribution draft
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+
+                {points.length > 0 && !contributionsDisabled ? (
+                  <Link
+                    to={`/contribute/test/${icao}`}
+                    className="mx-auto mt-3 flex min-h-10 w-fit items-center justify-center rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                  >
+                    Skip to test
+                  </Link>
+                ) : null}
               </Card>
 
               {contributionsDisabled ? (
@@ -1341,26 +1314,12 @@ const ContributeMap = () => {
               ) : (
                 <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
                   <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
-                  <p className="text-sm text-blue-400">
-                    This is the existing airport data for this airport, set by {owningDivisionLabel}
-                    . Your contribution will add support for a specific simulator scenery package.
+                  <p className="text-sm text-blue-300">
+                    Existing BARS layout from {owningDivisionLabel}. Your draft will target one
+                    scenery package.
                   </p>
                 </div>
               )}
-
-              <Button
-                onClick={points.length === 0 || contributionsDisabled ? undefined : handleContinue}
-                disabled={points.length === 0 || contributionsDisabled}
-                aria-disabled={points.length === 0 || contributionsDisabled}
-                className={`w-full ${
-                  points.length === 0 || contributionsDisabled
-                    ? 'opacity-50 cursor-not-allowed'
-                    : ''
-                }`}
-              >
-                <span>Continue to Next Step</span>
-                <ChevronRight className="w-4 h-4 ml-2" />
-              </Button>
             </div>
           </div>
         </div>

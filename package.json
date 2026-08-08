@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/features/draft-generator/matching.test.js src/features/draft-generator/airport-upload-validation.test.js",
+    "test": "node --test src/context/authRequest.test.js src/features/contribution-editor/dds-texture.test.js src/features/contribution-editor/marking-patterns.test.js src/features/contribution-editor/scenery-texture.test.js src/features/contribution-editor/texture-assets.test.js src/features/contribution-editor/XPlaneTextureLayer.test.js src/features/contribution-editor/xplane-mercator-geometry.test.js src/features/contribution-editor/xplane-texture-geometry.test.js src/features/contribution-editor/xplane-texture-resolution.test.js src/features/contribution-editor/reference-scene.test.js src/features/contribution-editor/editor-model.test.js src/features/contribution-editor/geoman-editor.test.js src/features/contribution-editor/editor-snapping.test.js src/features/contribution-editor/editor-geometry.test.js src/features/contribution-editor/editor-state.test.js src/features/contribution-editor/editor-session.test.js src/features/draft-generator/matching.test.js src/features/draft-generator/airport-upload-validation.test.js src/features/draft-generator/msfs-reference.test.js src/features/draft-generator/xplane-apt.test.js src/features/draft-generator/xplane-dsf.test.js src/utils/contributionContracts.test.js src/utils/coordinateParsing.test.js",
     "doctor": "react-doctor --verbose",
     "perf:trace": "node scripts/perf-trace.mjs",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\" \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.19.3",
+    "@geoman-io/maplibre-geoman-free": "^0.8.4",
     "dompurify": "^3.4.1",
+    "earcut": "^3.2.3",
     "framer-motion": "^12.38.0",
     "geolib": "^3.3.14",
     "leaflet": "^1.9.4",

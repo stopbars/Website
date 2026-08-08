@@ -20,24 +20,32 @@ const MAXIMUM_ISOLATED_CROSSING_OVERLAP_METERS = 6;
 const CROSSING_SAMPLE_INTERVAL_METERS = 0.5;
 const MAXIMUM_SAFETY_PASSES = 12;
 const REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS = 0.1;
-const DEBUG_ID_NEIGHBOR_COUNT = 4;
+const DEBUG_ID_NEIGHBOR_COUNT = 8;
 const DEBUG_ID_COLORS = [
-  '#3b82f6',
-  '#f97316',
-  '#22c55e',
-  '#ec4899',
-  '#06b6d4',
-  '#eab308',
-  '#8b5cf6',
-  '#ef4444',
-  '#14b8a6',
-  '#f472b6',
-  '#84cc16',
-  '#6366f1',
+  '#0067ff',
+  '#ff7a00',
+  '#00a651',
+  '#ff2da0',
+  '#00cde8',
+  '#ffd400',
+  '#7a3cff',
+  '#e31a1c',
+  '#7fd000',
 ];
 
 export function buildDraftOutput(data, matching, options) {
-  const selective = buildSafeSelectiveRemovals(data, matching.matches, options.onProgress);
+  const isXPlane = data.meta?.simulator === 'xplane';
+  const placementOnlyMatches = matching.matches.filter(
+    (match) => match.row.removalEligible === false
+  );
+  const removalMatches = matching.matches.filter((match) => match.row.removalEligible !== false);
+  const selective = isXPlane
+    ? {
+        approved: removalMatches,
+        rejected: [],
+        geometry: emptyRemovalGeometry(),
+      }
+    : buildSafeSelectiveRemovals(data, removalMatches, options.onProgress);
   const removalWarnings = uniqueDivisionItems(
     selective.rejected.map((match) => ({
       division: match.division,
@@ -46,7 +54,7 @@ export function buildDraftOutput(data, matching, options) {
     }))
   );
   const replacements = replacementMatches(matching.matches);
-  const safeReplacements = replacementMatches(selective.approved);
+  const safeReplacements = replacementMatches([...selective.approved, ...placementOnlyMatches]);
   const safetyDivisionIds = new Set(removalWarnings.map((item) => String(item.division?.id ?? '')));
   const unsafeReplacements = replacements.filter((match) =>
     safetyDivisionIds.has(String(match.division.id))
@@ -59,6 +67,8 @@ export function buildDraftOutput(data, matching, options) {
     altitude: options.altitude,
     matches: replacements,
     removalPolygons: selective.geometry.removalPolygons,
+    simulator: data.meta?.simulator,
+    xplaneSelectors: isXPlane ? buildXPlaneSelectors(data.lightRows ?? [], removalMatches) : [],
   });
   const geojson = buildDraftGeoJson(
     safeVisualReplacements,
@@ -77,6 +87,7 @@ export function buildDraftOutput(data, matching, options) {
     simulatorGeojson,
     matched: matching.matches,
     removalApproved: selective.approved,
+    placementOnlyMatches,
     replacements,
     unmatched: matching.unmatched,
     removalWarnings,
@@ -94,6 +105,79 @@ export function buildDraftOutput(data, matching, options) {
     duplicateDivisionLeadOns: matching.duplicateDivisionLeadOns,
     duplicateSimulatorLeadOns: matching.duplicateSimulatorLeadOns,
   };
+}
+
+function buildXPlaneSelectors(sourceRows, matches) {
+  const sourceById = new Map(sourceRows.map((row) => [String(row.id), row]));
+  const grouped = new Map();
+  for (const match of matches) {
+    const matchedRow = match.row;
+    const rows =
+      matchedRow.sourceRowIds?.length > 0
+        ? matchedRow.sourceRowIds.map((id) => sourceById.get(String(id))).filter(Boolean)
+        : [matchedRow];
+    for (const sourceRow of rows) {
+      const row =
+        Number.isFinite(matchedRow.sourceRangeStartMeters) &&
+        Number.isFinite(matchedRow.sourceRangeEndMeters)
+          ? {
+              ...sourceRow,
+              sourceRangeStartMeters: matchedRow.sourceRangeStartMeters,
+              sourceRangeEndMeters: matchedRow.sourceRangeEndMeters,
+              sourceParentLengthMeters:
+                matchedRow.sourceParentLengthMeters || rowLengthMeters(sourceRow),
+            }
+          : sourceRow;
+      if (
+        row.sourceType !== 'xplane-apt-light-string' ||
+        !/^[a-f0-9]{16}$/i.test(row.sourceFeatureId ?? '') ||
+        !Number.isInteger(row.lightCode)
+      ) {
+        continue;
+      }
+
+      const total = Number(row.sourceParentLengthMeters) || rowLengthMeters(row);
+      if (!(total > 0)) continue;
+      const start = Math.max(0, Math.min(total, Number(row.sourceRangeStartMeters) || 0));
+      const end = Math.max(start, Math.min(total, Number(row.sourceRangeEndMeters) || total));
+      const key = `${row.sourceFeatureId}:${row.lightCode}:${row.sourceRunIndex ?? 0}`;
+      const entry = grouped.get(key) ?? {
+        feature: row.sourceFeatureId,
+        code: row.lightCode,
+        run: Number(row.sourceRunIndex) || 0,
+        ranges: [],
+      };
+      entry.ranges.push([start / total, end / total]);
+      grouped.set(key, entry);
+    }
+  }
+
+  return [...grouped.values()]
+    .map((entry) => ({
+      ...entry,
+      ranges: mergeNormalizedRanges(entry.ranges),
+    }))
+    .sort(
+      (left, right) =>
+        left.feature.localeCompare(right.feature) || left.code - right.code || left.run - right.run
+    );
+}
+
+function mergeNormalizedRanges(ranges) {
+  const ordered = ranges
+    .map(([start, end]) => [Math.max(0, Math.min(1, start)), Math.max(0, Math.min(1, end))])
+    .filter(([start, end]) => end - start > 0.000001)
+    .sort((left, right) => left[0] - right[0]);
+  const merged = [];
+  for (const range of ordered) {
+    const previous = merged.at(-1);
+    if (previous && range[0] <= previous[1] + 0.000001) {
+      previous[1] = Math.max(previous[1], range[1]);
+    } else {
+      merged.push([...range]);
+    }
+  }
+  return merged;
 }
 
 function replacementMatches(matches) {
@@ -331,22 +415,31 @@ function generateForMatches(
   const originallySelectedSourceInstanceIds = new Set(
     originalSelectedRows.flatMap((row) => row.sourceInstanceIds ?? [])
   );
-  const selectiveZones = selectiveTargetMustKeepZones(
-    data,
-    originalSelectedRows,
-    originallySelectedSourceInstanceIds
-  );
+  const recordSelectiveXPlaneRemoval = isRecordSelectiveXPlaneRemoval(data, selectedRows);
+  const selectiveZones = recordSelectiveXPlaneRemoval
+    ? []
+    : selectiveTargetMustKeepZones(data, originalSelectedRows, originallySelectedSourceInstanceIds);
   const selectiveProtectionZones = selectiveZones.filter(
     (zone) => !isIsolatedGuidanceCrossingZone(zone, selectedRows)
   );
   const protectedSourceZones = (data.mustKeepZones ?? []).filter(
-    (zone) => !isConservativeRunwayEnvelopeSuperseded(zone, selectedRows)
+    (zone) =>
+      !(recordSelectiveXPlaneRemoval && zone.sourceType === 'xplane-runway-light-zone') &&
+      !isConservativeRunwayEnvelopeSuperseded(zone, selectedRows)
   );
   const mustKeepZones = [...protectedSourceZones, ...selectiveProtectionZones];
   return {
     ...generateRemovalGeometry(sourceInstances, rows, DEFAULT_SIZES, mustKeepZones),
     selectiveProtectionZones,
   };
+}
+
+function isRecordSelectiveXPlaneRemoval(data, selectedRows) {
+  return (
+    data.meta?.simulator === 'xplane' &&
+    selectedRows.length > 0 &&
+    selectedRows.every((row) => row.sourceType === 'xplane-apt-light-string')
+  );
 }
 
 function isIsolatedGuidanceCrossingZone(zone, selectedRows) {
@@ -527,6 +620,7 @@ function selectiveTargetMustKeepZones(data, selectedRows, selectedSourceInstance
 
   for (const row of data.lightRows ?? []) {
     if (
+      row.removalEligible === false ||
       selectedRowIds.has(row.id) ||
       !TARGET_CLASSIFICATIONS.has(row.classification) ||
       !Array.isArray(row.vertices) ||
@@ -642,7 +736,14 @@ function emptyRemovalGeometry() {
   };
 }
 
-function generateDraftXml({ icao, altitude, matches, removalPolygons }) {
+function generateDraftXml({
+  icao,
+  altitude,
+  matches,
+  removalPolygons,
+  simulator,
+  xplaneSelectors = [],
+}) {
   const polygons = [];
   let groupIndex = 1;
   const baseAltitude = Number.isFinite(altitude) ? altitude : 0;
@@ -676,7 +777,22 @@ function generateDraftXml({ icao, altitude, matches, removalPolygons }) {
     groupIndex += 1;
   }
 
-  return `<?xml version="1.0"?>\n<FSData version="9.0">\n${polygons.join('\n')}\n</FSData>`;
+  const rootAttributes =
+    simulator === 'xplane'
+      ? 'version="9.0" simulator="xplane" xplaneRemovalVersion="1"'
+      : 'version="9.0"';
+  const selectorXml =
+    simulator === 'xplane' && xplaneSelectors.length > 0
+      ? `\n\t<XPlaneRemovals version="1">\n${xplaneSelectors
+          .flatMap((selector) =>
+            selector.ranges.map(
+              ([start, end]) =>
+                `\t\t<Light feature="${selector.feature}" code="${selector.code}" run="${selector.run}" start="${start.toFixed(6)}" end="${end.toFixed(6)}"/>`
+            )
+          )
+          .join('\n')}\n\t</XPlaneRemovals>`
+      : '';
+  return `<?xml version="1.0"?>\n<FSData ${rootAttributes}>\n${polygons.join('\n')}${selectorXml}\n</FSData>`;
 }
 
 function uniqueDivisionItems(items) {
@@ -732,6 +848,10 @@ function buildSimulatorDebugGeoJson(simulatorRows, mergedSimulatorRows) {
         featureType: 'simulator-source',
         title: String(row.id || 'Extracted simulator row'),
         simulatorType: row.classification || 'unknown',
+        sourceType: row.sourceType || '',
+        sourceDefinition: row.sourceDefinition || '',
+        evidencePriority: Number(row.evidencePriority) || null,
+        removalEligible: row.removalEligible !== false,
         sourceFile: row.sourceFile || '',
         confidence: Number.isFinite(row.confidence) ? Math.round(row.confidence * 100) : null,
       },
@@ -760,6 +880,27 @@ function buildSimulatorDebugGeoJson(simulatorRows, mergedSimulatorRows) {
 function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = []) {
   const features = [];
   const divisionColors = buildDivisionColorMap(matches, unmatched, unsafeMatches);
+  const originalDivisions = new Map();
+
+  for (const item of [...matches, ...unsafeMatches, ...unmatched]) {
+    const division = item.division;
+    const id = String(division?.id ?? '');
+    if (!id || originalDivisions.has(id)) continue;
+    const geometry = divisionGeometry(division?.coordinates);
+    if (!geometry) continue;
+    originalDivisions.set(id, {
+      type: 'Feature',
+      geometry,
+      properties: {
+        featureType: 'original-division',
+        divisionId: id,
+        title: division?.name || id,
+        divisionType: division?.type || 'unknown',
+      },
+    });
+  }
+
+  features.push(...originalDivisions.values());
 
   for (const removal of removalPolygons) {
     features.push({
@@ -784,6 +925,15 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
         divisionType,
         simulatorType: match.row.classification,
         matchPercent: Math.round(match.score * 100),
+        sourceRowId: String(match.row.id ?? ''),
+        sourceFeatureId: String(match.row.sourceFeatureId ?? ''),
+        sourceType: String(match.row.sourceType ?? ''),
+        sourceRangeStartMeters: Number.isFinite(match.row.sourceRangeStartMeters)
+          ? match.row.sourceRangeStartMeters
+          : null,
+        sourceRangeEndMeters: Number.isFinite(match.row.sourceRangeEndMeters)
+          ? match.row.sourceRangeEndMeters
+          : null,
       },
     });
   }
@@ -804,6 +954,15 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
         simulatorType: match.row.classification,
         matchPercent: Math.round(match.score * 100),
         reason: 'Simulator geometry matched, but its removal area needs manual review.',
+        sourceRowId: String(match.row.id ?? ''),
+        sourceFeatureId: String(match.row.sourceFeatureId ?? ''),
+        sourceType: String(match.row.sourceType ?? ''),
+        sourceRangeStartMeters: Number.isFinite(match.row.sourceRangeStartMeters)
+          ? match.row.sourceRangeStartMeters
+          : null,
+        sourceRangeEndMeters: Number.isFinite(match.row.sourceRangeEndMeters)
+          ? match.row.sourceRangeEndMeters
+          : null,
       },
     });
   }
@@ -902,9 +1061,10 @@ function debugColorScore(color, neighborColors, usage, startIndex) {
   const separation = neighborColors.length
     ? Math.min(...neighborColors.map((neighborColor) => rgbDistance(color, neighborColor)))
     : 0;
+  const duplicateNeighborPenalty = neighborColors.includes(color) ? 10_000 : 0;
   const paletteIndex = DEBUG_ID_COLORS.indexOf(color);
   const preference = (paletteIndex - startIndex + DEBUG_ID_COLORS.length) % DEBUG_ID_COLORS.length;
-  return separation - usage.get(color) * 45 - preference * 0.01;
+  return separation * 10 - duplicateNeighborPenalty - usage.get(color) * 5 - preference * 0.01;
 }
 
 function rgbDistance(left, right) {

@@ -72,7 +72,7 @@ const About = () => {
               airport lighting states between controllers and pilots on VATSIM. It brings stopbars,
               follow the greens, runway lead‑on/off lights and gate lead‑in lighting to life while
               adapting to default and third‑party scenery seamlessly, without a restart. BARS
-              supports Microsoft Flight Simulator 2020 and 2024, and is designed to remain
+              supports Microsoft Flight Simulator 2020 and 2024, and X-Plane 12, while remaining
               lightweight for smooth simulator performance.
             </p>
             <p className="text-zinc-400 leading-relaxed">

@@ -35,6 +35,8 @@ const SOURCE_BACKED_LIGHT_ROW_TYPES = new Set([
   'bgl-taxiway-path-edge',
   'bgl-taxiway-path-bridge',
   'division-guided-source-instances',
+  'xplane-apt-light-string',
+  'xplane-dsf-light-string',
 ]);
 const INFERRED_REMOVAL_LIGHT_ROW_TYPES = new Set(['inferred-bgl-placement-row']);
 const METERS_PER_DEGREE_LAT = 111320;
@@ -63,6 +65,7 @@ export async function extractAirportLightData(options) {
   const instances = [];
   const lightRows = [];
   const existingExclusionRectangles = [];
+  const referenceFeatures = [];
 
   for (const unsupportedFile of options.unsupportedFiles ?? []) {
     warnings.push(`${unsupportedFile}: unsupported binary/package file`);
@@ -86,6 +89,7 @@ export async function extractAirportLightData(options) {
     const fileResult = extractFromParsedXml(parsed.root, xmlFile);
     instances.push(...fileResult.instances);
     lightRows.push(...fileResult.lightRows);
+    referenceFeatures.push(...fileResult.referenceFeatures);
     existingExclusionRectangles.push(...fileResult.existingExclusionRectangles);
     warnings.push(...fileResult.warnings);
   }
@@ -166,6 +170,7 @@ export async function extractAirportLightData(options) {
     instances,
     lightRows,
     runways: bglResult.runways ?? [],
+    referenceFeatures: [...referenceFeatures, ...(bglResult.referenceFeatures ?? [])],
     mustKeepZones,
     protectionConflicts,
     removalPolygons,
@@ -179,6 +184,7 @@ export function extractFromParsedXml(root, sourceFile) {
   const lightRows = [];
   const existingExclusionRectangles = [];
   const warnings = [];
+  const referenceFeatures = extractXmlReferenceFeatures(root, sourceFile);
   const consumedChildPaths = new Set();
   let recognizedTags = 0;
 
@@ -267,8 +273,263 @@ export function extractFromParsedXml(root, sourceFile) {
     instances,
     lightRows,
     existingExclusionRectangles,
+    referenceFeatures,
     warnings,
   };
+}
+
+function extractXmlReferenceFeatures(root, sourceFile) {
+  const features = [];
+  const taxiwayPoints = new Map();
+  const taxiwayPaths = [];
+
+  walkNodes(root, (node) => {
+    const tag = localName(node.name);
+    if (tag === 'taxiwaypoint') {
+      const placement = extractPlacement(node);
+      const index = firstNumber(node, ['index', 'Index']);
+      if (Number.isInteger(index) && isValidPlacement(placement)) {
+        taxiwayPoints.set(index, placement);
+      }
+      return;
+    }
+    if (tag === 'taxiwaypath') {
+      taxiwayPaths.push(node);
+      return;
+    }
+
+    const definition = xmlReferenceDefinition(tag);
+    if (!definition) return;
+    let geometry;
+    if (tag === 'runway') {
+      geometry = xmlRunwayGeometry(node);
+    } else {
+      const coordinates = findDescendants(node, (candidate) =>
+        VERTEX_TAGS.has(localName(candidate.name))
+      )
+        .map((vertex) => extractPlacement(vertex))
+        .filter(isValidPlacement)
+        .map((point) => [point.lon, point.lat]);
+      if (definition.geometry === 'Polygon' && coordinates.length >= 3) {
+        geometry = {
+          type: 'Polygon',
+          coordinates: [closeGeoJsonRing(coordinates)],
+        };
+      } else if (coordinates.length >= 2) {
+        geometry = { type: 'LineString', coordinates };
+      }
+    }
+    if (!geometry) return;
+    features.push(
+      xmlReferenceFeature({
+        sourceFile,
+        node,
+        geometry,
+        ...definition,
+      })
+    );
+  });
+
+  for (const node of taxiwayPaths) {
+    const start = taxiwayPoints.get(firstNumber(node, ['start', 'Start']));
+    const end = taxiwayPoints.get(firstNumber(node, ['end', 'End']));
+    if (!start || !end) continue;
+    const type = firstAttribute(node, ['type', 'Type']) || 'Taxiway';
+    const width = firstNumber(node, ['width', 'Width']);
+    const surface = firstAttribute(node, ['surface', 'Surface']) || '';
+    const centerLine = firstBoolean(node, ['centerLine', 'CenterLine']);
+    const centerLineLighted = firstBoolean(node, ['centerLineLighted', 'CenterLineLighted']);
+    if (Number.isFinite(width) && width >= 1 && width <= 200) {
+      const surfaceRing = editorTaxiwaySurfaceRing(
+        [start.lon, start.lat],
+        [end.lon, end.lat],
+        width
+      );
+      if (surfaceRing.length > 0) {
+        features.push(
+          xmlReferenceFeature({
+            sourceFile,
+            node,
+            geometry: { type: 'Polygon', coordinates: [surfaceRing] },
+            sourceType: 'msfs-xml-taxiway-surface',
+            semanticType: 'taxiway-surface',
+            snapCategory: 'pavement-edges',
+            title: `${type} pavement`,
+            extra: { widthMeters: width, surface },
+          })
+        );
+      }
+    }
+    if (!centerLine && !centerLineLighted) continue;
+    features.push(
+      xmlReferenceFeature({
+        sourceFile,
+        node,
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [start.lon, start.lat],
+            [end.lon, end.lat],
+          ],
+        },
+        sourceType: 'msfs-xml-taxiway-path',
+        semanticType: String(type).toLowerCase(),
+        snapCategory: 'taxiway-centrelines',
+        title: `${type} path`,
+        extra: {
+          widthMeters: width,
+          surface,
+          centerLine,
+          centerLineLighted,
+        },
+      })
+    );
+  }
+
+  return features;
+}
+
+function xmlReferenceDefinition(tag) {
+  if (tag === 'apron') {
+    return {
+      sourceType: 'msfs-xml-apron',
+      semanticType: 'apron',
+      snapCategory: 'pavement-edges',
+      geometry: 'Polygon',
+      title: 'Apron pavement',
+    };
+  }
+  if (tag === 'paintedline') {
+    return {
+      sourceType: 'msfs-xml-painted-line',
+      semanticType: 'painted-marking',
+      snapCategory: 'painted-lines',
+      geometry: 'LineString',
+      title: 'Painted line',
+      extra: {},
+    };
+  }
+  if (tag === 'paintedhatchedarea') {
+    return {
+      sourceType: 'msfs-xml-painted-hatched-area',
+      semanticType: 'painted-hatched-area',
+      snapCategory: 'painted-lines',
+      geometry: 'Polygon',
+      title: 'Painted hatched area',
+    };
+  }
+  if (tag === 'projectedmesh' || tag === 'polygon') {
+    return {
+      sourceType: `msfs-xml-${tag}`,
+      semanticType: tag,
+      snapCategory: 'pavement-edges',
+      geometry: 'Polygon',
+      title: tag === 'projectedmesh' ? 'Projected ground detail' : 'Scenery polygon',
+    };
+  }
+  if (tag === 'runway') {
+    return {
+      sourceType: 'msfs-xml-runway',
+      semanticType: 'runway-surface',
+      snapCategory: 'runways',
+      geometry: 'Polygon',
+      title: 'Runway',
+    };
+  }
+  return null;
+}
+
+function xmlReferenceFeature({
+  sourceFile,
+  node,
+  geometry,
+  sourceType,
+  semanticType,
+  snapCategory,
+  title,
+  extra = {},
+}) {
+  const sourceId = stableId(sourceFile, node.path, sourceType, JSON.stringify(geometry));
+  return {
+    type: 'Feature',
+    id: sourceId,
+    geometry,
+    properties: {
+      sourceId,
+      sourceType,
+      sourceFile,
+      title: firstAttribute(node, ['displayName', 'name', 'Name', 'type', 'Type']) || title,
+      semanticType,
+      snapCategory,
+      exactness: 'exact',
+      surface: firstAttribute(node, ['surface', 'Surface']) || '',
+      material: firstAttribute(node, ['material', 'Material']) || '',
+      priority: firstNumber(node, ['priority', 'Priority', 'drawOrder', 'DrawOrder']),
+      markingStyle: firstAttribute(node, ['type', 'Type']) || '',
+      markingOutline: firstAttribute(node, ['outlineType', 'OutlineType']) || '',
+      ...extra,
+    },
+  };
+}
+
+function xmlRunwayGeometry(node) {
+  const placement = extractPlacement(node);
+  const length = firstNumber(node, ['length', 'Length']);
+  const width = firstNumber(node, ['width', 'Width']);
+  const heading = firstNumber(node, ['heading', 'Heading']);
+  if (
+    !isValidPlacement(placement) ||
+    !Number.isFinite(length) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(heading)
+  ) {
+    return null;
+  }
+  const center = [placement.lon, placement.lat];
+  const first = editorOffsetCoordinate(center, heading + 180, length / 2);
+  const second = editorOffsetCoordinate(center, heading, length / 2);
+  const vertices = [
+    editorOffsetCoordinate(first, heading - 90, width / 2),
+    editorOffsetCoordinate(second, heading - 90, width / 2),
+    editorOffsetCoordinate(second, heading + 90, width / 2),
+    editorOffsetCoordinate(first, heading + 90, width / 2),
+  ];
+  return { type: 'Polygon', coordinates: [closeGeoJsonRing(vertices)] };
+}
+
+function editorTaxiwaySurfaceRing(start, end, widthMeters) {
+  const referenceLatitude = (start[1] + end[1]) / 2;
+  const longitudeScale =
+    111_320 * Math.max(Math.cos((referenceLatitude * Math.PI) / 180), 0.000001);
+  const east = (end[0] - start[0]) * longitudeScale;
+  const north = (end[1] - start[1]) * 111_320;
+  const length = Math.hypot(east, north);
+  if (length < 0.01) return [];
+  const normalEast = (-north / length) * (widthMeters / 2);
+  const normalNorth = (east / length) * (widthMeters / 2);
+  const offset = (point, direction) => [
+    point[0] + (normalEast * direction) / longitudeScale,
+    point[1] + (normalNorth * direction) / 111_320,
+  ];
+  const ring = [offset(start, 1), offset(end, 1), offset(end, -1), offset(start, -1)];
+  return [...ring, ring[0]];
+}
+
+function editorOffsetCoordinate([lon, lat], bearing, distance) {
+  const radians = (bearing * Math.PI) / 180;
+  const north = Math.cos(radians) * distance;
+  const east = Math.sin(radians) * distance;
+  const longitudeScale =
+    METERS_PER_DEGREE_LAT * Math.max(Math.cos((lat * Math.PI) / 180), 0.000001);
+  return [lon + east / longitudeScale, lat + north / METERS_PER_DEGREE_LAT];
+}
+
+function closeGeoJsonRing(coordinates) {
+  const first = coordinates[0];
+  const last = coordinates.at(-1);
+  return first?.[0] === last?.[0] && first?.[1] === last?.[1]
+    ? coordinates
+    : [...coordinates, [...first]];
 }
 
 function buildInstance({ sourceFile, node, objectNode, placement, sourceType }) {
@@ -403,7 +664,7 @@ function buildExistingExclusion(node, sourceFile) {
   };
 }
 
-function buildMustKeepZones(instances, lightRows, runwayLightZones) {
+export function buildMustKeepZones(instances, lightRows, runwayLightZones) {
   const zones = [...runwayLightZones];
 
   for (const row of lightRows) {
@@ -1961,7 +2222,11 @@ function intervalGapMeters(left, right) {
 }
 
 function isSourceBackedLightRow(row) {
-  return !row.inferred && SOURCE_BACKED_LIGHT_ROW_TYPES.has(row.sourceType);
+  return (
+    !row.inferred &&
+    row.removalEligible !== false &&
+    SOURCE_BACKED_LIGHT_ROW_TYPES.has(row.sourceType)
+  );
 }
 
 function isRemovalLightRow(row) {

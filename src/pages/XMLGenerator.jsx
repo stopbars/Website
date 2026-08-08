@@ -17,10 +17,23 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
-import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
+import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
 import { PageLoading } from '../components/shared/PageLoading';
 import DraftGeneratorMap from '../features/draft-generator/DraftGeneratorMap';
-import { selectionFromDrop, selectionFromInput } from '../features/draft-generator/local-package';
+import { createEditorDocument } from '../features/contribution-editor/editor-model.js';
+import {
+  cacheReferenceTextures,
+  requestPersistentEditorStorage,
+  saveEditorDraft,
+  saveReferenceScene,
+  setEditorSession,
+} from '../features/contribution-editor/editor-session.js';
+import {
+  detectScenerySimulator,
+  scenerySelectionFingerprint,
+  selectionFromDrop,
+  selectionFromInput,
+} from '../features/draft-generator/local-package';
 import {
   fetchContributionPolicy,
   getContributionDisabledMessage,
@@ -62,6 +75,10 @@ const XMLGenerator = () => {
   const draftFileName = `${normalizedIcao || 'airport'}-Draft.xml`;
   const diagnosticFileName = `${normalizedIcao || 'airport'}-Draft-diagnostic.json`;
   const divisionGeojson = useMemo(() => buildDivisionGeojson(divisionPoints), [divisionPoints]);
+  const selectedSimulator = useMemo(
+    () => (selection ? detectScenerySimulator(selection.entries) : null),
+    [selection]
+  );
 
   useEffect(() => {
     if (!normalizedIcao || !/^[A-Z0-9]{4}$/.test(normalizedIcao)) {
@@ -259,11 +276,45 @@ const XMLGenerator = () => {
     downloadBlob(result.diagnosticBlob, diagnosticFileName);
   };
 
-  const handleContinue = async () => {
+  const handleOpenEditor = async () => {
     if (!result?.xmlBlob || result.matchedCount === 0) return;
-    const draftXml = await result.xmlBlob.text();
-    navigate(`/contribute/test/${normalizedIcao}`, {
-      state: { draftXml, draftFileName },
+    const [draftXml, draftGeojson, referenceScene] = await Promise.all([
+      result.xmlBlob.text(),
+      result.geojsonBlob.text().then(JSON.parse),
+      result.referenceSceneBlob.text().then(JSON.parse),
+    ]);
+    const sourceFingerprint = scenerySelectionFingerprint(selection?.entries);
+    const document = createEditorDocument({
+      icao: normalizedIcao,
+      simulator: result.simulator,
+      altitude: Number.isFinite(airport?.elevation_m) ? airport.elevation_m : 0,
+      draftGeojson,
+      draftXml,
+      source: {
+        name: selection?.name || 'Scenery package',
+        fingerprint: sourceFingerprint,
+      },
+    });
+    requestPersistentEditorStorage();
+    await Promise.all([
+      saveEditorDraft(document),
+      saveReferenceScene(
+        normalizedIcao,
+        result.simulator,
+        referenceScene,
+        selection?.name || 'Scenery package',
+        sourceFingerprint
+      ),
+      cacheReferenceTextures(sourceFingerprint, referenceScene, selection?.entries),
+    ]);
+    setEditorSession(normalizedIcao, {
+      airport,
+      document,
+      referenceScene,
+      sourceSelection: selection,
+    });
+    navigate(`/contribute/editor/${normalizedIcao}`, {
+      state: { sessionKey: normalizedIcao },
     });
   };
 
@@ -273,29 +324,14 @@ const XMLGenerator = () => {
 
   return (
     <Layout>
-      <main className="min-h-screen pb-20 pt-32">
+      <div className="min-h-screen pb-20 pt-32">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="mb-8 mt-6">
-            <Breadcrumb>
-              <BreadcrumbItem title="Map" link={`/contribute/map/${normalizedIcao}`} />
-              <BreadcrumbItem title="Draft generator" />
-            </Breadcrumb>
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight text-white">
-                  Draft generator
-                </h1>
-                <p className="mt-2 text-sm text-zinc-400">
-                  {airport?.icao} · {airport?.name}
-                </p>
-              </div>
-              {result ? (
-                <p className="text-sm text-zinc-500">
-                  Generated locally in {result.elapsedSeconds}s
-                </p>
-              ) : null}
-            </div>
-          </div>
+          <ContributionFlowHeader
+            current="draft"
+            title="Create a draft"
+            icao={normalizedIcao}
+            context={`${airport?.icao} · ${airport?.name}`}
+          />
 
           {contributionsDisabled ? (
             <div className="mb-6 flex items-start rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
@@ -323,12 +359,12 @@ const XMLGenerator = () => {
             <aside className="space-y-5 lg:sticky lg:top-28 lg:self-start">
               <Card className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300">
                     <FileCode2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="font-medium text-white">Scenery package</h2>
-                    <p className="text-xs text-zinc-500">MSFS package or scenery folder</p>
+                    <h2 className="font-medium text-white">Choose scenery</h2>
+                    <p className="text-xs text-zinc-500">Airport scenery folder</p>
                   </div>
                 </div>
 
@@ -353,7 +389,9 @@ const XMLGenerator = () => {
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">
                     {selection
-                      ? `${selection.entries.length.toLocaleString()} files indexed`
+                      ? `${selection.entries.length.toLocaleString()} files indexed · ${
+                          selectedSimulator === 'xplane' ? 'X-Plane detected' : 'MSFS detected'
+                        }`
                       : 'You can also drag the folder here.'}
                   </p>
                   <button
@@ -386,6 +424,12 @@ const XMLGenerator = () => {
                     Scenery data is processed on this device and does not leave your browser.
                   </span>
                 </div>
+                {!selection ? (
+                  <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
+                    For X-Plane, choose the custom airport package, its Earth nav data folder, or
+                    Global Scenery/Global Airports.
+                  </p>
+                ) : null}
 
                 {isGenerating ? (
                   <GenerationProgress generation={generation} />
@@ -393,6 +437,7 @@ const XMLGenerator = () => {
                   <Button
                     onClick={handleGenerate}
                     disabled={!selection || generationPolicyBlocked}
+                    variant={result ? 'outline' : 'primary'}
                     className="mt-5 w-full"
                   >
                     {result ? (
@@ -400,7 +445,7 @@ const XMLGenerator = () => {
                     ) : (
                       <FileCode2 className="h-4 w-4" />
                     )}
-                    {result ? 'Generate again' : 'Generate draft'}
+                    {result ? 'Create a new draft' : 'Generate draft'}
                   </Button>
                 )}
               </Card>
@@ -410,13 +455,13 @@ const XMLGenerator = () => {
                   result={result}
                   onDownload={handleDownload}
                   onDownloadDiagnostic={handleDiagnosticDownload}
-                  onContinue={handleContinue}
+                  onOpenEditor={handleOpenEditor}
                 />
               ) : null}
             </aside>
           </div>
         </div>
-      </main>
+      </div>
 
       <Toast
         title="Draft generator"
@@ -493,10 +538,10 @@ function GenerationProgress({ generation }) {
   );
 }
 
-function ResultPanel({ result, onDownload, onDownloadDiagnostic, onContinue }) {
+function ResultPanel({ result, onDownload, onDownloadDiagnostic, onOpenEditor }) {
   const hasMatches = result.matchedCount > 0;
   const hasManualWork = result.manualCount > 0;
-  const hasRemovalReview = result.removalReview.length > 0;
+  const hasRemovalReview = result.simulator !== 'xplane' && result.removalReview.length > 0;
   const consolidatedObjects = result.duplicateDivisionLeadOns + result.duplicateSimulatorLeadOns;
 
   return (
@@ -519,7 +564,7 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onContinue }) {
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-zinc-400">
             {result.matchedCount} matched
-            {hasManualWork ? ` · ${result.manualCount} need manual work` : ' · no missing objects'}
+            {hasManualWork ? ` · ${result.manualCount} need editing` : ' · ready to edit'}
           </p>
         </div>
       </div>
@@ -527,7 +572,7 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onContinue }) {
       {hasManualWork ? (
         <div className="mt-4 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3">
           <p className="text-xs leading-relaxed text-rose-300">
-            Red objects were not added to the XML. Add them manually during scenery editing.
+            Red objects were not added to the draft. Add them in the editor.
           </p>
           <div className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
             {result.manualReview.map((item) => (
@@ -544,9 +589,8 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onContinue }) {
         <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
           <p className="text-xs leading-relaxed text-amber-200">
             {result.removalReview.length} matched{' '}
-            {result.removalReview.length === 1 ? 'object was' : 'objects were'} added to the XML,
-            but the automatic remover was skipped to protect nearby simulator lighting. Review the
-            amber geometry during testing.
+            {result.removalReview.length === 1 ? 'object was' : 'objects were'} added to the draft,
+            but nearby simulator lighting needs a quick review in the editor.
           </p>
         </div>
       ) : null}
@@ -559,9 +603,13 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onContinue }) {
       ) : null}
 
       <div className="mt-5 space-y-3 border-t border-zinc-800 pt-5">
-        <Button onClick={onDownload} disabled={!hasMatches} variant="secondary" className="w-full">
+        <Button onClick={onOpenEditor} disabled={!hasMatches} className="w-full">
+          Open editor
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+        <Button onClick={onDownload} disabled={!hasMatches} variant="outline" className="w-full">
           <Download className="h-4 w-4" />
-          Download XML
+          Download draft
         </Button>
         {import.meta.env.DEV && result.diagnosticBlob ? (
           <Button onClick={onDownloadDiagnostic} variant="secondary" className="w-full">
@@ -569,10 +617,6 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onContinue }) {
             Download diagnostic JSON
           </Button>
         ) : null}
-        <Button onClick={onContinue} disabled={!hasMatches} className="w-full">
-          Continue to testing
-          <ArrowRight className="h-4 w-4" />
-        </Button>
       </div>
     </Card>
   );
@@ -620,11 +664,17 @@ ResultPanel.propTypes = {
     ).isRequired,
     duplicateDivisionLeadOns: PropTypes.number.isRequired,
     duplicateSimulatorLeadOns: PropTypes.number.isRequired,
+    simulator: PropTypes.oneOf(['msfs', 'xplane']).isRequired,
+    sourceSummary: PropTypes.shape({
+      aptDatSourceFile: PropTypes.string,
+      aptDatFilesParsed: PropTypes.number,
+      dsfFilesDecoded: PropTypes.number,
+    }).isRequired,
     diagnosticBlob: PropTypes.instanceOf(Blob),
   }).isRequired,
   onDownload: PropTypes.func.isRequired,
   onDownloadDiagnostic: PropTypes.func.isRequired,
-  onContinue: PropTypes.func.isRequired,
+  onOpenEditor: PropTypes.func.isRequired,
 };
 
 export default XMLGenerator;

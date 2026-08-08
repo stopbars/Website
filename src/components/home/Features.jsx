@@ -117,8 +117,8 @@ export const Features = () => {
             <div className="flex-1 space-y-4">
               <h3 className="text-2xl md:text-3xl font-bold">Multi-Simulator Support</h3>
               <p className="text-zinc-400 text-base leading-relaxed">
-                Compatible with Microsoft Flight Simulator 2020 and 2024. Designed to remain
-                lightweight for smooth performance, without impacting your frames.
+                Compatible with Microsoft Flight Simulator 2020 and 2024, and X-Plane 12. Designed
+                to remain lightweight for smooth performance, without impacting your frames.
               </p>
             </div>
             <div className="flex-1 w-full">

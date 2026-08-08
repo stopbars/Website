@@ -16,7 +16,7 @@ export const Button = ({
   ...props
 }) => {
   const baseStyles =
-    'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-6 py-3 font-medium cursor-pointer select-none whitespace-nowrap transition-[background-color,border-color,color,transform,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:pointer-events-none disabled:opacity-50';
+    'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-6 py-3 text-center font-medium cursor-pointer select-none whitespace-normal transition-[background-color,border-color,color,transform,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:pointer-events-none disabled:opacity-50';
   return (
     <button
       type={type}

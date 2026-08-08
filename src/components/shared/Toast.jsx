@@ -1,4 +1,4 @@
-import { useState, useEffect, useEffectEvent, useCallback } from 'react';
+import { useState, useEffect, useEffectEvent, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { Info, Check, AlertTriangle, X } from 'lucide-react';
 
@@ -46,37 +46,48 @@ export const Toast = ({
 }) => {
   const [isVisible, setIsVisible] = useState(show);
   const [isAnimating, setIsAnimating] = useState(false);
+  const closeTimerRef = useRef(null);
 
   const handleClose = useCallback(() => {
     setIsAnimating(false);
-    setTimeout(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
       setIsVisible(false);
       if (onClose) onClose();
     }, 300); // Wait for exit animation
   }, [onClose]);
   const handleAutoDismiss = useEffectEvent(handleClose);
 
-  useEffect(() => {
-    if (!show) return undefined;
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
 
-    let animationDelay;
-    let autoDismiss;
-    const opener = setTimeout(() => {
+  useEffect(() => {
+    let animationDelay = null;
+    let autoDismiss = null;
+
+    if (show) {
+      const shouldAutoDismiss = variant !== 'destructive' && duration > 0;
+
       setIsVisible(true);
       animationDelay = setTimeout(() => {
         setIsAnimating(true);
       }, 50);
-      autoDismiss = setTimeout(() => {
-        handleAutoDismiss();
-      }, duration);
-    }, 0);
+      autoDismiss = shouldAutoDismiss
+        ? setTimeout(() => {
+            handleAutoDismiss();
+          }, duration)
+        : null;
+    }
 
     return () => {
-      clearTimeout(opener);
       if (animationDelay) clearTimeout(animationDelay);
       if (autoDismiss) clearTimeout(autoDismiss);
     };
-  }, [show, duration]);
+  }, [show, duration, variant]);
 
   useEffect(() => {
     if (show) return undefined;
@@ -101,6 +112,9 @@ export const Toast = ({
 
   return (
     <div
+      role={variant === 'destructive' ? 'alert' : 'status'}
+      aria-live={variant === 'destructive' ? 'assertive' : 'polite'}
+      aria-atomic="true"
       className={`
         fixed bottom-4 left-4 right-4 sm:right-auto sm:left-4 z-50 sm:max-w-sm sm:w-full
         transform transition-[opacity,transform] duration-300 ease-out

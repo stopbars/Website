@@ -8,6 +8,7 @@ import {
 } from './diagnostics.js';
 import { matchDivisionObjects, scorePolylineMatch } from './matching.js';
 import { pointInPolygon } from './extractor/geo.js';
+import { parseAptDatAirport } from './extractor/xplane-apt.js';
 import ypphOwnershipRegression from './fixtures/ypph-ownership-regressions.js';
 
 const LATITUDE = -31.94;
@@ -51,6 +52,33 @@ test('captures complete matcher decisions only when development diagnostics are 
   assert.equal(result.diagnostics.pipeline.eligibleEdges.length, 1);
   assert.equal(result.diagnostics.pipeline.allocatedEdges.length, 1);
   assert.equal(result.diagnostics.configuration.types.stopbar.minimumScore, 0.43);
+});
+
+test('bounds airport-scale candidate diagnostics without losing totals or eligible rows', () => {
+  const division = divisionLine('bounded-diagnostic-stop', 'stopbar', [point(0, 0), point(20, 0)]);
+  const simulatorRows = Array.from({ length: 30 }, (_, index) =>
+    simulatorLine(
+      `bounded-sim-${index.toString().padStart(2, '0')}`,
+      'stopbar',
+      index === 0
+        ? [point(1, 2), point(21, 2)]
+        : [point(index * 100, 0), point(index * 100 + 20, 0)]
+    )
+  );
+
+  const result = matchDivisionObjects([division], simulatorRows, [], {
+    includeDiagnostics: true,
+  });
+
+  assert.equal(result.diagnostics.compatibleRowCandidateEvaluations.length, 12);
+  assert.equal(result.diagnostics.compatibleRowCandidateSummary.totalEvaluations, 30);
+  assert.equal(result.diagnostics.compatibleRowCandidateSummary.omittedEvaluations, 18);
+  assert.ok(
+    result.diagnostics.compatibleRowCandidateEvaluations.some(
+      (evaluation) =>
+        evaluation.simulatorCandidateId === 'bounded-sim-00' && evaluation.outcome === 'eligible'
+    )
+  );
 });
 
 test('builds a compact self-contained generation diagnostic JSON document', async () => {
@@ -268,8 +296,22 @@ test('selects co-located simulator lead-on layers but writes one replacement', (
   const matchedFeature = output.geojson.features.find(
     (feature) => feature.properties.featureType === 'matched'
   );
+  const originalFeature = output.geojson.features.find(
+    (feature) => feature.properties.featureType === 'original-division'
+  );
+  assert.equal(
+    output.geojson.features.filter(
+      (feature) => feature.properties.featureType === 'original-division'
+    ).length,
+    1
+  );
   assert.equal(matchedFeature.properties.divisionId, 'lead-a');
   assert.match(matchedFeature.properties.debugColor, /^#[\da-f]{6}$/);
+  assert.equal(originalFeature.properties.divisionId, 'lead-a');
+  assert.deepEqual(
+    originalFeature.geometry.coordinates,
+    division.coordinates.map((coordinate) => [coordinate.lng, coordinate.lat])
+  );
   assert.deepEqual(result.duplicateSimulatorLeadOns, ['sim-low']);
   assert.equal(result.mergedSimulatorRows.length, 1);
   assert.deepEqual(result.mergedSimulatorRows[0].sourceRowIds, ['sim-high', 'sim-low']);
@@ -307,9 +349,11 @@ test('uses varied high-contrast colors for nearby BARS IDs', () => {
     .filter((feature) => feature.properties.featureType === 'unmatched')
     .map((feature) => feature.properties.debugColor);
 
-  assert.ok(new Set(colors).size >= 6);
-  for (let index = 1; index < colors.length; index += 1) {
-    assert.ok(hexColorDistance(colors[index], colors[index - 1]) >= 100);
+  assert.equal(new Set(colors).size, colors.length);
+  for (let left = 0; left < colors.length; left += 1) {
+    for (let right = left + 1; right < colors.length; right += 1) {
+      assert.ok(hexColorDistance(colors[left], colors[right]) >= 100);
+    }
   }
 });
 
@@ -558,6 +602,792 @@ test('uses the complete native lead-on row when the division display shape is sh
   assert.deepEqual(result.matches[0].replacementRow.vertices, simulator.vertices);
 });
 
+test('uses the complete X-Plane taxi-centreline row for a shortened lead-on display shape', () => {
+  const division = divisionLine('lead-short', 'lead_on', [point(35, 0), point(65, 0)]);
+  const simulator = {
+    ...simulatorLine('xplane-full', 'taxi-centerline', [point(0, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    lightCode: 105,
+  };
+
+  const result = matchDivisionObjects([division], [simulator]);
+
+  assert.equal(result.matches.length, 1);
+  assert.deepEqual(result.matches[0].row.vertices, simulator.vertices);
+  assert.deepEqual(result.matches[0].replacementRow.vertices, simulator.vertices);
+});
+
+test('uses the highest available X-Plane evidence tier for each division object', () => {
+  const division = divisionLine('xplane-priority', 'stopbar', [point(0, 0), point(20, 0)]);
+  const aptLight = {
+    ...simulatorLine('apt-light', 'stopbar', [point(0, 3), point(20, 3)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const dsfString = {
+    ...simulatorLine('dsf-string', 'stopbar', [point(0, 1), point(20, 1)]),
+    sourceType: 'xplane-dsf-light-string',
+    evidencePriority: 2,
+    removalEligible: true,
+  };
+  const marking = {
+    ...simulatorLine('dsf-marking', 'stopbar', [point(0, 0), point(20, 0)]),
+    sourceType: 'xplane-dsf-painted-line',
+    evidencePriority: 3,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects([division], [marking, dsfString, aptLight]);
+
+  assert.deepEqual(
+    result.matches.map((match) => match.row.id),
+    ['apt-light']
+  );
+});
+
+test('uses lower-priority X-Plane evidence only for geometry not covered by exact lights', () => {
+  const division = divisionLine('xplane-segment-priority', 'lead_on', [
+    point(0, 0),
+    point(50, 0),
+    point(50, 50),
+  ]);
+  const exactLight = {
+    ...simulatorLine('apt-light-segment', 'lead-on', [point(0, 1), point(50, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const duplicateMarking = {
+    ...simulatorLine('apt-marking-duplicate', 'taxi-centerline', [point(0, 1), point(50, 1)]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+  const uncoveredMarking = {
+    ...simulatorLine('apt-marking-uncovered', 'taxi-centerline', [point(51, 0), point(51, 50)]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects([division], [duplicateMarking, uncoveredMarking, exactLight]);
+
+  assert.deepEqual(result.matches.map((match) => match.row.id).sort(), [
+    'apt-light-segment',
+    'apt-marking-uncovered',
+  ]);
+});
+
+test('hard-cuts a native X-Plane guidance row at the stopbar around the matched geometry', () => {
+  const divisions = [
+    divisionLine('directed-stopbar', 'stopbar', [point(50, 10), point(50, -10)]),
+    divisionLine('lead-lit-side', 'lead_on', [point(50, 0), point(90, 0)]),
+  ];
+  const row = {
+    ...simulatorLine('xplane-crossing-row', 'lead-on', [point(0, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+
+  const result = matchDivisionObjects(divisions, [row]);
+  const leadOn = result.matches.find((match) => match.division.id === 'lead-lit-side');
+
+  assert.ok(leadOn);
+  assert.ok(Math.abs(leadOn.row.sourceRangeStartMeters - 50) < 0.2);
+  assert.ok(Math.abs(leadOn.row.sourceRangeEndMeters - 100) < 0.2);
+});
+
+test('hard-cuts a native MSFS guidance row at the stopbar regardless of stopbar direction', () => {
+  const divisions = [
+    divisionLine('directed-stopbar-msfs', 'stopbar', [point(50, -10), point(50, 10)]),
+    divisionLine('lead-lit-side-msfs', 'lead_on', [point(50, 0), point(90, 0)]),
+  ];
+  const row = simulatorLine('msfs-crossing-row', 'lead-on', [point(0, 1), point(100, 1)]);
+
+  const result = matchDivisionObjects(divisions, [row]);
+  const leadOn = result.matches.find((match) => match.division.id === 'lead-lit-side-msfs');
+
+  assert.ok(leadOn);
+  assert.ok(Math.abs(leadOn.row.sourceRangeStartMeters - 50) < 0.2);
+  assert.ok(Math.abs(leadOn.row.sourceRangeEndMeters - 100) < 0.2);
+});
+
+test('does not attach a continuation from the opposite side of a stopbar', () => {
+  const divisions = [
+    divisionLine('hard-boundary', 'stopbar', [point(50, -10), point(50, 10)]),
+    divisionLine('inside-owner', 'lead_on', [point(50, 0), point(100, 0)]),
+  ];
+  const primary = {
+    ...simulatorLine('inside-exact', 'lead-on', [point(50, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const exterior = {
+    ...simulatorLine('outside-marking', 'taxi-centerline', [point(0, 1), point(50, 1)]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects(divisions, [primary, exterior]);
+
+  assert.deepEqual(
+    result.matches
+      .filter((match) => match.division.id === 'inside-owner')
+      .map((match) => match.row.sourceParentRowId ?? match.row.id),
+    ['inside-exact']
+  );
+});
+
+test('drops a translated stopbar fallback when a full-shape exact row already exists', () => {
+  const division = divisionLine('one-stopbar', 'stopbar', [point(0, 0), point(20, 0)]);
+  const exact = {
+    ...simulatorLine('exact-stopbar', 'stopbar', [point(0, 1), point(20, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const translated = {
+    ...simulatorLine('translated-stopbar', 'stopbar', [point(0, 29), point(9, 29)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+
+  const result = matchDivisionObjects([division], [translated, exact]);
+
+  assert.deepEqual(
+    result.matches.map((match) => match.row.id),
+    ['exact-stopbar']
+  );
+});
+
+test('completes a connected X-Plane source row exactly to a BARS stopbar boundary', () => {
+  const divisions = [
+    divisionLine('directed-stopbar', 'stopbar', [point(0, 10), point(0, -10)]),
+    divisionLine('lead-needing-stopbar-end', 'lead_on', [point(30, 0), point(100, 0)]),
+  ];
+  const primary = {
+    ...simulatorLine('xplane-primary', 'lead-on', [point(30, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const connector = {
+    ...simulatorLine('xplane-stopbar-connector', 'taxi-centerline', [
+      point(-40, 1),
+      point(0, 1),
+      point(30, 1),
+    ]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+
+  const result = matchDivisionObjects(divisions, [primary, connector]);
+  const leadMatches = result.matches.filter(
+    (match) => match.division.id === 'lead-needing-stopbar-end'
+  );
+  const completion = leadMatches.find(
+    (match) => match.metrics.sourceConnectionBasis === 'stopbar-boundary'
+  );
+
+  assert.ok(completion);
+  assert.equal(completion.row.sourceParentRowId, 'xplane-stopbar-connector');
+  assert.ok(Math.abs(completion.row.sourceRangeStartMeters - 40) < 0.2);
+  assert.ok(Math.abs(completion.row.sourceRangeEndMeters - 70) < 0.2);
+});
+
+test('extends through one straight lower-priority source continuation', () => {
+  const division = divisionLine('lead-with-marking-continuation', 'lead_on', [
+    point(0, 0),
+    point(50, 0),
+  ]);
+  const primary = {
+    ...simulatorLine('xplane-lit-primary', 'lead-on', [point(0, 1), point(50, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const continuation = {
+    ...simulatorLine('xplane-marked-continuation', 'taxi-centerline', [
+      point(50, 1),
+      point(130, 1),
+    ]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects([division], [primary, continuation]);
+  const completion = result.matches.find(
+    (match) => match.metrics.sourceConnectionBasis === 'straight-source-fallback'
+  );
+
+  assert.ok(completion);
+  assert.equal(completion.row.id, 'xplane-marked-continuation');
+  assert.equal(completion.row.removalEligible, false);
+});
+
+test('keeps the uncovered continuation of an overlapping lower-priority X-Plane row', () => {
+  const division = divisionLine('lead-with-overlapping-marking', 'lead_on', [
+    point(0, 0),
+    point(50, 0),
+  ]);
+  const primary = {
+    ...simulatorLine('xplane-exact-segment', 'lead-on', [point(0, 1), point(50, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const continuation = {
+    ...simulatorLine('xplane-overlapping-marking', 'taxi-centerline', [
+      point(-80, 1),
+      point(0, 1),
+      point(50, 1),
+    ]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects([division], [primary, continuation]);
+  const completion = result.matches.find(
+    (match) =>
+      match.row.sourceParentRowId === 'xplane-overlapping-marking' &&
+      match.metrics.sourceConnectionBasis === 'uncovered-lower-priority-evidence'
+  );
+
+  assert.ok(completion);
+  assert.ok(completion.row.sourceRangeStartMeters < 0.2);
+  assert.ok(Math.abs(completion.row.sourceRangeEndMeters - 80) < 0.2);
+  assert.equal(completion.row.removalEligible, false);
+});
+
+test('suppresses a weak registered YPPH claimant beneath a strong exact X-Plane owner', () => {
+  const divisions = [
+    {
+      id: 'BARS_ZMSHS',
+      type: 'lead_on',
+      name: 'D',
+      coordinates: [
+        { lat: -31.935152833600153, lng: 115.96621368149421 },
+        { lat: -31.935119825149773, lng: 115.96630956977606 },
+        { lat: -31.935079990761018, lng: 115.96638936549427 },
+        { lat: -31.935024222587764, lng: 115.96648123115304 },
+        { lat: -31.934953658728233, lng: 115.96655566245319 },
+        { lat: -31.934895614222516, lng: 115.96660729497673 },
+        { lat: -31.934844967516025, lng: 115.9666307643056 },
+        { lat: -31.934747088408674, lng: 115.96666295081378 },
+      ],
+    },
+    {
+      id: 'BARS_UFD89',
+      type: 'lead_on',
+      name: 'N',
+      coordinates: [
+        { lat: -31.934914365403586, lng: 115.96690785267484 },
+        { lat: -31.934942277455495, lng: 115.96686730161312 },
+        { lat: -31.934977274864664, lng: 115.96681701019406 },
+        { lat: -31.935009711475917, lng: 115.96677510067822 },
+        { lat: -31.93504613151702, lng: 115.96673050895335 },
+        { lat: -31.93507856810396, lng: 115.96669698134065 },
+        { lat: -31.93512295499387, lng: 115.96665440127255 },
+        { lat: -31.935172463422724, lng: 115.96661584451796 },
+        { lat: -31.935223109948776, lng: 115.96658164635303 },
+        { lat: -31.93527546363176, lng: 115.96655180677773 },
+        { lat: -31.935333223367, lng: 115.9665202908218 },
+        { lat: -31.935386430578667, lng: 115.96649816259743 },
+        { lat: -31.93543366262313, lng: 115.96648475155234 },
+      ],
+    },
+  ];
+  const extracted = parseAptDatAirport(
+    [
+      '1 20 0 0 YPPH Perth',
+      '120',
+      '111 -31.9349083 115.9669093 10 105',
+      '112 -31.9353870 115.9665030 -31.9356750 115.9664188',
+      '111 -31.9353870 115.9665030 10 105',
+      '115 -31.9362926 115.9662442',
+    ].join('\n'),
+    { icao: 'YPPH', sourceFile: 'apt.dat' }
+  );
+  const light = extracted.lightRows.find((row) => row.lightCode === 105);
+
+  const result = matchDivisionObjects(divisions, [light], [], { includeDiagnostics: true });
+  const ownership = result.diagnostics.pipeline.ownershipEdges.filter(
+    (edge) => edge.simulatorCandidateId === light.id
+  );
+
+  assert.deepEqual(
+    result.matches.map((match) => match.division.id),
+    ['BARS_UFD89']
+  );
+  assert.deepEqual(
+    ownership.map((edge) => edge.divisionId),
+    ['BARS_UFD89']
+  );
+});
+
+test('keeps YPPH painted-centreline fallback with its overlapping exact-light owner', () => {
+  const divisions = [
+    {
+      id: 'BARS_3LHZ2',
+      type: 'lead_on',
+      name: 'D',
+      coordinates: [
+        { lat: -31.9351431127847, lng: 115.96581363040838 },
+        { lat: -31.935160228583598, lng: 115.96589852124454 },
+        { lat: -31.935169902642567, lng: 115.96597831696273 },
+        { lat: -31.935172747953835, lng: 115.96606817096475 },
+        { lat: -31.935162504832846, lng: 115.96615869551898 },
+        { lat: -31.93513974233767, lng: 115.96628811210394 },
+        { lat: -31.935062918874845, lng: 115.96657041460278 },
+      ],
+    },
+    {
+      id: 'BARS_ZUHDO',
+      type: 'lead_on',
+      name: 'N',
+      coordinates: [
+        { lat: -31.934324556763766, lng: 115.96805216744544 },
+        { lat: -31.934886509198694, lng: 115.9669626876712 },
+        { lat: -31.93497158422994, lng: 115.96679521724583 },
+        { lat: -31.93500288271661, lng: 115.9667274914682 },
+        { lat: -31.93503190494018, lng: 115.9666601009667 },
+        { lat: -31.935053529336095, lng: 115.96659572795035 },
+      ],
+    },
+  ];
+  const extracted = parseAptDatAirport(
+    [
+      '1 20 0 0 YPPH Perth',
+      '120',
+      '111 -31.9351174 115.9657885 10 101',
+      '112 -31.9351475 115.9662093 -31.9351084 115.9664583',
+      '111 -31.9351475 115.9662093',
+      '112 -31.9351475 115.9662093 -31.9350911 115.9665590 10 101',
+      '111 -31.9349083 115.9669093 10 101',
+      '111 -31.9345833 115.9675117 10 101',
+      '115 -31.9343199 115.9680462',
+    ].join('\n'),
+    { icao: 'YPPH', sourceFile: 'apt.dat' }
+  );
+  const light = extracted.lightRows.find((row) => row.lightCode === 101);
+  const marking = extracted.lightRows.find((row) => row.markingCode === 10);
+
+  const result = matchDivisionObjects(divisions, [light, marking]);
+  const markingMatches = result.matches.filter(
+    (match) => (match.row.sourceParentRowId ?? match.row.id) === marking.id
+  );
+
+  assert.equal(markingMatches.length, 1);
+  assert.equal(markingMatches[0].division.id, 'BARS_3LHZ2');
+  assert.equal(
+    markingMatches[0].metrics.sourceConnectionBasis,
+    'overlapping-higher-priority-owner'
+  );
+  assert.ok(markingMatches[0].row.sourceRangeStartMeters < 0.1);
+  assert.ok(markingMatches[0].row.sourceRangeEndMeters > 75);
+});
+
+test('uses a source junction to avoid an endpoint gap in shared exact-light allocation', () => {
+  const divisions = [
+    divisionLine('short-adjacent-owner', 'lead_on', [point(0, 0), point(15, 0)]),
+    divisionLine('primary-marking-owner', 'lead_on', [point(20, 0), point(90, 0)]),
+  ];
+  const exactLight = {
+    ...simulatorLine('shared-exact-light', 'lead-on', [point(0, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const marking = {
+    ...simulatorLine('primary-full-marking', 'taxi-centerline', [point(10, 1), point(90, 1)]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects(divisions, [exactLight, marking]);
+  const exactRanges = result.matches
+    .filter((match) => match.row.sourceParentRowId === 'shared-exact-light')
+    .sort((left, right) => left.row.sourceRangeStartMeters - right.row.sourceRangeStartMeters);
+
+  assert.equal(exactRanges.length, 2);
+  assert.ok(Math.abs(exactRanges[0].row.sourceRangeEndMeters - 10) < 0.2);
+  assert.ok(
+    Math.abs(exactRanges[0].row.sourceRangeEndMeters - exactRanges[1].row.sourceRangeStartMeters) <
+      0.001
+  );
+  assert.equal(
+    result.matches.some(
+      (match) => (match.row.sourceParentRowId ?? match.row.id) === 'primary-full-marking'
+    ),
+    false
+  );
+});
+
+test('keeps a near-equal composite row with its source-dominant owner', () => {
+  const divisions = [
+    divisionLine('source-dominant-owner', 'lead_on', [point(0, 0), point(70, 0), point(70, 50)]),
+    divisionLine('subordinate-overlap', 'lead_on', [point(32, 0), point(52, 0), point(52, 65)]),
+  ];
+  const row = simulatorLine('dominant-source-row', 'lead-on', [point(0, 1), point(70, 1)]);
+
+  const result = matchDivisionObjects(divisions, [row], [], { includeDiagnostics: true });
+  const owners = result.diagnostics.pipeline.ownershipEdges
+    .filter((edge) => edge.simulatorCandidateId === 'dominant-source-row')
+    .map((edge) => edge.divisionId);
+
+  assert.deepEqual(owners, ['source-dominant-owner']);
+});
+
+test('keeps a contested source row with its full-shape owner over a composite claimant', () => {
+  const divisions = [
+    divisionLine('full-owner', 'lead_on', [point(20, 0), point(80, 0)]),
+    divisionLine('composite-claimant', 'lead_on', [point(20, 0), point(50, 0), point(50, 50)]),
+  ];
+  const row = simulatorLine('shared-row-with-incidental-branch', 'lead-on', [
+    point(0, 1),
+    point(100, 1),
+  ]);
+
+  const result = matchDivisionObjects(divisions, [row]);
+
+  assert.deepEqual(
+    result.matches.map((match) => match.division.id),
+    ['full-owner']
+  );
+});
+
+test('splits an uncovered marking midpoint between connected source owners', () => {
+  const divisions = [
+    divisionLine('west-connected-owner', 'lead_on', [point(-30, 0), point(0, 0)]),
+    divisionLine('east-evidence-owner', 'lead_on', [point(50, 0), point(100, 0)]),
+  ];
+  const westExact = {
+    ...simulatorLine('west-exact', 'lead-on', [point(-30, 1), point(0, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const eastExact = {
+    ...simulatorLine('east-exact', 'lead-on', [point(50, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const marking = {
+    ...simulatorLine('bridging-marking', 'taxi-centerline', [point(0, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects(divisions, [westExact, eastExact, marking]);
+  const markingMatches = result.matches
+    .filter((match) => match.row.sourceParentRowId === 'bridging-marking')
+    .sort((left, right) => left.row.sourceRangeStartMeters - right.row.sourceRangeStartMeters);
+
+  assert.deepEqual(
+    markingMatches.map((match) => match.division.id),
+    ['west-connected-owner', 'east-evidence-owner']
+  );
+  assert.ok(Math.abs(markingMatches[0].row.sourceRangeEndMeters - 25) < 0.2);
+  assert.ok(
+    Math.abs(
+      markingMatches[0].row.sourceRangeEndMeters - markingMatches[1].row.sourceRangeStartMeters
+    ) < 0.001
+  );
+});
+
+test('gives uncovered marking ownership to the complete source-dominant division', () => {
+  const west = divisionLine('west-connected-owner', 'lead_on', [point(-30, 0), point(0, 0)]);
+  const shortEast = {
+    ...divisionLine('a-short-east-owner', 'lead_on', [point(75, 0), point(100, 0)]),
+    name: 'B',
+  };
+  const completeEast = {
+    ...divisionLine('z-complete-east-owner', 'lead_on', [point(50, 0), point(100, 0)]),
+    name: 'B',
+  };
+  const westExact = {
+    ...simulatorLine('west-exact', 'lead-on', [point(-30, 1), point(0, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const shortEastExact = {
+    ...simulatorLine('short-east-exact', 'lead-on', [point(75, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+    evidencePriority: 1,
+    removalEligible: true,
+  };
+  const marking = {
+    ...simulatorLine('shared-east-marking', 'taxi-centerline', [point(0, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-painted-marking',
+    evidencePriority: 4,
+    removalEligible: false,
+    placementOnly: true,
+  };
+
+  const result = matchDivisionObjects(
+    [west, shortEast, completeEast],
+    [westExact, shortEastExact, marking]
+  );
+  const markingOwners = result.matches
+    .filter((match) => match.row.sourceParentRowId === 'shared-east-marking')
+    .map((match) => match.division.id);
+
+  assert.ok(markingOwners.includes('z-complete-east-owner'));
+  assert.equal(markingOwners.includes('a-short-east-owner'), false);
+});
+
+test('partitions a long X-Plane trunk between source-backed branch junction owners', () => {
+  const divisions = [
+    divisionLine('branch-west', 'lead_on', [point(20, 0), point(20, 30)]),
+    divisionLine('branch-middle', 'lead_on', [point(80, 0), point(80, 30)]),
+    divisionLine('trunk-end', 'lead_on', [point(350, 0), point(400, 0)]),
+  ];
+  const rows = [
+    {
+      ...simulatorLine('long-source-trunk', 'lead-on', [point(0, 1), point(400, 1)]),
+      sourceType: 'xplane-apt-light-string',
+      evidencePriority: 1,
+      removalEligible: true,
+    },
+    {
+      ...simulatorLine('west-source-branch', 'lead-on', [point(20, 1), point(20, 31)]),
+      sourceType: 'xplane-apt-light-string',
+      evidencePriority: 1,
+      removalEligible: true,
+    },
+    {
+      ...simulatorLine('middle-source-branch', 'lead-on', [point(80, 1), point(80, 31)]),
+      sourceType: 'xplane-apt-light-string',
+      evidencePriority: 1,
+      removalEligible: true,
+    },
+  ];
+
+  const result = matchDivisionObjects(divisions, rows);
+  const trunkMatches = result.matches
+    .filter((match) => match.row.sourceParentRowId === 'long-source-trunk')
+    .sort((left, right) => left.row.sourceRangeStartMeters - right.row.sourceRangeStartMeters);
+
+  assert.deepEqual(
+    trunkMatches.map((match) => match.division.id),
+    ['branch-west', 'branch-middle', 'trunk-end']
+  );
+  assert.equal(trunkMatches[0].row.sourceRangeStartMeters, 0);
+  assert.ok(
+    Math.abs(
+      trunkMatches[0].row.sourceRangeEndMeters - trunkMatches[1].row.sourceRangeStartMeters
+    ) < 0.001
+  );
+  assert.ok(
+    Math.abs(
+      trunkMatches[1].row.sourceRangeEndMeters - trunkMatches[2].row.sourceRangeStartMeters
+    ) < 0.001
+  );
+  assert.ok(Math.abs(trunkMatches[2].row.sourceRangeEndMeters - 400) < 0.2);
+});
+
+test('prefers an exact connected continuation over a nearby parallel trunk', () => {
+  const branchOwner = divisionLine('branch-with-straight-continuation', 'lead_on', [
+    point(0, 30),
+    point(0, 0),
+    point(0, -50),
+  ]);
+  const trunkOwner = divisionLine('parallel-trunk-end', 'lead_on', [
+    point(3, -350),
+    point(3, -400),
+  ]);
+  const rows = [
+    {
+      ...simulatorLine('parallel-long-trunk', 'lead-on', [point(3, 0), point(3, -400)]),
+      sourceType: 'xplane-apt-light-string',
+      evidencePriority: 1,
+      removalEligible: true,
+    },
+    {
+      ...simulatorLine('exact-branch', 'lead-on', [point(0, 30), point(0, 0)]),
+      sourceType: 'xplane-apt-light-string',
+      evidencePriority: 1,
+      removalEligible: true,
+    },
+    {
+      ...simulatorLine('straight-painted-continuation', 'taxi-centerline', [
+        point(0, 30),
+        point(0, -50),
+      ]),
+      sourceType: 'xplane-apt-painted-marking',
+      evidencePriority: 4,
+      removalEligible: false,
+      placementOnly: true,
+    },
+  ];
+
+  const result = matchDivisionObjects([branchOwner, trunkOwner], rows);
+  const incorrectlyClaimedParallelTrunk = result.matches.some(
+    (match) =>
+      match.division.id === 'branch-with-straight-continuation' &&
+      match.row.sourceParentRowId === 'parallel-long-trunk' &&
+      match.metrics.alignmentMode === 'source-junction-ownership'
+  );
+
+  assert.equal(incorrectlyClaimedParallelTrunk, false);
+  assert.ok(
+    result.matches.some(
+      (match) =>
+        match.division.id === 'branch-with-straight-continuation' &&
+        (match.row.sourceParentRowId ?? match.row.id) === 'straight-painted-continuation'
+    )
+  );
+});
+
+test('accepts a moderate full-shape branch only at an exact X-Plane source junction', () => {
+  const divisions = [
+    divisionLine('moderate-branch', 'lead_on', [point(80, 0), point(82.5, 14), point(80, 30)]),
+    divisionLine('trunk-end', 'lead_on', [point(350, 0), point(400, 0)]),
+  ];
+  const rows = [
+    {
+      ...simulatorLine('long-source-trunk', 'lead-on', [point(0, 1), point(400, 1)]),
+      sourceType: 'xplane-apt-light-string',
+      evidencePriority: 1,
+      removalEligible: true,
+    },
+    {
+      ...simulatorLine('moderate-source-branch', 'taxi-centerline', [point(80, 1), point(80, 31)]),
+      sourceType: 'xplane-apt-painted-marking',
+      evidencePriority: 4,
+      removalEligible: false,
+      placementOnly: true,
+    },
+  ];
+
+  const result = matchDivisionObjects(divisions, rows, [], { includeDiagnostics: true });
+  const connected = result.diagnostics.pipeline.connectedOwnershipEdges.find(
+    (edge) =>
+      edge.divisionId === 'moderate-branch' && edge.simulatorCandidateId === 'long-source-trunk'
+  );
+
+  assert.ok(connected);
+  assert.equal(connected.metrics.alignmentMode, 'source-junction-ownership');
+  assert.ok(connected.metrics.sourceConnectionGapMeters <= 0.1);
+});
+
+test('uses painted X-Plane marking geometry for placement without generating removals', () => {
+  const division = divisionLine('xplane-marking-fallback', 'stopbar', [point(0, 0), point(20, 0)]);
+  const marking = {
+    ...simulatorLine('dsf-marking-only', 'stopbar', [point(0, 2), point(20, 2)]),
+    sourceType: 'xplane-dsf-painted-line',
+    sourceBasis: 'decoded-dsf-painted-marking',
+    evidencePriority: 3,
+    removalEligible: false,
+    placementOnly: true,
+  };
+  const matching = matchDivisionObjects([division], [marking]);
+  const output = buildDraftOutput(
+    {
+      meta: { simulator: 'xplane' },
+      instances: [],
+      lightRows: [marking],
+      mustKeepZones: [],
+    },
+    matching,
+    { icao: 'TEST', altitude: 0 }
+  );
+
+  assert.equal(matching.matches.length, 1);
+  assert.equal(output.replacements.length, 1);
+  assert.equal(output.placementOnlyMatches.length, 1);
+  assert.equal(output.removals.length, 0);
+  assert.equal(output.removalWarnings.length, 0);
+});
+
+test('does not generate polygon removers for exact X-Plane apt light strings', () => {
+  const division = divisionLine('lead-xplane', 'lead_on', [point(20, 0), point(80, 0)]);
+  const selected = {
+    ...simulatorLine('xplane-selected', 'taxi-centerline', [point(0, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+  };
+  const overlappingTarget = {
+    ...simulatorLine('xplane-overlap', 'taxi-centerline', [point(40, 1), point(60, 1)]),
+    sourceType: 'xplane-apt-light-string',
+  };
+  const matching = matchDivisionObjects([division], [selected]);
+  const output = buildDraftOutput(
+    {
+      meta: { simulator: 'xplane' },
+      instances: [],
+      lightRows: [selected, overlappingTarget],
+      mustKeepZones: [
+        {
+          id: 'xplane-runway-grid-point',
+          sourceType: 'xplane-runway-light-zone',
+          geometryType: 'Point',
+          point: point(50, 1),
+          clearanceMeters: 1.5,
+        },
+      ],
+    },
+    matching,
+    { icao: 'TEST', altitude: 0 }
+  );
+
+  assert.equal(output.matched.length, 1);
+  assert.equal(output.removalWarnings.length, 0);
+  assert.equal(output.removals.length, 0);
+  assert.doesNotMatch(output.xml, /displayName="remove"/);
+});
+
+test('does not generate X-Plane removal geometry around explicit fixtures', () => {
+  const division = divisionLine('lead-xplane', 'lead_on', [point(20, 0), point(80, 0)]);
+  const selected = {
+    ...simulatorLine('xplane-selected', 'taxi-centerline', [point(0, 1), point(100, 1)]),
+    sourceType: 'xplane-apt-light-string',
+  };
+  const matching = matchDivisionObjects([division], [selected]);
+  const output = buildDraftOutput(
+    {
+      meta: { simulator: 'xplane' },
+      instances: [],
+      lightRows: [selected],
+      mustKeepZones: [
+        {
+          id: 'explicit-xplane-papi',
+          sourceType: 'xplane-apt-lighting-object',
+          geometryType: 'Point',
+          point: point(50, 1),
+          clearanceMeters: 1.5,
+        },
+      ],
+    },
+    matching,
+    { icao: 'TEST', altitude: 0 }
+  );
+
+  assert.equal(output.matched.length, 1);
+  assert.equal(output.removalWarnings.length, 0);
+  assert.equal(output.removals.length, 0);
+  assert.doesNotMatch(output.xml, /displayName="remove"/);
+});
+
 test('smooths only reconstructed replacement geometry and preserves the exact removal row', () => {
   const division = divisionLine('lead-smooth', 'lead_on', [point(0, 0), point(60, 0)]);
   const simulator = inferredPlacementLine('sim-jagged', 'taxi-centerline', [
@@ -715,7 +1545,7 @@ test('cuts an already matched guidance section at an interior simulator stopbar'
 
 test('uses a BARS stopbar to trim reconstructed lead-on extension without a simulator stopbar', () => {
   const division = [
-    divisionLine('bars-stopbar', 'stopbar', [point(50, -10), point(50, 10)]),
+    divisionLine('bars-stopbar', 'stopbar', [point(50, 10), point(50, -10)]),
     divisionLine('lead-after-bars-stopbar', 'lead_on', [point(50, 0), point(100, 0)]),
   ];
   const row = inferredPlacementLine('sim-guidance', 'taxi-centerline', [
@@ -724,9 +1554,7 @@ test('uses a BARS stopbar to trim reconstructed lead-on extension without a simu
   ]);
 
   const result = matchDivisionObjects(division, [row]);
-  const leadOn = result.matches.find(
-    (item) => item.division.id === 'lead-after-bars-stopbar'
-  );
+  const leadOn = result.matches.find((item) => item.division.id === 'lead-after-bars-stopbar');
 
   assert.ok(leadOn);
   assert.ok(Math.abs(leadOn.row.sourceRangeStartMeters - 50) < 0.2);
@@ -735,13 +1563,9 @@ test('uses a BARS stopbar to trim reconstructed lead-on extension without a simu
 
 test('keeps overlapping reconstructed guidance for BARS lead-ons that share a trunk', () => {
   const division = [
-    divisionLine('bars-stopbar', 'stopbar', [point(50, -10), point(50, 10)]),
+    divisionLine('bars-stopbar', 'stopbar', [point(50, 10), point(50, -10)]),
     divisionLine('lead-short-branch', 'lead_on', [point(50, 0), point(150, 0)]),
-    divisionLine('lead-long-branch', 'lead_on', [
-      point(50, 0),
-      point(150, 0),
-      point(200, 50),
-    ]),
+    divisionLine('lead-long-branch', 'lead_on', [point(50, 0), point(150, 0), point(200, 50)]),
   ];
   const row = inferredPlacementLine('sim-shared-trunk', 'taxi-centerline', [
     point(0, 1),
@@ -1100,9 +1924,7 @@ test('keeps the real YPPH A row with BARS_BQ8C4 instead of giving a branch to BA
 });
 
 test('leaves the real YPPH BARS_QHIG2 object manual when nearby rows only touch its ends', () => {
-  const lightRows = sourceBackedFixtureRows(
-    ypphOwnershipRegression.nearbyCoLocatedLightRows
-  );
+  const lightRows = sourceBackedFixtureRows(ypphOwnershipRegression.nearbyCoLocatedLightRows);
 
   const result = matchDivisionObjects([ypphOwnershipRegression.noLightDivision], lightRows);
 
@@ -1111,6 +1933,86 @@ test('leaves the real YPPH BARS_QHIG2 object manual when nearby rows only touch 
     result.unmatched.map((item) => item.division.id),
     ['BARS_QHIG2']
   );
+});
+
+test('keeps the real YPPH V trunks with their stopbar-anchored division owners', () => {
+  const lightRows = ypphOwnershipRegression.vOwnershipLightRows.map((row) => ({
+    ...row,
+    sourceFile: 'apt.dat',
+    sourceType: 'xplane-apt-light-string',
+    confidence: 0.98,
+  }));
+
+  const result = matchDivisionObjects(ypphOwnershipRegression.vOwnershipDivisions, lightRows, [], {
+    includeDiagnostics: true,
+  });
+  const ownersFor = (sourceId) =>
+    result.matches
+      .filter((match) => (match.row.sourceParentRowId ?? match.row.id) === sourceId)
+      .map((match) => match.division.id);
+
+  assert.deepEqual(ownersFor('840e299c2d4f1954'), ['BARS_247KA']);
+  assert.deepEqual(new Set(ownersFor('ca5297eab19e7684')), new Set(['BARS_61YJ4', 'BARS_KUGS8']));
+  assert.deepEqual(ownersFor('bsbm1-own-row'), ['BARS_BSBM1']);
+  assert.equal(
+    result.unmatched.some((item) => item.division.id === 'BARS_KUGS8'),
+    false
+  );
+  const northVMatch = result.matches.find(
+    (match) =>
+      match.division.id === 'BARS_61YJ4' &&
+      (match.row.sourceParentRowId ?? match.row.id) === 'ca5297eab19e7684'
+  );
+  assert.ok(northVMatch);
+  assert.ok((northVMatch.row.sourceRangeStartMeters ?? 0) <= 0.01);
+  assert.ok(
+    Math.abs(
+      (northVMatch.row.sourceRangeEndMeters ?? 0) - (northVMatch.row.sourceParentLengthMeters ?? 0)
+    ) <= 0.01
+  );
+  assert.deepEqual(
+    northVMatch.replacementRow.vertices,
+    lightRows.find((row) => row.id === 'ca5297eab19e7684').vertices
+  );
+  assert.ok(
+    result.diagnostics.pipeline.allocationEvaluations.some(
+      (evaluation) =>
+        evaluation.divisionId === 'BARS_BSBM1' &&
+        evaluation.simulatorRowId === '840e299c2d4f1954' &&
+        evaluation.outcome === 'suppressed-by-stopbar-anchored-continuation-owner' &&
+        evaluation.preferredDivisionId === 'BARS_247KA'
+    )
+  );
+});
+
+test('keeps connected X-Plane lead-on owners on a straight stopbar-linked row', () => {
+  const divisions = [
+    divisionLine('straight-continuation', 'lead_on', [point(0, 0), point(145, 0)]),
+    divisionLine('straight-stopbar-owner', 'lead_on', [point(145, 0), point(200, 0)]),
+    divisionLine('straight-stopbar', 'stopbar', [point(200, 10), point(200, -10)]),
+  ];
+  const row = {
+    ...simulatorLine('straight-xplane-row', 'taxi-centerline', [
+      point(0, 1),
+      point(145, 1),
+      point(200, 1),
+    ]),
+    sourceType: 'xplane-apt-light-string',
+  };
+
+  const result = matchDivisionObjects(divisions, [row]);
+  const owners = result.matches
+    .filter((match) => (match.row.sourceParentRowId ?? match.row.id) === row.id)
+    .sort(
+      (left, right) =>
+        (left.row.sourceRangeStartMeters ?? 0) - (right.row.sourceRangeStartMeters ?? 0)
+    );
+
+  assert.deepEqual(
+    owners.map((match) => match.division.id),
+    ['straight-continuation', 'straight-stopbar-owner']
+  );
+  assert.ok(owners[0].row.sourceRangeEndMeters + 0.01 >= owners[1].row.sourceRangeStartMeters);
 });
 
 test('keeps a short aligned target layer alongside a complete match for removal', () => {
@@ -1138,6 +2040,43 @@ test('keeps a short aligned target layer alongside a complete match for removal'
     ['sim-complete', 'sim-short-layer']
   );
   assert.equal(output.removalWarnings.length, 0, JSON.stringify(output.safetyRejections));
+});
+
+test('writes compact X-Plane selectors and omits removal polygons', () => {
+  const division = divisionLine('xplane-lead-on', 'lead_on', [point(25, 0), point(75, 0)]);
+  const row = {
+    ...simulatorLine('xplane-source', 'lead-on', [point(25, 0), point(75, 0)]),
+    sourceType: 'xplane-apt-light-string',
+    sourceFeatureId: '0123456789abcdef',
+    sourceRunIndex: 2,
+    lightCode: 107,
+    sourceParentRowId: 'xplane-parent',
+    sourceRangeStartMeters: 25,
+    sourceRangeEndMeters: 75,
+    sourceParentLengthMeters: 100,
+  };
+  const matching = {
+    matches: [{ division, row, score: 1 }],
+    unmatched: [],
+    mergedSimulatorRows: [],
+    duplicateDivisionLeadOns: 0,
+    duplicateSimulatorLeadOns: 0,
+  };
+
+  const output = buildDraftOutput(
+    { meta: { simulator: 'xplane' }, instances: [], lightRows: [row], mustKeepZones: [] },
+    matching,
+    { icao: 'TEST', altitude: 0 }
+  );
+
+  assert.equal(output.removals.length, 0);
+  assert.equal(output.removalWarnings.length, 0);
+  assert.match(output.xml, /simulator="xplane"/);
+  assert.match(
+    output.xml,
+    /<Light feature="0123456789abcdef" code="107" run="2" start="0\.250000" end="0\.750000"\/>/
+  );
+  assert.doesNotMatch(output.xml, /displayName="remove"/);
 });
 
 test('accepts shared partition endpoints on a removal polygon boundary', () => {

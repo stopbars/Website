@@ -3,11 +3,11 @@ import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
-import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
+import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
 import { Toast } from '../components/shared/Toast';
 import XMLMap from '../components/shared/XMLMap';
 import {
-  ChevronRight,
+  ArrowRight,
   FileUp,
   Check,
   Loader,
@@ -20,6 +20,7 @@ import {
   fetchContributionPolicy,
   getContributionDisabledMessage,
 } from '../utils/contributionPolicy';
+import { draftHash } from '../features/contribution-editor/editor-model.js';
 
 const StableXMLMap = memo(XMLMap);
 
@@ -35,6 +36,12 @@ const ContributeTest = () => {
     typeof location.state?.draftFileName === 'string'
       ? location.state.draftFileName
       : `${icao}-Draft.xml`;
+  const incomingSimulator = location.state?.simulator === 'xplane' ? 'xplane' : undefined;
+  const incomingDraftHash =
+    typeof location.state?.draftHash === 'string' ? location.state.draftHash : '';
+  const [simulator, setSimulator] = useState(
+    () => incomingSimulator ?? detectDraftSimulator(incomingDraftXml)
+  );
 
   const [selectedFile, setSelectedFile] = useState(() =>
     incomingDraftXml
@@ -56,6 +63,8 @@ const ContributeTest = () => {
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [isXmlTested, setIsXmlTested] = useState(false);
+  const [generationHash, setGenerationHash] = useState('');
+  const [expectedDraftHash, setExpectedDraftHash] = useState(incomingDraftHash);
   const [showPolyLines, setShowPolyLines] = useState(false);
   const [showRemoveAreas, setShowRemoveAreas] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -82,8 +91,11 @@ const ContributeTest = () => {
       setSelectedFile(null);
       setXmlData('');
       setIsXmlTested(false);
+      setGenerationHash('');
+      setExpectedDraftHash('');
       setContributionToken('');
       setSupportsXmlData('');
+      setSimulator(incomingSimulator ?? 'msfs2024');
       return;
     }
 
@@ -92,12 +104,14 @@ const ContributeTest = () => {
     const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
 
     if (!validExtensions.includes(fileExtension)) {
-      setErrorTitle('Error');
-      setError('Please upload an XML file');
+      setErrorTitle('Unable to open draft');
+      setError('Choose a BARS contribution draft file.');
       setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
       setIsXmlTested(false);
+      setGenerationHash('');
+      setExpectedDraftHash('');
       setContributionToken('');
       setSupportsXmlData('');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -106,12 +120,14 @@ const ContributeTest = () => {
 
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      setErrorTitle('Error');
-      setError('XML file size must be less than 5MB');
+      setErrorTitle('Unable to open draft');
+      setError('Choose a draft smaller than 5 MB.');
       setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
       setIsXmlTested(false);
+      setGenerationHash('');
+      setExpectedDraftHash('');
       setContributionToken('');
       setSupportsXmlData('');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -122,14 +138,18 @@ const ContributeTest = () => {
     setShowErrorToast(false);
     setSelectedFile(file);
     setIsXmlTested(false);
+    setGenerationHash('');
+    setExpectedDraftHash('');
     setContributionToken('');
     setSupportsXmlData('');
 
     // Read file content
     const reader = new FileReader();
     reader.onload = (e) => {
-      setXmlData(e.target.result);
-      setOriginalXmlData(e.target.result);
+      const content = String(e.target.result ?? '');
+      setXmlData(content);
+      setOriginalXmlData(content);
+      setSimulator(incomingSimulator ?? detectDraftSimulator(content));
       // Reset visualization toggles when new file is loaded
       setShowPolyLines(false);
       setShowRemoveAreas(false);
@@ -174,8 +194,8 @@ const ContributeTest = () => {
     }
 
     if (!xmlData) {
-      setErrorTitle('Error');
-      setError('Please upload an XML file first');
+      setErrorTitle('Draft required');
+      setError('Choose a contribution draft before preparing the test.');
       setShowErrorToast(true);
       return;
     }
@@ -185,6 +205,13 @@ const ContributeTest = () => {
     setIsValidating(true);
 
     try {
+      const sourceXml = originalXmlData || xmlData;
+      const currentDraftHash = await draftHash(sourceXml);
+      if (expectedDraftHash && currentDraftHash !== expectedDraftHash) {
+        throw new Error(
+          'The draft changed after leaving the editor. Return to the editor and test the current version.'
+        );
+      }
       // Create FormData to match the format used in DebugGenerator
       const formData = new FormData();
       const blob = new Blob([xmlData], { type: 'application/xml' });
@@ -193,6 +220,7 @@ const ContributeTest = () => {
       });
       formData.append('xmlFile', file);
       formData.append('icao', icao);
+      formData.append('simulator', simulator);
 
       // Send XML data to the same endpoint used in DebugGenerator
       const response = await fetch(`https://v2.stopbars.com/supports/generate`, {
@@ -211,21 +239,25 @@ const ContributeTest = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate files');
+        throw new Error(errorData.error || 'Unable to prepare the test.');
       }
 
       const data = await response.json();
 
-      // Store the supports XML for the "Remove Areas" toggle
+      // MSFS returns previewable support geometry; X-Plane removals are applied locally.
       if (data.supportsXml) {
         setSupportsXmlData(data.supportsXml);
       }
 
-      if (data.token) {
-        setContributionToken(data.token);
+      if (!data.token || !data.generationHash) {
+        throw new Error(
+          'Core did not return a complete tested-draft proof. Try again after the Core contribution update is deployed.'
+        );
       }
+      setContributionToken(data.token);
 
       setIsXmlTested(true);
+      setGenerationHash(data.generationHash);
 
       // Replace visualization XML with the generated BARS XML (keep original stored separately)
       setXmlData(data.barsXml);
@@ -245,7 +277,7 @@ const ContributeTest = () => {
       setSelectedFile(null);
     } catch (err) {
       setErrorTitle('Error');
-      setError(err.message || 'Failed to validate XML, please check the file format.');
+      setError(err.message || 'Unable to prepare the test. Check the draft and try again.');
       setShowErrorToast(true);
       console.error('XML validation error:', err);
     } finally {
@@ -272,7 +304,9 @@ const ContributeTest = () => {
   const handleOpenPilotClientTest = () => {
     if (!isXmlTested || !contributionToken) return;
 
-    const testUrl = `bars://test?token=${encodeURIComponent(contributionToken)}`;
+    const testUrl = `bars://test?token=${encodeURIComponent(contributionToken)}${
+      generationHash ? `&draftHash=${encodeURIComponent(generationHash)}` : ''
+    }`;
     window.open(testUrl, '_blank', 'noopener,noreferrer');
   };
 
@@ -290,11 +324,14 @@ const ContributeTest = () => {
         state: {
           originalXml: originalXmlData,
           fileName: originalFileName || `${icao}.xml`,
+          simulator,
+          generationToken: contributionToken,
+          generationHash,
         },
       });
     } else {
       setErrorTitle('Error');
-      setError('Please test your XML file before continuing');
+      setError('Prepare the contribution test before continuing.');
       setShowErrorToast(true);
     }
   };
@@ -303,16 +340,12 @@ const ContributeTest = () => {
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-12 mt-6">
-            <div className="flex items-center space-x-2 mb-1">
-              <Breadcrumb>
-                <BreadcrumbItem title="Airport" link="/contribute/new" />
-                <BreadcrumbItem title="Map" link={`/contribute/map/${icao}`} />
-                <BreadcrumbItem title="Draft" link={`/contribute/generator/${icao}`} />
-                <BreadcrumbItem title="Test" />
-              </Breadcrumb>
-            </div>
-          </div>
+          <ContributionFlowHeader
+            current="test"
+            title="Test contribution"
+            icao={icao}
+            context={icao}
+          />
 
           {contributionsDisabled && (
             <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
@@ -323,10 +356,9 @@ const ContributeTest = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-              {/* XML Map Preview */}
               <Card className="p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-medium">XML Preview</h2>
+                  <h2 className="text-xl font-medium">Preview</h2>
                 </div>
 
                 {xmlData || (showRemoveAreas && supportsXmlData) ? (
@@ -341,7 +373,7 @@ const ContributeTest = () => {
                   <div className="h-125 flex items-center justify-center bg-zinc-800/30 rounded-lg">
                     <div className="text-center text-zinc-400">
                       <FileSearch className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>Upload an XML file to preview</p>
+                      <p>Choose a contribution draft to preview.</p>
                     </div>
                   </div>
                 )}
@@ -349,11 +381,11 @@ const ContributeTest = () => {
             </div>
 
             <div className="space-y-6">
-              {/* File Upload */}
               <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Upload XML File</h2>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                <h2 className="text-xl font-medium mb-4">Contribution draft</h2>
+                <label
+                  htmlFor="contribution-draft-file"
+                  className={`block w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
                     isDragActive
                       ? 'border-blue-400 bg-blue-500/10'
                       : isXmlTested
@@ -362,19 +394,9 @@ const ContributeTest = () => {
                           ? 'border-emerald-500/50 bg-emerald-500/5'
                           : 'border-zinc-600 bg-zinc-800/50 hover:bg-zinc-800/80'
                   }`}
-                  onClick={() => fileInputRef.current.click()}
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      fileInputRef.current.click();
-                    }
-                  }}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  role="button"
-                  aria-label="Upload XML file via click or drag and drop"
                 >
                   {isXmlTested ? (
                     <div className="flex flex-col items-center">
@@ -383,7 +405,7 @@ const ContributeTest = () => {
                       </div>
                       <p className="font-medium mb-1">{originalFileName || `${icao}.xml`}</p>
                       <p className="text-sm text-zinc-400">
-                        {(originalFileSize / 1024).toFixed(1)} KB • Click to reupload
+                        {(originalFileSize / 1024).toFixed(1)} KB · Select to replace
                       </p>
                     </div>
                   ) : selectedFile ? (
@@ -393,7 +415,7 @@ const ContributeTest = () => {
                       </div>
                       <p className="font-medium mb-1">{selectedFile.name}</p>
                       <p className="text-sm text-zinc-400">
-                        {(selectedFile.size / 1024).toFixed(1)} KB • Click to change
+                        {(selectedFile.size / 1024).toFixed(1)} KB · Select to replace
                       </p>
                     </div>
                   ) : (
@@ -402,20 +424,21 @@ const ContributeTest = () => {
                         <FileUp className="w-6 h-6 text-zinc-400" />
                       </div>
                       <p className="font-medium mb-1">
-                        {isDragActive ? 'Drop file to upload' : 'Click to select XML file'}
+                        {isDragActive ? 'Drop the draft here' : 'Choose a draft file'}
                       </p>
-                      <p className="text-sm text-zinc-400">or drag and drop (max 5MB)</p>
+                      <p className="text-sm text-zinc-400">or drag one here · max 5 MB</p>
                     </div>
                   )}
                   <input
+                    id="contribution-draft-file"
                     type="file"
-                    aria-label="Select XML file"
+                    aria-label="Choose contribution draft file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     accept=".xml"
                     className="hidden"
                   />
-                </div>
+                </label>
 
                 {/* Test XML actions */}
                 {isXmlTested ? (
@@ -427,153 +450,90 @@ const ContributeTest = () => {
                     }`}
                     disabled={!contributionToken}
                   >
-                    <span>Test In Client</span>
+                    <span>Open in BARS Pilot Client</span>
                     <ExternalLink className="h-5 w-5 min-w-5 shrink-0" strokeWidth={2.5} />
                   </Button>
                 ) : (
                   <Button
                     onClick={handleTestXml}
-                    disabled={contributionsDisabled || !xmlData || isValidating}
+                    disabled={contributionsDisabled || isValidating}
                     className="mt-4 w-full"
                   >
                     {isValidating ? (
                       <div className="flex items-center justify-center">
                         <Loader className="w-4 h-4 mr-2 animate-spin" />
-                        <span>Testing XML...</span>
+                        <span>Preparing test…</span>
                       </div>
                     ) : (
                       <div className="flex items-center justify-center">
                         <FileSearch className="w-4 h-4 mr-2" />
-                        <span>Test XML</span>
+                        <span>Prepare test</span>
                       </div>
                     )}
                   </Button>
                 )}
               </Card>
 
-              {/* Map Settings */}
-              <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Map Settings</h2>
-                <div className="space-y-3">
-                  {/* Toggle Polylines Button */}
-                  <button
-                    type="button"
-                    onClick={handleTogglePolyLines}
-                    disabled={!isXmlTested}
-                    className={`w-full flex items-center p-2.5 rounded-lg border-2 transition-all cursor-pointer ${
-                      !isXmlTested
-                        ? 'opacity-40 cursor-not-allowed bg-zinc-800/30 border-zinc-700'
-                        : showPolyLines
-                          ? 'border-blue-500 bg-zinc-800/50 hover:bg-zinc-800/70'
-                          : 'border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50'
-                    }`}
-                    title="Show connecting lines between points in the same object"
-                  >
-                    {/* Icon Container */}
-                    <div
-                      className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
-                        !isXmlTested
-                          ? 'bg-zinc-700/50'
-                          : showPolyLines
-                            ? 'bg-blue-500/20'
-                            : 'bg-zinc-700/50'
+              {isXmlTested ? (
+                <details className="rounded-xl border border-zinc-800 bg-zinc-900">
+                  <summary className="flex min-h-12 cursor-pointer items-center px-5 text-sm font-medium text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45">
+                    Preview options
+                  </summary>
+                  <div className="space-y-2 px-5 pb-5">
+                    <button
+                      type="button"
+                      onClick={handleTogglePolyLines}
+                      aria-pressed={showPolyLines}
+                      className={`flex min-h-11 w-full items-center rounded-lg border px-3 transition-[background-color,border-color,color] ${
+                        showPolyLines
+                          ? 'border-blue-500/60 bg-blue-500/10'
+                          : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
                       }`}
+                      title="Show connecting lines between points in the same object"
                     >
-                      <Spline
-                        className={`w-4 h-4 ${
-                          !isXmlTested
-                            ? 'text-zinc-500'
-                            : showPolyLines
-                              ? 'text-blue-400'
-                              : 'text-zinc-400'
-                        }`}
-                      />
-                    </div>
-
-                    {/* Title */}
-                    <div className="flex-1 ml-2.5 text-left">
-                      <span
-                        className={`text-sm font-medium ${!isXmlTested ? 'text-zinc-500' : 'text-white'}`}
-                      >
-                        Toggle Polylines
+                      <Spline className="h-4 w-4 text-zinc-400" aria-hidden="true" />
+                      <span className="ml-2.5 flex-1 text-left text-sm font-medium text-white">
+                        Connection lines
                       </span>
-                    </div>
-
-                    {/* Checkbox Container */}
-                    <div
-                      className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
-                        !isXmlTested
-                          ? 'border-zinc-600 bg-zinc-700/30'
-                          : showPolyLines
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-zinc-500 bg-transparent'
-                      }`}
-                    >
-                      {showPolyLines && <Check className="w-3.5 h-3.5 text-white" />}
-                    </div>
-                  </button>
-
-                  {/* Toggle Remove Areas Button */}
-                  <button
-                    type="button"
-                    onClick={handleToggleRemoveAreas}
-                    disabled={!isXmlTested || !supportsXmlData}
-                    className={`w-full flex items-center p-2.5 rounded-lg border-2 transition-all cursor-pointer ${
-                      !isXmlTested || !supportsXmlData
-                        ? 'opacity-40 cursor-not-allowed bg-zinc-800/30 border-zinc-700'
-                        : showRemoveAreas
-                          ? 'border-blue-500 bg-zinc-800/50 hover:bg-zinc-800/70'
-                          : 'border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50'
-                    }`}
-                    title="Show remove areas that will hide default simulator lights"
-                  >
-                    {/* Icon Container */}
-                    <div
-                      className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
-                        !isXmlTested || !supportsXmlData
-                          ? 'bg-zinc-700/50'
-                          : showRemoveAreas
-                            ? 'bg-blue-500/20'
-                            : 'bg-zinc-700/50'
-                      }`}
-                    >
-                      <X
-                        className={`w-4 h-4 ${
-                          !isXmlTested || !supportsXmlData
-                            ? 'text-zinc-500'
-                            : showRemoveAreas
-                              ? 'text-blue-400'
-                              : 'text-zinc-400'
-                        }`}
-                      />
-                    </div>
-
-                    {/* Title */}
-                    <div className="flex-1 ml-2.5 text-left">
                       <span
-                        className={`text-sm font-medium ${
-                          !isXmlTested || !supportsXmlData ? 'text-zinc-500' : 'text-white'
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                          showPolyLines ? 'border-blue-500 bg-blue-500' : 'border-zinc-600'
                         }`}
+                        aria-hidden="true"
                       >
-                        Toggle Remove Areas
+                        {showPolyLines && <Check className="w-3.5 h-3.5 text-white" />}
                       </span>
-                    </div>
+                    </button>
 
-                    {/* Checkbox Container */}
-                    <div
-                      className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
-                        !isXmlTested || !supportsXmlData
-                          ? 'border-zinc-600 bg-zinc-700/30'
-                          : showRemoveAreas
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-zinc-500 bg-transparent'
-                      }`}
-                    >
-                      {showRemoveAreas && <Check className="w-3.5 h-3.5 text-white" />}
-                    </div>
-                  </button>
-                </div>
-              </Card>
+                    {simulator !== 'xplane' && supportsXmlData ? (
+                      <button
+                        type="button"
+                        onClick={handleToggleRemoveAreas}
+                        aria-pressed={showRemoveAreas}
+                        className={`flex min-h-11 w-full items-center rounded-lg border px-3 transition-[background-color,border-color,color] ${
+                          showRemoveAreas
+                            ? 'border-blue-500/60 bg-blue-500/10'
+                            : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
+                        }`}
+                        title="Show remove areas that will hide default simulator lights"
+                      >
+                        <X className="h-4 w-4 text-zinc-400" aria-hidden="true" />
+                        <span className="ml-2.5 flex-1 text-left text-sm font-medium text-white">
+                          Removal areas
+                        </span>
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                            showRemoveAreas ? 'border-blue-500 bg-blue-500' : 'border-zinc-600'
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {showRemoveAreas && <Check className="w-3.5 h-3.5 text-white" />}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                </details>
+              ) : null}
 
               {/* Continue button */}
               <Button
@@ -583,8 +543,8 @@ const ContributeTest = () => {
                 }`}
                 disabled={contributionsDisabled || !isXmlTested || !!error}
               >
-                <span>Continue to Next Step</span>
-                <ChevronRight className="w-4 h-4 ml-2" />
+                <span>Continue to submit</span>
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>
@@ -606,5 +566,11 @@ const ContributeTest = () => {
     </Layout>
   );
 };
+
+function detectDraftSimulator(xml) {
+  return /<FSData\b[^>]*\bsimulator\s*=\s*["']xplane["']/i.test(String(xml ?? ''))
+    ? 'xplane'
+    : 'msfs2024';
+}
 
 export default ContributeTest;

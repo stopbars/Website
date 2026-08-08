@@ -21,6 +21,12 @@ const RECORD_TAXIWAY_POINT_TABLE = 0x1a;
 const RECORD_TAXI_NAME_TABLE = 0x1d;
 const RECORD_TAXIWAY_PATH_TABLE = 0xd4;
 const RECORD_TAXIWAY_PARKING_TABLE = 0xe7;
+const RECORD_AIRPORT = 0x0056;
+const RECORD_AIRPORT_APRON = 0x00d3;
+const RECORD_AIRPORT_APRON_EDGE_LIGHTS = 0x0031;
+const RECORD_AIRPORT_PAINTED_LINE = 0x00cf;
+const RECORD_AIRPORT_PAINTED_HATCHED_AREA = 0x00d8;
+const AIRPORT_FIXED_RECORD_SIZE = 0x44;
 const AIRPORT_LIGHT_ROW_HEADER_SIZE = 0x18;
 const AIRPORT_LIGHT_ROW_MIN_RECORD_SIZE = AIRPORT_LIGHT_ROW_HEADER_SIZE + 2 * 8;
 const AIRPORT_LIGHT_ROW_MAX_RECORD_SIZE = 64 * 1024;
@@ -125,6 +131,7 @@ export async function extractBglData(bglFiles) {
   const lightRows = [];
   const runways = [];
   const runwayLightZones = [];
+  const referenceFeatures = [];
   const modelIndex = new Map();
   const buffers = [];
   const fileStats = [];
@@ -200,6 +207,12 @@ export async function extractBglData(bglFiles) {
     const airportLightRows = extractAirportLightRows(buffer, sourceFile);
     const runwayResult = extractRunwayLightZones(buffer, sourceFile);
     const taxiwayGraph = extractTaxiwayGraph(buffer, sourceFile);
+    const airportReferences = extractAirportReferenceFeatures(buffer, sourceFile);
+    const taxiwayReferences = buildTaxiwayReferenceFeatures(taxiwayGraph.graphs, sourceFile);
+    const taxiwaySurfaces = buildTaxiwaySurfaceReferenceFeatures(
+      taxiwayGraph.graphs,
+      sourceFile
+    );
     const taxiwayBridgeRows = buildTaxiwayPathBridgeRows(
       sourceFile,
       taxiwayGraph.graphs,
@@ -210,6 +223,7 @@ export async function extractBglData(bglFiles) {
     lightRows.push(...taxiwayBridgeRows);
     runways.push(...runwayResult.runways);
     runwayLightZones.push(...runwayResult.zones);
+    referenceFeatures.push(...airportReferences, ...taxiwaySurfaces, ...taxiwayReferences);
     fileStats.push({
       sourceFile,
       parsed: result.parsed,
@@ -224,6 +238,8 @@ export async function extractBglData(bglFiles) {
       taxiwayNames: taxiwayGraph.graphs.reduce((sum, graph) => sum + graph.taxiNames.length, 0),
       lightedTaxiwayPaths: taxiwayGraph.lightRows.length,
       bridgedTaxiwayPaths: taxiwayBridgeRows.length,
+      editorReferenceFeatures:
+        airportReferences.length + taxiwaySurfaces.length + taxiwayReferences.length,
       sectionTypes: result.sectionTypes,
       unsupportedSceneryRecordTypes: result.unsupportedSceneryRecordTypes,
     });
@@ -278,6 +294,7 @@ export async function extractBglData(bglFiles) {
     lightRows,
     runways,
     runwayLightZones,
+    referenceFeatures,
     warnings,
     bglFilesParsed,
     modelLibraryEntries: modelIndex.size,
@@ -285,6 +302,439 @@ export async function extractBglData(bglFiles) {
     fileStats,
     unsupportedSceneryRecordTypes: Object.fromEntries(unsupportedSceneryRecordTypes),
   };
+}
+
+export function extractAirportReferenceFeatures(buffer, sourceFile) {
+  const features = [];
+  const visited = new Set();
+  let offset = 0;
+  while ((offset = buffer.indexOf(RECORD_AIRPORT & 0xff, offset)) !== -1) {
+    if (
+      offset + AIRPORT_FIXED_RECORD_SIZE > buffer.length ||
+      buffer.readUInt16LE(offset) !== RECORD_AIRPORT
+    ) {
+      offset += 1;
+      continue;
+    }
+    const recordSize = buffer.readUInt32LE(offset + 0x02);
+    if (
+      recordSize < AIRPORT_FIXED_RECORD_SIZE ||
+      recordSize > 64 * 1024 * 1024 ||
+      offset + recordSize > buffer.length
+    ) {
+      offset += 1;
+      continue;
+    }
+    const longitude = decodeBglLongitude(buffer.readUInt32LE(offset + 0x0c));
+    const latitude = decodeBglLatitude(buffer.readUInt32LE(offset + 0x10));
+    if (!isPlausibleCoordinate(latitude, longitude)) {
+      offset += 1;
+      continue;
+    }
+
+    const airportEnd = offset + recordSize;
+    let childOffset = offset + AIRPORT_FIXED_RECORD_SIZE;
+    let parsedChildren = 0;
+    const airportFeatures = [];
+    while (childOffset + 6 <= airportEnd) {
+      const childType = buffer.readUInt16LE(childOffset);
+      const childSize = buffer.readUInt32LE(childOffset + 0x02);
+      if (childSize < 6 || childOffset + childSize > airportEnd) break;
+      const feature = parseAirportReferenceChild(
+        buffer,
+        sourceFile,
+        childOffset,
+        childSize,
+        childType
+      );
+      if (Array.isArray(feature)) airportFeatures.push(...feature);
+      else if (feature) airportFeatures.push(feature);
+      parsedChildren += 1;
+      childOffset += childSize;
+    }
+    if (parsedChildren > 0 && childOffset === airportEnd) {
+      for (const feature of airportFeatures) {
+        const id = String(feature.id);
+        if (!visited.has(id)) {
+          visited.add(id);
+          features.push(feature);
+        }
+      }
+      offset = airportEnd;
+    } else {
+      offset += 1;
+    }
+  }
+  return features;
+}
+
+function parseAirportReferenceChild(buffer, sourceFile, offset, size, type) {
+  if (type === RECORD_AIRPORT_APRON) {
+    if (size < 0x30) return null;
+    const vertexCount = buffer.readUInt16LE(offset + 0x2c);
+    const triangleCount = buffer.readUInt16LE(offset + 0x2e);
+    const vertexOffset = offset + 0x30;
+    const triangleOffset = vertexOffset + vertexCount * 8;
+    if (triangleOffset + triangleCount * 6 > offset + size) return null;
+    const vertices = decodeReferenceVertices(buffer, vertexOffset, vertexCount);
+    const triangles = [];
+    for (let index = 0; index < triangleCount; index += 1) {
+      const itemOffset = triangleOffset + index * 6;
+      triangles.push([
+        buffer.readUInt16LE(itemOffset),
+        buffer.readUInt16LE(itemOffset + 2),
+        buffer.readUInt16LE(itemOffset + 4),
+      ]);
+    }
+    const rings = apronBoundaryRings(vertices, triangles);
+    if (rings.length === 0) return null;
+    return airportReferenceFeature({
+      sourceFile,
+      offset,
+      sourceType: 'msfs-bgl-apron',
+      title: 'Apron pavement',
+      semanticType: 'apron',
+      snapCategory: 'pavement-edges',
+      geometry: apronBoundaryGeometry(rings),
+      properties: {
+        surface: guidFromBytes(buffer, offset + 0x0c),
+        tiling: buffer.readFloatLE(offset + 0x1c),
+        headingRadians: buffer.readFloatLE(offset + 0x20),
+        falloff: buffer.readFloatLE(offset + 0x24),
+        priority: buffer.readInt32LE(offset + 0x28),
+      },
+    });
+  }
+  if (type === RECORD_AIRPORT_PAINTED_LINE) {
+    if (size < 0x1c) return null;
+    const vertexCount = buffer.readUInt32LE(offset + 0x08);
+    if (vertexCount < 2 || offset + 0x1c + vertexCount * 8 > offset + size) return null;
+    return airportReferenceFeature({
+      sourceFile,
+      offset,
+      sourceType: 'msfs-bgl-painted-line',
+      title: 'Painted line',
+      semanticType: 'painted-marking',
+      snapCategory: 'painted-lines',
+      geometry: {
+        type: 'LineString',
+        coordinates: decodeReferenceVertices(buffer, offset + 0x1c, vertexCount),
+      },
+      properties: {
+        lineType: buffer.readUInt8(offset + 0x06),
+        trueAngle: buffer.readUInt8(offset + 0x07),
+        surface: guidFromBytes(buffer, offset + 0x0c),
+      },
+    });
+  }
+  if (type === RECORD_AIRPORT_PAINTED_HATCHED_AREA) {
+    if (size < 0x14) return null;
+    const vertexCount = buffer.readUInt16LE(offset + 0x0a);
+    if (vertexCount < 3 || offset + 0x14 + vertexCount * 8 > offset + size) return null;
+    const vertices = decodeReferenceVertices(buffer, offset + 0x14, vertexCount);
+    return airportReferenceFeature({
+      sourceFile,
+      offset,
+      sourceType: 'msfs-bgl-painted-hatched-area',
+      title: 'Painted hatched area',
+      semanticType: 'painted-hatched-area',
+      snapCategory: 'painted-lines',
+      geometry: { type: 'Polygon', coordinates: [closeReferenceRing(vertices)] },
+      properties: {
+        lineType: buffer.readUInt32LE(offset + 0x06),
+        heading: buffer.readFloatLE(offset + 0x0c),
+        spacing: buffer.readFloatLE(offset + 0x10),
+      },
+    });
+  }
+  if (type === RECORD_AIRPORT_APRON_EDGE_LIGHTS) {
+    if (size < 0x18) return null;
+    const vertexCount = buffer.readUInt16LE(offset + 0x08);
+    const edgeCount = buffer.readUInt16LE(offset + 0x0a);
+    const vertexOffset = offset + 0x18;
+    const edgeOffset = vertexOffset + vertexCount * 8;
+    if (edgeOffset + edgeCount * 8 > offset + size) return null;
+    const vertices = decodeReferenceVertices(buffer, vertexOffset, vertexCount);
+    const lines = [];
+    for (let index = 0; index < edgeCount; index += 1) {
+      const itemOffset = edgeOffset + index * 8;
+      const first = vertices[buffer.readUInt16LE(itemOffset + 4)];
+      const second = vertices[buffer.readUInt16LE(itemOffset + 6)];
+      if (first && second) lines.push([first, second]);
+    }
+    if (lines.length === 0) return null;
+    return airportReferenceFeature({
+      sourceFile,
+      offset,
+      sourceType: 'msfs-bgl-apron-edge-lights',
+      title: 'Apron edge lights',
+      semanticType: 'taxi-edge',
+      snapCategory: 'light-rows',
+      geometry: { type: 'MultiLineString', coordinates: lines },
+      properties: {
+        scale: buffer.readFloatLE(offset + 0x10),
+        falloff: buffer.readFloatLE(offset + 0x14),
+      },
+    });
+  }
+  return null;
+}
+
+export function buildTaxiwayReferenceFeatures(graphs, sourceFile) {
+  return graphs.flatMap((graph) =>
+    graph.paths
+      .filter(
+        (path) =>
+          path.start &&
+          path.end &&
+          TAXIWAY_PATH_BRIDGE_TYPES.has(path.pathType) &&
+          (path.centerLine || path.centerLineLighted) &&
+          path.lengthMeters >= MIN_TAXIWAY_PATH_LENGTH_METERS &&
+          path.lengthMeters <= MAX_TAXIWAY_PATH_LENGTH_METERS
+      )
+      .map((path) =>
+        airportReferenceFeature({
+          sourceFile,
+          offset: path.sourceRecordOffset,
+          sourceType: 'msfs-bgl-taxiway-path',
+          title: path.taxiName ? `Taxiway ${path.taxiName}` : 'Taxiway path',
+          semanticType: path.pathType === TAXIWAY_PATH_TYPE_TAXI ? 'taxiway' : 'taxi-path',
+          snapCategory: 'taxiway-centrelines',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [path.start.lon, path.start.lat],
+              [path.end.lon, path.end.lat],
+            ],
+          },
+          properties: {
+            width: path.widthMeters,
+            surface: path.surface,
+            centerLine: path.centerLine,
+            centerLineLighted: path.centerLineLighted,
+            leftEdgeLighted: path.leftEdgeLighted,
+            rightEdgeLighted: path.rightEdgeLighted,
+          },
+        })
+      )
+  );
+}
+
+export function buildTaxiwaySurfaceReferenceFeatures(graphs, sourceFile) {
+  return graphs.flatMap((graph) =>
+    graph.paths
+      .filter(
+        (path) =>
+          path.start &&
+          path.end &&
+          TAXIWAY_PATH_BRIDGE_TYPES.has(path.pathType) &&
+          path.lengthMeters >= MIN_TAXIWAY_PATH_LENGTH_METERS &&
+          path.lengthMeters <= MAX_TAXIWAY_PATH_LENGTH_METERS &&
+          Number.isFinite(path.widthMeters) &&
+          path.widthMeters >= 1 &&
+          path.widthMeters <= 200
+      )
+      .flatMap((path) => {
+        const ring = taxiwayPathSurfaceRing(path.start, path.end, path.widthMeters);
+        if (ring.length === 0) return [];
+        return [
+          airportReferenceFeature({
+          sourceFile,
+          offset: path.sourceRecordOffset,
+          sourceType: 'msfs-bgl-taxiway-surface',
+          title: path.taxiName ? `Taxiway ${path.taxiName} pavement` : 'Taxiway pavement',
+          semanticType: 'taxiway-surface',
+          snapCategory: 'pavement-edges',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [ring],
+          },
+          properties: {
+            widthMeters: path.widthMeters,
+            surface: path.surface,
+          },
+          }),
+        ];
+      })
+  );
+}
+
+function airportReferenceFeature({
+  sourceFile,
+  offset,
+  sourceType,
+  title,
+  semanticType,
+  snapCategory,
+  geometry,
+  properties,
+}) {
+  const sourceId = stableId('msfs-bgl-reference', sourceFile, offset, sourceType);
+  return {
+    type: 'Feature',
+    id: sourceId,
+    geometry,
+    properties: {
+      sourceId,
+      sourceFile,
+      sourceRecordOffset: offset,
+      sourceType,
+      title,
+      semanticType,
+      snapCategory,
+      exactness: 'exact',
+      ...properties,
+    },
+  };
+}
+
+function decodeReferenceVertices(buffer, offset, count) {
+  const vertices = [];
+  for (let index = 0; index < count; index += 1) {
+    const itemOffset = offset + index * 8;
+    const lon = decodeBglLongitude(buffer.readUInt32LE(itemOffset));
+    const lat = decodeBglLatitude(buffer.readUInt32LE(itemOffset + 4));
+    if (isPlausibleCoordinate(lat, lon)) vertices.push([lon, lat]);
+  }
+  return vertices;
+}
+
+function apronBoundaryRings(vertices, triangles) {
+  const edgeCounts = new Map();
+  for (const triangle of triangles) {
+    if (triangle.some((index) => !vertices[index])) continue;
+    for (const [first, second] of [
+      [triangle[0], triangle[1]],
+      [triangle[1], triangle[2]],
+      [triangle[2], triangle[0]],
+    ]) {
+      const key = first < second ? `${first}:${second}` : `${second}:${first}`;
+      const existing = edgeCounts.get(key);
+      edgeCounts.set(
+        key,
+        existing ? { ...existing, count: existing.count + 1 } : { first, second, count: 1 }
+      );
+    }
+  }
+  const adjacency = new Map();
+  for (const edge of edgeCounts.values()) {
+    if (edge.count !== 1) continue;
+    appendAdjacency(adjacency, edge.first, edge.second);
+    appendAdjacency(adjacency, edge.second, edge.first);
+  }
+  const unused = new Set(
+    [...edgeCounts.entries()].filter(([, edge]) => edge.count === 1).map(([key]) => key)
+  );
+  const rings = [];
+  while (unused.size > 0) {
+    const [seed] = unused;
+    const [first, second] = seed.split(':').map(Number);
+    const indices = [first, second];
+    unused.delete(seed);
+    let previous = first;
+    let current = second;
+    while (current !== first && indices.length <= unused.size + vertices.length + 2) {
+      const next = (adjacency.get(current) ?? []).find((candidate) => {
+        if (candidate === previous) return false;
+        const key = current < candidate ? `${current}:${candidate}` : `${candidate}:${current}`;
+        return unused.has(key);
+      });
+      if (!Number.isInteger(next)) break;
+      const key = current < next ? `${current}:${next}` : `${next}:${current}`;
+      unused.delete(key);
+      indices.push(next);
+      previous = current;
+      current = next;
+    }
+    if (indices.length >= 4 && indices.at(-1) === first) {
+      rings.push(indices.map((index) => vertices[index]));
+    }
+  }
+  return rings;
+}
+
+function apronBoundaryGeometry(rings) {
+  const normalized = rings
+    .map(closeReferenceRing)
+    .filter((ring) => ring.length >= 4)
+    .map((ring) => ({ ring, area: Math.abs(referenceRingArea(ring)), depth: 0 }))
+    .sort((left, right) => right.area - left.area);
+  for (let index = 0; index < normalized.length; index += 1) {
+    const point = normalized[index].ring[0];
+    normalized[index].depth = normalized
+      .slice(0, index)
+      .filter((candidate) => referencePointInRing(point, candidate.ring)).length;
+  }
+  const polygons = normalized
+    .filter((candidate) => candidate.depth % 2 === 0)
+    .map((outer) => [
+      outer.ring,
+      ...normalized
+        .filter(
+          (candidate) =>
+            candidate.depth === outer.depth + 1 &&
+            referencePointInRing(candidate.ring[0], outer.ring)
+        )
+        .map((candidate) => candidate.ring),
+    ]);
+  return polygons.length === 1
+    ? { type: 'Polygon', coordinates: polygons[0] }
+    : { type: 'MultiPolygon', coordinates: polygons };
+}
+
+function referenceRingArea(ring) {
+  let area = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    area += ring[index][0] * ring[index + 1][1] - ring[index + 1][0] * ring[index][1];
+  }
+  return area / 2;
+}
+
+function referencePointInRing(point, ring) {
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const currentPoint = ring[index];
+    const previousPoint = ring[previous];
+    const crosses =
+      currentPoint[1] > point[1] !== previousPoint[1] > point[1] &&
+      point[0] <
+        ((previousPoint[0] - currentPoint[0]) * (point[1] - currentPoint[1])) /
+          (previousPoint[1] - currentPoint[1]) +
+          currentPoint[0];
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function taxiwayPathSurfaceRing(start, end, widthMeters) {
+  const meanLatitude = (start.lat + end.lat) / 2;
+  const longitudeScale =
+    111_320 * Math.max(Math.cos((meanLatitude * Math.PI) / 180), 0.000001);
+  const east = (end.lon - start.lon) * longitudeScale;
+  const north = (end.lat - start.lat) * 111_320;
+  const length = Math.hypot(east, north);
+  if (!Number.isFinite(length) || length < 0.01) return [];
+  const normalEast = (-north / length) * (widthMeters / 2);
+  const normalNorth = (east / length) * (widthMeters / 2);
+  const offset = (point, direction) => [
+    point.lon + (normalEast * direction) / longitudeScale,
+    point.lat + (normalNorth * direction) / 111_320,
+  ];
+  const ring = [offset(start, 1), offset(end, 1), offset(end, -1), offset(start, -1)];
+  return [...ring, ring[0]];
+}
+
+function appendAdjacency(map, first, second) {
+  const values = map.get(first) ?? [];
+  values.push(second);
+  map.set(first, values);
+}
+
+function closeReferenceRing(vertices) {
+  if (vertices.length === 0) return vertices;
+  const first = vertices[0];
+  const last = vertices.at(-1);
+  return first[0] === last[0] && first[1] === last[1] ? vertices : [...vertices, [...first]];
 }
 
 export function extractAirportLightRows(buffer, sourceFile) {
