@@ -3,8 +3,54 @@ import { UserCircle, LogOut, ChevronRight, Menu, X } from 'lucide-react';
 import { Button } from '../shared/Button';
 import { RouteLink } from '../shared/RouteLink';
 import { useAuth } from '../../hooks/useAuth';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
+
+const DISMISSED_NOTAM_KEY = 'dismissed-notam';
+const NOTAM_STYLES = {
+  warning: {
+    banner: 'border-[#38270b] bg-[#21180b]',
+    text: 'text-amber-400',
+    button: 'text-amber-300 hover:bg-amber-400/10 hover:text-amber-200',
+  },
+  info: {
+    banner: 'border-[#131f3a] bg-[#0e1523]',
+    text: 'text-blue-400',
+    button: 'text-blue-300 hover:bg-blue-400/10 hover:text-blue-200',
+  },
+  discord: {
+    banner: 'border-[#1b1c39] bg-[#12121e]',
+    text: 'text-indigo-300',
+    button: 'text-indigo-300 hover:bg-indigo-400/10 hover:text-indigo-200',
+  },
+  success: {
+    banner: 'border-[#0a2c23] bg-[#0a1b17]',
+    text: 'text-emerald-400',
+    button: 'text-emerald-300 hover:bg-emerald-400/10 hover:text-emerald-200',
+  },
+  error: {
+    banner: 'border-[#371516] bg-[#201012]',
+    text: 'text-red-400',
+    button: 'text-red-300 hover:bg-red-400/10 hover:text-red-200',
+  },
+  default: {
+    banner: 'border-[#19191d] bg-[#141417]',
+    text: 'text-zinc-300',
+    button: 'text-zinc-300 hover:bg-white/5 hover:text-white',
+  },
+};
+
+const getNotamIdentity = (content, type) => JSON.stringify([type || 'warning', content || '']);
+
+const isNotamDismissed = (content, type) => {
+  if (!content) return false;
+
+  try {
+    return localStorage.getItem(DISMISSED_NOTAM_KEY) === getNotamIdentity(content, type);
+  } catch {
+    return false;
+  }
+};
 
 // Function to parse markdown-style links in NOTAM content
 const sanitizeNotamLinks = (content) => {
@@ -30,13 +76,17 @@ export const Navbar = () => {
   const scrolled = useScroll();
   const { user, logout, loading, initiateVatsimAuth } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showNotam, setShowNotam] = useState(true);
-  const [notamContent, setNotamContent] = useState(
-    () => localStorage.getItem('notam-content') || ''
-  );
-  const [notamType, setNotamType] = useState(() => localStorage.getItem('notam-type') || 'warning'); // Types: "warning", "info", "discord", etc.
-  const notamRef = useRef(null);
-  const [notamFitsOnOneLine, setNotamFitsOnOneLine] = useState(true);
+  const [cachedNotam] = useState(() => ({
+    content: localStorage.getItem('notam-content') || '',
+    type: localStorage.getItem('notam-type') || 'warning',
+  }));
+  const [notamContent, setNotamContent] = useState(cachedNotam.content);
+  const [notamType, setNotamType] = useState(cachedNotam.type); // Types: "warning", "info", "discord", etc.
+  const [showNotam, setShowNotam] = useState(() => {
+    return (
+      Boolean(cachedNotam.content) && !isNotamDismissed(cachedNotam.content, cachedNotam.type)
+    );
+  });
   const [authLoading, setAuthLoading] = useState(false);
   // Track when NOTAM state has been resolved to avoid initial border flash
   const [notamInitialized, setNotamInitialized] = useState(() => Boolean(notamContent));
@@ -85,7 +135,7 @@ export const Navbar = () => {
 
               setNotamContent(data.notam);
               setNotamType(data.type || 'warning');
-              setShowNotam(true);
+              setShowNotam(!isNotamDismissed(data.notam, data.type || 'warning'));
             } else {
               setShowNotam(false);
               // Clear cached NOTAM if the API returns none
@@ -98,7 +148,7 @@ export const Navbar = () => {
           if (cachedNotamContent) {
             setNotamContent(cachedNotamContent);
             setNotamType(cachedNotamType || 'warning');
-            setShowNotam(true);
+            setShowNotam(!isNotamDismissed(cachedNotamContent, cachedNotamType || 'warning'));
           } else {
             setShowNotam(false);
           }
@@ -111,7 +161,7 @@ export const Navbar = () => {
         if (cachedNotamContent) {
           setNotamContent(cachedNotamContent);
           setNotamType(cachedNotamType || 'warning');
-          setShowNotam(true);
+          setShowNotam(!isNotamDismissed(cachedNotamContent, cachedNotamType || 'warning'));
         } else {
           setShowNotam(false);
         }
@@ -124,99 +174,69 @@ export const Navbar = () => {
     fetchNotam();
     return () => controller.abort();
   }, []);
-  // Check if NOTAM text wraps to multiple lines
-  useEffect(() => {
-    if (notamRef.current && notamContent) {
-      const checkNotamHeight = () => {
-        const element = notamRef.current;
-        if (element) {
-          // Get the line height from computed styles
-          const computedStyle = window.getComputedStyle(element);
-          const lineHeight =
-            parseInt(computedStyle.lineHeight) || parseInt(computedStyle.fontSize) * 1.2;
-
-          // If the element's height is greater than the line height (with a small buffer),
-          // then the text is wrapping to multiple lines
-          const isSingleLine = element.offsetHeight <= lineHeight * 1.2;
-          setNotamFitsOnOneLine(isSingleLine);
-        }
-      };
-
-      // Initial check
-      checkNotamHeight();
-
-      // Also check on window resize as available width changes
-      const handleResize = () => {
-        checkNotamHeight();
-      };
-
-      window.addEventListener('resize', handleResize);
-      return () => {
-        window.removeEventListener('resize', handleResize);
-      };
-    }
-  }, [notamContent]);
-
   const toggleMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
+  };
+
+  const dismissNotam = () => {
+    try {
+      localStorage.setItem(DISMISSED_NOTAM_KEY, getNotamIdentity(notamContent, notamType));
+    } catch {
+      // The notice can still be dismissed for this session when storage is unavailable.
+    }
+    setShowNotam(false);
   };
 
   const mobileLinkClasses =
     'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
 
-  const notamVisible = Boolean(notamContent) && showNotam && !scrolled && notamFitsOnOneLine;
+  const notamVisible = Boolean(notamContent) && showNotam;
+  const notamStyles = NOTAM_STYLES[notamType] || NOTAM_STYLES.default;
 
   return (
-    <>
-      {' '}
-      {/* NOTAM Banner - Always in the DOM but visibility controlled by classes */}
-      {notamContent && (
+    <header className="fixed inset-x-0 top-0 z-50">
+      {/* Keeping the NOTAM and navbar in one stack lets the navbar reclaim its exact height. */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          notamVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+        aria-hidden={!notamVisible}
+        inert={!notamVisible}
+      >
         <div
-          className={`fixed left-0 top-0 z-60 w-full transform-gpu overflow-hidden border-b transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-            notamType === 'warning'
-              ? 'bg-amber-500/10 border-amber-500/20'
-              : notamType === 'info'
-                ? 'bg-blue-500/10 border-blue-500/20'
-                : notamType === 'discord'
-                  ? 'bg-indigo-500/10 border-indigo-500/20'
-                  : notamType === 'success'
-                    ? 'bg-emerald-500/10 border-emerald-500/20'
-                    : notamType === 'error'
-                      ? 'bg-red-500/10 border-red-500/20'
-                      : 'bg-zinc-700/20 border-zinc-600/30'
-          } ${notamVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-full opacity-0'}`}
+          className={`min-h-0 overflow-hidden transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            notamVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'
+          }`}
         >
-          <div className="container mx-auto px-4 py-3">
-            <div className="flex items-center justify-center">
-              {' '}
-              <p
-                ref={notamRef}
-                className={`text-sm font-medium ${
-                  notamType === 'warning'
-                    ? 'text-amber-400'
-                    : notamType === 'info'
-                      ? 'text-blue-400'
-                      : notamType === 'discord'
-                        ? 'text-indigo-300'
-                        : notamType === 'success'
-                          ? 'text-emerald-400'
-                          : notamType === 'error'
-                            ? 'text-red-400'
-                            : 'text-zinc-300'
-                }`}
-                dangerouslySetInnerHTML={{ __html: sanitizeNotamLinks(notamContent) }}
-              />
+          <div className={`border-b ${notamStyles.banner}`}>
+            <div className="grid min-h-10 w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-center px-1">
+              <span aria-hidden="true" />
+              {notamContent && (
+                <p
+                  className={`mx-auto max-w-7xl break-words py-2 text-center text-sm font-medium ${notamStyles.text}`}
+                  dangerouslySetInnerHTML={{ __html: sanitizeNotamLinks(notamContent) }}
+                />
+              )}
+              <button
+                type="button"
+                onClick={dismissNotam}
+                className={`inline-flex size-10 items-center justify-center justify-self-end rounded-md transition-[background-color,color,transform] duration-150 ease-out active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${notamStyles.button}`}
+                aria-label="Dismiss notice"
+                title="Dismiss notice"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
             </div>
           </div>
         </div>
-      )}{' '}
+      </div>
       <nav
-        className={`fixed left-0 top-0 z-50 w-full transform-gpu border-b transition-[background-color,border-color,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`w-full border-b transition-[background-color,border-color] duration-200 ease-out ${
           // Avoid showing the border until NOTAM state is initialized to prevent white flash
-          scrolled || (notamInitialized && (!showNotam || !notamFitsOnOneLine || !notamContent))
+          scrolled || (notamInitialized && (!showNotam || !notamContent))
             ? 'border-zinc-800 bg-zinc-950/90 backdrop-blur-md'
             : 'border-transparent bg-zinc-950'
-        } ${notamVisible ? 'translate-y-10' : 'translate-y-0'}`}
+        }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-20">
@@ -414,6 +434,6 @@ export const Navbar = () => {
           </div>
         </div>
       </nav>
-    </>
+    </header>
   );
 };
