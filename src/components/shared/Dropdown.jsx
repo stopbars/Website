@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { ChevronDown } from 'lucide-react';
 
@@ -19,21 +19,57 @@ export function Dropdown({
   options = EMPTY_DROPDOWN_OPTIONS,
   value,
   onChange,
-  placeholder = 'Select...',
+  placeholder = 'Select…',
   className = '',
   disabled = false,
+  id,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const dropdownRef = useRef(null);
+  const triggerRef = useRef(null);
+  const optionRefs = useRef(null);
+  if (optionRefs.current === null) optionRefs.current = new Map();
+  const generatedId = useId();
+  const triggerId = id || `dropdown-${generatedId}`;
+  const listboxId = `${triggerId}-listbox`;
 
-  const currentOption = options.find((opt) => !opt.isHeader && opt.value === value);
+  const selectableOptions = useMemo(
+    () => options.filter((option) => !option.isHeader),
+    [options]
+  );
+  const currentOption = selectableOptions.find((option) => option.value === value);
   const TriggerIcon = currentOption?.icon || null;
+
+  const openDropdown = (requestedIndex) => {
+    const selectedIndex = selectableOptions.findIndex((option) => option.value === value);
+    const fallbackIndex = selectedIndex >= 0 ? selectedIndex : 0;
+    const nextIndex = Math.min(
+      Math.max(requestedIndex ?? fallbackIndex, 0),
+      Math.max(selectableOptions.length - 1, 0)
+    );
+
+    setActiveIndex(nextIndex);
+    setIsOpen(true);
+  };
+
+  const closeDropdown = ({ restoreFocus = false } = {}) => {
+    setIsOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  };
+
+  const selectOption = (option) => {
+    onChange(option.value);
+    closeDropdown({ restoreFocus: true });
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
+        closeDropdown();
       }
     };
 
@@ -45,40 +81,113 @@ export function Dropdown({
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') {
-        setIsOpen(false);
+        closeDropdown({ restoreFocus: isOpen });
       }
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, []);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || activeIndex < 0) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      const activeOption = selectableOptions[activeIndex];
+      if (activeOption) optionRefs.current.get(activeOption.value)?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeIndex, isOpen, selectableOptions]);
+
+  const handleTriggerKeyDown = (event) => {
+    if (disabled || selectableOptions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      openDropdown();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      openDropdown(selectableOptions.length - 1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      openDropdown(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      openDropdown(selectableOptions.length - 1);
+    }
+  };
+
+  const handleListboxKeyDown = (event) => {
+    if (selectableOptions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((index) => (index + 1) % selectableOptions.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((index) => (index - 1 + selectableOptions.length) % selectableOptions.length);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      setActiveIndex(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      setActiveIndex(selectableOptions.length - 1);
+    } else if ((event.key === 'Enter' || event.key === ' ') && activeIndex >= 0) {
+      event.preventDefault();
+      selectOption(selectableOptions[activeIndex]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDropdown({ restoreFocus: true });
+    } else if (event.key === 'Tab') {
+      closeDropdown();
+    }
+  };
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
+        id={triggerId}
+        ref={triggerRef}
         type="button"
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-haspopup="listbox"
+        aria-controls={listboxId}
         aria-expanded={isOpen}
+        onKeyDown={handleTriggerKeyDown}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (!disabled) setIsOpen(!isOpen);
+          if (disabled) return;
+          if (isOpen) closeDropdown();
+          else openDropdown();
         }}
         disabled={disabled}
-        className={`flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white transition-[background-color,border-color,transform,opacity] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
+        className={`flex min-h-11 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white transition-[background-color,border-color,transform,opacity] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
           disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
         <span className="mr-2 flex min-w-0 items-center gap-2 truncate transition-colors duration-150">
-          {TriggerIcon && <TriggerIcon className="w-4 h-4 shrink-0" />}
+          {TriggerIcon && <TriggerIcon className="w-4 h-4 shrink-0" aria-hidden="true" />}
           {currentOption?.label || placeholder}
         </span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform duration-150 ease-out ${isOpen ? 'rotate-180' : ''}`}
+          aria-hidden="true"
         />
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-150">
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          tabIndex={-1}
+          onKeyDown={handleListboxKeyDown}
+          className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800"
+        >
           {options.map((option, index) => {
             if (option.isHeader) {
               return (
@@ -93,14 +202,19 @@ export function Dropdown({
             return (
               <button
                 key={option.value}
+                ref={(element) => {
+                  if (element) optionRefs.current.set(option.value, element);
+                  else optionRefs.current.delete(option.value);
+                }}
                 type="button"
+                role="option"
+                aria-selected={value === option.value}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  onChange(option.value);
-                  setIsOpen(false);
+                  selectOption(option);
                 }}
-                className={`flex min-h-10 w-full items-center gap-2 px-4 py-2.5 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
+                className={`flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
                   value === option.value
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'
@@ -110,7 +224,7 @@ export function Dropdown({
                   animationFillMode: 'both',
                 }}
               >
-                {OptionIcon && <OptionIcon className="w-4 h-4 shrink-0" />}
+                {OptionIcon && <OptionIcon className="w-4 h-4 shrink-0" aria-hidden="true" />}
                 {option.label}
               </button>
             );
@@ -135,4 +249,7 @@ Dropdown.propTypes = {
   placeholder: PropTypes.string,
   className: PropTypes.string,
   disabled: PropTypes.bool,
+  id: PropTypes.string,
+  'aria-label': PropTypes.string,
+  'aria-labelledby': PropTypes.string,
 };
