@@ -20,6 +20,7 @@ import {
 import XMLMap from '../shared/XMLMap';
 import { Toast } from '../shared/Toast';
 import { SimulatorBadge } from '../shared/SimulatorBadge';
+import { PageLoading } from '../shared/PageLoading';
 import ReviewModal from './ContributionReviewWorkspace';
 import { getVatsimToken } from '../../utils/cookieUtils';
 
@@ -867,9 +868,7 @@ const ContributionManagement = () => {
         {/* Contributions list */}
         <div className="space-y-4">
           {loading && !selectedContribution ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader className="w-8 h-8 animate-spin text-zinc-400" />
-            </div>
+            <PageLoading label="Loading contributions…" variant="tool-stack" />
           ) : paginatedContributions.length === 0 ? (
             <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-8 text-center">
               <Upload className="w-12 h-12 text-zinc-500 mx-auto mb-3" />

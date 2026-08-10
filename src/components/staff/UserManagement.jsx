@@ -6,6 +6,7 @@ import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
 import { Tooltip } from '../shared/Tooltip';
+import { PageLoading } from '../shared/PageLoading';
 import {
   User,
   Users,
@@ -17,7 +18,6 @@ import {
   ChevronRight,
   Trash2,
   AlertOctagon,
-  Loader,
   IdCard,
   KeyRound,
   Globe,
@@ -354,9 +354,7 @@ const UserManagement = () => {
       {/* Users List */}
       <div className="space-y-4">
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-          </div>
+          <PageLoading label="Loading users…" variant="tool-card-grid" />
         ) : (
           <>
             <div className="grid content-start grid-cols-1 items-stretch gap-4 md:min-h-248 md:grid-cols-2 xl:min-h-164 xl:grid-cols-3">

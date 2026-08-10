@@ -190,7 +190,7 @@ Support BARS: https://stopbars.com/donate`,
   if (isFullScreenEditor) {
     return (
       <div ref={layoutRef} className="h-dvh overflow-hidden bg-zinc-950 text-white">
-        <Suspense fallback={<PageLoading page label="Loading editorâ€¦" />}>
+        <Suspense fallback={<PageLoading page label="Loading editor…" />}>
           <div key={pathname} className="h-full">
             {children}
           </div>

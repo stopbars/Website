@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
+import { PageLoading } from '../shared/PageLoading';
 import {
   Loader,
   Trash2,
@@ -197,11 +198,7 @@ export default function ContactMessages() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-40">
-        <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-      </div>
-    );
+    return <PageLoading label="Loading contact messages…" variant="tool-list" />;
   }
 
   return (

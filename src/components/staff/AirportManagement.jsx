@@ -18,6 +18,7 @@ import {
 import { getVatsimToken } from '../../utils/cookieUtils';
 import useSearchQuery from '../../hooks/useSearchQuery';
 import AirportEditorDialog from './AirportEditorDialog';
+import { PageLoading } from '../shared/PageLoading';
 
 // Status order for sorting: pending first, then approved, then rejected
 const STATUS_ORDER = { pending: 0, approved: 1, rejected: 2 };
@@ -452,10 +453,7 @@ const AirportManagement = () => {
       <div className="space-y-4">
         <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
           {loading ? (
-            <div className="text-center py-8 text-zinc-400">
-              <Loader className="w-12 h-12 mx-auto mb-3 opacity-50 animate-spin" />
-              <p>Loading airports...</p>
-            </div>
+            <PageLoading label="Loading airports…" variant="tool-stack" />
           ) : !filteredAirports?.length ? (
             <div className="text-center py-8 text-zinc-500">
               <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />

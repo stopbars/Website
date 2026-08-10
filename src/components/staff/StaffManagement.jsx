@@ -6,6 +6,7 @@ import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
 import { Dropdown } from '../shared/Dropdown';
+import { PageLoading } from '../shared/PageLoading';
 import { Loader, Trash2, UserPlus, UserCheck, Users, AlertOctagon } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
@@ -53,7 +54,10 @@ function StaffMemberForm({ onSubmit, onValidationError }) {
         </h3>
         <form onSubmit={openConfirmation} className="grid md:grid-cols-4 gap-4 items-end">
           <div className="md:col-span-2">
-            <label htmlFor="staff-vatsim-id" className="block text-sm font-medium text-zinc-400 mb-2">
+            <label
+              htmlFor="staff-vatsim-id"
+              className="block text-sm font-medium text-zinc-400 mb-2"
+            >
               VATSIM CID
             </label>
             <input
@@ -76,7 +80,11 @@ function StaffMemberForm({ onSubmit, onValidationError }) {
             />
           </div>
           <div className="flex gap-2">
-            <Button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2">
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 flex items-center justify-center gap-2"
+            >
               <UserPlus className="w-4 h-4" />
               Add
             </Button>
@@ -258,11 +266,7 @@ export default function StaffManagement() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-40">
-        <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-      </div>
-    );
+    return <PageLoading label="Loading staff members…" variant="tool-list" />;
   }
 
   return (

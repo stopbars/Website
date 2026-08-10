@@ -48,7 +48,7 @@ export const FAQ = () => {
             {error}
           </div>
         ) : loading ? (
-          <PageLoading label="Loading homepage content…" />
+          <PageLoading label="Loading FAQs…" variant="faq-list" />
         ) : (
           <>
             <div className="space-y-4 mb-12">

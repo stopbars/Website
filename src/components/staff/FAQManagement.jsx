@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
+import { PageLoading } from '../shared/PageLoading';
 import {
   HelpCircle,
-  RefreshCw,
   Plus,
   Edit2,
   Save,
@@ -465,9 +465,7 @@ const FAQManagement = () => {
 
         {/* FAQs List */}
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <RefreshCw className="w-6 h-6 animate-spin text-zinc-400" />
-          </div>
+          <PageLoading label="Loading FAQs…" variant="tool-stack" />
         ) : faqs.length === 0 ? (
           <div className="p-12 bg-zinc-800/30 border border-zinc-700/30 border-dashed rounded-xl text-center">
             <HelpCircle className="w-12 h-12 text-zinc-600 mx-auto mb-4" />

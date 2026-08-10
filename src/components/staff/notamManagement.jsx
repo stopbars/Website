@@ -16,6 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Toast } from '../shared/Toast';
+import { PageLoading } from '../shared/PageLoading';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import DOMPurify from 'dompurify';
 
@@ -567,10 +568,7 @@ const NotamManagement = () => {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader className="w-5 h-5 animate-spin text-zinc-400" />
-              <span className="ml-2 text-sm text-zinc-400">Loading NOTAM...</span>
-            </div>
+            <PageLoading label="Loading NOTAM…" variant="tool-detail" />
           ) : error ? (
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
               <p className="text-sm text-red-400">{error}</p>

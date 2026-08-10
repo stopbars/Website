@@ -253,9 +253,7 @@ const Changelog = () => {
 
           {/* Changelog Content */}
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <PageLoading label="Loading changelog…" />
-            </div>
+            <PageLoading label="Loading changelog…" variant="changelog-content" />
           ) : error ? (
             <div className="flex items-center justify-center py-20">
               <div className="text-center">
