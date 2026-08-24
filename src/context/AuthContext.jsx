@@ -97,7 +97,7 @@ const initiateVatsimAuth = (redirectPage) => {
   window.location.assign(`https://auth.vatsim.net/oauth/authorize?${params}`);
 };
 
-/* oxlint-disable react-doctor/js-cache-storage react-doctor/client-localstorage-no-version react-doctor/no-cascading-set-state -- Cache reads occur in mutually exclusive validation paths; existing keys preserve active sessions, and auth hydration batches related guarded state transitions. */
+/* oxlint-disable react-doctor/js-cache-storage react-doctor/client-localstorage-no-version react-doctor/no-cascading-set-state react-doctor/no-loading-flag-reset-outside-finally -- Cache and request branches all explicitly settle loading while preserving existing authenticated sessions. */
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);

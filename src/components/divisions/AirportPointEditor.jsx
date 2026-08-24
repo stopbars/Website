@@ -869,10 +869,10 @@ const PolylineVisualizationOverlay = ({
       try {
         const nextBounds = map.getBounds();
         const schedule = () => setViewBounds(nextBounds);
-        if (typeof requestAnimationFrame === 'function') {
-          scheduledFrame = requestAnimationFrame(schedule);
+        if (typeof window.requestAnimationFrame === 'function') {
+          scheduledFrame = window.requestAnimationFrame(schedule);
         } else {
-          scheduledTimer = setTimeout(schedule, 0);
+          scheduledTimer = window.setTimeout(schedule, 0);
         }
       } catch {
         /* ignore */
@@ -882,10 +882,10 @@ const PolylineVisualizationOverlay = ({
     try {
       const initialBounds = map.getBounds();
       const schedule = () => setViewBounds(initialBounds);
-      if (typeof requestAnimationFrame === 'function') {
-        scheduledFrame = requestAnimationFrame(schedule);
+      if (typeof window.requestAnimationFrame === 'function') {
+        scheduledFrame = window.requestAnimationFrame(schedule);
       } else {
-        scheduledTimer = setTimeout(schedule, 0);
+        scheduledTimer = window.setTimeout(schedule, 0);
       }
     } catch {
       /* ignore */
@@ -893,8 +893,8 @@ const PolylineVisualizationOverlay = ({
     map.on('movestart zoomstart dragstart', start);
     map.on('moveend zoomend viewreset', end);
     return () => {
-      if (scheduledFrame !== null) cancelAnimationFrame(scheduledFrame);
-      if (scheduledTimer !== null) clearTimeout(scheduledTimer);
+      if (scheduledFrame !== null) window.cancelAnimationFrame(scheduledFrame);
+      if (scheduledTimer !== null) window.clearTimeout(scheduledTimer);
       map.off('movestart zoomstart dragstart', start);
       map.off('moveend zoomend viewreset', end);
     };
@@ -1464,8 +1464,8 @@ const ImageOverlayTool = ({
   const dragMarkerRef = useRef(null);
   const cornerMarkersRef = useRef([]);
   const rotationMarkerRef = useRef(null);
-  const rotationRef = useRef(null);
-  if (rotationRef.current === null) rotationRef.current = normalizeAngle(rotation);
+  const [initialRotation] = useState(() => normalizeAngle(rotation));
+  const rotationRef = useRef(initialRotation);
   const aspectRatioRef = useRef(aspectRatio > 0 ? aspectRatio : 1);
   const shiftPressedRef = useRef(false);
   const syncPresentationRef = useRef(() => {});
@@ -1998,7 +1998,7 @@ OverlayAutoAlignPreview.propTypes = {
 
 // This stateful Leaflet editor is cohesive; splitting or reducing its independent state here
 // would be a high-risk architectural rewrite with no behavior-preserving mechanical boundary.
-// oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer
+// oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-side-effect-in-state-updater-function react-doctor/no-async-event-handler-without-reentry-guard react-doctor/no-loading-flag-reset-outside-finally -- State updaters mutate only fresh clones; upload controls and state block re-entry; abort guards and finally own loading cleanup.
 const AirportPointEditor = ({
   existingPoints = EMPTY_POINTS,
   onChangesetChange,
@@ -2474,6 +2474,8 @@ const AirportPointEditor = ({
       }
 
       // 3. Verify the file is actually a decodable image before committing state
+      // The URL is revoked on decode failure, replacement, removal, and component unmount.
+      // oxlint-disable-next-line react-doctor/no-create-object-url-without-revoke
       const candidateUrl = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
@@ -2755,6 +2757,8 @@ const AirportPointEditor = ({
           throw new Error(msg || `Link update failed (${resp.status})`);
         }
 
+        // This updater only mutates fresh clones created inside the callback.
+        // oxlint-disable-next-line react-doctor/no-side-effect-in-state-updater-function
         setLinkMap((prev) => {
           const next = Object.fromEntries(
             Object.entries(prev).map(([stopbarId, leadOnIds]) => [stopbarId, [...leadOnIds]])
@@ -3212,6 +3216,8 @@ const AirportPointEditor = ({
         layer.setLatLng([lat, lng]);
       }
     }
+    // This updater deletes from a fresh nested clone and never mutates prior state.
+    // oxlint-disable-next-line react-doctor/no-side-effect-in-state-updater-function
     setChangeset((prev) => {
       if (!prev.modify[selectedId]) return prev;
       const clone = { ...prev, modify: { ...prev.modify } };
@@ -3438,6 +3444,7 @@ const AirportPointEditor = ({
   };
 
   const handleUpload = async () => {
+    if (uploadState.status === 'uploading') return;
     const token = getVatsimToken();
     if (!token) {
       setToastConfig({
@@ -3572,7 +3579,8 @@ const AirportPointEditor = ({
   }, [existingMap, selectedId]);
 
   // These three values form one link-picking session and must reset together.
-  // oxlint-disable react-doctor/no-chain-state-updates
+  // External selection/deletion changes invalidate the three-field link-picking session together.
+  // oxlint-disable react-doctor/no-chain-state-updates react-doctor/no-adjust-state-on-prop-change
   useEffect(() => {
     const canKeepPicking =
       selectedExistingPoint?.id === linkPickStopbarId &&
@@ -3584,7 +3592,7 @@ const AirportPointEditor = ({
       setLinkDraftLeadOnIds([]);
     }
   }, [deletedPointIds, linkPickStopbarId, selectedExistingPoint]);
-  // oxlint-enable react-doctor/no-chain-state-updates
+  // oxlint-enable react-doctor/no-chain-state-updates react-doctor/no-adjust-state-on-prop-change
 
   const existingLeadOnCount = useMemo(
     () =>
@@ -3749,8 +3757,8 @@ const AirportPointEditor = ({
   }, [airportMeta, parsedAirportCenter]);
 
   const [refreshTick, setRefreshTick] = useState(0);
-  // The request has an AbortController and ignores stale completion after cleanup.
-  // oxlint-disable-next-line react-doctor/no-fetch-in-effect
+  // The request has an AbortController and ignores stale completion after cleanup; loading resets in finally.
+  // oxlint-disable-next-line react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally
   useEffect(() => {
     if (!icao || isEuroscopeOnly) return;
     let aborted = false;
@@ -4320,9 +4328,9 @@ const AirportPointEditor = ({
                 )}
                 {selectedExistingPoint?.type === 'stopbar' &&
                   !deletedPointIds.has(selectedExistingPoint.id) && (
-                    <div className="rounded-lg bg-zinc-800/45 p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+                    <div className="rounded-lg bg-zinc-800/45 p-3 shadow-[0_0_0_1px_oklch(1_0_0/0.08)]">
                       {linksError ? (
-                        <div className="rounded-lg bg-red-500/10 p-2.5 text-xs text-red-300 shadow-[0_0_0_1px_rgba(239,68,68,0.22)]">
+                        <div className="rounded-lg bg-red-500/10 p-2.5 text-xs text-red-300 shadow-[0_0_0_1px_oklch(0.637_0.237_25.331/0.22)]">
                           <p>{linksError}</p>
                           <button
                             type="button"
@@ -4445,7 +4453,7 @@ const AirportPointEditor = ({
                         setManualPlacedId(null);
                         if (mapInstanceRef.current?.pm) mapInstanceRef.current.pm.disableDraw();
                       }}
-                      className="w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                      className="w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                     >
                       <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
                         <CircleFadingPlus className="w-5 h-5 text-blue-400" />
@@ -4481,6 +4489,7 @@ const AirportPointEditor = ({
                               {idx + 1}
                             </span>
                             <input
+                              aria-label={`Vertex ${idx + 1} coordinates`}
                               type="text"
                               value={coord.value}
                               onChange={(e) => {
@@ -5053,7 +5062,7 @@ const AirportPointEditor = ({
     </div>
   );
 };
-// oxlint-enable react-doctor/no-giant-component react-doctor/prefer-useReducer
+// oxlint-enable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-side-effect-in-state-updater-function react-doctor/no-async-event-handler-without-reentry-guard react-doctor/no-loading-flag-reset-outside-finally
 
 AirportPointEditor.propTypes = {
   existingPoints: PropTypes.array,

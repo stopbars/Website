@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect react-doctor/no-loading-flag-reset-outside-finally -- Both ordered requests share an AbortController; aborted work cannot update state and loading resets in finally. */
+
 import { useState, useEffect, useMemo } from 'react';
 import useSearchQuery from '../hooks/useSearchQuery';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -138,11 +140,12 @@ const DivisionAirportManager = () => {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
               <input
+                aria-label="Search airports"
                 type="text"
                 placeholder="Search airports by ICAO or name..."
                 value={searchTerm}
                 onChange={handleSearchChange}
-                className="w-full pl-10 pr-4 py-3 bg-zinc-800/50 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:border-transparent transition-all"
+                className="w-full pl-10 pr-4 py-3 bg-zinc-800/50 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:border-transparent transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
               />
             </div>
           </Card>
@@ -152,7 +155,7 @@ const DivisionAirportManager = () => {
             {filteredAirports.map((airport) => (
               <Card
                 key={airport.id}
-                className="p-6 hover:border-zinc-700 transition-all duration-200 cursor-pointer"
+                className="p-6 hover:border-zinc-700 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] cursor-pointer"
                 onClick={() => navigate(`/divisions/${divisionId}/airports/${airport.icao}`)}
               >
                 <div className="flex items-start justify-between">
@@ -198,7 +201,7 @@ const DivisionAirportManager = () => {
 
             {/* Add new airport card */}
             <Card
-              className="p-6 border border-dashed border-zinc-800 hover:border-zinc-700 transition-all duration-200 flex flex-col justify-center items-center cursor-pointer h-full"
+              className="p-6 border border-dashed border-zinc-800 hover:border-zinc-700 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] flex flex-col justify-center items-center cursor-pointer h-full"
               onClick={() => navigate(`/divisions/${divisionId}/airports/add`)}
             >
               <div className="h-12 w-12 rounded-full bg-zinc-800 flex items-center justify-center mb-4">

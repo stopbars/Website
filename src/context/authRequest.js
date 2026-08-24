@@ -71,15 +71,14 @@ export const createAuthenticatedUserLoader = ({
       throw new AuthRequestError('Failed to fetch user data');
     }
 
-    const staffData = await staffResponse.json();
-    const divisionData = await divisionResponse.json();
-    const divisionRoles = (Array.isArray(divisionData) ? divisionData : []).reduce(
-      (roles, { role }) => ({
-        ...roles,
-        [role]: 1,
-      }),
-      {}
-    );
+    const [staffData, divisionData] = await Promise.all([
+      staffResponse.json(),
+      divisionResponse.json(),
+    ]);
+    const divisionRoles = {};
+    for (const { role } of Array.isArray(divisionData) ? divisionData : []) {
+      divisionRoles[role] = 1;
+    }
 
     return {
       status: 'ok',

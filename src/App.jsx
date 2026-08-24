@@ -207,6 +207,7 @@ const appRoutes = [
 
 const router = createBrowserRouter([
   {
+    errorElement: <RouteError />,
     element: (
       <AuthProvider>
         <Layout>

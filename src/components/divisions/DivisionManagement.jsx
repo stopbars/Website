@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect react-doctor/no-async-event-handler-without-reentry-guard -- Route requests share an AbortController; mutating controls expose and set busy state before awaiting, preventing practical re-entry. */
+
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../layout/Layout';
@@ -526,6 +528,7 @@ const DivisionManagement = () => {
   const [airportToDelete, setAirportToDelete] = useState(null);
   const [deletingAirport, setDeletingAirport] = useState(false);
   const [updatingContributionAirportId, setUpdatingContributionAirportId] = useState(null);
+  const [contributionAirportToEnable, setContributionAirportToEnable] = useState(null);
   const token = getVatsimToken();
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isLeadDev, setIsLeadDev] = useState(false);
@@ -1077,7 +1080,7 @@ const DivisionManagement = () => {
   };
 
   const handleContributionToggle = async (airport, contributionsEnabled) => {
-    if (!isDivisionMember) return;
+    if (!isDivisionMember || (contributionsEnabled && !getDataSubmitted(airport))) return;
 
     setUpdatingContributionAirportId(airport.id);
     setAirports((prev) =>
@@ -1140,6 +1143,27 @@ const DivisionManagement = () => {
     }
   };
 
+  const requestContributionToggle = (airport) => {
+    if (airport.contributions_enabled) {
+      handleContributionToggle(airport, false);
+      return;
+    }
+
+    if (!getDataSubmitted(airport)) return;
+    setContributionAirportToEnable(airport);
+  };
+
+  const confirmEnableContributions = async () => {
+    const airport = contributionAirportToEnable;
+    if (!airport || !getDataSubmitted(airport)) {
+      setContributionAirportToEnable(null);
+      return;
+    }
+
+    await handleContributionToggle(airport, true);
+    setContributionAirportToEnable(null);
+  };
+
   if (loading) {
     return <PageLoading page label="Loading division management…" />;
   }
@@ -1196,7 +1220,7 @@ const DivisionManagement = () => {
                     return (
                       <div
                         key={member.id}
-                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-all duration-200"
+                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)]"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3 min-w-0">
@@ -1293,7 +1317,7 @@ const DivisionManagement = () => {
                     .map((airport) => (
                       <div
                         key={airport.id}
-                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-all duration-200"
+                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)]"
                       >
                         <div className="flex items-start justify-between">
                           <div>
@@ -1347,7 +1371,11 @@ const DivisionManagement = () => {
                             <div>
                               <p className="text-sm text-white">Scenery Contributions</p>
                               <p className="text-xs text-zinc-500">
-                                {airport.contributions_enabled ? 'Enabled' : 'Disabled'}
+                                {airport.contributions_enabled
+                                  ? 'Enabled'
+                                  : getDataSubmitted(airport)
+                                    ? 'Disabled'
+                                    : 'Add objects before enabling'}
                               </p>
                             </div>
                             <button
@@ -1355,16 +1383,18 @@ const DivisionManagement = () => {
                               role="switch"
                               aria-checked={airport.contributions_enabled}
                               aria-label={`Toggle scenery contributions for ${airport.icao}`}
-                              onClick={() =>
-                                handleContributionToggle(airport, !airport.contributions_enabled)
-                              }
+                              onClick={() => requestContributionToggle(airport)}
                               disabled={
-                                !isDivisionMember || updatingContributionAirportId === airport.id
+                                !isDivisionMember ||
+                                updatingContributionAirportId === airport.id ||
+                                (!airport.contributions_enabled && !getDataSubmitted(airport))
                               }
                               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                 airport.contributions_enabled ? 'bg-emerald-500' : 'bg-zinc-700'
                               } ${
-                                !isDivisionMember || updatingContributionAirportId === airport.id
+                                !isDivisionMember ||
+                                updatingContributionAirportId === airport.id ||
+                                (!airport.contributions_enabled && !getDataSubmitted(airport))
                                   ? 'opacity-50 cursor-not-allowed'
                                   : 'cursor-pointer'
                               }`}
@@ -1457,7 +1487,7 @@ const DivisionManagement = () => {
                   const digits = paste.replace(/\D/g, '');
                   if (digits) setNewMemberCid((prev) => (prev + digits).replace(/\D/g, ''));
                 }}
-                className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                 placeholder="Enter CID"
                 required
                 disabled={addingMember}
@@ -1538,7 +1568,7 @@ const DivisionManagement = () => {
               type="text"
               value={newAirportIcao}
               onChange={(e) => setNewAirportIcao(e.target.value.toUpperCase())}
-              className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all uppercase"
+              className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] uppercase"
               maxLength={4}
               pattern="[A-Za-z]{4}"
               required
@@ -1576,6 +1606,31 @@ const DivisionManagement = () => {
           </div>
         </form>
       </Dialog>
+
+      {/* Enable Contributions Confirmation Dialog */}
+      <Dialog
+        open={!!contributionAirportToEnable}
+        onClose={() => setContributionAirportToEnable(null)}
+        icon={AlertOctagon}
+        iconColor="orange"
+        title={`Enable contributions for ${contributionAirportToEnable?.icao}?`}
+        description="Only enable scenery contributions once all airport data has been fully added. Enabling early may allow incomplete contributions."
+        closeOnBackdrop={!updatingContributionAirportId}
+        closeOnEscape={!updatingContributionAirportId}
+        isLoading={!!updatingContributionAirportId}
+        maxWidth="md"
+        buttons={[
+          {
+            label: 'Enable contributions',
+            onClick: confirmEnableContributions,
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: () => setContributionAirportToEnable(null),
+          },
+        ]}
+      />
 
       {/* Remove Member Confirmation Dialog */}
       <Dialog
