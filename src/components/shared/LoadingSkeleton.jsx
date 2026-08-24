@@ -70,16 +70,16 @@ CardGrid.propTypes = {
   count: PropTypes.number,
 };
 
-const FlowHeaderSkeleton = () => (
+const FlowHeaderSkeleton = ({ centered = false, showContext = true }) => (
   <header className="mb-8 mt-6">
-    <div className="sm:hidden">
+    <div className={`sm:hidden ${centered ? 'mx-auto max-w-sm' : ''}`}>
       <div className="flex items-center justify-between">
         <SkeletonBlock className="h-3 w-20" />
         <SkeletonBlock className="h-3 w-16" />
       </div>
       <SkeletonBlock className="mt-3 h-1 w-full" />
     </div>
-    <div className="hidden h-12 items-center sm:flex">
+    <div className="hidden h-12 items-center justify-center sm:flex">
       {Array.from({ length: 6 }, (_, index) => (
         <div key={index} className="flex items-center">
           <SkeletonBlock className="h-6 w-6 rounded-full" />
@@ -88,12 +88,17 @@ const FlowHeaderSkeleton = () => (
         </div>
       ))}
     </div>
-    <div className="mt-5 space-y-3">
+    <div className={`mt-5 space-y-3 ${centered ? 'flex flex-col items-center text-center' : ''}`}>
       <SkeletonBlock className="h-9 w-64 max-w-[75vw]" />
-      <SkeletonBlock className="h-4 w-56 max-w-[65vw]" />
+      {showContext ? <SkeletonBlock className="h-4 w-56 max-w-[65vw]" /> : null}
     </div>
   </header>
 );
+
+FlowHeaderSkeleton.propTypes = {
+  centered: PropTypes.bool,
+  showContext: PropTypes.bool,
+};
 
 const StaffSkeleton = () => (
   <div className="mx-auto max-w-450 px-6 2xl:px-12">
@@ -223,9 +228,10 @@ const ContributionDashboardSkeleton = () => (
 
 const ContributionFormSkeleton = () => (
   <div className="mx-auto max-w-4xl px-6">
-    <FlowHeaderSkeleton />
+    <FlowHeaderSkeleton centered showContext={false} />
     <Panel className="mx-auto max-w-xl p-6 sm:p-8">
       <div className="space-y-6">
+        <SkeletonBlock className="mx-auto h-4 w-72 max-w-full" />
         <div className="space-y-3">
           <SkeletonBlock className="h-4 w-28" />
           <SkeletonBlock className="h-12 w-full" />
@@ -260,16 +266,17 @@ const ContributionMapSkeleton = () => (
       <div className="lg:col-span-2">
         <MapPanel />
       </div>
-      <div className="space-y-6">
-        <Panel className="p-6">
-          <SkeletonBlock className="mb-5 h-6 w-36" />
-          <ListRows count={3} height="h-10" />
-        </Panel>
-        <Panel className="p-6">
-          <SkeletonBlock className="mb-4 h-5 w-32" />
-          <SkeletonBlock className="h-24 w-full" />
-        </Panel>
-      </div>
+      <Panel className="p-6">
+        <div className="flex gap-3">
+          <SkeletonBlock className="h-5 w-5 shrink-0 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <SkeletonBlock className="h-4 w-full" />
+            <SkeletonBlock className="h-4 w-4/5" />
+          </div>
+        </div>
+        <SkeletonBlock className="mt-6 h-14 w-full" />
+        <SkeletonBlock className="mx-auto mt-3 h-10 w-28" />
+      </Panel>
     </div>
   </div>
 );

@@ -74,6 +74,7 @@ const XMLMap = ({
   height = '600px',
   showPolyLines = false,
   showRemoveAreas = false,
+  removeAreasStyle = 'fill',
   showLights = true,
   colorMode = 'operational',
   visibleTypes,
@@ -629,14 +630,16 @@ const XMLMap = ({
             {/* Render remove areas if showing remove areas view */}
             {showRemoveAreas && (
               <Source id="remove-areas" type="geojson" data={removeAreasGeoJSON}>
-                <Layer
-                  id="remove-areas-fill"
-                  type="fill"
-                  paint={{
-                    'fill-color': '#ef4444',
-                    'fill-opacity': 0.2,
-                  }}
-                />
+                {removeAreasStyle === 'fill' ? (
+                  <Layer
+                    id="remove-areas-fill"
+                    type="fill"
+                    paint={{
+                      'fill-color': '#ef4444',
+                      'fill-opacity': 0.2,
+                    }}
+                  />
+                ) : null}
                 <Layer
                   id="remove-areas-outline"
                   type="line"
@@ -709,6 +712,7 @@ XMLMap.propTypes = {
   height: PropTypes.string,
   showPolyLines: PropTypes.bool,
   showRemoveAreas: PropTypes.bool,
+  removeAreasStyle: PropTypes.oneOf(['fill', 'outline']),
   showLights: PropTypes.bool,
   colorMode: PropTypes.oneOf(['operational', 'type', 'directionality']),
   visibleTypes: PropTypes.arrayOf(PropTypes.string),

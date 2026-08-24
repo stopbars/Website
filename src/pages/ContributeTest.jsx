@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
@@ -16,15 +16,19 @@ import {
   X,
   ExternalLink,
 } from 'lucide-react';
+import { getContributionDisabledMessage } from '../utils/contributionPolicy';
 import {
-  fetchContributionPolicy,
-  getContributionDisabledMessage,
-} from '../utils/contributionPolicy';
+  getCachedContributionAirport,
+  getCachedContributionPolicy,
+  loadContributionAirport,
+  loadContributionPolicy as loadContributionPolicyData,
+} from '../utils/contributionFlowData.js';
 import { draftHash } from '../features/contribution-editor/editor-model.js';
+import { preloadRoute } from '../utils/routeModules.js';
 
 const StableXMLMap = memo(XMLMap);
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/prefer-tag-over-role -- The test/upload workflow is cohesive; the composite drop zone contains nested content and a hidden file input, so it cannot validly become a native button. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/prefer-tag-over-role react-doctor/no-set-state-after-await-in-effect -- Async lookups own cancellation guards; the cohesive test/upload workflow and composite drop zone preserve established behavior. */
 const ContributeTest = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -39,6 +43,12 @@ const ContributeTest = () => {
   const incomingSimulator = location.state?.simulator === 'xplane' ? 'xplane' : undefined;
   const incomingDraftHash =
     typeof location.state?.draftHash === 'string' ? location.state.draftHash : '';
+  const incomingAirportName =
+    typeof location.state?.airportName === 'string' ? location.state.airportName : '';
+  const cachedAirport = getCachedContributionAirport(icao);
+  const cachedPolicy = getCachedContributionPolicy(icao);
+  const shouldAutoPrepare = location.state?.fromEditor === true && Boolean(incomingDraftXml);
+  const autoPrepareAttemptedRef = useRef(false);
   const [simulator, setSimulator] = useState(
     () => incomingSimulator ?? detectDraftSimulator(incomingDraftXml)
   );
@@ -66,25 +76,58 @@ const ContributeTest = () => {
   const [generationHash, setGenerationHash] = useState('');
   const [expectedDraftHash, setExpectedDraftHash] = useState(incomingDraftHash);
   const [showPolyLines, setShowPolyLines] = useState(false);
-  const [showRemoveAreas, setShowRemoveAreas] = useState(false);
+  const [removalView, setRemovalView] = useState('off');
   const [isDragActive, setIsDragActive] = useState(false);
-  const [contributionPolicy, setContributionPolicy] = useState(null);
+  const [contributionPolicy, setContributionPolicy] = useState(cachedPolicy);
+  const [policyChecked, setPolicyChecked] = useState(Boolean(cachedPolicy));
+  const [airportName, setAirportName] = useState(incomingAirportName || cachedAirport?.name || '');
   const contributionsDisabled =
     contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
   const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
+  const showRemoveAreas = removalView !== 'off';
 
   useEffect(() => {
+    if (cachedPolicy) return undefined;
+    let cancelled = false;
     const loadContributionPolicy = async () => {
       try {
-        const policy = await fetchContributionPolicy(icao);
-        setContributionPolicy(policy);
+        const policy = await loadContributionPolicyData(icao);
+        if (!cancelled) setContributionPolicy(policy);
       } catch (err) {
         console.error('Failed to load contribution policy:', err);
+      } finally {
+        if (!cancelled) setPolicyChecked(true);
       }
     };
 
     loadContributionPolicy();
-  }, [icao]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cachedPolicy, icao]);
+
+  useEffect(() => {
+    if (incomingAirportName || cachedAirport) return undefined;
+
+    let cancelled = false;
+    const loadAirportName = async () => {
+      try {
+        const airport = await loadContributionAirport(icao);
+        if (!cancelled && typeof airport?.name === 'string') {
+          setAirportName(airport.name);
+        }
+      } catch (err) {
+        console.error('Failed to load airport name:', err);
+      }
+    };
+
+    loadAirportName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cachedAirport, icao, incomingAirportName]);
 
   const processFile = (file) => {
     if (!file) {
@@ -96,6 +139,7 @@ const ContributeTest = () => {
       setContributionToken('');
       setSupportsXmlData('');
       setSimulator(incomingSimulator ?? 'msfs2024');
+      setRemovalView('off');
       return;
     }
 
@@ -152,7 +196,7 @@ const ContributeTest = () => {
       setSimulator(incomingSimulator ?? detectDraftSimulator(content));
       // Reset visualization toggles when new file is loaded
       setShowPolyLines(false);
-      setShowRemoveAreas(false);
+      setRemovalView('off');
     };
     reader.readAsText(file);
   };
@@ -185,7 +229,7 @@ const ContributeTest = () => {
     processFile(file);
   };
 
-  const handleTestXml = async () => {
+  const handleTestXml = useCallback(async () => {
     if (contributionsDisabled) {
       setErrorTitle('Contributions Disabled');
       setError(disabledContributionMessage);
@@ -283,12 +327,40 @@ const ContributeTest = () => {
     } finally {
       setIsValidating(false);
     }
-  };
+  }, [
+    contributionsDisabled,
+    disabledContributionMessage,
+    expectedDraftHash,
+    icao,
+    originalFileName,
+    originalXmlData,
+    selectedFile,
+    simulator,
+    xmlData,
+  ]);
+
+  useEffect(() => {
+    if (
+      !shouldAutoPrepare ||
+      !policyChecked ||
+      contributionsDisabled ||
+      autoPrepareAttemptedRef.current
+    ) {
+      return;
+    }
+
+    autoPrepareAttemptedRef.current = true;
+    void handleTestXml();
+  }, [contributionsDisabled, handleTestXml, policyChecked, shouldAutoPrepare]);
+
+  useEffect(() => {
+    if (isXmlTested) void preloadRoute(`/contribute/details/${icao}`);
+  }, [icao, isXmlTested]);
 
   const handleTogglePolyLines = () => {
     if (showRemoveAreas) {
       // Can't show both, so turn off remove areas if it's on
-      setShowRemoveAreas(false);
+      setRemovalView('off');
     }
     setShowPolyLines(!showPolyLines);
   };
@@ -298,7 +370,14 @@ const ContributeTest = () => {
       // Can't show both, so turn off poly lines if it's on
       setShowPolyLines(false);
     }
-    setShowRemoveAreas(!showRemoveAreas);
+    setRemovalView((current) => (current === 'areas' ? 'off' : 'areas'));
+  };
+
+  const handleToggleRemovalOutlines = () => {
+    if (showPolyLines) {
+      setShowPolyLines(false);
+    }
+    setRemovalView((current) => (current === 'outlines' ? 'off' : 'outlines'));
   };
 
   const handleOpenPilotClientTest = () => {
@@ -344,7 +423,7 @@ const ContributeTest = () => {
             current="test"
             title="Test contribution"
             icao={icao}
-            context={icao}
+            context={airportName ? `${icao} · ${airportName}` : icao}
           />
 
           {contributionsDisabled && (
@@ -368,6 +447,7 @@ const ContributeTest = () => {
                     height="500px"
                     showPolyLines={showPolyLines}
                     showRemoveAreas={showRemoveAreas}
+                    removeAreasStyle={removalView === 'outlines' ? 'outline' : 'fill'}
                   />
                 ) : (
                   <div className="h-125 flex items-center justify-center bg-zinc-800/30 rounded-lg">
@@ -381,7 +461,7 @@ const ContributeTest = () => {
             </div>
 
             <div className="space-y-6">
-              <Card className="p-6">
+              <Card className="p-6" aria-busy={isValidating}>
                 <h2 className="text-xl font-medium mb-4">Contribution draft</h2>
                 <label
                   htmlFor="contribution-draft-file"
@@ -475,11 +555,9 @@ const ContributeTest = () => {
               </Card>
 
               {isXmlTested ? (
-                <details className="rounded-xl border border-zinc-800 bg-zinc-900">
-                  <summary className="flex min-h-12 cursor-pointer items-center px-5 text-sm font-medium text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45">
-                    Preview options
-                  </summary>
-                  <div className="space-y-2 px-5 pb-5">
+                <Card className="p-5">
+                  <h2 className="mb-3 text-sm font-medium text-zinc-300">Preview options</h2>
+                  <div className="space-y-2">
                     <button
                       type="button"
                       onClick={handleTogglePolyLines}
@@ -506,33 +584,68 @@ const ContributeTest = () => {
                     </button>
 
                     {simulator !== 'xplane' && supportsXmlData ? (
-                      <button
-                        type="button"
-                        onClick={handleToggleRemoveAreas}
-                        aria-pressed={showRemoveAreas}
-                        className={`flex min-h-11 w-full items-center rounded-lg border px-3 transition-[background-color,border-color,color] ${
-                          showRemoveAreas
-                            ? 'border-blue-500/60 bg-blue-500/10'
-                            : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
-                        }`}
-                        title="Show remove areas that will hide default simulator lights"
-                      >
-                        <X className="h-4 w-4 text-zinc-400" aria-hidden="true" />
-                        <span className="ml-2.5 flex-1 text-left text-sm font-medium text-white">
-                          Removal areas
-                        </span>
-                        <span
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                            showRemoveAreas ? 'border-blue-500 bg-blue-500' : 'border-zinc-600'
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleToggleRemoveAreas}
+                          aria-pressed={removalView === 'areas'}
+                          className={`flex min-h-11 w-full items-center rounded-lg border px-3 transition-[background-color,border-color,color] ${
+                            removalView === 'areas'
+                              ? 'border-blue-500/60 bg-blue-500/10'
+                              : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
                           }`}
-                          aria-hidden="true"
+                          title="Show filled areas that will hide default simulator lights"
                         >
-                          {showRemoveAreas && <Check className="w-3.5 h-3.5 text-white" />}
-                        </span>
-                      </button>
+                          <X className="h-4 w-4 text-zinc-400" aria-hidden="true" />
+                          <span className="ml-2.5 flex-1 text-left text-sm font-medium text-white">
+                            Removal areas
+                          </span>
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                              removalView === 'areas'
+                                ? 'border-blue-500 bg-blue-500'
+                                : 'border-zinc-600'
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {removalView === 'areas' && (
+                              <Check className="w-3.5 h-3.5 text-white" />
+                            )}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleToggleRemovalOutlines}
+                          aria-pressed={removalView === 'outlines'}
+                          className={`flex min-h-11 w-full items-center rounded-lg border px-3 transition-[background-color,border-color,color] ${
+                            removalView === 'outlines'
+                              ? 'border-blue-500/60 bg-blue-500/10'
+                              : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
+                          }`}
+                          title="Show removal boundaries without filled areas"
+                        >
+                          <Spline className="h-4 w-4 text-zinc-400" aria-hidden="true" />
+                          <span className="ml-2.5 flex-1 text-left text-sm font-medium text-white">
+                            Removal outlines
+                          </span>
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                              removalView === 'outlines'
+                                ? 'border-blue-500 bg-blue-500'
+                                : 'border-zinc-600'
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {removalView === 'outlines' && (
+                              <Check className="w-3.5 h-3.5 text-white" />
+                            )}
+                          </span>
+                        </button>
+                      </>
                     ) : null}
                   </div>
-                </details>
+                </Card>
               ) : null}
 
               {/* Continue button */}

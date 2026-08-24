@@ -1,17 +1,21 @@
 import { useRef, useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
 import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
-import { ArrowRight, FileUp, Upload, Check, Loader, Search } from 'lucide-react';
+import { SubmissionSuccess } from '../components/contributions/SubmissionSuccess';
+import { FileUp, Upload, Check, Loader, Search } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getVatsimToken } from '../utils/cookieUtils';
+import { getContributionDisabledMessage } from '../utils/contributionPolicy';
 import {
-  fetchContributionPolicy,
-  getContributionDisabledMessage,
-} from '../utils/contributionPolicy';
+  getCachedContributionAirport,
+  getCachedContributionPolicy,
+  loadContributionAirport,
+  loadContributionPolicy,
+} from '../utils/contributionFlowData.js';
 import {
   contributionProofError,
   contributionSubmissionError,
@@ -21,18 +25,19 @@ import {
 /* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect -- File preloading, package suggestions, validation, and submission are a cohesive wizard; its guarded one-shot requests and ordered state transitions preserve navigation behavior. */
 const ContributeDetails = () => {
   const { icao } = useParams();
-  const navigate = useNavigate();
   const location = useLocation();
   const navigationState = location.state;
   const { user } = useAuth();
   const vatsimToken = getVatsimToken();
   const submissionProof = contributionSubmissionProof(navigationState);
+  const cachedAirport = getCachedContributionAirport(icao);
+  const cachedPolicy = getCachedContributionPolicy(icao);
 
   const [sceneryName, setSceneryName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [preloaded, setPreloaded] = useState(false);
-  const [airport, setAirport] = useState(null);
-  const [contributionPolicy, setContributionPolicy] = useState(null);
+  const [airport, setAirport] = useState(cachedAirport);
+  const [contributionPolicy, setContributionPolicy] = useState(cachedPolicy);
   const notesRef = useRef('');
   const sceneryInputRef = useRef(null);
   const simulatorGroupRef = useRef(null);
@@ -74,12 +79,13 @@ const ContributeDetails = () => {
 
   // Fetch airport information
   useEffect(() => {
+    if (cachedAirport && cachedPolicy) return undefined;
     let cancelled = false;
     const fetchAirport = async () => {
       try {
         const [responseResult, policyResult] = await Promise.allSettled([
-          fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
-          fetchContributionPolicy(icao),
+          cachedAirport ? Promise.resolve(cachedAirport) : loadContributionAirport(icao),
+          cachedPolicy ? Promise.resolve(cachedPolicy) : loadContributionPolicy(icao),
         ]);
 
         if (cancelled) return;
@@ -89,16 +95,8 @@ const ContributeDetails = () => {
           console.error('Error fetching contribution policy:', policyResult.reason);
         }
 
-        if (responseResult.status === 'fulfilled' && responseResult.value.ok) {
-          const response = responseResult.value;
-          const data = await response.json();
-          if (cancelled) return;
-          setAirport({
-            icao: data.icao,
-            name: data.name,
-            latitude: data.latitude,
-            longitude: data.longitude,
-          });
+        if (responseResult.status === 'fulfilled') {
+          setAirport(responseResult.value);
         }
       } catch (error) {
         console.error('Error fetching airport:', error);
@@ -109,7 +107,7 @@ const ContributeDetails = () => {
     return () => {
       cancelled = true;
     };
-  }, [icao]);
+  }, [cachedAirport, cachedPolicy, icao]);
 
   // Fetch top packages when component loads
   useEffect(() => {
@@ -298,27 +296,7 @@ const ContributeDetails = () => {
   };
 
   if (submissionSuccess) {
-    return (
-      <Layout>
-        <div className="min-h-screen pt-32 pb-20 flex items-center">
-          <div className="w-full max-w-3xl mx-auto px-6">
-            <Card className="p-8 text-center">
-              <div className="mx-auto w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
-                <Check className="w-8 h-8 text-emerald-500" />
-              </div>
-              <h1 className="mb-4 text-2xl font-bold">Contribution submitted</h1>
-              <p className="text-zinc-400 mb-8">Your {icao} contribution is ready for review.</p>
-              <div className="flex justify-center">
-                <Button onClick={() => navigate('/contribute')}>
-                  View contributions
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </Layout>
-    );
+    return <SubmissionSuccess icao={icao} />;
   }
 
   return (
@@ -412,7 +390,7 @@ const ContributeDetails = () => {
                         data-simulator="msfs2024"
                         onClick={() => setSimulator('msfs2024')}
                         onKeyDown={selectAdjacentSimulator}
-                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-200 ${
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ${
                           simulator === 'msfs2024'
                             ? 'border-blue-500 bg-blue-500/10 text-white'
                             : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -428,7 +406,7 @@ const ContributeDetails = () => {
                         data-simulator="msfs2020"
                         onClick={() => setSimulator('msfs2020')}
                         onKeyDown={selectAdjacentSimulator}
-                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-200 ${
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ${
                           simulator === 'msfs2020'
                             ? 'border-purple-500 bg-purple-500/10 text-white'
                             : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -444,7 +422,7 @@ const ContributeDetails = () => {
                         data-simulator="xplane"
                         onClick={() => setSimulator('xplane')}
                         onKeyDown={selectAdjacentSimulator}
-                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-200 ${
+                        className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ${
                           simulator === 'xplane'
                             ? 'border-emerald-500 bg-emerald-500/10 text-white'
                             : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'

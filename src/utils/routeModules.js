@@ -78,11 +78,22 @@ export const preloadRoute = (to) => {
   }
 
   if (/^\/divisions\/[^/]+\/manage\/?$/.test(pathname)) {
-    routeModules.divisionManagement();
-    return;
+    return routeModules.divisionManagement();
   }
 
   if (/^\/divisions\/[^/]+\/airports\//.test(pathname)) {
-    routeModules.divisionAirportManager();
+    return routeModules.divisionAirportManager();
   }
+
+  if (/^\/contribute\/map\/[^/]+\/?$/.test(pathname)) return routeModules.contributeMap();
+  if (/^\/contribute\/generator\/[^/]+\/?$/.test(pathname)) return routeModules.xmlGenerator();
+  if (/^\/contribute\/editor\/[^/]+\/?$/.test(pathname)) {
+    return routeModules.contributionEditor();
+  }
+  if (/^\/contribute\/test\/[^/]+\/?$/.test(pathname)) return routeModules.contributeTest();
+  if (/^\/contribute\/details\/[^/]+\/?$/.test(pathname)) {
+    return routeModules.contributeDetails();
+  }
+
+  return undefined;
 };

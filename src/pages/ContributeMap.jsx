@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
+import { PageLoading } from '../components/shared/PageLoading';
+import { RouteLink } from '../components/shared/RouteLink.jsx';
 import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
 import { AlertCircle, ArrowRight, CopyIcon, Info, Check, Layers } from 'lucide-react';
 import Map, {
@@ -14,10 +16,11 @@ import Map, {
   ScaleControl,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { getContributionDisabledMessage } from '../utils/contributionPolicy';
 import {
-  fetchContributionPolicy,
-  getContributionDisabledMessage,
-} from '../utils/contributionPolicy';
+  getCachedContributionContext,
+  loadContributionContext,
+} from '../utils/contributionFlowData.js';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -695,16 +698,17 @@ const INTERACTIVE_LAYER_IDS = [
 const CLICK_RADIUS_PX = 10;
 const TOUCH_RADIUS_PX = 14;
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect -- Map state, viewport, selection, and draft navigation share one MapLibre lifecycle; the request is a guarded route-load fetch. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally -- Map state, viewport, selection, and draft navigation share one MapLibre lifecycle; the request is guarded, and its loading flag is reset inside finally after the cancellation check. */
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
   const mapRef = useRef(null);
+  const cachedContext = useMemo(() => getCachedContributionContext(icao), [icao]);
 
-  const [loading, setLoading] = useState(true);
-  const [airport, setAirport] = useState(null);
-  const [points, setPoints] = useState([]);
-  const [contributionPolicy, setContributionPolicy] = useState(null);
+  const [loading, setLoading] = useState(() => !cachedContext);
+  const [airport, setAirport] = useState(() => cachedContext?.airport ?? null);
+  const [points, setPoints] = useState(() => cachedContext?.points ?? []);
+  const [contributionPolicy, setContributionPolicy] = useState(() => cachedContext?.policy ?? null);
   const [activePointId, setActivePointId] = useState(null);
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
@@ -716,75 +720,46 @@ const ContributeMap = () => {
   const owningDivisionLabel = contributionPolicy?.divisionName || 'the owning Division';
 
   useEffect(() => {
+    if (cachedContext) return undefined;
+    let cancelled = false;
     const fetchData = async () => {
       try {
         setLoading(true);
-
-        const pointsRequest = fetch(`https://v2.stopbars.com/airports/${icao}/points`);
-        const [airportResponse, policy] = await Promise.all([
-          fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
-          fetchContributionPolicy(icao),
-        ]);
-        if (!airportResponse.ok) {
-          throw new Error('Failed to fetch airport data');
-        }
-        const airportData = await airportResponse.json();
-        setContributionPolicy(policy);
-
-        setAirport({
-          icao: airportData.icao,
-          name: airportData.name,
-          latitude: airportData.latitude,
-          longitude: airportData.longitude,
-        });
+        const context = await loadContributionContext(icao);
+        if (cancelled) return;
+        setContributionPolicy(context.policy);
+        setAirport(context.airport);
+        setPoints(context.points);
 
         const hasBoundingBox =
-          typeof airportData.bbox_min_lat === 'number' &&
-          typeof airportData.bbox_min_lon === 'number' &&
-          typeof airportData.bbox_max_lat === 'number' &&
-          typeof airportData.bbox_max_lon === 'number';
+          typeof context.airport.bbox_min_lat === 'number' &&
+          typeof context.airport.bbox_min_lon === 'number' &&
+          typeof context.airport.bbox_max_lat === 'number' &&
+          typeof context.airport.bbox_max_lon === 'number';
 
         if (hasBoundingBox && mapRef.current) {
           mapRef.current.fitBounds(
             [
-              [airportData.bbox_min_lon, airportData.bbox_min_lat],
-              [airportData.bbox_max_lon, airportData.bbox_max_lat],
+              [context.airport.bbox_min_lon, context.airport.bbox_min_lat],
+              [context.airport.bbox_max_lon, context.airport.bbox_max_lat],
             ],
             { padding: 40 }
           );
         }
-
-        setLoading(false);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-
-        const pointsResponse = await pointsRequest;
-        if (!pointsResponse.ok) {
-          throw new Error('Failed to fetch points data');
-        }
-        const pointsData = await pointsResponse.json();
-        const transformedPoints = pointsData.map((point) => ({
-          id: point.id,
-          type: point.type,
-          name: point.name,
-          coordinates: point.coordinates,
-          directionality: point.directionality,
-          color: point.color || undefined,
-          elevated: point.elevated,
-          ihp: point.ihp,
-        }));
-
-        setPoints(transformedPoints);
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
         navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
-        return;
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchData();
-  }, [icao, navigate]);
+    return () => {
+      cancelled = true;
+    };
+  }, [cachedContext, icao, navigate]);
 
   const { markers, lowerLinesSource, upperLinesSource, lowerCapsSource, upperCapsSource } =
     useMemo(() => {
@@ -988,29 +963,7 @@ const ContributeMap = () => {
   }, [activePointId]);
 
   if (loading) {
-    return (
-      <Layout>
-        <div className="min-h-screen pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6" aria-busy="true">
-            <ContributionFlowHeader current="review" title="Review airport" icao={icao} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 h-150 rounded-lg border border-zinc-800 bg-zinc-900/50 animate-pulse" />
-              <div className="space-y-6">
-                <Card className="p-6 min-h-48 animate-pulse">
-                  <div className="h-6 w-36 rounded bg-zinc-800 mb-5" />
-                  <div className="space-y-3">
-                    <div className="h-4 w-full rounded bg-zinc-800" />
-                    <div className="h-4 w-4/5 rounded bg-zinc-800" />
-                    <div className="h-10 w-full rounded bg-zinc-800 mt-6" />
-                  </div>
-                </Card>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Layout>
-    );
+    return <PageLoading page variant="flow-map" label="Loading airport review…" />;
   }
 
   return (
@@ -1253,17 +1206,38 @@ const ContributeMap = () => {
               </div>
             </div>
 
-            <div className="space-y-6">
+            <aside aria-label="Contribution actions">
               <Card className="p-6">
-                <div>
-                  <p className="font-mono text-xs text-zinc-500">{airport.icao}</p>
-                  <h2 className="mt-1 text-xl font-semibold text-white">{airport.name}</h2>
-                  <p className="mt-2 font-mono text-xs text-zinc-500">
-                    {airport.latitude.toFixed(4)}, {airport.longitude.toFixed(4)}
-                  </p>
-                </div>
+                {contributionsDisabled ? (
+                  <div className="flex items-start gap-3" role="alert">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                    <div>
+                      <p className="text-sm text-amber-300">{disabledContributionMessage}</p>
+                      {import.meta.env.DEV ? (
+                        <p className="mt-1 text-xs text-amber-300/80">
+                          The draft generator remains available in local development.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : points.length === 0 ? (
+                  <div className="flex items-start gap-3" role="status">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                    <p className="text-sm text-amber-300">
+                      No airport lighting data is available from {owningDivisionLabel}. Check back
+                      later or contact the Division requesting this airport.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3" role="status">
+                    <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-400" />
+                    <p className="text-sm text-zinc-300">
+                      Review the current BARS layout, then create a draft for your scenery package.
+                    </p>
+                  </div>
+                )}
 
-                <Link
+                <RouteLink
                   to={draftGeneratorDisabled ? '#' : `/contribute/generator/${icao}`}
                   aria-disabled={draftGeneratorDisabled}
                   tabIndex={draftGeneratorDisabled ? -1 : undefined}
@@ -1278,49 +1252,18 @@ const ContributeMap = () => {
                 >
                   Create contribution draft
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
+                </RouteLink>
 
                 {points.length > 0 && !contributionsDisabled ? (
-                  <Link
+                  <RouteLink
                     to={`/contribute/test/${icao}`}
                     className="mx-auto mt-3 flex min-h-10 w-fit items-center justify-center rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
                   >
                     Skip to test
-                  </Link>
+                  </RouteLink>
                 ) : null}
               </Card>
-
-              {contributionsDisabled ? (
-                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
-                    {import.meta.env.DEV ? (
-                      <p className="mt-1 text-xs text-amber-300">
-                        The draft generator remains available in local development.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              ) : points.length === 0 ? (
-                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
-                  <p className="text-sm text-amber-400">
-                    This airport currently has no airport lighting data submitted by{' '}
-                    {owningDivisionLabel}. Please check back later, or contact the Division
-                    requesting this airport.
-                  </p>
-                </div>
-              ) : (
-                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
-                  <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
-                  <p className="text-sm text-blue-300">
-                    Existing BARS layout from {owningDivisionLabel}. Your draft will target one
-                    scenery package.
-                  </p>
-                </div>
-              )}
-            </div>
+            </aside>
           </div>
         </div>
       </div>
