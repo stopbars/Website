@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useId, useRef } from 'react';
+import { useEffect, useCallback, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { X, Loader } from 'lucide-react';
@@ -94,7 +94,7 @@ const DialogField = ({ field, colorScheme }) => {
     helperText,
   } = field;
 
-  const baseInputClasses = `w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 transition-[background-color,border-color,box-shadow,opacity] duration-150 ease-out focus:outline-none focus:ring-2 ${colorScheme.focusRing}`;
+  const baseInputClasses = `w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 transition-[background-color,border-color,box-shadow,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] focus:outline-none focus:ring-2 ${colorScheme.focusRing}`;
 
   return (
     <div className="space-y-2">
@@ -250,6 +250,8 @@ export const Dialog = ({
 }) => {
   const dialogRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
+  const [isRendered, setIsRendered] = useState(open);
+  const [isClosing, setIsClosing] = useState(false);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -319,12 +321,30 @@ export const Dialog = ({
 
   useEffect(() => {
     if (open) {
+      setIsRendered(true);
+      setIsClosing(false);
+      return undefined;
+    }
+
+    if (!isRendered) return undefined;
+
+    setIsClosing(true);
+    const closeTimer = window.setTimeout(() => {
+      setIsRendered(false);
+      setIsClosing(false);
+    }, 150);
+
+    return () => window.clearTimeout(closeTimer);
+  }, [isRendered, open]);
+
+  useEffect(() => {
+    if (isRendered) {
       previouslyFocusedRef.current = document.activeElement;
       const previousOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
 
       const timer = setTimeout(() => {
-        if (dialogRef.current && !dialogRef.current.contains(document.activeElement)) {
+        if (open && dialogRef.current && !dialogRef.current.contains(document.activeElement)) {
           dialogRef.current.focus();
         }
       }, 10);
@@ -335,42 +355,19 @@ export const Dialog = ({
         previouslyFocusedRef.current?.focus?.();
       };
     }
-  }, [open]);
+  }, [isRendered, open]);
 
-  if (!open) return null;
+  if (!isRendered) return null;
 
   const dialogContent = (
     // The backdrop owns pointer dismissal while the inner panel is the accessible dialog.
     // oxlint-disable-next-line react-doctor/no-noninteractive-element-interactions
     <div
       role="presentation"
-      className="fixed inset-0 z-50 flex min-h-dvh w-screen items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+      className={`${isClosing ? 'dialog-backdrop-exit' : 'dialog-backdrop-enter'} fixed inset-0 z-50 flex min-h-dvh w-screen items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm`}
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
-      style={{
-        animation: 'dialogBackdropIn 0.2s ease-out forwards',
-      }}
     >
-      <style>{`
-        @keyframes dialogBackdropIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        @keyframes dialogContentIn {
-          from {
-            opacity: 0;
-            transform: scale(0.95) translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
-        }
-      `}</style>
       <div
         ref={dialogRef}
         tabIndex={-1}
@@ -378,13 +375,10 @@ export const Dialog = ({
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descriptionId : undefined}
-        className={`my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto bg-zinc-900 rounded-xl ${DIALOG_MAX_WIDTH_CLASSES[maxWidth] || DIALOG_MAX_WIDTH_CLASSES.md} w-full border border-zinc-800 shadow-2xl shadow-black/30 focus:outline-none`}
-        style={{
-          animation: 'dialogContentIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        }}
+        className={`${isClosing ? 'dialog-content-exit' : 'dialog-content-enter'} my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto bg-zinc-900 rounded-xl ${DIALOG_MAX_WIDTH_CLASSES[maxWidth] || DIALOG_MAX_WIDTH_CLASSES.md} w-full border border-zinc-800 shadow-2xl shadow-black/30 focus:outline-none`}
       >
-        <div className="flex items-start justify-between p-6 pb-0">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between p-6 pb-0">
+          <div className="flex min-h-10 items-center space-x-3">
             {Icon && <Icon className={`w-6 h-6 ${iconColorScheme.icon} shrink-0`} />}
             {title && (
               <h3 id={titleId} className={`text-xl font-semibold ${titleColorScheme.title}`}>
@@ -397,7 +391,7 @@ export const Dialog = ({
               type="button"
               onClick={onClose}
               disabled={isLoading}
-              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1.5 text-zinc-500 transition-[background-color,color,transform,opacity] duration-150 ease-out hover:bg-zinc-800 hover:text-zinc-300 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1.5 text-zinc-500 transition-[background-color,color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-800 hover:text-zinc-300 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
               aria-label="Close dialog"
             >
               <X className="w-5 h-5" />
@@ -406,8 +400,8 @@ export const Dialog = ({
         </div>
 
         <div className="p-6">
-          {description && (
-            typeof description === 'string' ? (
+          {description &&
+            (typeof description === 'string' ? (
               <p id={descriptionId} className="text-zinc-300 mb-6">
                 {description}
               </p>
@@ -415,8 +409,7 @@ export const Dialog = ({
               <div id={descriptionId} className="mb-6 text-zinc-300">
                 {description}
               </div>
-            )
-          )}
+            ))}
 
           {children}
 

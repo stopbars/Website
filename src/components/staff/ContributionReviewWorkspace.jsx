@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect react-doctor/prefer-html-dialog react-doctor/js-set-map-lookups -- Review generation owns AbortController cleanup; the full-screen portal implements focus and modal semantics, and visibility lookup is a tiny bounded list. */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
@@ -209,7 +211,7 @@ const downloadXml = (xml, fileName) => {
 };
 
 const ReviewMetric = ({ value, label }) => (
-  <div className="min-w-0 rounded-lg bg-black/35 px-3 py-2 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+  <div className="min-w-0 rounded-lg bg-black/35 px-3 py-2 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]">
     <p className="text-lg font-semibold tabular-nums text-white">{value}</p>
     <p className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-500">
       {label}
@@ -227,10 +229,10 @@ const LayerToggle = ({ active, icon: Icon, label, detail, onClick }) => (
     type="button"
     aria-pressed={active}
     onClick={onClick}
-    className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
+    className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-[background-color,color,box-shadow,transform] duration-[var(--duration-quick)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
       active
-        ? 'bg-blue-500/12 text-white shadow-[inset_0_0_0_1px_rgba(59,130,246,0.28)]'
-        : 'bg-zinc-900/60 text-zinc-400 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] hover:bg-zinc-800/80 hover:text-zinc-200'
+        ? 'bg-blue-500/12 text-white shadow-[inset_0_0_0_1px_oklch(0.623_0.214_259.815/0.28)]'
+        : 'bg-zinc-900/60 text-zinc-400 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)] hover:bg-zinc-800/80 hover:text-zinc-200'
     }`}
   >
     <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-400' : ''}`} aria-hidden="true" />
@@ -521,7 +523,7 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
             />
           ) : (
             <div className="flex h-full min-h-[55dvh] items-center justify-center p-6 lg:min-h-0">
-              <div className="max-w-md rounded-xl bg-zinc-900/90 p-6 text-center shadow-[0_16px_48px_rgba(0,0,0,0.35),inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+              <div className="max-w-md rounded-xl bg-zinc-900/90 p-6 text-center shadow-[0_16px_48px_oklch(0_0_0/0.35),inset_0_0_0_1px_oklch(1_0_0/0.08)]">
                 {generationError ? (
                   <>
                     <AlertTriangle
@@ -551,7 +553,7 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
 
           {generatedFiles?.barsXml && (
             <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-center sm:inset-x-4">
-              <div className="pointer-events-auto grid w-full max-w-xl grid-cols-3 gap-1.5 rounded-xl bg-zinc-950/88 p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.35),inset_0_0_0_1px_rgba(255,255,255,0.1)] backdrop-blur-md">
+              <div className="pointer-events-auto grid w-full max-w-xl grid-cols-3 gap-1.5 rounded-xl bg-zinc-950/88 p-1.5 shadow-[0_16px_48px_oklch(0_0_0/0.35),inset_0_0_0_1px_oklch(1_0_0/0.1)] backdrop-blur-md">
                 <ReviewMetric value={summary.objectCount} label="Objects" />
                 <ReviewMetric value={summary.lightCount} label="Lights" />
                 <ReviewMetric value={summary.removeAreaCount} label="Removal areas" />
@@ -658,8 +660,8 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
                         onClick={() => toggleType(type)}
                         className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-medium transition-[background-color,color,box-shadow,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
                           active
-                            ? 'bg-zinc-800 text-zinc-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
-                            : 'bg-zinc-900 text-zinc-500 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]'
+                            ? 'bg-zinc-800 text-zinc-100 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.1)]'
+                            : 'bg-zinc-900 text-zinc-500 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.05)]'
                         }`}
                       >
                         <span
@@ -687,7 +689,7 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
               </div>
 
               {summary.issues.length > 0 && (
-                <div className="mt-3 rounded-lg bg-amber-500/8 p-3 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.2)]">
+                <div className="mt-3 rounded-lg bg-amber-500/8 p-3 shadow-[inset_0_0_0_1px_oklch(0.769_0.188_70.08/0.2)]">
                   <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
                     <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                     Check before deciding
@@ -789,7 +791,7 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
                     </button>
                   )}
                 </div>
-                <p className="mt-1 whitespace-pre-wrap rounded-lg bg-zinc-900/70 p-3 text-sm leading-6 text-zinc-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+                <p className="mt-1 whitespace-pre-wrap rounded-lg bg-zinc-900/70 p-3 text-sm leading-6 text-zinc-300 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]">
                   {contribution.notes || 'No notes provided.'}
                 </p>
               </div>
@@ -833,7 +835,7 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
 
           <section
             aria-labelledby="decision-heading"
-            className="shrink-0 border-t border-white/10 bg-zinc-950 p-4 shadow-[0_-16px_40px_rgba(0,0,0,0.24)] sm:p-5"
+            className="shrink-0 border-t border-white/10 bg-zinc-950 p-4 shadow-[0_-16px_40px_oklch(0_0_0/0.24)] sm:p-5"
           >
             <h3 id="decision-heading" className="text-sm font-semibold text-white">
               Decision
@@ -844,7 +846,7 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
               </p>
             )}
             {approveConfirmation ? (
-              <div className="mt-3 rounded-lg bg-emerald-500/8 p-3 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.22)]">
+              <div className="mt-3 rounded-lg bg-emerald-500/8 p-3 shadow-[inset_0_0_0_1px_oklch(0.696_0.17_162.48/0.22)]">
                 <p className="text-sm font-medium text-emerald-200">
                   Publish this contribution to BARS?
                 </p>

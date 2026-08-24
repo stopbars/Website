@@ -9,32 +9,32 @@ import DOMPurify from 'dompurify';
 const DISMISSED_NOTAM_KEY = 'dismissed-notam';
 const NOTAM_STYLES = {
   warning: {
-    banner: 'border-[#38270b] bg-[#21180b]',
+    banner: 'border-amber-900/70 bg-amber-950/60',
     text: 'text-amber-400',
     button: 'text-amber-300 hover:bg-amber-400/10 hover:text-amber-200',
   },
   info: {
-    banner: 'border-[#131f3a] bg-[#0e1523]',
+    banner: 'border-blue-900/70 bg-blue-950/60',
     text: 'text-blue-400',
     button: 'text-blue-300 hover:bg-blue-400/10 hover:text-blue-200',
   },
   discord: {
-    banner: 'border-[#1b1c39] bg-[#12121e]',
-    text: 'text-indigo-300',
-    button: 'text-indigo-300 hover:bg-indigo-400/10 hover:text-indigo-200',
+    banner: 'border-discord/30 bg-discord/10',
+    text: 'text-discord-text',
+    button: 'text-discord-text hover:bg-discord/10 hover:text-indigo-200',
   },
   success: {
-    banner: 'border-[#0a2c23] bg-[#0a1b17]',
+    banner: 'border-emerald-900/70 bg-emerald-950/60',
     text: 'text-emerald-400',
     button: 'text-emerald-300 hover:bg-emerald-400/10 hover:text-emerald-200',
   },
   error: {
-    banner: 'border-[#371516] bg-[#201012]',
+    banner: 'border-red-900/70 bg-red-950/60',
     text: 'text-red-400',
     button: 'text-red-300 hover:bg-red-400/10 hover:text-red-200',
   },
   default: {
-    banner: 'border-[#19191d] bg-[#141417]',
+    banner: 'border-zinc-800 bg-zinc-950/90',
     text: 'text-zinc-300',
     button: 'text-zinc-300 hover:bg-white/5 hover:text-white',
   },
@@ -63,7 +63,7 @@ const sanitizeNotamLinks = (content) => {
   // Add target="_blank" and rel="noopener noreferrer" for security
   const sanitizedContent = content.replace(
     linkRegex,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-150 hover:brightness-125">$1</a>'
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-[var(--duration-quick)] hover:brightness-125">$1</a>'
   );
 
   // Sanitize the content to prevent XSS attacks
@@ -83,9 +83,7 @@ export const Navbar = () => {
   const [notamContent, setNotamContent] = useState(cachedNotam.content);
   const [notamType, setNotamType] = useState(cachedNotam.type); // Types: "warning", "info", "discord", etc.
   const [showNotam, setShowNotam] = useState(() => {
-    return (
-      Boolean(cachedNotam.content) && !isNotamDismissed(cachedNotam.content, cachedNotam.type)
-    );
+    return Boolean(cachedNotam.content) && !isNotamDismissed(cachedNotam.content, cachedNotam.type);
   });
   const [authLoading, setAuthLoading] = useState(false);
   // Track when NOTAM state has been resolved to avoid initial border flash
@@ -188,7 +186,7 @@ export const Navbar = () => {
   };
 
   const mobileLinkClasses =
-    'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
+    'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-800/70 hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
 
   const notamVisible = Boolean(notamContent) && showNotam;
   const notamStyles = NOTAM_STYLES[notamType] || NOTAM_STYLES.default;
@@ -197,18 +195,18 @@ export const Navbar = () => {
     <header className="fixed inset-x-0 top-0 z-50">
       {/* Keeping the NOTAM and navbar in one stack lets the navbar reclaim its exact height. */}
       <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        className={`grid transition-[grid-template-rows] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
           notamVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
         aria-hidden={!notamVisible}
         inert={!notamVisible}
       >
         <div
-          className={`min-h-0 overflow-hidden transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          className={`min-h-0 overflow-hidden transition-[opacity,transform] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
             notamVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'
           }`}
         >
-          <div className={`border-b ${notamStyles.banner}`}>
+          <div className={`border-b backdrop-blur-md ${notamStyles.banner}`}>
             <div className="grid min-h-10 w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-center px-1">
               <span aria-hidden="true" />
               {notamContent && (
@@ -220,7 +218,7 @@ export const Navbar = () => {
               <button
                 type="button"
                 onClick={dismissNotam}
-                className={`inline-flex size-10 items-center justify-center justify-self-end rounded-md transition-[background-color,color,transform] duration-150 ease-out active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${notamStyles.button}`}
+                className={`inline-flex size-10 items-center justify-center justify-self-end rounded-md transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${notamStyles.button}`}
                 aria-label="Dismiss notice"
                 title="Dismiss notice"
               >
@@ -231,7 +229,7 @@ export const Navbar = () => {
         </div>
       </div>
       <nav
-        className={`w-full border-b transition-[background-color,border-color] duration-200 ease-out ${
+        className={`w-full border-b transition-[background-color,border-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] ${
           // Avoid showing the border until NOTAM state is initialized to prevent white flash
           scrolled || (notamInitialized && (!showNotam || !notamContent))
             ? 'border-zinc-800 bg-zinc-950/90 backdrop-blur-md'
@@ -318,7 +316,7 @@ export const Navbar = () => {
               <button
                 onClick={toggleMenu}
                 type="button"
-                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md p-2 text-zinc-400 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md p-2 text-zinc-400 transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-800/70 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 aria-controls="mobile-menu"
                 aria-expanded={mobileMenuOpen}
               >
@@ -334,10 +332,10 @@ export const Navbar = () => {
         </div>
         {/* Mobile menu, show/hide based on menu state with smooth animation */}
         <div
-          className={`md:hidden fixed inset-x-0 transform transition-[opacity,transform] duration-200 ease-out ${
+          className={`md:hidden fixed inset-x-0 transform transition-[filter,opacity,transform] ease-[var(--ease-smooth-out)] ${
             mobileMenuOpen
-              ? 'translate-y-0 opacity-100'
-              : '-translate-y-2 opacity-0 pointer-events-none'
+              ? 'translate-y-0 scale-100 blur-0 opacity-100 duration-[var(--duration-fast)]'
+              : '-translate-y-2 scale-[var(--scale-medium)] blur-[var(--blur-small)] opacity-0 pointer-events-none duration-[var(--duration-quick)]'
           }`}
           id="mobile-menu"
         >

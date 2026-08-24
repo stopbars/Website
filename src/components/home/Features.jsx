@@ -1,182 +1,74 @@
+import { Film } from 'lucide-react';
 import { useRef } from 'react';
 import { useRevealGroup } from '../../hooks/useRevealGroup';
+
+const FEATURES = [
+  {
+    title: 'Realistic controlled airport lighting',
+    className: 'sm:col-span-2 lg:col-span-8 lg:min-h-[31rem]',
+  },
+  {
+    title: 'Follow the Greens',
+    className: 'sm:col-span-1 lg:col-span-4 lg:min-h-[31rem]',
+  },
+  {
+    title: 'Live VATSIM control',
+    className: 'sm:col-span-1 lg:col-span-4',
+  },
+  {
+    title: 'MSFS and X-Plane',
+    className: 'sm:col-span-1 lg:col-span-4',
+  },
+  {
+    title: 'Default and add-on scenery',
+    className: 'sm:col-span-1 lg:col-span-4',
+  },
+];
 
 export const Features = () => {
   const sectionRef = useRef(null);
   useRevealGroup(sectionRef);
 
   return (
-    <section ref={sectionRef} className="py-16" id="features">
-      <div className="max-w-7xl mx-auto px-6">
-        {/* Section Header */}
-        <div className="text-center mb-20 max-w-2xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">Core Features</h2>
-          <p className="text-zinc-400 text-lg">
-            BARS brings advanced airport lighting simulation features to your flight simulator,
-            completely free and in real time with VATSIM.
-          </p>
+    <section ref={sectionRef} className="home-section" id="features">
+      <div className="home-shell">
+        <div className="home-section-header mx-auto max-w-2xl text-center">
+          <h2 className="home-section-title">Core features</h2>
         </div>
 
-        {/* Zigzag Features */}
-        <div className="space-y-40 mb-32 max-w-5xl mx-auto">
-          <div
-            data-reveal
-            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
-          >
-            <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl text-left font-bold">
-                Realistic Stopbar Simulation
-              </h3>
-              <p className="text-zinc-400 text-base leading-relaxed">
-                True-to-life stopbar lighting that mirrors real-world airports. Red illuminated
-                stopbars at runway holding points activate and deactivate as controllers issue
-                clearances.
-              </p>
-            </div>
-            <div className="flex-1 w-full">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg md:text-xl font-medium text-zinc-300">
-                    Stopbar Simulation Preview
+        <div
+          data-reveal
+          className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-800 sm:grid-cols-2 lg:grid-cols-12"
+        >
+          {FEATURES.map((feature) => (
+            <article
+              key={feature.title}
+              className={`group relative isolate min-h-[19rem] overflow-hidden bg-zinc-900 sm:min-h-[21rem] ${feature.className}`}
+            >
+              <div
+                className="feature-media pointer-events-none absolute inset-0"
+                aria-hidden="true"
+              >
+                <div className="absolute inset-0 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900 transition-transform duration-[var(--duration-slow)] ease-[var(--ease-smooth-out)] group-hover:scale-[1.015]" />
+                <div className="feature-media-grid absolute inset-0 opacity-30" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-400">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-zinc-950/25 backdrop-blur-sm">
+                    <Film className="h-5 w-5" strokeWidth={1.5} />
+                  </span>
+                  <span className="text-xs font-medium tracking-wide text-zinc-300">
+                    Media coming soon
                   </span>
                 </div>
+                <div className="absolute inset-0 bg-linear-to-t from-zinc-950/55 via-transparent to-white/[0.025]" />
               </div>
-            </div>
-          </div>
 
-          <div
-            data-reveal
-            className="deferred-content flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16"
-          >
-            <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">Follow The Greens</h3>
-              <p className="text-zinc-400 text-base leading-relaxed">
-                Navigate complex airports realistically by following the green centerline lights,
-                guiding you the entire way just like the real-world system used at major airports.
-              </p>
-            </div>
-            <div className="flex-1 w-full">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg md:text-xl font-medium text-zinc-300">
-                    Follow The Greens Preview
-                  </span>
-                </div>
+              <div className="feature-title-halo absolute bottom-0 left-0 z-10 p-6 sm:p-7">
+                <h3 className="relative z-10 text-lg font-semibold tracking-tight text-white sm:text-xl">
+                  {feature.title}
+                </h3>
               </div>
-            </div>
-          </div>
-
-          <div
-            data-reveal
-            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
-          >
-            <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">Lead-On Lights</h3>
-              <p className="text-zinc-400 text-base leading-relaxed">
-                Realistic lead-on lighting that guides you onto the runway after stopbars, modeled
-                with accurate light colors and positioning.
-              </p>
-            </div>
-            <div className="flex-1 w-full">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg md:text-xl font-medium text-zinc-300">
-                    Lead-On Lights Preview
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            data-reveal
-            className="deferred-content flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16"
-          >
-            <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">VATSIM Integration</h3>
-              <p className="text-zinc-400 text-base leading-relaxed">
-                Seamlessly connects with VATSIM for real-time lighting updates. Controllers manage
-                lights within your simulator in real time.
-              </p>
-            </div>
-            <div className="flex-1 w-full">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg md:text-xl font-medium text-zinc-300">
-                    VATSIM Integration Preview
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            data-reveal
-            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
-          >
-            <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">Multi-Simulator Support</h3>
-              <p className="text-zinc-400 text-base leading-relaxed">
-                Compatible with Microsoft Flight Simulator 2020 and 2024, and X-Plane 12. Designed
-                to remain lightweight for smooth performance, without impacting your frames.
-              </p>
-            </div>
-            <div className="flex-1 w-full">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg md:text-xl font-medium text-zinc-300">
-                    Multi-Simulator Preview
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            data-reveal
-            className="deferred-content flex flex-col lg:flex-row-reverse items-center gap-12 lg:gap-16"
-          >
-            <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">Global Airport Coverage</h3>
-              <p className="text-zinc-400 text-base leading-relaxed">
-                Extensive library of supported airports worldwide with support through community
-                contributions, seamlessly integrated with both default and major third-party
-                scenery.
-              </p>
-            </div>
-            <div className="flex-1 w-full">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg md:text-xl font-medium text-zinc-300">
-                    Global Coverage Preview
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            data-reveal
-            className="deferred-content flex flex-col lg:flex-row items-center gap-12 lg:gap-16"
-          >
-            <div className="flex-1 space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">Division Management</h3>
-              <p className="text-zinc-400 text-base leading-relaxed">
-                VATSIM Divisions have full control over airport lighting data for airports within
-                their jurisdiction, created and maintained through the Division Management System,
-                this data is then used to create scenery contributions.
-              </p>
-            </div>
-            <div className="flex-1 w-full">
-              <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lg md:text-xl font-medium text-zinc-300">
-                    Division Management Preview
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+            </article>
+          ))}
         </div>
       </div>
     </section>

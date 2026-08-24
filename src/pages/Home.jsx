@@ -11,19 +11,22 @@ import { useEffect } from 'react';
 const Home = () => {
   useEffect(() => {
     if (window.location.hash) {
-      const element = document.querySelector(window.location.hash);
-
-      if (element) element.scrollIntoView({ behavior: 'smooth' });
+      try {
+        const element = document.querySelector(window.location.hash);
+        if (element) element.scrollIntoView({ behavior: 'smooth' });
+      } catch {
+        // Ignore malformed hash selectors.
+      }
     }
   }, []);
   return (
     <Layout>
       <Hero />
-      <DonationBanner />
       <Features />
       <Airports />
       <Documentation />
       <FAQ />
+      <DonationBanner />
       <Support />
     </Layout>
   );

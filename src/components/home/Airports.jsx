@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ChevronRight,
-  CircleAlert,
-  Lightbulb,
-  MapPin,
-  Plane,
-  RefreshCw,
-  Users,
-} from 'lucide-react';
+import { ChevronRight, CircleAlert, MapPin, Plane, RefreshCw, Users } from 'lucide-react';
 import { Card } from '../shared/Card';
 import { PageLoading } from '../shared/PageLoading';
 import { RouteLink } from '../shared/RouteLink';
@@ -48,23 +40,20 @@ const getAirportContinent = (icao) => {
   }
 };
 
-const formatUpdatedTime = (date) =>
-  date?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
 const getStatusSimulatorLabel = (simulator) =>
   simulator?.trim().toLowerCase() === 'xplane' ? 'X-Plane 12' : getSimulatorLabel(simulator);
 
 const formatCount = (count, singular, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
 
-/* oxlint-disable react-doctor/no-fetch-in-effect react-doctor/no-set-state-after-await-in-effect react-doctor/no-giant-component react-doctor/prefer-useReducer -- The homepage preview keeps its coordinated loading, stale-data, retry, and polling states together; every owned request and timer is cleaned up. */
+/* oxlint-disable react-doctor/no-fetch-in-effect react-doctor/no-set-state-after-await-in-effect react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/prefer-tag-over-role -- The homepage preview keeps its coordinated loading, stale-data, retry, and polling states together; retryKey deliberately restarts the effect, the live error is a status message rather than form output, and every owned request and timer is cleaned up. */
 export const Airports = () => {
   const [airports, setAirports] = useState({});
   const [liveMap, setLiveMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [activityPending, setActivityPending] = useState(true);
   const [refreshError, setRefreshError] = useState('');
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [hasLiveData, setHasLiveData] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
@@ -76,7 +65,7 @@ export const Airports = () => {
     const fetchData = async () => {
       controller = new AbortController();
       let timedOut = false;
-      requestTimeout = setTimeout(() => {
+      requestTimeout = window.setTimeout(() => {
         timedOut = true;
         controller.abort();
       }, REQUEST_TIMEOUT_MS);
@@ -141,12 +130,11 @@ export const Airports = () => {
           nextLiveMap[icao] = {
             controllers: (state.controllers || []).length,
             pilots: (state.pilots || []).length,
-            lightsOn: (state.objects || []).filter((object) => object.state === true).length,
           };
         });
 
         setLiveMap(nextLiveMap);
-        setLastUpdated(new Date());
+        setHasLiveData(true);
         setRefreshError('');
         setActivityPending(false);
       } catch (error) {
@@ -159,10 +147,10 @@ export const Airports = () => {
           setActivityPending(false);
         }
       } finally {
-        clearTimeout(requestTimeout);
+        window.clearTimeout(requestTimeout);
         if (active) {
           setLoading(false);
-          refreshTimer = setTimeout(fetchData, REFRESH_INTERVAL_MS);
+          refreshTimer = window.setTimeout(fetchData, REFRESH_INTERVAL_MS);
         }
       }
     };
@@ -171,8 +159,8 @@ export const Airports = () => {
 
     return () => {
       active = false;
-      clearTimeout(refreshTimer);
-      clearTimeout(requestTimeout);
+      window.clearTimeout(refreshTimer);
+      window.clearTimeout(requestTimeout);
       controller?.abort();
     };
   }, [retryKey]);
@@ -189,49 +177,44 @@ export const Airports = () => {
   );
 
   const previewAirports = sortedAirports.slice(0, ITEMS_PREVIEWED);
-  const activeAirportCount = sortedAirports.filter(([icao]) => Boolean(liveMap[icao])).length;
-  const hasLastKnownData = lastUpdated !== null;
+  const totalConnections = sortedAirports.reduce((total, [icao]) => {
+    const status = liveMap[icao];
+    return total + (status?.controllers || 0) + (status?.pilots || 0);
+  }, 0);
 
   return (
-    <section className="deferred-section bg-zinc-900/50 py-24" id="status">
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="mb-8 flex flex-col gap-5 sm:mb-12 sm:flex-row sm:items-end sm:justify-between">
+    <section className="deferred-section home-section home-section-band" id="status">
+      <div className="home-shell">
+        <div className="home-section-header flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-3">
-              <h2 className="text-3xl font-bold">Live airport activity</h2>
+              <h2 className="home-section-title">Live airport activity</h2>
               {!loading && (
                 <div className="inline-flex min-h-8 items-center gap-2 rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300">
                   <span
-                    className={`h-2 w-2 rounded-full ${refreshError ? 'bg-red-400' : activeAirportCount > 0 ? 'bg-emerald-400' : 'bg-zinc-500'}`}
+                    className={`h-2 w-2 rounded-full ${refreshError ? 'bg-red-400' : totalConnections > 0 ? 'bg-emerald-400' : 'bg-zinc-500'}`}
                     aria-hidden="true"
                   />
                   {activityPending
                     ? 'Checking live activity…'
                     : refreshError
                       ? 'Refresh delayed'
-                      : activeAirportCount > 0
-                        ? `${activeAirportCount} active now`
-                        : 'No airports active right now'}
+                      : formatCount(totalConnections, 'live connection')}
                 </div>
               )}
             </div>
-            <p className="text-sm text-zinc-300 sm:text-base">
+            <p className="home-section-copy">
               See where pilots and controllers are currently connected to BARS.
             </p>
-            {!loading && lastUpdated && (
-              <p className="mt-2 text-xs text-zinc-500">
-                Updated {formatUpdatedTime(lastUpdated)} · Refreshes 15 seconds after each check
-              </p>
-            )}
           </div>
 
           <RouteLink
             to="/status"
-            className="group inline-flex min-h-11 items-center gap-1.5 self-start rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 font-medium text-zinc-100 transition-[background-color,border-color,color] duration-150 hover:border-zinc-600 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:self-auto"
+            className="group inline-flex min-h-11 items-center gap-1.5 self-start rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 font-medium text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:self-auto"
           >
             View all airport activity
             <ChevronRight
-              className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5"
+              className="h-4 w-4 transition-transform duration-[var(--duration-quick)] group-hover:translate-x-0.5"
               aria-hidden="true"
             />
           </RouteLink>
@@ -252,19 +235,19 @@ export const Airports = () => {
                     aria-hidden="true"
                   />
                   <p className="text-red-100">
-                    {hasLastKnownData
-                      ? `${refreshError} Showing the last update from ${formatUpdatedTime(lastUpdated)}.`
+                    {hasLiveData
+                      ? `${refreshError} Showing the last known activity.`
                       : `${refreshError} Live activity is temporarily unavailable.`}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    setLoading(!hasLastKnownData);
-                    if (!hasLastKnownData) setActivityPending(true);
+                    setLoading(!hasLiveData);
+                    if (!hasLiveData) setActivityPending(true);
                     setRetryKey((key) => key + 1);
                   }}
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 self-start rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-2 font-medium text-red-100 transition-colors duration-150 hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/50 sm:self-auto"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 self-start rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-2 font-medium text-red-100 transition-colors duration-[var(--duration-quick)] hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/50 sm:self-auto"
                 >
                   <RefreshCw className="h-4 w-4" aria-hidden="true" />
                   Retry
@@ -279,7 +262,7 @@ export const Airports = () => {
                   return (
                     <Card
                       key={icao}
-                      className="p-4 transition-[border-color] duration-150 hover:border-zinc-700 sm:p-6"
+                      className="home-panel p-4 transition-[border-color] duration-[var(--duration-quick)] hover:border-zinc-700 sm:p-6"
                     >
                       <div className="mb-5 flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
@@ -326,12 +309,6 @@ export const Airports = () => {
                             <Plane className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                             {formatCount(liveState?.pilots || 0, 'pilot')}
                           </div>
-                          {liveState && (
-                            <div className="col-span-2 flex items-center gap-2 text-zinc-400">
-                              <Lightbulb className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                              {formatCount(liveState.lightsOn, 'light')} illuminated
-                            </div>
-                          )}
                         </div>
 
                         {data.scenery?.length > 0 && (
@@ -359,7 +336,7 @@ export const Airports = () => {
               </div>
             ) : (
               !refreshError && (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-center">
+                <div className="home-panel p-6 text-center">
                   <p className="font-medium text-zinc-200">No supported airports are listed yet.</p>
                   <p className="mt-1 text-sm text-zinc-400">
                     Add support for an airport or scenery package through the contribution flow.
@@ -367,15 +344,6 @@ export const Airports = () => {
                 </div>
               )
             )}
-
-            <div className="mt-8 flex justify-center">
-              <RouteLink
-                to="/contribute"
-                className="rounded text-sm font-medium text-zinc-400 underline decoration-zinc-600 underline-offset-4 transition-colors duration-150 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-              >
-                Airport or scenery missing? Contribute support
-              </RouteLink>
-            </div>
           </>
         )}
       </div>

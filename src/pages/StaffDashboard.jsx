@@ -143,7 +143,7 @@ const TABS = {
 // The dashboard coordinates a small, fixed tab registry; splitting it or replacing bounded
 // filter/map passes would add complexity without changing user-visible performance. The slow
 // status pulse matches the footer's deliberately ambient health indicator.
-// oxlint-disable react-doctor/no-giant-component react-doctor/js-combine-iterations react-doctor/no-chain-state-updates react-doctor/no-long-transition-duration
+// oxlint-disable react-doctor/no-giant-component react-doctor/js-combine-iterations react-doctor/no-chain-state-updates react-doctor/no-long-transition-duration react-doctor/no-set-state-after-await-in-effect -- Staff requests use AbortController and active guards before post-await updates.
 const StaffDashboard = () => {
   const [staffRoles, setStaffRoles] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -172,6 +172,7 @@ const StaffDashboard = () => {
         const response = await fetch('https://v2.stopbars.com/health', {
           signal: activeController.signal,
         });
+        if (!response.ok) throw new Error(`Health request failed (${response.status})`);
         const data = await response.json();
         const services = Object.values(data);
         const okCount = services.filter((status) => status === 'ok').length;
@@ -412,15 +413,7 @@ const StaffDashboard = () => {
                 <span>Status</span>
                 <span className="relative mt-0.5 h-2.5 w-2.5 shrink-0">
                   <span
-                    className={`block h-2.5 w-2.5 rounded-full ${statusColor} transition-colors duration-300`}
-                  />
-                  <span
-                    className={`absolute inset-0 h-2.5 w-2.5 rounded-full ${statusColor} animate-pulse opacity-50`}
-                    style={{ animationDuration: '3s' }}
-                  />
-                  <span
-                    className={`absolute -inset-0.5 h-3.5 w-3.5 rounded-full ${statusColor} animate-ping opacity-20`}
-                    style={{ animationDuration: '3s' }}
+                    className={`block h-2.5 w-2.5 rounded-full ${statusColor} shadow-[0_0_0_3px_oklch(1_0_0/0.04)] transition-colors duration-[var(--duration-quick)]`}
                   />
                 </span>
               </a>
@@ -428,7 +421,7 @@ const StaffDashboard = () => {
                 type="button"
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border transition-colors duration-150 ${refreshing ? 'border-blue-500/30 bg-blue-500/15 text-blue-300' : 'border-transparent bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'}`}
+                className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border transition-colors duration-[var(--duration-quick)] ${refreshing ? 'border-blue-500/30 bg-blue-500/15 text-blue-300' : 'border-transparent bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'}`}
                 aria-label="Refresh current tool"
               >
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -500,7 +493,7 @@ const StaffDashboard = () => {
                                   return params;
                                 });
                               }}
-                              className={`w-full flex items-center space-x-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150 ${
+                              className={`w-full flex items-center space-x-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-[var(--duration-quick)] ${
                                 isActive
                                   ? 'border-blue-500/25 bg-blue-500/12 text-blue-200'
                                   : 'border-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-white'
@@ -556,7 +549,7 @@ const StaffDashboard = () => {
                                   return params;
                                 });
                               }}
-                              className={`w-full flex items-center space-x-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150 ${
+                              className={`w-full flex items-center space-x-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-[var(--duration-quick)] ${
                                 isActive
                                   ? 'border-blue-500/25 bg-blue-500/12 text-blue-200'
                                   : 'border-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-white'
@@ -596,7 +589,7 @@ const StaffDashboard = () => {
                                   return params;
                                 });
                               }}
-                              className={`w-full flex items-center space-x-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150 ${
+                              className={`w-full flex items-center space-x-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-[var(--duration-quick)] ${
                                 isActive
                                   ? 'border-blue-500/25 bg-blue-500/12 text-blue-200'
                                   : 'border-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-white'
@@ -634,6 +627,6 @@ const StaffDashboard = () => {
     </Layout>
   );
 };
-// oxlint-enable react-doctor/no-giant-component react-doctor/js-combine-iterations react-doctor/no-chain-state-updates react-doctor/no-long-transition-duration
+// oxlint-enable react-doctor/no-giant-component react-doctor/js-combine-iterations react-doctor/no-chain-state-updates react-doctor/no-long-transition-duration react-doctor/no-set-state-after-await-in-effect
 
 export default StaffDashboard;

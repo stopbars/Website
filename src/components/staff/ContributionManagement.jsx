@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect -- The one-shot review generation is guarded by isGeneratingRef and belongs to the mounted review modal. */
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
@@ -376,29 +378,29 @@ export const LegacyContributionReviewModal = ({
         {/* Stepper */}
         <div className="flex items-center mb-6">
           <div
-            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-300
+            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-[var(--duration-fast)]
           ${step >= 1 ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}
           >
             1
           </div>
           <div className="flex-1 h-0.5 mx-3 bg-zinc-800 rounded-full overflow-hidden">
             <div
-              className={`h-full bg-blue-500 transition-all duration-300 ${step >= 2 ? 'w-full' : 'w-0'}`}
+              className={`h-full bg-blue-500 transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth-out)] ${step >= 2 ? 'w-full' : 'w-0'}`}
             />
           </div>
           <div
-            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-300
+            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-[var(--duration-fast)]
           ${step >= 2 ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}
           >
             2
           </div>
           <div className="flex-1 h-0.5 mx-3 bg-zinc-800 rounded-full overflow-hidden">
             <div
-              className={`h-full bg-blue-500 transition-all duration-300 ${step >= 3 ? 'w-full' : 'w-0'}`}
+              className={`h-full bg-blue-500 transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth-out)] ${step >= 3 ? 'w-full' : 'w-0'}`}
             />
           </div>
           <div
-            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-300
+            className={`flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors duration-[var(--duration-fast)]
           ${step >= 3 ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}
           >
             3
@@ -879,7 +881,7 @@ const ContributionManagement = () => {
               {paginatedContributions.map((contribution) => (
                 <Card
                   key={contribution.id}
-                  className={`bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-all duration-200 cursor-pointer ${
+                  className={`bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] cursor-pointer ${
                     selectedContribution?.id === contribution.id ? 'border-blue-500' : ''
                   }`}
                   onClick={() => handleReview(contribution)}

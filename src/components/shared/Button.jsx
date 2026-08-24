@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types';
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-white text-black hover:bg-gray-100 border-transparent active:bg-gray-200',
+  primary: 'bg-white text-black hover:bg-zinc-100 border-transparent active:bg-zinc-200',
   secondary: 'bg-zinc-700 text-white hover:bg-zinc-600 border-transparent active:bg-zinc-500',
   outline:
     'bg-zinc-800/50 border-zinc-700/50 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 active:bg-zinc-700',
@@ -16,7 +16,7 @@ export const Button = ({
   ...props
 }) => {
   const baseStyles =
-    'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-6 py-3 text-center font-medium cursor-pointer select-none whitespace-normal transition-[background-color,border-color,color,transform,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:pointer-events-none disabled:opacity-50';
+    'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-6 py-3 text-center font-medium cursor-pointer select-none whitespace-normal transition-[background-color,border-color,color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-smooth-out)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:pointer-events-none disabled:opacity-50';
   return (
     <button
       type={type}

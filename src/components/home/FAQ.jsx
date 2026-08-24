@@ -26,7 +26,7 @@ export const FAQ = () => {
       } catch (err) {
         if (err.name === 'AbortError') return;
         console.error('Error fetching FAQs:', err);
-        setError('Failed to load FAQs');
+        setError('FAQs could not be loaded. Refresh the page to try again.');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -37,65 +37,64 @@ export const FAQ = () => {
   }, []);
 
   return (
-    <section className="deferred-section py-24 bg-zinc-900/50" id="faq">
-      <div className="max-w-3xl mx-auto px-6">
-        <div className="flex items-center justify-between mb-12">
-          <h2 className="text-3xl font-bold">Frequently Asked Questions</h2>
-        </div>
-
-        {error ? (
-          <div className="text-red-500 text-center p-8 bg-red-500/10 rounded-lg border border-red-500/20">
-            {error}
+    <section className="deferred-section home-section home-section-band" id="faq">
+      <div className="home-shell">
+        <div className="mx-auto max-w-3xl">
+          <div className="home-section-header text-center">
+            <h2 className="home-section-title">Frequently asked questions</h2>
           </div>
-        ) : loading ? (
-          <PageLoading label="Loading FAQs…" variant="faq-list" />
-        ) : (
-          <>
-            <div className="space-y-4 mb-12">
-              {faqs.map((faq, index) => (
-                <div
-                  key={faq.id}
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                    aria-expanded={openFaq === index}
-                    aria-controls={`faq-panel-${faq.id}`}
-                    className="w-full px-6 py-4 text-left flex justify-between cursor-pointer items-center hover:bg-zinc-800/40 transition-colors duration-200"
-                  >
-                    <span className="font-medium pr-6">{faq.question}</span>
-                    <Plus
-                      className={`h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${openFaq === index ? 'rotate-45' : 'rotate-0'}`}
-                      aria-hidden="true"
-                    />
-                  </button>
-                  <div
-                    id={`faq-panel-${faq.id}`}
-                    className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                      openFaq === index
-                        ? 'grid-rows-[1fr] opacity-100'
-                        : 'grid-rows-[0fr] opacity-0'
-                    }`}
-                  >
-                    <div className="min-h-0 overflow-hidden">
-                      <div className="border-t border-zinc-800 px-6 pb-4 text-zinc-400">
-                        <div className="pt-4">{faq.answer}</div>
+
+          {error ? (
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-8 text-center text-red-300">
+              {error}
+            </div>
+          ) : loading ? (
+            <PageLoading label="Loading FAQs…" variant="faq-list" />
+          ) : (
+            <>
+              <div className="mb-10 space-y-4">
+                {faqs.map((faq, index) => (
+                  <div key={faq.id} className="home-panel overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                      aria-expanded={openFaq === index}
+                      aria-controls={`faq-panel-${faq.id}`}
+                      className="flex w-full cursor-pointer items-center justify-between px-6 py-5 text-left transition-colors duration-[var(--duration-quick)] hover:bg-zinc-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45"
+                    >
+                      <span className="pr-6 font-medium">{faq.question}</span>
+                      <Plus
+                        className={`h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${openFaq === index ? 'rotate-45' : 'rotate-0'}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    <div
+                      id={`faq-panel-${faq.id}`}
+                      className={`grid transition-[grid-template-rows,opacity] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
+                        openFaq === index
+                          ? 'grid-rows-[1fr] opacity-100'
+                          : 'grid-rows-[0fr] opacity-0'
+                      }`}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="border-t border-zinc-800 px-6 pb-5 leading-relaxed text-zinc-400">
+                          <div className="pt-5">{faq.answer}</div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            <div className="text-center">
-              <Button variant="secondary" onClick={() => navigate('/faq')} className="group">
-                View All FAQs
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </div>
-          </>
-        )}
+              <div className="text-center">
+                <Button variant="secondary" onClick={() => navigate('/faq')} className="group">
+                  View all FAQs
+                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </section>
   );

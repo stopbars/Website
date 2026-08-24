@@ -345,7 +345,7 @@ const UserManagement = () => {
               placeholder="Search users..."
               value={searchTerm}
               onChange={handleSearch}
-              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-all"
+              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
             />
           </div>
         </div>
@@ -367,7 +367,7 @@ const UserManagement = () => {
               {paginatedUsers.map((user) => (
                 <Card
                   key={user.id}
-                  className="flex min-h-80 flex-col p-5 transition-all duration-200 hover:border-zinc-600/50 hover:bg-zinc-800/30 md:h-80"
+                  className="flex min-h-80 flex-col p-5 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] hover:border-zinc-600/50 hover:bg-zinc-800/30 md:h-80"
                 >
                   <div className="flex h-full flex-1 flex-col gap-4">
                     {/* User Header */}
@@ -426,7 +426,7 @@ const UserManagement = () => {
                               handleCopyEmail(user.id, user.email);
                             }
                           }}
-                          className={`min-w-0 truncate cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedEmail === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                          className={`min-w-0 truncate cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-[var(--duration-quick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedEmail === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
                         >
                           {user.email}
                         </button>
@@ -444,7 +444,7 @@ const UserManagement = () => {
                                 handleCopyCid(user.id, user.vatsim_id);
                               }
                             }}
-                            className={`cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedCid === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                            className={`cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-[var(--duration-quick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedCid === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
                           >
                             {user.vatsim_id}
                           </button>

@@ -57,7 +57,7 @@ const renderMarkdown = (markdown) => {
 };
 
 // This page is a cohesive timeline; splitting it is a non-mechanical layout refactor.
-// oxlint-disable react-doctor/no-giant-component
+// oxlint-disable react-doctor/no-giant-component react-doctor/no-loading-flag-reset-outside-finally -- The abort guard prevents stale resets and loading is cleared from finally.
 const Changelog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentFilterParam = (searchParams.get(FILTER_PARAM) || '').toLowerCase();
@@ -202,19 +202,19 @@ const Changelog = () => {
           margin-bottom: 1.5rem !important;
         }
         .markdown-preview li {
-          color: rgb(212 212 216) !important;
+          color: var(--color-text-secondary) !important;
           margin-bottom: 0.5rem !important;
         }
         .markdown-preview code {
-          background-color: rgb(39 39 42) !important;
-          color: rgb(212 212 216) !important;
+          background-color: var(--color-bg-surface-raised) !important;
+          color: var(--color-text-secondary) !important;
           padding: 0.125rem 0.5rem !important;
           border-radius: 0.25rem !important;
           font-size: 0.875rem !important;
           font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace !important;
         }
         .markdown-preview p {
-          color: rgb(212 212 216) !important;
+          color: var(--color-text-secondary) !important;
           margin-bottom: 1rem !important;
         }
         .markdown-preview strong {
@@ -298,18 +298,12 @@ const Changelog = () => {
                     >
                       <div className="relative">
                         <div
-                          className={`timeline-dot w-3.5 h-3.5 ${index === 0 ? 'bg-green-500' : 'bg-zinc-600'} rounded-full border-2 border-zinc-900 shadow-lg transition-colors duration-300`}
+                          className={`timeline-dot h-3.5 w-3.5 ${index === 0 ? 'bg-green-500 shadow-[0_0_0_3px_oklch(0.696_0.17_162.48/0.14)]' : 'bg-zinc-600'} rounded-full border-2 border-zinc-900 transition-colors duration-[var(--duration-quick)]`}
                         ></div>
-                        {index === 0 && (
-                          <div
-                            className="absolute -inset-0.5 w-4.5 h-4.5 bg-green-500 rounded-full animate-ping opacity-15"
-                            style={{ animationDuration: '4s' }}
-                          ></div>
-                        )}
                         {/* Timeline line connecting to next release */}
                         {index < filteredReleases.length - 1 && (
                           <div
-                            className="absolute left-1.75 w-px bg-zinc-800 transition-[height] duration-300 ease-out"
+                            className="absolute left-1.75 w-px bg-zinc-800 transition-[height] duration-[var(--duration-slow)] ease-[var(--ease-smooth-out)]"
                             style={{
                               top: '14px',
                               height: lineHeights[index] || 0,
@@ -377,6 +371,6 @@ const Changelog = () => {
     </Layout>
   );
 };
-// oxlint-enable react-doctor/no-giant-component
+// oxlint-enable react-doctor/no-giant-component react-doctor/no-loading-flag-reset-outside-finally
 
 export default Changelog;

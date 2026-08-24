@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-async-event-handler-without-reentry-guard -- Publishing state is set before awaiting and disables the publishing control. */
+
 import { useState, useEffect } from 'react';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
@@ -369,7 +371,7 @@ const FAQManagement = () => {
           <button
             type="button"
             onClick={() => setIsAdding(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
           >
             <Plus className="w-4 h-4" />
             Add FAQ
@@ -403,7 +405,7 @@ const FAQManagement = () => {
                   type="text"
                   value={newFaq.question}
                   onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
-                  className="w-full px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                  className="w-full px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                   placeholder="Enter the FAQ question..."
                 />
               </div>
@@ -421,7 +423,7 @@ const FAQManagement = () => {
                   id="new-faq-answer"
                   value={newFaq.answer}
                   onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
-                  className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                  className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                   placeholder="Enter the FAQ answer..."
                 />
               </div>
@@ -432,7 +434,7 @@ const FAQManagement = () => {
                   type="button"
                   onClick={handleAddFaq}
                   disabled={!newFaq.question.trim() || !newFaq.answer.trim() || isPublishing}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] font-medium text-sm"
                 >
                   {isPublishing ? (
                     <>
@@ -453,7 +455,7 @@ const FAQManagement = () => {
                     setNewFaq({ question: '', answer: '' });
                   }}
                   disabled={isPublishing}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] text-sm"
                 >
                   <X className="w-4 h-4" />
                   Cancel
@@ -479,7 +481,7 @@ const FAQManagement = () => {
             {faqs.map((faq, index) => (
               <div
                 key={faq.id}
-                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700/50 transition-all"
+                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700/50 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
               >
                 {editingFaq === faq.id ? (
                   // Edit Mode
@@ -505,7 +507,7 @@ const FAQManagement = () => {
                         type="text"
                         value={editForm.question}
                         onChange={(e) => setEditForm({ ...editForm, question: e.target.value })}
-                        className="w-full px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                        className="w-full px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                       />
                     </div>
 
@@ -522,7 +524,7 @@ const FAQManagement = () => {
                         id="edit-faq-answer"
                         value={editForm.answer}
                         onChange={(e) => setEditForm({ ...editForm, answer: e.target.value })}
-                        className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                        className="w-full h-32 px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                       />
                     </div>
 
@@ -537,7 +539,7 @@ const FAQManagement = () => {
                           !hasEditChanges() ||
                           isSaving
                         }
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] font-medium text-sm"
                       >
                         {isSaving ? (
                           <>
@@ -559,7 +561,7 @@ const FAQManagement = () => {
                           setOriginalEditForm({ question: '', answer: '' });
                         }}
                         disabled={isSaving}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] text-sm"
                       >
                         <X className="w-4 h-4" />
                         Cancel

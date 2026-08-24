@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect react-doctor/no-async-event-handler-without-reentry-guard -- Best-effort hint loading is mount-only; mutating controls set and render busy state before awaiting. */
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
@@ -582,19 +584,19 @@ const ReleaseManagement = () => {
             e.stopPropagation();
             setIsOpen(!isOpen);
           }}
-          className="flex items-center justify-between w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750"
+          className="flex items-center justify-between w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-750"
         >
-          <span className="transition-colors duration-200">
+          <span className="transition-colors duration-[var(--duration-quick)]">
             {currentOption?.label || currentProduct}
           </span>
           <ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 transition-transform duration-[var(--duration-quick)] ${isOpen ? 'rotate-180' : ''}`}
           />
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
-            {PRODUCT_OPTIONS.map((option, index) => (
+          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]">
+            {PRODUCT_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -609,15 +611,11 @@ const ReleaseManagement = () => {
                   setIsOpen(false);
                   setUploadError(''); // Clear any validation errors when changing product
                 }}
-                className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
+                className={`w-full px-4 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] ${
                   currentProduct === option.value
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'
                 }`}
-                style={{
-                  animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both',
-                }}
               >
                 {option.label}
               </button>
@@ -642,19 +640,19 @@ const ReleaseManagement = () => {
             e.stopPropagation();
             setIsOpen(!isOpen);
           }}
-          className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-750 text-sm min-w-45"
+          className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-white transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-750 text-sm min-w-45"
         >
-          <span className="transition-colors duration-200">
+          <span className="transition-colors duration-[var(--duration-quick)]">
             {currentOption?.label || 'All Products'}
           </span>
           <ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 transition-transform duration-[var(--duration-quick)] ${isOpen ? 'rotate-180' : ''}`}
           />
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-200">
-            {filterOptions.map((option, index) => (
+          <div className="absolute z-50 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]">
+            {filterOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -664,15 +662,11 @@ const ReleaseManagement = () => {
                   setFilter(option.value);
                   setIsOpen(false);
                 }}
-                className={`w-full px-3 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 text-sm ${
+                className={`w-full px-3 py-2 text-left hover:bg-zinc-700 first:rounded-t-lg last:rounded-b-lg transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] text-sm ${
                   currentFilter === option.value
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'
                 }`}
-                style={{
-                  animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both',
-                }}
               >
                 {option.label}
               </button>
@@ -696,7 +690,7 @@ const ReleaseManagement = () => {
             <button
               type="button"
               onClick={handleStartAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
             >
               <Plus className="w-4 h-4" />
               New Release
@@ -716,7 +710,7 @@ const ReleaseManagement = () => {
                     updating
                   );
                 })()}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] font-medium text-sm"
               >
                 {uploading || updating ? (
                   <>
@@ -739,7 +733,7 @@ const ReleaseManagement = () => {
                 type="button"
                 onClick={handleCancel}
                 disabled={uploading || updating}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] text-sm"
               >
                 <X className="w-4 h-4" />
                 Cancel
@@ -1166,7 +1160,7 @@ const ReleaseManagement = () => {
                                 handleStartUpdate();
                                 handleSelectRelease(rel);
                               }}
-                              className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:text-blue-300 transition-all"
+                              className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:text-blue-300 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                               title="Edit changelog"
                               aria-label={`Edit changelog for release ${rel.id}`}
                             >

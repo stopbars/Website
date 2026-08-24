@@ -21,9 +21,10 @@ export const useRevealGroup = (containerRef) => {
     );
 
     const frame = requestAnimationFrame(() => {
-      elements.forEach((element) => {
+      elements.forEach((element, index) => {
         const alreadyVisible = element.getBoundingClientRect().top < window.innerHeight * 0.9;
         if (alreadyVisible) return;
+        element.style.setProperty('--reveal-delay', `${Math.min(index, 6) * 40}ms`);
         element.classList.add('reveal-pending');
         observer.observe(element);
       });

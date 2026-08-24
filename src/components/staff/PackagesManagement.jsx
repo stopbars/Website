@@ -208,7 +208,7 @@ const PackagesManagement = () => {
                   onClick={() => {
                     setSelectedType(pt.id);
                   }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${active ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700/70'}`}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] ${active ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700/70'}`}
                 >
                   {' '}
                   {pt.label}

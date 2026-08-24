@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-adjust-state-on-prop-change -- Opening or switching the selected airport intentionally resets the editable form draft. */
+
 import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Check, ClipboardPaste, Loader, MapPin, Plus, Save, Trash2 } from 'lucide-react';

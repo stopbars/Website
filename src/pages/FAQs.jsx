@@ -1,210 +1,283 @@
-import { useState, useEffect, useMemo } from 'react';
-import useSearchQuery from '../hooks/useSearchQuery';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, ChevronLeft, ChevronRight, HelpCircle, Plus, Search, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
-import { Card } from '../components/shared/Card';
-import { Search, ChevronLeft, ChevronRight, HelpCircle, AlertCircle } from 'lucide-react';
 import { Button } from '../components/shared/Button';
+import { Card } from '../components/shared/Card';
+import { PageLoading } from '../components/shared/PageLoading';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import useSearchQuery from '../hooks/useSearchQuery';
 
 const ITEMS_PER_PAGE = 5;
-const FAQ_SKELETON_KEYS = [
-  'faq-skeleton-1',
-  'faq-skeleton-2',
-  'faq-skeleton-3',
-  'faq-skeleton-4',
-  'faq-skeleton-5',
-];
 
-/* oxlint-disable react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect -- Request and pagination state are independent; the one-shot FAQ request is isolated to this route. */
+/* oxlint-disable react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally -- The route owns one abortable request; identity guards protect the finally reset and Retry reuses it. */
 const FAQPage = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [pagination, setPagination] = useState(() => ({ searchTerm, page: 1 }));
-  const currentPage = pagination.searchTerm === searchTerm ? pagination.page : 1;
+  const [openFaqId, setOpenFaqId] = useState(null);
+  const requestRef = useRef(null);
+  const resultsRef = useRef(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  const loadFaqs = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('https://v2.stopbars.com/faqs', {
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`FAQ request failed with status ${response.status}`);
+
+      const data = await response.json();
+      const nextFaqs = Array.isArray(data.faqs)
+        ? data.faqs.slice().sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
+        : [];
+      setFaqs(nextFaqs);
+    } catch (requestError) {
+      if (requestError.name === 'AbortError') return;
+      console.error('Error fetching FAQs:', requestError);
+      setError('Unable to load FAQs. Check your connection and try again.');
+    } finally {
+      if (requestRef.current === controller) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadFaqs();
+    const activeRequest = requestRef.current;
+    return () => activeRequest?.abort();
+  }, [loadFaqs]);
 
   const filteredFaqs = useMemo(() => {
-    const normalizedSearch = searchTerm.toLowerCase();
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (!normalizedSearch) return faqs;
+
     return faqs.filter(
       (faq) =>
-        faq.question.toLowerCase().includes(normalizedSearch) ||
-        faq.answer.toLowerCase().includes(normalizedSearch)
+        String(faq.question ?? '')
+          .toLowerCase()
+          .includes(normalizedSearch) ||
+        String(faq.answer ?? '')
+          .toLowerCase()
+          .includes(normalizedSearch)
     );
   }, [faqs, searchTerm]);
 
   const lastUpdated = useMemo(() => {
-    if (faqs.length === 0) return null;
-    const mostRecent = faqs.reduce((latest, faq) => {
-      const faqDate = new Date(faq.updated_at);
-      return faqDate > latest ? faqDate : latest;
-    }, new Date(faqs[0].updated_at));
-    return mostRecent.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+    const timestamps = faqs.flatMap((faq) => {
+      const timestamp = Date.parse(faq.updated_at);
+      return Number.isFinite(timestamp) ? [timestamp] : [];
     });
+    if (timestamps.length === 0) return '';
+
+    return new Intl.DateTimeFormat(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(Math.max(...timestamps)));
   }, [faqs]);
 
-  // Scroll to top when page changes
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentPage]);
-
-  useEffect(() => {
-    const fetchFaqs = async () => {
-      try {
-        const response = await fetch('https://v2.stopbars.com/faqs');
-        if (!response.ok) throw new Error('Failed to fetch FAQs');
-        const data = await response.json();
-        const sortedFaqs = data.faqs.sort((a, b) => a.order - b.order);
-        setFaqs(sortedFaqs);
-      } catch (err) {
-        setError('Failed to load FAQs. Please try again later.');
-        console.error('Error fetching FAQs:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFaqs();
-  }, []);
-
+  const requestedPage = pagination.searchTerm === searchTerm ? pagination.page : 1;
   const totalPages = Math.ceil(filteredFaqs.length / ITEMS_PER_PAGE);
+  const currentPage = Math.min(requestedPage, Math.max(totalPages, 1));
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentFaqs = filteredFaqs.slice(startIndex, endIndex);
+  const currentFaqs = filteredFaqs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  const handlePageChange = (newPage) => {
-    setPagination({ searchTerm, page: newPage });
+  const handlePageChange = (page) => {
+    setPagination({ searchTerm, page });
+    window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
   };
+
+  if (loading) {
+    return (
+      <Layout>
+        <PageLoading page label="Loading FAQs…" variant="faq" />
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
-      <div className="min-h-screen pt-40 pb-20">
-        <div className="max-w-4xl mx-auto px-6">
-          {/* Header Section */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold mb-3">Frequently Asked Questions</h1>
-            {loading ? (
-              <div className="h-5 bg-zinc-700/50 rounded-md w-48 mx-auto animate-pulse mt-4"></div>
-            ) : lastUpdated ? (
-              <span className="text-sm text-zinc-500">Last Updated: {lastUpdated}</span>
+      <div className="min-h-screen pt-36 pb-20 sm:pt-40">
+        <div className="mx-auto max-w-3xl">
+          <header className="mb-10 max-w-2xl">
+            <h1 className="text-4xl font-bold tracking-tight text-white">
+              Frequently asked questions
+            </h1>
+            <p className="mt-4 text-lg leading-8 text-zinc-400">
+              Find answers about installing, using, and contributing to BARS.
+            </p>
+            {lastUpdated ? (
+              <p className="mt-3 text-sm text-zinc-500">Updated {lastUpdated}</p>
             ) : null}
-          </div>
+          </header>
 
-          {/* Search Bar */}
-          <div className="max-w-xl mx-auto mb-12">
-            <div className="relative">
-              <input
-                aria-label="Search FAQs"
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search FAQs..."
-                className="w-full pl-12 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder:text-zinc-500"
-              />
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
-            </div>
-          </div>
-
-          {/* Main Content */}
-          {error ? (
-            <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-              <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-zinc-300 mb-2">Failed to Load FAQs</h3>
-              <p className="text-zinc-500">
-                We couldn&apos;t load the FAQs at this time, please try again later.
-              </p>
-            </Card>
-          ) : loading ? (
-            <div className="space-y-6">
-              {FAQ_SKELETON_KEYS.map((skeletonKey) => (
-                <Card key={skeletonKey} className="animate-pulse">
-                  <div className="p-6">
-                    <div className="h-6 bg-zinc-700 rounded-md w-3/4 mb-4"></div>
-                    <div className="space-y-2">
-                      <div className="h-4 bg-zinc-700/70 rounded-md w-full"></div>
-                      <div className="h-4 bg-zinc-700/70 rounded-md w-4/5"></div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          ) : filteredFaqs.length === 0 ? (
-            <Card className="p-12 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-center">
-              {faqs.length === 0 ? (
-                <>
-                  <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
-                  <p className="text-zinc-500 mb-2">
-                    No FAQs were found, please try again later or contact support.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <HelpCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-zinc-300 mb-2">No FAQs Found</h3>
-                  <p className="text-zinc-500 mb-2">
-                    No results found matching{' '}
-                    <span className="font-semibold text-zinc-400">&quot;{searchTerm}&quot;</span>
-                  </p>
-                </>
-              )}
-            </Card>
-          ) : (
-            <>
-              <div className="space-y-6">
-                {currentFaqs.map((faq) => (
-                  <Card key={faq.id} className="transition-all duration-200 hover:shadow-lg">
-                    <div className="p-6">
-                      <h3 className="text-lg font-medium text-white mb-4">{faq.question}</h3>
-                      <div className="text-zinc-400 text-sm">{faq.answer}</div>
-                    </div>
-                  </Card>
-                ))}
+          {!error ? (
+            <div className="mb-8">
+              <label htmlFor="faq-search" className="mb-2 block text-sm font-medium text-zinc-300">
+                Search questions
+              </label>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-zinc-500"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <input
+                  id="faq-search"
+                  name="faq-search"
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search by topic or question"
+                  className="min-h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 py-3 pr-12 pl-12 text-base text-white outline-none transition-[background-color,border-color,box-shadow] duration-[var(--duration-quick)] placeholder:text-zinc-500 hover:border-zinc-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                />
+                {searchTerm ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute top-1/2 right-1.5 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-500 transition-[background-color,color,transform] duration-[var(--duration-quick)] hover:bg-zinc-800 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    aria-label="Clear FAQ search"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                ) : null}
               </div>
+            </div>
+          ) : null}
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="mt-8 flex items-center justify-center space-x-2">
-                  <Button
-                    variant="secondary"
-                    className="px-3 py-2 flex items-center justify-center bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </Button>
-
-                  <div className="flex items-center space-x-2">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                      <Button
-                        key={page}
-                        variant="secondary"
-                        className={`w-14 h-12 flex items-center justify-center border! border-zinc-700! transition-colors duration-200 ${
-                          currentPage === page
-                            ? 'bg-white! text-black! hover:bg-zinc-200!'
-                            : 'bg-zinc-800! text-zinc-200! hover:bg-zinc-700!'
-                        }`}
-                        onClick={() => handlePageChange(page)}
-                      >
-                        {page}
-                      </Button>
-                    ))}
+          <div ref={resultsRef} className="scroll-mt-28">
+            {error ? (
+              <Card className="border-red-500/20 bg-red-500/5 p-6 sm:p-8" role="alert">
+                <div className="flex items-start gap-4">
+                  <AlertCircle
+                    className="mt-0.5 h-5 w-5 shrink-0 text-red-400"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <h2 className="font-semibold text-white">Unable to load FAQs</h2>
+                    <p className="mt-2 text-sm leading-6 text-zinc-400">{error}</p>
+                    <Button variant="outline" className="mt-5 px-4 py-2.5" onClick={loadFaqs}>
+                      Retry
+                    </Button>
                   </div>
-
-                  <Button
-                    variant="secondary"
-                    className="px-3 py-2 flex items-center justify-center bg-zinc-800! text-zinc-200! border! border-zinc-700! hover:bg-zinc-700! transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </Button>
                 </div>
-              )}
-            </>
-          )}
+              </Card>
+            ) : filteredFaqs.length === 0 ? (
+              <Card className="p-8 text-center sm:p-10">
+                <HelpCircle className="mx-auto h-8 w-8 text-zinc-500" aria-hidden="true" />
+                <h2 className="mt-4 text-lg font-semibold text-white">
+                  {faqs.length === 0 ? 'No FAQs published yet' : `No answers for "${searchTerm}"`}
+                </h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-zinc-400">
+                  {faqs.length === 0
+                    ? 'Contact support if you need help before the FAQ is published.'
+                    : 'Try a shorter search or clear it to browse every question.'}
+                </p>
+                <div className="mt-6 flex justify-center">
+                  {faqs.length === 0 ? (
+                    <Link
+                      to="/contact"
+                      className="inline-flex min-h-10 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-100 transition-[background-color,border-color,transform] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-700 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                    >
+                      Contact support
+                    </Link>
+                  ) : (
+                    <Button variant="outline" onClick={() => setSearchTerm('')}>
+                      Clear search
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ) : (
+              <>
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <h2 className="text-sm font-medium text-zinc-300">
+                    {searchTerm ? 'Matching questions' : 'All questions'}
+                  </h2>
+                  <output className="text-sm tabular-nums text-zinc-500" aria-live="polite">
+                    {filteredFaqs.length} {filteredFaqs.length === 1 ? 'answer' : 'answers'}
+                  </output>
+                </div>
+
+                <div className="divide-y divide-zinc-800 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/55">
+                  {currentFaqs.map((faq) => {
+                    const isOpen = openFaqId === faq.id;
+                    return (
+                    <div key={faq.id}>
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        aria-controls={`faq-answer-${faq.id}`}
+                        onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
+                        className="flex min-h-16 w-full cursor-pointer items-center justify-between gap-6 px-5 py-4 text-left transition-colors duration-[var(--duration-quick)] hover:bg-zinc-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45 sm:px-6"
+                      >
+                        <span className="font-medium leading-6 text-zinc-100">{faq.question}</span>
+                        <Plus
+                          className={`h-5 w-5 shrink-0 text-zinc-500 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${isOpen ? 'rotate-45' : 'rotate-0'}`}
+                          aria-hidden="true"
+                        />
+                      </button>
+                      <div
+                        id={`faq-answer-${faq.id}`}
+                        className={`grid transition-[grid-template-rows,opacity] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+                      >
+                        <div className="min-h-0 overflow-hidden">
+                          <div className="border-t border-zinc-800/80 px-5 py-5 text-sm leading-7 whitespace-pre-line text-zinc-400 sm:px-6">
+                            {faq.answer}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+
+                {totalPages > 1 ? (
+                  <nav
+                    className="mt-8 flex items-center justify-between gap-4 border-t border-zinc-800 pt-6"
+                    aria-label="FAQ pages"
+                  >
+                    <Button
+                      variant="outline"
+                      className="px-3 sm:px-4"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      aria-label="Previous FAQ page"
+                    >
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                      <span className="hidden sm:inline">Previous</span>
+                    </Button>
+                    <span className="text-sm tabular-nums text-zinc-400">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="px-3 sm:px-4"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      aria-label="Next FAQ page"
+                    >
+                      <span className="hidden sm:inline">Next</span>
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </nav>
+                ) : null}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </Layout>

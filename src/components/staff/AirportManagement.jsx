@@ -115,7 +115,7 @@ const AirportCard = ({ airport, onApprove, onInfoClick, onEdit }) => {
               type="button"
               onClick={() => handleApprove(true)}
               disabled={loadingAction !== null}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loadingAction === 'approve' ? (
                 <Loader className="w-4 h-4 animate-spin" />
@@ -128,7 +128,7 @@ const AirportCard = ({ airport, onApprove, onInfoClick, onEdit }) => {
               type="button"
               onClick={() => handleApprove(false)}
               disabled={loadingAction !== null}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-sm font-medium text-red-400 hover:bg-red-500/30 hover:border-red-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loadingAction === 'reject' ? (
                 <Loader className="w-4 h-4 animate-spin" />
@@ -142,7 +142,7 @@ const AirportCard = ({ airport, onApprove, onInfoClick, onEdit }) => {
         <button
           type="button"
           onClick={() => onInfoClick(airport.icao)}
-          className="inline-flex items-center justify-center p-2.5 rounded-lg bg-zinc-700/50 border border-zinc-600 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-500 transition-all"
+          className="inline-flex items-center justify-center p-2.5 rounded-lg bg-zinc-700/50 border border-zinc-600 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-500 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
           title={`View ${airport.icao} info`}
         >
           <Info className="w-4 h-4" />
@@ -179,7 +179,7 @@ AirportCard.propTypes = {
   onEdit: PropTypes.func.isRequired,
 };
 
-// oxlint-disable-next-line react-doctor/prefer-useReducer -- Independent admin filters, pagination, dialog, and request states do not share transitions.
+// oxlint-disable-next-line react-doctor/prefer-useReducer react-doctor/no-giant-component -- Independent admin filters, pagination, dialog, and request states form one cohesive management surface without shared transitions.
 const AirportManagement = () => {
   const [airports, setAirports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -444,7 +444,7 @@ const AirportManagement = () => {
               value={searchTerm}
               onChange={handleSearch}
               placeholder="Search airports..."
-              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-all"
+              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
             />
           </div>
         </div>

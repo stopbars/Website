@@ -1,43 +1,32 @@
-import { HeartHandshake, ArrowRight } from 'lucide-react';
+import { ArrowRight, HeartHandshake } from 'lucide-react';
 
 export const DonationBanner = () => {
   return (
-    <section className="pt-10 pb-20">
-      <div className="max-w-5xl mx-auto px-6">
-        <div className="relative overflow-hidden rounded-2xl bg-emerald-900 border border-emerald-700">
-          <div className="relative px-8 py-10 text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <HeartHandshake className="w-7 h-7 text-white" />
-              <h2 className="text-2xl font-semibold text-white">Help Keep BARS Free!</h2>
-            </div>
-
-            <p className="text-lg text-emerald-50">
-              We’re 100% community‑funded. Even $5 helps cover servers and development.
-            </p>
-
-            <div className="mt-6">
-              <div className="mx-auto max-w-2xl rounded-lg bg-emerald-900 border border-emerald-700 p-6">
-                <p className="text-emerald-50">
-                  As our community grows, so do our costs. Your support directly keeps BARS free and
-                  accessible for everyone. All our finances are completely public, including
-                  donations, expenses, and transactions, ensuring your support is used responsibly.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <a
-                href="https://opencollective.com/stopbars"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center px-7 py-3 text-base font-semibold rounded-md text-white bg-emerald-700 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-900 transition-colors duration-200 shadow-lg shadow-emerald-900/30"
-                aria-label="Support BARS with a donation on Open Collective"
-              >
-                Support BARS
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </a>
+    <section className="py-14 sm:py-16">
+      <div className="home-shell">
+        <div className="home-panel mx-auto flex max-w-5xl flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+          <div className="flex items-start gap-4">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300">
+              <HeartHandshake className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Help keep BARS free</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-400">
+                BARS is community-funded. Donations help cover hosting and development.
+              </p>
             </div>
           </div>
+
+          <a
+            href="https://opencollective.com/stopbars"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-100 transition-[background-color,border-color,color,scale] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 active:scale-[0.96] sm:self-auto"
+            aria-label="Support BARS on Open Collective"
+          >
+            Support BARS
+            <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </a>
         </div>
       </div>
     </section>

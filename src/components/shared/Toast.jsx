@@ -1,4 +1,5 @@
 import { useState, useEffect, useEffectEvent, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { Info, Check, AlertTriangle, X } from 'lucide-react';
 
@@ -36,11 +37,13 @@ const TOAST_VARIANTS = {
   },
 };
 
+const TOAST_CLOSE_DURATION_MS = 350;
+
 export const Toast = ({
   title,
   description,
   variant = 'default',
-  duration = 5000,
+  duration = 3500,
   onClose,
   show = true,
 }) => {
@@ -50,19 +53,19 @@ export const Toast = ({
 
   const handleClose = useCallback(() => {
     setIsAnimating(false);
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = setTimeout(() => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => {
       setIsVisible(false);
       if (onClose) onClose();
-    }, 300); // Wait for exit animation
+    }, TOAST_CLOSE_DURATION_MS);
   }, [onClose]);
   const handleAutoDismiss = useEffectEvent(handleClose);
 
   useEffect(
     () => () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     },
-    [],
+    []
   );
 
   useEffect(() => {
@@ -73,19 +76,19 @@ export const Toast = ({
       const shouldAutoDismiss = variant !== 'destructive' && duration > 0;
 
       setIsVisible(true);
-      animationDelay = setTimeout(() => {
+      animationDelay = window.setTimeout(() => {
         setIsAnimating(true);
       }, 50);
       autoDismiss = shouldAutoDismiss
-        ? setTimeout(() => {
+        ? window.setTimeout(() => {
             handleAutoDismiss();
           }, duration)
         : null;
     }
 
     return () => {
-      if (animationDelay) clearTimeout(animationDelay);
-      if (autoDismiss) clearTimeout(autoDismiss);
+      if (animationDelay) window.clearTimeout(animationDelay);
+      if (autoDismiss) window.clearTimeout(autoDismiss);
     };
   }, [show, duration, variant]);
 
@@ -93,16 +96,16 @@ export const Toast = ({
     if (show) return undefined;
 
     let finalizeTimer;
-    const hideTimer = setTimeout(() => {
+    const hideTimer = window.setTimeout(() => {
       setIsAnimating(false);
-      finalizeTimer = setTimeout(() => {
+      finalizeTimer = window.setTimeout(() => {
         setIsVisible(false);
-      }, 300);
+      }, TOAST_CLOSE_DURATION_MS);
     }, 0);
 
     return () => {
-      clearTimeout(hideTimer);
-      if (finalizeTimer) clearTimeout(finalizeTimer);
+      window.clearTimeout(hideTimer);
+      if (finalizeTimer) window.clearTimeout(finalizeTimer);
     };
   }, [show]);
 
@@ -110,18 +113,19 @@ export const Toast = ({
 
   const currentVariant = TOAST_VARIANTS[variant] || TOAST_VARIANTS.default;
 
-  return (
+  const toast = (
     <div
       role={variant === 'destructive' ? 'alert' : 'status'}
       aria-live={variant === 'destructive' ? 'assertive' : 'polite'}
       aria-atomic="true"
       className={`
         fixed bottom-4 left-4 right-4 sm:right-auto sm:left-4 z-50 sm:max-w-sm sm:w-full
-        transform transition-[opacity,transform] duration-300 ease-out
+        transform transition-[filter,opacity,transform] ease-[var(--ease-smooth-out)]
+        ${isAnimating ? 'duration-[var(--duration-slow)]' : 'duration-[var(--duration-medium)]'}
         ${
           isAnimating
-            ? 'translate-x-0 opacity-100 scale-100'
-            : '-translate-x-full opacity-0 scale-95'
+            ? 'translate-y-0 scale-100 blur-0 opacity-100'
+            : 'translate-y-2 scale-[var(--scale-small)] blur-[var(--blur-small)] opacity-0'
         }
       `}
     >
@@ -129,15 +133,13 @@ export const Toast = ({
         className={`
           ${currentVariant.container}
           border rounded-xl p-5 relative
-          transform transition-[opacity,transform] duration-300 ease-out
-          ${isAnimating ? 'translate-y-0 scale-100' : 'translate-y-2 scale-[0.98]'}
         `}
       >
         {/* Close button */}
         <button
           type="button"
           onClick={handleClose}
-          className="absolute right-3 top-3 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full p-1 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-white/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35"
+          className="absolute right-3 top-3 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full p-1 transition-[background-color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-white/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35"
           aria-label="Close notification"
         >
           <X className="w-4 h-4 text-current opacity-70 hover:opacity-100" />
@@ -163,6 +165,8 @@ export const Toast = ({
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? toast : createPortal(toast, document.body);
 };
 
 Toast.propTypes = {

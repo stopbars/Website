@@ -27,23 +27,24 @@ export function Dropdown({
   'aria-labelledby': ariaLabelledBy,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isRendered, setIsRendered] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const dropdownRef = useRef(null);
   const triggerRef = useRef(null);
   const optionRefs = useRef(null);
+  const closeTimerRef = useRef(null);
   if (optionRefs.current === null) optionRefs.current = new Map();
   const generatedId = useId();
   const triggerId = id || `dropdown-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
 
-  const selectableOptions = useMemo(
-    () => options.filter((option) => !option.isHeader),
-    [options]
-  );
+  const selectableOptions = useMemo(() => options.filter((option) => !option.isHeader), [options]);
   const currentOption = selectableOptions.find((option) => option.value === value);
   const TriggerIcon = currentOption?.icon || null;
 
   const openDropdown = (requestedIndex) => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     const selectedIndex = selectableOptions.findIndex((option) => option.value === value);
     const fallbackIndex = selectedIndex >= 0 ? selectedIndex : 0;
     const nextIndex = Math.min(
@@ -52,13 +53,28 @@ export function Dropdown({
     );
 
     setActiveIndex(nextIndex);
+    setIsRendered(true);
+    setIsClosing(false);
     setIsOpen(true);
   };
 
   const closeDropdown = ({ restoreFocus = false } = {}) => {
     setIsOpen(false);
+    setIsClosing(true);
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => {
+      setIsRendered(false);
+      setIsClosing(false);
+    }, 150);
     if (restoreFocus) triggerRef.current?.focus();
   };
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    },
+    []
+  );
 
   const selectOption = (option) => {
     onChange(option.value);
@@ -164,21 +180,21 @@ export function Dropdown({
           else openDropdown();
         }}
         disabled={disabled}
-        className={`flex min-h-11 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white transition-[background-color,border-color,transform,opacity] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
+        className={`flex min-h-11 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white transition-[background-color,border-color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
           disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
-        <span className="mr-2 flex min-w-0 items-center gap-2 truncate transition-colors duration-150">
+        <span className="mr-2 flex min-w-0 items-center gap-2 truncate transition-colors duration-[var(--duration-quick)]">
           {TriggerIcon && <TriggerIcon className="w-4 h-4 shrink-0" aria-hidden="true" />}
           {currentOption?.label || placeholder}
         </span>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform duration-150 ease-out ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 transition-transform duration-[var(--duration-quick)] ease-[var(--ease-out)] ${isOpen ? 'rotate-180' : ''}`}
           aria-hidden="true"
         />
       </button>
 
-      {isOpen && (
+      {isRendered && (
         <div
           id={listboxId}
           role="listbox"
@@ -186,9 +202,10 @@ export function Dropdown({
           aria-labelledby={ariaLabelledBy}
           tabIndex={-1}
           onKeyDown={handleListboxKeyDown}
-          className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800"
+          aria-hidden={isClosing}
+          className={`${isClosing ? 'dropdown-exit pointer-events-none' : 'dropdown-enter'} absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 shadow-xl shadow-black/20`}
         >
-          {options.map((option, index) => {
+          {options.map((option) => {
             if (option.isHeader) {
               return (
                 <div key={`header-${option.label}`} className="px-4 pt-3 pb-1">
@@ -214,15 +231,11 @@ export function Dropdown({
                   e.stopPropagation();
                   selectOption(option);
                 }}
-                className={`flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
+                className={`flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left transition-[background-color,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
                   value === option.value
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'
                 }`}
-                style={{
-                  animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both',
-                }}
               >
                 {OptionIcon && <OptionIcon className="w-4 h-4 shrink-0" aria-hidden="true" />}
                 {option.label}

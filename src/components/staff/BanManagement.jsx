@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect -- The authenticated ban list load is one-shot for the mounted admin route. */
+
 import { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useSearchParams } from 'react-router-dom';
@@ -53,7 +55,7 @@ function BanForm({ initialVatsimId, onSubmit }) {
             value={vatsimId}
             onChange={(event) => setVatsimId(event.target.value.replace(/[^0-9]/g, ''))}
             placeholder="e.g., 1234567"
-            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
             inputMode="numeric"
           />
         </div>
@@ -67,7 +69,7 @@ function BanForm({ initialVatsimId, onSubmit }) {
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="Ban reason (optional)"
-            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
           />
         </div>
         <div className="md:col-span-3 min-w-0">
@@ -79,7 +81,7 @@ function BanForm({ initialVatsimId, onSubmit }) {
             type="datetime-local"
             value={expiresAtLocal}
             onChange={(event) => setExpiresAtLocal(event.target.value)}
-            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+            className="w-full min-w-0 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
           />
         </div>
         <div className="md:col-span-1 min-w-0">
@@ -87,7 +89,7 @@ function BanForm({ initialVatsimId, onSubmit }) {
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !vatsimId}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm whitespace-nowrap"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] font-medium text-sm whitespace-nowrap"
           >
             {submitting ? <Loader className="w-4 h-4 animate-spin" /> : 'Ban'}
           </button>
@@ -145,8 +147,11 @@ export default function BanManagement() {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/bans`, { headers });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || `${res.status} ${res.statusText}`);
+      }
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
       setBans(Array.isArray(data?.bans) ? data.bans : []);
     } catch (e) {
       setToast({
@@ -196,8 +201,10 @@ export default function BanManagement() {
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || `${res.status} ${res.statusText}`);
+      }
       setToast({
         show: true,
         title: 'Ban Applied',

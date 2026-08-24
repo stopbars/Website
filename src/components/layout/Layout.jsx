@@ -191,9 +191,7 @@ Support BARS: https://stopbars.com/donate`,
     return (
       <div ref={layoutRef} className="h-dvh overflow-hidden bg-zinc-950 text-white">
         <Suspense fallback={<PageLoading page label="Loading editor…" />}>
-          <div key={pathname} className="h-full">
-            {children}
-          </div>
+          <div className="h-full">{children}</div>
         </Suspense>
         <ConsentLayer />
       </div>
@@ -206,7 +204,9 @@ Support BARS: https://stopbars.com/donate`,
         <div className="z-40">
           <StableNavbar />
         </div>
-        <main className="grow container mx-auto px-6 relative">
+        <main
+          className={pathname === '/' ? 'relative grow' : 'container relative mx-auto grow px-6'}
+        >
           <Suspense fallback={<PageLoading page label="Loading page…" />}>
             <div key={pathname} className="route-surface">
               {children}

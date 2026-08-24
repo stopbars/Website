@@ -5,8 +5,6 @@ import { Card } from '../components/shared/Card';
 import { Dropdown } from '../components/shared/Dropdown';
 import {
   AlertCircle,
-  ExternalLink,
-  Lightbulb,
   MapPin,
   MenuIcon,
   Plane,
@@ -24,11 +22,6 @@ import { getSimulatorLabel } from '../utils/simulatorPresentation';
 const ITEMS_PER_PAGE = 12;
 const REFRESH_INTERVAL_MS = 15000;
 const REQUEST_TIMEOUT_MS = 45000;
-const UPDATED_AT_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  hour: 'numeric',
-  minute: '2-digit',
-  second: '2-digit',
-});
 
 const CONTINENT_OPTIONS = [
   { value: 'all', label: 'All continents' },
@@ -86,7 +79,8 @@ const getAirportContinent = (icao) => {
 
 const getTotalConnections = (status) => (status?.controllers || 0) + (status?.pilots || 0);
 
-const formatUpdatedAt = (date) => UPDATED_AT_FORMATTER.format(date);
+const formatCount = (count, singular, plural = `${singular}s`) =>
+  `${count} ${count === 1 ? singular : plural}`;
 
 const getStatusSimulatorLabel = (simulator) =>
   simulator?.trim().toLowerCase() === 'xplane' ? 'X-Plane 12' : getSimulatorLabel(simulator);
@@ -95,13 +89,13 @@ const getStatusSimulatorLabel = (simulator) =>
 const GlobalStatus = () => {
   // airports: { [icao]: { packages: string[] } }
   const [airports, setAirports] = useState({});
-  // live: { [icao]: { controllers: number, pilots: number, lightsOn: number } }
+  // live: { [icao]: { controllers: number, pilots: number } }
   const [live, setLive] = useState({});
   const [loading, setLoading] = useState(true);
   const [airportsLoaded, setAirportsLoaded] = useState(false);
   const [activityPending, setActivityPending] = useState(true);
   const [error, setError] = useState('');
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [hasLiveData, setHasLiveData] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [view, setView] = useState('grid');
@@ -179,13 +173,12 @@ const GlobalStatus = () => {
           liveMap[icao] = {
             controllers: (state.controllers || []).length,
             pilots: (state.pilots || []).length,
-            lightsOn: (state.objects || []).filter((object) => object.state === true).length,
           };
         });
 
         setLive(liveMap);
         setError('');
-        setLastUpdated(new Date());
+        setHasLiveData(true);
         setActivityPending(false);
       } catch (fetchError) {
         if (active && (fetchError.name !== 'AbortError' || timedOut)) {
@@ -253,8 +246,10 @@ const GlobalStatus = () => {
   }, [filteredAirports, displayedPage]);
 
   const totalAirports = airportsList.length;
-  const activeAirports = Object.keys(live).length;
-  const hasData = lastUpdated !== null;
+  const totalConnections = Object.values(live).reduce(
+    (total, status) => total + getTotalConnections(status),
+    0
+  );
   const hasFilters = Boolean(searchTerm || continentFilter !== 'all' || activityFilter !== 'all');
 
   const resetFilters = () => {
@@ -266,7 +261,7 @@ const GlobalStatus = () => {
 
   const retry = () => {
     if (!airportsLoaded) setLoading(true);
-    if (!hasData) setActivityPending(true);
+    if (!hasLiveData) setActivityPending(true);
     setRefreshKey((key) => key + 1);
   };
 
@@ -284,45 +279,23 @@ const GlobalStatus = () => {
               </div>
 
               {!loading && airportsLoaded && (
-                <div className="self-start rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
-                  <div className="flex items-center gap-2 text-sm text-zinc-200">
+                <div className="self-start rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 sm:min-w-44">
+                  <div className="flex items-center gap-2 text-zinc-200">
                     <span
-                      className={`h-2 w-2 rounded-full ${!activityPending && activeAirports > 0 ? 'bg-emerald-400' : 'bg-zinc-500'}`}
+                      className={`h-2 w-2 shrink-0 rounded-full ${!activityPending && totalConnections > 0 ? 'bg-emerald-400' : 'bg-zinc-500'}`}
                       aria-hidden="true"
                     />
-                    <span>
-                      {activityPending
-                        ? 'Checking live activity…'
-                        : activeAirports > 0
-                          ? `${activeAirports} ${activeAirports === 1 ? 'airport' : 'airports'} active now`
-                          : 'No airports active right now'}
-                    </span>
+                    {activityPending ? (
+                      <span className="text-sm">Checking live connections…</span>
+                    ) : (
+                      <span className="text-xl font-semibold tabular-nums">{totalConnections}</span>
+                    )}
                   </div>
-                  {hasData && (
-                    <p className="mt-1 text-xs text-zinc-500">
-                      Updated {formatUpdatedAt(lastUpdated)} · Refreshes 15 seconds after each check
-                    </p>
+                  {!activityPending && (
+                    <p className="mt-0.5 text-xs text-zinc-500">Pilots and controllers connected</p>
                   )}
                 </div>
               )}
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-              <a
-                href="https://status.stopbars.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-zinc-300 transition-colors duration-150 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-              >
-                Service status
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              </a>
-              <RouteLink
-                to="/contribute"
-                className="text-zinc-300 transition-colors duration-150 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-              >
-                Airport or scenery missing? Contribute support
-              </RouteLink>
             </div>
           </header>
 
@@ -335,7 +308,7 @@ const GlobalStatus = () => {
                 <div>
                   <h2 className="font-semibold text-red-300">Live activity unavailable</h2>
                   <p className="mt-1 text-sm text-zinc-400">
-                    We could not load airport activity. Check service status or try again.
+                    Unable to load airport activity. Try again.
                   </p>
                   <Button variant="outline" onClick={retry} className="mt-4 px-4 py-2">
                     <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -357,8 +330,8 @@ const GlobalStatus = () => {
                       <div>
                         <p className="font-medium text-red-300">Live refresh failed</p>
                         <p className="text-sm text-zinc-400">
-                          {hasData
-                            ? `Showing activity from ${formatUpdatedAt(lastUpdated)}. We will keep retrying.`
+                          {hasLiveData
+                            ? 'Showing the last known activity. We will keep retrying.'
                             : 'Supported airports are available, but live connection data is delayed. We will keep retrying.'}
                         </p>
                       </div>
@@ -405,7 +378,7 @@ const GlobalStatus = () => {
                           setSearchTerm('');
                           setCurrentPage(1);
                         }}
-                        className="absolute right-2 top-1/2 flex min-h-10 min-w-10 -translate-y-1/2 cursor-pointer items-center justify-center text-zinc-400 transition-colors duration-150 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                        className="absolute right-2 top-1/2 flex min-h-10 min-w-10 -translate-y-1/2 cursor-pointer items-center justify-center text-zinc-400 transition-colors duration-[var(--duration-quick)] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
                         aria-label="Clear search"
                       >
                         <X className="h-5 w-5" aria-hidden="true" />
@@ -449,7 +422,7 @@ const GlobalStatus = () => {
                       <button
                         type="button"
                         onClick={() => setView('grid')}
-                        className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm transition-[background-color,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 lg:flex-none ${
+                        className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm transition-[background-color,color] duration-[var(--duration-quick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 lg:flex-none ${
                           view === 'grid'
                             ? 'bg-zinc-700 text-white'
                             : 'text-zinc-400 hover:text-zinc-200'
@@ -461,7 +434,7 @@ const GlobalStatus = () => {
                       <button
                         type="button"
                         onClick={() => setView('list')}
-                        className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm transition-[background-color,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 lg:flex-none ${
+                        className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm transition-[background-color,color] duration-[var(--duration-quick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 lg:flex-none ${
                           view === 'list'
                             ? 'bg-zinc-700 text-white'
                             : 'text-zinc-400 hover:text-zinc-200'
@@ -483,7 +456,7 @@ const GlobalStatus = () => {
                     <button
                       type="button"
                       onClick={resetFilters}
-                      className="text-sm text-zinc-300 underline decoration-zinc-600 underline-offset-4 transition-colors duration-150 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                      className="text-sm text-zinc-300 underline decoration-zinc-600 underline-offset-4 transition-colors duration-[var(--duration-quick)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
                     >
                       Reset filters
                     </button>
@@ -509,7 +482,7 @@ const GlobalStatus = () => {
                       return (
                         <Card
                           key={icao}
-                          className="p-4 transition-[border-color] duration-150 hover:border-zinc-700 sm:p-6"
+                          className="p-4 transition-[border-color] duration-[var(--duration-quick)] hover:border-zinc-700 sm:p-6"
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3">
@@ -544,18 +517,12 @@ const GlobalStatus = () => {
                           <div className="mt-5 grid grid-cols-2 gap-3 text-sm text-zinc-300">
                             <div className="flex items-center gap-2">
                               <Users className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                              <span>{status?.controllers || 0} controllers</span>
+                              <span>{formatCount(status?.controllers || 0, 'controller')}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Plane className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                              <span>{status?.pilots || 0} pilots</span>
+                              <span>{formatCount(status?.pilots || 0, 'pilot')}</span>
                             </div>
-                            {isActive && (
-                              <div className="col-span-2 flex items-center gap-2">
-                                <Lightbulb className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                                <span>{status.lightsOn} BARS lights illuminated</span>
-                              </div>
-                            )}
                           </div>
 
                           {data.packages.length > 0 && (
@@ -587,7 +554,7 @@ const GlobalStatus = () => {
                       aria-label="Supported airport activity table"
                       tabIndex={0}
                     >
-                      <table className="min-w-[900px] w-full">
+                      <table className="min-w-[760px] w-full">
                         <caption className="sr-only">
                           Live activity and supported scenery for BARS airports
                         </caption>
@@ -604,9 +571,6 @@ const GlobalStatus = () => {
                             </th>
                             <th scope="col" className="px-4 py-3 text-left font-medium">
                               Pilots
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-left font-medium">
-                              BARS lights
                             </th>
                             <th scope="col" className="px-4 py-3 text-left font-medium">
                               Supported scenery
@@ -638,9 +602,6 @@ const GlobalStatus = () => {
                                   {status?.controllers || 0}
                                 </td>
                                 <td className="px-4 py-4 text-zinc-300">{status?.pilots || 0}</td>
-                                <td className="px-4 py-4 text-zinc-300">
-                                  {isActive ? status.lightsOn : '—'}
-                                </td>
                                 <td className="px-4 py-4">
                                   <div className="flex flex-wrap gap-2">
                                     {data.packages.map((packageName) => (
@@ -696,7 +657,7 @@ const GlobalStatus = () => {
                 </div>
                 <RouteLink
                   to="/contribute"
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-[background-color,border-color,color,transform] duration-150 hover:border-zinc-600 hover:bg-zinc-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-[background-color,border-color,color,transform] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
                 >
                   Contribute support
                 </RouteLink>

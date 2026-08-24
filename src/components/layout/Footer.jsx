@@ -34,6 +34,7 @@ export const Footer = () => {
         const response = await fetch('https://v2.stopbars.com/health', {
           signal: activeController.signal,
         });
+        if (!response.ok) throw new Error(`Health request failed (${response.status})`);
         const data = await response.json();
         const services = Object.values(data);
         const okCount = services.filter((status) => status === 'ok').length;
@@ -162,15 +163,7 @@ export const Footer = () => {
                   <span>Status</span>
                   <div className="relative mt-0.5">
                     <div
-                      className={`w-2.5 h-2.5 md:w-2.5 md:h-2.5 rounded-full ${statusColor} transition-colors duration-300 shadow-lg`}
-                    ></div>
-                    <div
-                      className={`absolute inset-0 w-2.5 h-2.5 md:w-2.5 md:h-2.5 rounded-full ${statusColor} animate-pulse opacity-50`}
-                      style={{ animationDuration: '3s' }}
-                    ></div>
-                    <div
-                      className={`absolute -inset-0.5 w-3.5 h-3.5 md:w-3.5 md:h-3.5 rounded-full ${statusColor} animate-ping opacity-20`}
-                      style={{ animationDuration: '3s' }}
+                      className={`h-2.5 w-2.5 rounded-full ${statusColor} shadow-[0_0_0_3px_oklch(1_0_0/0.04)] transition-colors duration-[var(--duration-quick)]`}
                     ></div>
                   </div>
                 </a>
@@ -245,7 +238,7 @@ export const Footer = () => {
 
         {/* Disclaimer */}
         <div className="mt-8 md:mt-16 pt-6 md:pt-8 border-t border-zinc-900">
-          <p className="text-base md:text-base text-zinc-400 hover:text-red-400/90 transition-colors duration-300 text-center max-w-4xl mx-auto leading-relaxed">
+          <p className="text-base md:text-base text-zinc-400 hover:text-red-400/90 transition-colors duration-[var(--duration-fast)] text-center max-w-4xl mx-auto leading-relaxed">
             BARS is an independent third-party software project. We are not affiliated with,
             endorsed by, or connected to VATSIM, vatSys, EuroScope, Microsoft Flight Simulator,
             X-Plane, or any other simulator or controller client supported by our software.

@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect -- This isolated staff load is mount-only and does not race changing inputs. */
+
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../shared/Card';
@@ -515,7 +517,7 @@ const DivisionManagement = () => {
                                             </span>
                                             <div className="relative">
                                               <div
-                                                className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-300 shadow-lg`}
+                                                className={`w-2 h-2 rounded-full ${getStatusColor(airport.status)} transition-colors duration-[var(--duration-fast)] shadow-lg`}
                                               ></div>
                                               <div
                                                 className={`absolute inset-0 w-2 h-2 rounded-full ${getStatusColor(airport.status)} animate-pulse opacity-50`}

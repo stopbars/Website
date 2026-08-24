@@ -2,6 +2,7 @@ import { memo, useState, useRef, useEffect } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
+import { Dropdown } from '../components/shared/Dropdown';
 import { Toast } from '../components/shared/Toast';
 import {
   Mail,
@@ -11,7 +12,6 @@ import {
   MessagesSquare,
   Copy,
   ArrowRight,
-  ChevronDown,
 } from 'lucide-react';
 
 const topicOptions = [
@@ -48,7 +48,7 @@ const SupportOptions = memo(function SupportOptions() {
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <Card
-        className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-blue-500/30 active:scale-[0.96]"
+        className="group cursor-pointer p-6 transition-[border-color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-blue-500/30 active:scale-[0.96]"
         onClick={() => window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')}
       >
         <div className="flex items-center space-x-3">
@@ -59,14 +59,14 @@ const SupportOptions = memo(function SupportOptions() {
             </h3>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-zinc-400">Get instant help from our community</span>
-              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors duration-150 group-hover:text-blue-400" />
+              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors duration-[var(--duration-quick)] group-hover:text-blue-400" />
             </div>
           </div>
         </div>
       </Card>
 
       <Card
-        className="group cursor-pointer p-6 transition-[border-color,transform] duration-150 ease-out hover:border-emerald-500/30 active:scale-[0.96]"
+        className="group cursor-pointer p-6 transition-[border-color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-emerald-500/30 active:scale-[0.96]"
         onClick={() => handleCopyEmail('support@stopbars.com')}
       >
         <div className="flex items-center space-x-3">
@@ -95,75 +95,25 @@ const Contact = () => {
   const [selectedTopic, setSelectedTopic] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [errorTitle, setErrorTitle] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const dropdownRef = useRef(null);
   const formRef = useRef(null);
   const emailRef = useRef(null);
   const messageRef = useRef(null);
 
-  // Handle click outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowTopicDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
   // Render topic dropdown
   const renderTopicDropdown = () => {
     return (
-      <div className="relative" ref={dropdownRef}>
-        <button
-          id="contact-topic"
-          type="button"
-          onClick={() => setShowTopicDropdown(!showTopicDropdown)}
-          aria-expanded={showTopicDropdown}
-          className="flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-white transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-        >
-          <span className={selectedTopic ? 'text-white' : 'text-zinc-500'}>
-            {selectedTopic || 'Select a topic'}
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform duration-150 ease-out ${showTopicDropdown ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {showTopicDropdown && (
-          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-150">
-            {topicOptions.map((topic, index) => (
-              <button
-                key={topic}
-                type="button"
-                onClick={() => {
-                  setSelectedTopic(topic);
-                  setShowTopicDropdown(false);
-                }}
-                className={`min-h-10 w-full px-4 py-2 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
-                  selectedTopic === topic
-                    ? 'bg-zinc-700 text-blue-400'
-                    : 'text-white hover:text-zinc-100'
-                }`}
-                style={{
-                  animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both',
-                }}
-              >
-                {topic}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <Dropdown
+        id="contact-topic"
+        value={selectedTopic}
+        onChange={setSelectedTopic}
+        options={topicOptions.map((topic) => ({ value: topic, label: topic }))}
+        placeholder="Select a topic"
+        aria-label="Contact topic"
+      />
     );
   };
 
@@ -221,7 +171,6 @@ const Contact = () => {
       setShowSuccessToast(true);
       formRef.current?.reset();
       setSelectedTopic('');
-      setShowTopicDropdown(false);
     } catch (err) {
       setErrorTitle('Error');
       setErrorMessage(err.message || 'Failed to send message, please try again.');
