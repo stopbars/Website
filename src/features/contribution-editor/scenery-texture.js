@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations -- Texture lookup keeps normalization and candidate selection as separate diagnostic stages. */
+
 export function composeXPlaneLineTexture(image, properties = {}) {
   const layers = Array.isArray(properties.lineTextureLayers)
     ? properties.lineTextureLayers.filter(validLayer)

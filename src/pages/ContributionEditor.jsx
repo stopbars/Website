@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import PropTypes from 'prop-types';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -8,7 +17,6 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
-  CircleDot,
   Download,
   Eye,
   EyeOff,
@@ -18,15 +26,19 @@ import {
   Magnet,
   MapPinPlus,
   MousePointer2,
+  Pencil,
   Redo2,
   RotateCcw,
+  Ruler,
   Scissors,
   Trash2,
   Undo2,
   Upload,
-  X,
 } from 'lucide-react';
 import { Toast } from '../components/shared/Toast';
+import { SimulatorBadge } from '../components/shared/SimulatorBadge';
+import { ExperimentalBadge } from '../components/contributions/ExperimentalBadge';
+import { ContributionGuideLink } from '../components/contributions/ContributionGuideLink';
 import EditorMap from '../features/contribution-editor/EditorMap';
 import {
   barsIdSuggestions,
@@ -38,6 +50,7 @@ import {
   serializeDraftXml,
 } from '../features/contribution-editor/editor-model.js';
 import {
+  distanceMeters,
   joinLines,
   nearestPointOnLine,
   sliceLineBetween,
@@ -54,13 +67,15 @@ import {
   hydrateReferenceTextureDefinitions,
   loadEditorDraft,
   loadEditorDraftImmediate,
+  loadEditorWorkspaceImmediate,
   loadReferenceScene,
   loadReferenceSceneImmediate,
   loadReferenceTextures,
   requestPersistentEditorStorage,
   saveEditorDraft,
+  saveEditorWorkspace,
   saveReferenceScene,
-  takeEditorSession,
+  getEditorSession,
   xPlaneTextureDefinitionKey,
 } from '../features/contribution-editor/editor-session.js';
 import {
@@ -69,7 +84,9 @@ import {
 } from '../features/contribution-editor/reference-scene.js';
 import {
   matchSnappedReference,
+  nearbyRemovalBindingFromExtendedReference,
   referenceMatchFromProjections,
+  removalBindingFromExtendedReference,
 } from '../features/contribution-editor/editor-snapping.js';
 import {
   createTextureEntryIndex,
@@ -82,6 +99,15 @@ import {
   selectionFromDrop,
   selectionFromInput,
 } from '../features/draft-generator/local-package.js';
+import { preloadRoute } from '../utils/routeModules.js';
+import {
+  automaticRemovalSelections,
+  canonicalMsfsRemovalSourceId,
+  coveredAutomaticRemovalIds,
+  createMsfsRemovalWorkerClient,
+  removalSelectionFromBinding,
+  removalBindingsWithSharedRows,
+} from '../features/contribution-editor/msfs-removal-client.js';
 
 const TOOLS = [
   { id: 'select', label: 'Edit', icon: MousePointer2, shortcut: 'V' },
@@ -91,17 +117,45 @@ const TOOLS = [
     label: 'Mark source lights for removal',
     icon: Trash2,
     shortcut: 'R',
-    xplaneOnly: true,
+    advanced: true,
   },
-  { id: 'marking-debug', label: 'Inspect marking', icon: Bug, shortcut: 'I' },
+  {
+    id: 'marking-debug',
+    label: 'Inspect marking',
+    icon: Bug,
+    shortcut: 'I',
+    advanced: true,
+  },
   { id: 'split', label: 'Split', icon: Scissors, shortcut: 'S' },
   { id: 'join', label: 'Join', icon: GitMerge, shortcut: 'J' },
+  { id: 'measure', label: 'Measure distance', icon: Ruler, shortcut: 'M' },
 ];
 const DEFAULT_VISIBLE_CATEGORIES = new Set(['painted-lines', 'runways', 'pavement-edges']);
-const EMPTY_SCENE = { version: 1, simulator: 'msfs', features: [], categories: SNAP_CATEGORIES };
+const EMPTY_SCENE = { version: 2, simulator: 'msfs', features: [], categories: SNAP_CATEGORIES };
+
+function nearestMsfsRemovalTarget(features, clickedFeature, coordinate, maximumMeters = 4) {
+  if (clickedFeature?.properties?.msfsRemovalTarget === true) return clickedFeature;
+  let best = null;
+  let bestDistance = maximumMeters;
+  for (const feature of features ?? []) {
+    if (feature.properties?.msfsRemovalTarget !== true) continue;
+    let distance = Infinity;
+    if (feature.geometry?.type === 'Point') {
+      distance = distanceMeters(coordinate, feature.geometry.coordinates);
+    } else if (feature.geometry?.type === 'LineString') {
+      distance =
+        nearestPointOnLine(coordinate, feature.geometry.coordinates)?.distanceMeters ?? Infinity;
+    }
+    if (distance <= bestDistance) {
+      best = feature;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
 
 // The editor coordinates map gestures, local extraction, persistence, and deterministic XML export.
-// oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer
+// oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/js-combine-iterations react-doctor/js-flatmap-filter react-doctor/rerender-state-only-in-handlers -- The editor is a cohesive map workflow; source selection is rendered and feeds effects, while staged geometry transforms preserve review semantics.
 export default function ContributionEditor() {
   const { icao: routeIcao } = useParams();
   const icao = String(routeIcao ?? '')
@@ -115,11 +169,17 @@ export default function ContributionEditor() {
   const workerRef = useRef(null);
   const requestIdRef = useRef(0);
   const autosaveTimerRef = useRef(null);
+  const workspaceSaveTimerRef = useRef(null);
   const initialSaveRef = useRef(false);
-  const initialSessionRef = useRef(null);
   const originalDivisionRefreshRef = useRef('');
-  if (initialSessionRef.current === null) {
-    const session = takeEditorSession(location.state?.sessionKey || icao);
+  const removalRequestRef = useRef(0);
+  const removalAbortRef = useRef(null);
+  const removalWorkerClientRef = useRef(null);
+  const [initialSession] = useState(() => {
+    // Reading render-time state must be idempotent. React Strict Mode renders this
+    // initializer twice in development; consuming the session here discarded the
+    // ephemeral MSFS render bundle before the committed editor mounted.
+    const session = getEditorSession(location.state?.sessionKey || icao);
     const localRecord = newestEditorRecord([
       loadEditorDraftImmediate(icao, 'xplane'),
       loadEditorDraftImmediate(icao, 'msfs'),
@@ -128,51 +188,115 @@ export default function ContributionEditor() {
     const localReference = localDocument
       ? loadReferenceSceneImmediate(icao, localDocument.simulator)
       : null;
-    initialSessionRef.current =
-      session ??
-      (localDocument
+    const sessionDocument = session?.document ?? localDocument;
+    const workspace = sessionDocument
+      ? loadEditorWorkspaceImmediate(icao, sessionDocument.simulator)?.workspace
+      : null;
+    return session
+      ? { ...session, workspace }
+      : localDocument
         ? {
             document: localDocument,
             referenceScene: localReference?.scene,
             sourceName: localReference?.sourceName,
+            workspace,
           }
-        : {});
-  }
+        : {};
+  });
 
-  const [airport, setAirport] = useState(initialSessionRef.current?.airport ?? null);
+  const initialWorkspace = initialSession?.workspace ?? {};
+
+  const [airport, setAirport] = useState(initialSession?.airport ?? null);
   const [state, dispatch] = useReducer(
     editorReducer,
-    initialSessionRef.current?.document ?? null,
-    (document) => (document ? createEditorState(document) : null)
+    initialSession?.document ?? null,
+    (document) => {
+      if (!document) return null;
+      const editorState = createEditorState(document);
+      const selectedId = initialWorkspace.selectedId;
+      return editorState.present.objects.some((object) => object.partId === selectedId)
+        ? { ...editorState, selectedId }
+        : editorState;
+    }
   );
   const [referenceSceneState, setReferenceScene] = useState(
-    initialSessionRef.current?.referenceScene ?? EMPTY_SCENE
+    initialSession?.referenceScene ?? EMPTY_SCENE
   );
   const referenceScene = useMemo(
     () => normalizeReferenceScene(referenceSceneState),
     [referenceSceneState]
   );
-  const [tool, setTool] = useState('select');
-  const [visibleCategories, setVisibleCategories] = useState(
-    () => new Set(DEFAULT_VISIBLE_CATEGORIES)
+  const removalReferenceFeaturesBySourceId = useMemo(() => {
+    const featuresBySourceId = new Map();
+    for (const feature of referenceScene.features ?? []) {
+      for (const value of [feature.id, feature.properties?.sourceId]) {
+        const sourceId = canonicalMsfsRemovalSourceId(value);
+        if (sourceId && !featuresBySourceId.has(sourceId)) {
+          featuresBySourceId.set(sourceId, feature);
+        }
+      }
+    }
+    return featuresBySourceId;
+  }, [referenceScene.features]);
+  const nearbyRemovalReferenceFeatures = useMemo(
+    () =>
+      (referenceScene.features ?? []).filter(
+        (feature) =>
+          feature.geometry?.type === 'LineString' && feature.properties?.msfsRemovalTarget === true
+      ),
+    [referenceScene.features]
   );
-  const [divisionGhostsVisible, setDivisionGhostsVisible] = useState(false);
-  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [tool, setTool] = useState(() =>
+    TOOLS.some((candidate) => candidate.id === initialWorkspace.tool)
+      ? initialWorkspace.tool
+      : 'select'
+  );
+  const [visibleCategories, setVisibleCategories] = useState(
+    () =>
+      new Set(
+        initialWorkspace.visibleCategories?.length
+          ? initialWorkspace.visibleCategories
+          : DEFAULT_VISIBLE_CATEGORIES
+      )
+  );
+  const [divisionGhostsVisible, setDivisionGhostsVisible] = useState(
+    Boolean(initialWorkspace.divisionGhostsVisible)
+  );
+  const [editorObjectsVisible, setEditorObjectsVisible] = useState(
+    initialWorkspace.editorObjectsVisible !== false
+  );
+  const [snapEnabled, setSnapEnabled] = useState(initialWorkspace.snapEnabled !== false);
   const snapToleranceMeters = 8;
-  const [objectsOpen, setObjectsOpen] = useState(true);
-  const [validationOpen, setValidationOpen] = useState(false);
-  const [rightPanel, setRightPanel] = useState('scenery');
-  const [uniqueObjectColors, setUniqueObjectColors] = useState(false);
+  const [validationOpen, setValidationOpen] = useState(Boolean(initialWorkspace.validationOpen));
+  const [quickEditingId, setQuickEditingId] = useState(null);
+  const [removalSectionStart, setRemovalSectionStart] = useState(null);
+  const [measurementStart, setMeasurementStart] = useState(null);
+  const [measurements, setMeasurements] = useState([]);
+  const measurementIdRef = useRef(0);
+  const [rightPanel, setRightPanel] = useState(
+    initialWorkspace.rightPanel === 'object' ? 'object' : 'scenery'
+  );
+  const [uniqueObjectColors, setUniqueObjectColors] = useState(
+    Boolean(initialWorkspace.uniqueObjectColors)
+  );
+  const [advancedOpen, setAdvancedOpen] = useState(
+    Boolean(
+      initialWorkspace.advancedOpen ||
+      TOOLS.find((candidate) => candidate.id === initialWorkspace.tool)?.advanced
+    )
+  );
+  const [viewport, setViewport] = useState(initialWorkspace.viewport ?? null);
   const [focusRequest, setFocusRequest] = useState(null);
   const [followState, setFollowState] = useState(null);
   const [sourceProgress, setSourceProgress] = useState(null);
   const [sourceSelection, setSourceSelection] = useState(
     () =>
-      initialSessionRef.current?.sourceSelection ??
-      (initialSessionRef.current?.sourceName
-        ? { name: initialSessionRef.current.sourceName, entries: [] }
-        : null)
+      initialSession?.sourceSelection ??
+      (initialSession?.sourceName ? { name: initialSession.sourceName, entries: [] } : null)
   );
+  const [renderBundle, setRenderBundle] = useState(initialSession?.renderBundle ?? null);
+  const [removalContext, setRemovalContext] = useState(initialSession?.removalContext ?? null);
+  const [removalBusy, setRemovalBusy] = useState(false);
   const [sourceMismatch, setSourceMismatch] = useState(false);
   const [dragTarget, setDragTarget] = useState('');
   const [cachedTexturePaths, setCachedTexturePaths] = useState(() => new Set());
@@ -180,6 +304,9 @@ export default function ContributionEditor() {
     phase: 'idle',
     total: 0,
     loaded: 0,
+    packageTotal: 0,
+    packageLoaded: 0,
+    fallbackLoaded: 0,
     missing: 0,
     failed: 0,
     skipped: 0,
@@ -191,7 +318,7 @@ export default function ContributionEditor() {
     cached: 0,
     connected: 0,
   });
-  const [savedAt, setSavedAt] = useState(null);
+  const [, setSavedAt] = useState(null);
   const initialTextureCacheRef = useRef('');
   const [toast, setToast] = useState({
     show: false,
@@ -203,16 +330,70 @@ export default function ContributionEditor() {
   const document = state?.present;
   const latestDocumentRef = useRef(document);
   const latestDirtyRef = useRef(Boolean(state?.dirty));
-  latestDocumentRef.current = document;
-  latestDirtyRef.current = Boolean(state?.dirty);
+  const workspaceSnapshot = useMemo(
+    () => ({
+      selectedId: state?.selectedId ?? null,
+      tool,
+      visibleCategories: [...visibleCategories],
+      divisionGhostsVisible,
+      editorObjectsVisible,
+      snapEnabled,
+      validationOpen,
+      rightPanel,
+      uniqueObjectColors,
+      advancedOpen,
+      viewport,
+    }),
+    [
+      advancedOpen,
+      divisionGhostsVisible,
+      editorObjectsVisible,
+      rightPanel,
+      snapEnabled,
+      state?.selectedId,
+      tool,
+      uniqueObjectColors,
+      validationOpen,
+      viewport,
+      visibleCategories,
+    ]
+  );
+  const latestWorkspaceRef = useRef(workspaceSnapshot);
   const hydrationRef = useRef({
     icao,
-    enabled: editorSessionNeedsHydration(initialSessionRef.current),
+    enabled: editorSessionNeedsHydration(initialSession),
   });
-  if (hydrationRef.current.icao !== icao) {
-    hydrationRef.current = { icao, enabled: true };
-  }
+  useLayoutEffect(() => {
+    latestWorkspaceRef.current = workspaceSnapshot;
+    latestDocumentRef.current = document;
+    latestDirtyRef.current = Boolean(state?.dirty);
+  }, [document, state?.dirty, workspaceSnapshot]);
+  useLayoutEffect(() => {
+    if (hydrationRef.current.icao !== icao) {
+      hydrationRef.current = { icao, enabled: true };
+    }
+  }, [icao]);
   const selectedObject = document?.objects.find((object) => object.partId === state.selectedId);
+  const msfsRemovalSourceIds = useMemo(() => {
+    const sourceIds = new Set();
+    for (const removal of document?.removals ?? []) {
+      if (removal.origin !== 'msfs-source') continue;
+      for (const sourceId of removal.sourceIds ?? []) sourceIds.add(String(sourceId));
+    }
+    return sourceIds;
+  }, [document?.removals]);
+  const msfsManualRemovalSelections = useMemo(
+    () =>
+      (document?.removals ?? [])
+        .filter((removal) => removal.origin === 'msfs-manual')
+        .flatMap((removal) =>
+          removal.selections?.length
+            ? removal.selections
+            : (removal.sourceIds ?? []).map((sourceId) => ({ sourceId: String(sourceId) }))
+        ),
+    [document?.removals]
+  );
+
   const issues = useMemo(() => (document ? validateEditorDocument(document) : []), [document]);
   const selectedIssues = issues.filter((issue) => issue.partId === state?.selectedId);
   const partMetadata = useMemo(
@@ -220,8 +401,14 @@ export default function ContributionEditor() {
     [document?.objects]
   );
   const idSuggestions = useMemo(
-    () => barsIdSuggestions(document?.originalDivisions, selectedObject?.id),
-    [document?.originalDivisions, selectedObject?.id]
+    () =>
+      barsIdSuggestions(document?.originalDivisions, selectedObject?.id, 6, {
+        coordinate: selectedObject?.coordinates?.[0],
+        excludeIds: (document?.objects ?? [])
+          .filter((object) => object.partId !== selectedObject?.partId)
+          .map((object) => object.id),
+      }),
+    [document?.objects, document?.originalDivisions, selectedObject]
   );
   const localTextureStats = useMemo(() => {
     if (document?.simulator !== 'xplane') return null;
@@ -254,6 +441,7 @@ export default function ContributionEditor() {
   const editorReady = Boolean(
     document &&
     hasReferenceScene &&
+    (document.simulator !== 'msfs' || renderBundle) &&
     (document.simulator !== 'xplane' || !localTextureStats?.needsLibrary)
   );
   const showError = useCallback((description) => {
@@ -459,6 +647,26 @@ export default function ContributionEditor() {
   }, [document, state?.dirty]);
 
   useEffect(() => {
+    if (!document) return undefined;
+    clearTimeout(workspaceSaveTimerRef.current);
+    workspaceSaveTimerRef.current = setTimeout(() => {
+      saveEditorWorkspace(icao, document.simulator, workspaceSnapshot).catch(() => {});
+    }, 300);
+    return () => clearTimeout(workspaceSaveTimerRef.current);
+  }, [document, icao, workspaceSnapshot]);
+
+  useEffect(() => {
+    removalWorkerClientRef.current?.terminate();
+    removalWorkerClientRef.current = removalContext
+      ? createMsfsRemovalWorkerClient(removalContext)
+      : null;
+    return () => {
+      removalWorkerClientRef.current?.terminate();
+      removalWorkerClientRef.current = null;
+    };
+  }, [removalContext]);
+
+  useEffect(() => {
     if (!document || initialSaveRef.current) return;
     initialSaveRef.current = true;
     saveEditorDraft(document).then((record) => setSavedAt(record.savedAt));
@@ -485,6 +693,7 @@ export default function ContributionEditor() {
       if (event.key === 'Escape') {
         setTool('select');
         setFollowState(null);
+        setMeasurementStart(null);
         dispatch({ type: 'select', id: null });
         return;
       }
@@ -494,10 +703,14 @@ export default function ContributionEditor() {
           (!candidate.xplaneOnly || document?.simulator === 'xplane')
       );
       if (selectedTool) {
-        if (selectedTool.id === 'remove-light') {
+        if (selectedTool.id !== 'measure') setMeasurementStart(null);
+        if (selectedTool.id === 'remove-light' || selectedTool.id === 'draw') {
           setVisibleCategories((categories) => new Set([...categories, 'light-rows']));
+        }
+        if (selectedTool.id === 'remove-light') {
           setRightPanel('scenery');
         }
+        if (selectedTool.advanced) setAdvancedOpen(true);
         setTool(selectedTool.id);
       }
     };
@@ -508,56 +721,156 @@ export default function ContributionEditor() {
   useEffect(
     () => () => {
       workerRef.current?.terminate();
+      removalAbortRef.current?.abort();
+      removalWorkerClientRef.current?.terminate();
       clearTimeout(autosaveTimerRef.current);
+      clearTimeout(workspaceSaveTimerRef.current);
       if (latestDirtyRef.current && latestDocumentRef.current) {
         saveEditorDraft(latestDocumentRef.current);
       }
+      if (latestDocumentRef.current) {
+        saveEditorWorkspace(icao, latestDocumentRef.current.simulator, latestWorkspaceRef.current);
+      }
     },
-    []
+    [icao]
   );
 
   const selectTool = useCallback(
     (nextTool) => {
       if (!document) return;
       setFollowState(null);
-      if (nextTool === 'remove-light') {
+      setRemovalSectionStart(null);
+      if (nextTool !== 'measure') setMeasurementStart(null);
+      if (nextTool === 'remove-light' || nextTool === 'draw') {
         setVisibleCategories((categories) => new Set([...categories, 'light-rows']));
+      }
+      if (nextTool === 'remove-light') {
         setRightPanel('scenery');
+      }
+      if (TOOLS.find((candidate) => candidate.id === nextTool)?.advanced) {
+        setAdvancedOpen(true);
       }
       setTool(nextTool);
     },
     [document]
   );
 
+  const syncAutomaticMsfsRemoval = useCallback(
+    async (matchOrMatches, retainedBindings = [], replacedRemovalIds = []) => {
+      if (document?.simulator !== 'msfs' || !removalContext) return;
+      const selections = automaticRemovalSelections(matchOrMatches, retainedBindings);
+      if (selections.length === 0) return;
+      removalAbortRef.current?.abort();
+      const abortController = new AbortController();
+      removalAbortRef.current = abortController;
+      const workerClient = removalWorkerClientRef.current;
+      if (!workerClient) return;
+      const requestId = ++removalRequestRef.current;
+      setRemovalBusy(true);
+      try {
+        const result = await workerClient.build(selections, {
+          signal: abortController.signal,
+        });
+        if (requestId !== removalRequestRef.current) return;
+        const acceptedSourceIds = new Set((result.acceptedSourceIds ?? []).map(String));
+        const acceptedSelections = selections.filter((selection) =>
+          acceptedSourceIds.has(String(selection.sourceId))
+        );
+        const rejectedSelections = selections.filter(
+          (selection) => !acceptedSourceIds.has(String(selection.sourceId))
+        );
+        const affectedSourceIds = new Set();
+        for (const selection of acceptedSelections) affectedSourceIds.add(selection.sourceId);
+        for (const sourceId of result.generatedSourceIds ?? []) affectedSourceIds.add(sourceId);
+        if (affectedSourceIds.size > 0) {
+          dispatch({
+            type: 'upsert-msfs-auto-removals',
+            sourceIds: [...affectedSourceIds],
+            removalIds: replacedRemovalIds,
+            removals: result.removals,
+          });
+        }
+        if (rejectedSelections.length > 0) {
+          showError(
+            `Automatic removal could not safely update ${rejectedSelections.length === 1 ? 'one simulator row' : `${rejectedSelections.length} simulator rows`}.`
+          );
+        }
+      } catch (error) {
+        if (error?.name !== 'AbortError' && requestId === removalRequestRef.current) {
+          showError(error instanceof Error ? error.message : String(error));
+        }
+      } finally {
+        if (requestId === removalRequestRef.current) {
+          removalAbortRef.current = null;
+          setRemovalBusy(false);
+        }
+      }
+    },
+    [document?.simulator, removalContext, showError]
+  );
+
   const handleMapClick = useCallback(
     (coordinate, metadata) => {
       if (!document) return;
-      if (tool === 'split' && selectedObject) {
+      if (tool === 'measure') {
+        if (!measurementStart) {
+          setMeasurementStart(coordinate);
+          return;
+        }
+        const measuredDistance = distanceMeters(measurementStart, coordinate);
+        if (measuredDistance > 0.05) {
+          const id = `measurement:${++measurementIdRef.current}`;
+          setMeasurements((current) => [
+            ...current,
+            { id, coordinates: [measurementStart, coordinate], distanceMeters: measuredDistance },
+          ]);
+        }
+        setMeasurementStart(null);
+      } else if (tool === 'split' && selectedObject) {
         const projection = nearestPointOnLine(coordinate, selectedObject.coordinates);
         if (!projection || projection.distanceMeters > snapToleranceMeters) return;
         const split = splitLineAt(selectedObject.coordinates, projection);
         if (!split) return;
+        const splitMatches =
+          document.simulator === 'msfs'
+            ? split.map((coordinates) =>
+                matchSnappedReference(coordinates, referenceScene.features, 1.5, {
+                  allowDerived: true,
+                })
+              )
+            : [null, null];
         const sibling = {
           ...selectedObject,
-          id:
-            document.simulator === 'xplane'
-              ? selectedObject.id
-              : uniqueSiblingId(document.objects, selectedObject.id),
+          id: selectedObject.id,
           partId: uniquePartId(document.objects, selectedObject.id),
           name: selectedObject.name,
           coordinates: split[1],
-          sourceBindings: [],
+          sourceBindings: splitMatches[1]?.binding ? [splitMatches[1].binding] : [],
         };
         dispatch({
           type: 'replace-objects',
           objects: document.objects
             .map((object) =>
               object.partId === selectedObject.partId
-                ? { ...object, coordinates: split[0] }
+                ? {
+                    ...object,
+                    coordinates: split[0],
+                    sourceBindings:
+                      document.simulator === 'msfs'
+                        ? splitMatches[0]?.binding
+                          ? [splitMatches[0].binding]
+                          : []
+                        : object.sourceBindings,
+                  }
                 : object
             )
             .concat(sibling),
         });
+        void syncAutomaticMsfsRemoval(
+          splitMatches,
+          selectedObject.sourceBindings,
+          coveredAutomaticRemovalIds(document.removals, selectedObject.coordinates)
+        );
         setTool('select');
       } else if (tool === 'join' && selectedObject) {
         const targetId = String(metadata.editorFeature?.properties?.editorId ?? '');
@@ -595,8 +908,32 @@ export default function ContributionEditor() {
         setTool('select');
       }
     },
-    [document, selectedObject, showError, snapToleranceMeters, tool]
+    [
+      document,
+      measurementStart,
+      referenceScene.features,
+      selectedObject,
+      showError,
+      snapToleranceMeters,
+      syncAutomaticMsfsRemoval,
+      tool,
+    ]
   );
+
+  const handleMeasurementMove = useCallback((id, coordinates) => {
+    setMeasurements((current) =>
+      current.map((measurement) =>
+        measurement.id === id
+          ? {
+              ...measurement,
+              coordinates,
+              distanceMeters: distanceMeters(coordinates[0], coordinates[1]),
+            }
+          : measurement
+      )
+    );
+  }, []);
+  const handleMeasurementCancel = useCallback(() => setMeasurementStart(null), []);
 
   const handleSelect = useCallback((id, { focus = false } = {}) => {
     dispatch({ type: 'select', id });
@@ -636,51 +973,177 @@ export default function ContributionEditor() {
   const handleCreate = useCallback(
     (coordinates) => {
       if (!document || coordinates.length < 2) return;
-      const id = uniqueManualId(document.objects);
-      const match =
-        document.simulator === 'xplane'
-          ? matchSnappedReference(coordinates, referenceScene.features)
-          : null;
+      const match = matchSnappedReference(coordinates, referenceScene.features, 1.5, {
+        allowDerived: document.simulator === 'msfs',
+      });
       dispatch({
         type: 'add-object',
         match,
         object: {
-          id,
+          id: '',
+          partId: uniquePartId(document.objects, 'manual'),
           name: 'New object',
           type: 'lead_on',
           status: match ? 'matched' : 'manual',
           coordinates,
           color: '#22d3ee',
-          sourceBindings: match?.bindings ?? (match?.binding ? [match.binding] : []),
+          sourceBindings:
+            document.simulator === 'msfs'
+              ? match?.binding
+                ? [match.binding]
+                : []
+              : (match?.bindings ?? (match?.binding ? [match.binding] : [])),
         },
       });
       setTool('select');
       setRightPanel('object');
+      void syncAutomaticMsfsRemoval(match);
     },
-    [document, referenceScene.features]
+    [document, referenceScene.features, syncAutomaticMsfsRemoval]
   );
 
   const handleGeometryChange = useCallback(
     (id, coordinates) => {
       if (coordinates.length < 2) return;
-      const match =
-        document?.simulator === 'xplane'
-          ? matchSnappedReference(coordinates, referenceScene.features)
-          : null;
+      const match = matchSnappedReference(coordinates, referenceScene.features, 1.5, {
+        allowDerived: document?.simulator === 'msfs',
+      });
+      const previousObject = document?.objects.find((object) => object.partId === id);
+      const projectedBindings = (previousObject?.sourceBindings ?? []).map((binding) => {
+        const sourceId = canonicalMsfsRemovalSourceId(binding.sourceId);
+        const feature = removalReferenceFeaturesBySourceId.get(sourceId);
+        return removalBindingFromExtendedReference(coordinates, feature) ?? binding;
+      });
+      const projectedSourceIds = new Set(
+        projectedBindings.map((binding) => canonicalMsfsRemovalSourceId(binding.sourceId))
+      );
+      const matchedBindings = match?.bindings ?? (match?.binding ? [match.binding] : []);
+      const removalBindings = [...projectedBindings];
+      for (const binding of matchedBindings) {
+        const sourceId = canonicalMsfsRemovalSourceId(binding.sourceId);
+        if (projectedSourceIds.has(sourceId)) continue;
+        projectedSourceIds.add(sourceId);
+        removalBindings.push(binding);
+      }
+      for (const feature of nearbyRemovalReferenceFeatures) {
+        const binding = nearbyRemovalBindingFromExtendedReference(coordinates, feature, 1.5);
+        if (!binding) continue;
+        const sourceId = canonicalMsfsRemovalSourceId(binding.sourceId);
+        if (projectedSourceIds.has(sourceId)) continue;
+        projectedSourceIds.add(sourceId);
+        removalBindings.push(binding);
+      }
+      const sharedRemovalBindings = removalBindingsWithSharedRows(
+        document?.objects,
+        id,
+        removalBindings
+      );
       dispatch({
         type: 'update-object-geometry',
         id,
         coordinates,
         match,
+        sourceBindings: document?.simulator === 'msfs' ? removalBindings : undefined,
       });
+      void syncAutomaticMsfsRemoval(
+        sharedRemovalBindings.length > 0 ? { bindings: sharedRemovalBindings } : match,
+        [],
+        coveredAutomaticRemovalIds(document?.removals, previousObject?.coordinates)
+      );
     },
-    [document?.simulator, referenceScene.features]
+    [
+      document,
+      nearbyRemovalReferenceFeatures,
+      referenceScene.features,
+      removalReferenceFeaturesBySourceId,
+      syncAutomaticMsfsRemoval,
+    ]
   );
 
   const handleReferenceClick = useCallback(
-    (feature, coordinate) => {
+    async (feature, coordinate, { selectSection = false } = {}) => {
       if (tool === 'remove-light') {
         const properties = feature.properties ?? {};
+        if (document?.simulator === 'msfs') {
+          if (properties.mustKeep === true) {
+            showError('This BGL light is protected as must keep and will not be removed.');
+            return;
+          }
+          const removalFeature = nearestMsfsRemovalTarget(
+            referenceScene.features,
+            feature,
+            coordinate
+          );
+          const removalProperties = removalFeature?.properties ?? {};
+          const sourceId = String(removalProperties.sourceId ?? removalFeature?.id ?? '');
+          if (
+            removalProperties.msfsRemovalTarget !== true ||
+            !['light-rows', 'fixtures'].includes(removalProperties.snapCategory)
+          ) {
+            showError('Select a source-backed stopbar, lead-on, or taxi-centreline light.');
+            return;
+          }
+          if (!removalContext) {
+            showError('Reconnect the scenery package before changing MSFS removals.');
+            return;
+          }
+          let nextSelections = [...msfsManualRemovalSelections];
+          if (selectSection && removalFeature.geometry?.type === 'LineString') {
+            const projection = nearestPointOnLine(coordinate, removalFeature.geometry.coordinates);
+            if (!projection) return;
+            if (!removalSectionStart || removalSectionStart.sourceId !== sourceId) {
+              setRemovalSectionStart({ sourceId, feature: removalFeature, projection });
+              return;
+            }
+            const section = referenceMatchFromProjections(
+              removalFeature,
+              removalSectionStart.projection,
+              projection
+            );
+            const selection = removalSelectionFromBinding(section?.binding);
+            if (!selection) return;
+            nextSelections = [
+              ...nextSelections.filter((item) => item.sourceId !== sourceId),
+              selection,
+            ];
+            setRemovalSectionStart(null);
+          } else {
+            const hasManualSelection = nextSelections.some(
+              (selection) => selection.sourceId === sourceId
+            );
+            nextSelections = hasManualSelection
+              ? nextSelections.filter((selection) => selection.sourceId !== sourceId)
+              : [...nextSelections, { sourceId }];
+            setRemovalSectionStart(null);
+          }
+          removalAbortRef.current?.abort();
+          const abortController = new AbortController();
+          removalAbortRef.current = abortController;
+          const workerClient = removalWorkerClientRef.current;
+          if (!workerClient) return;
+          const requestId = ++removalRequestRef.current;
+          setRemovalBusy(true);
+          try {
+            const result = await workerClient.build(nextSelections, {
+              signal: abortController.signal,
+            });
+            if (requestId !== removalRequestRef.current) return;
+            dispatch({ type: 'replace-msfs-manual-removals', removals: result.removals });
+            if (result.rejectedSourceIds.includes(sourceId)) {
+              showError('That light cannot be removed without touching must-keep BGL lighting.');
+            }
+          } catch (error) {
+            if (error?.name !== 'AbortError' && requestId === removalRequestRef.current) {
+              showError(error instanceof Error ? error.message : String(error));
+            }
+          } finally {
+            if (requestId === removalRequestRef.current) {
+              removalAbortRef.current = null;
+              setRemovalBusy(false);
+            }
+          }
+          return;
+        }
         const selector = {
           feature: String(properties.sourceFeatureId ?? ''),
           code: Number(properties.lightCode),
@@ -700,6 +1163,26 @@ export default function ContributionEditor() {
           );
           return;
         }
+        if (selectSection && feature.geometry?.type === 'LineString') {
+          const projection = nearestPointOnLine(coordinate, feature.geometry.coordinates);
+          if (!projection) return;
+          const sourceId = String(properties.sourceId ?? feature.id ?? selector.feature);
+          if (!removalSectionStart || removalSectionStart.sourceId !== sourceId) {
+            setRemovalSectionStart({ sourceId, feature, projection });
+            return;
+          }
+          const match = referenceMatchFromProjections(
+            feature,
+            removalSectionStart.projection,
+            projection
+          );
+          const sectionSelector = match?.selector ?? match?.selectors?.[0];
+          if (sectionSelector)
+            dispatch({ type: 'toggle-xplane-removal', selector: sectionSelector });
+          setRemovalSectionStart(null);
+          return;
+        }
+        setRemovalSectionStart(null);
         dispatch({ type: 'toggle-xplane-removal', selector });
         return;
       }
@@ -736,7 +1219,17 @@ export default function ContributionEditor() {
       setFollowState(null);
       setTool('select');
     },
-    [document?.simulator, followState, referenceScene.features, selectedObject, showError, tool]
+    [
+      document?.simulator,
+      followState,
+      msfsManualRemovalSelections,
+      removalContext,
+      referenceScene.features,
+      removalSectionStart,
+      selectedObject,
+      showError,
+      tool,
+    ]
   );
 
   const processDraftFile = useCallback(
@@ -760,6 +1253,8 @@ export default function ContributionEditor() {
           .then(() => setSavedAt(new Date()))
           .catch(() => {});
         setReferenceScene({ ...EMPTY_SCENE, simulator: next.simulator });
+        setRenderBundle(null);
+        setRemovalContext(null);
         setSourceSelection(null);
         setCachedTexturePaths(new Set());
         setSourceMismatch(false);
@@ -800,7 +1295,11 @@ export default function ContributionEditor() {
               `This is ${formatSimulator(message.result.simulator)} scenery, but the draft is for ${formatSimulator(document.simulator)}.`
             );
           } else {
+            setSourceSelection(selection);
             setReferenceScene(message.result.scene);
+            setRenderBundle(message.result.renderBundle || null);
+            setRemovalContext(message.result.removalContext || null);
+            setSourceMismatch(false);
             dispatch({
               type: 'update-source',
               source: { name: selection.name, fingerprint },
@@ -843,7 +1342,6 @@ export default function ContributionEditor() {
       const selection = selectionFromInput(event.target.files);
       event.target.value = '';
       if (!selection) return;
-      setSourceSelection(selection);
       extractReference(selection);
     },
     [extractReference]
@@ -899,9 +1397,13 @@ export default function ContributionEditor() {
 
   const handleTextureLibraryInput = useCallback(
     (event) => {
-      const library = selectionFromInput(event.target.files);
+      const files = Array.from(event.target.files ?? []);
       event.target.value = '';
-      connectTextureLibrary(library);
+      if (files.length === 0) return;
+      setSourceProgress({ kind: 'textures', stage: 'Reading selected textures', progress: 5 });
+      requestAnimationFrame(() => {
+        setTimeout(() => connectTextureLibrary(selectionFromInput(files)), 0);
+      });
     },
     [connectTextureLibrary]
   );
@@ -925,7 +1427,6 @@ export default function ContributionEditor() {
       try {
         const selection = await selectionFromDrop(event.dataTransfer);
         if (!selection) return;
-        setSourceSelection(selection);
         extractReference(selection);
       } catch (error) {
         showError(error instanceof Error ? error.message : String(error));
@@ -964,7 +1465,11 @@ export default function ContributionEditor() {
       return;
     }
     const draftXml = serializeDraftXml(document);
-    const [hash, saved] = await Promise.all([draftHash(draftXml), saveEditorDraft(document)]);
+    const [hash, saved] = await Promise.all([
+      draftHash(draftXml),
+      saveEditorDraft(document),
+      preloadRoute(`/contribute/test/${icao}`),
+    ]);
     setSavedAt(saved.savedAt);
     navigate(`/contribute/test/${icao}`, {
       state: {
@@ -973,27 +1478,31 @@ export default function ContributionEditor() {
         simulator: document.simulator,
         draftHash: hash,
         fromEditor: true,
+        airportName: airport?.name || '',
       },
     });
-  }, [document, icao, issues, navigate, showError]);
+  }, [airport?.name, document, icao, issues, navigate, showError]);
 
   if (!document) {
     return (
       <div className="min-h-dvh bg-zinc-950 text-white">
         <main className="min-h-dvh px-6 py-12">
           <div className="mx-auto max-w-4xl">
-            <Link
-              to={`/contribute/generator/${icao}`}
-              className="inline-flex items-center gap-2 text-xs text-zinc-400 transition hover:text-white"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Back to draft generator
-            </Link>
+            <div className="flex items-center justify-between gap-4">
+              <Link
+                to={`/contribute/generator/${icao}`}
+                className="inline-flex items-center gap-2 text-xs text-zinc-400 transition hover:text-white"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Back to draft generator
+              </Link>
+            </div>
             <div className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6 sm:p-8">
               <p className="font-mono text-xs text-zinc-500">{icao}</p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white">
-                Open a draft
-              </h1>
+              <div className="mt-3 flex items-center justify-between gap-4">
+                <h1 className="text-3xl font-semibold tracking-tight text-white">Open a draft</h1>
+                <ContributionGuideLink tooltipSide="bottom" />
+              </div>
               <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-400">
                 Create a draft from your scenery before opening the editor.
               </p>
@@ -1046,6 +1555,7 @@ export default function ContributionEditor() {
   if (!editorReady) {
     const sceneryLoading = Boolean(sourceProgress && sourceProgress.kind !== 'textures');
     const textureLoading = sourceProgress?.kind === 'textures';
+    const sceneryReady = hasReferenceScene && (document.simulator !== 'msfs' || renderBundle);
     const textureDetail = !hasReferenceScene
       ? 'Add the scenery package first'
       : localTextureStats?.unresolvedDefinitions
@@ -1058,19 +1568,24 @@ export default function ContributionEditor() {
       <div className="min-h-dvh bg-zinc-950 text-white">
         <main className="min-h-dvh px-6 py-12">
           <div className="mx-auto max-w-3xl">
-            <Link
-              to={`/contribute/generator/${icao}`}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm text-zinc-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-            >
-              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-              Back to draft generator
-            </Link>
+            <div className="flex items-center justify-between gap-4">
+              <Link
+                to={`/contribute/generator/${icao}`}
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm text-zinc-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                Back to draft generator
+              </Link>
+            </div>
 
             <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900 p-6 sm:p-8">
               <p className="font-mono text-xs text-zinc-500">{icao}</p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white text-balance">
-                Finish editor setup
-              </h1>
+              <div className="mt-3 flex items-center justify-between gap-4">
+                <h1 className="text-3xl font-semibold tracking-tight text-white text-balance">
+                  Finish editor setup
+                </h1>
+                <ContributionGuideLink tooltipSide="bottom" />
+              </div>
               <p className="mt-3 max-w-xl text-sm text-zinc-400">
                 Add the source files needed to draw an accurate editor map.
               </p>
@@ -1093,12 +1608,14 @@ export default function ContributionEditor() {
                   number={2}
                   label="Scenery package"
                   detail={
-                    sourceSelection?.name ||
-                    (hasReferenceScene
-                      ? `${referenceScene.features.length.toLocaleString()} references ready`
-                      : 'Choose the airport scenery folder')
+                    document.simulator === 'msfs' && hasReferenceScene && !renderBundle
+                      ? 'Reconnect the same MSFS scenery folder to continue'
+                      : sourceSelection?.name ||
+                        (sceneryReady
+                          ? `${referenceScene.features.length.toLocaleString()} references ready`
+                          : 'Choose the airport scenery folder')
                   }
-                  complete={hasReferenceScene}
+                  complete={sceneryReady}
                   active={dragTarget === 'scenery'}
                   loading={sceneryLoading}
                   disabled={!airport}
@@ -1133,7 +1650,7 @@ export default function ContributionEditor() {
                   </div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
                     <div
-                      className="h-full rounded-full bg-blue-400 transition-[width]"
+                      className="h-full rounded-full bg-blue-400 transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth-out)]"
                       style={{ width: `${sourceProgress.progress}%` }}
                     />
                   </div>
@@ -1197,26 +1714,13 @@ export default function ContributionEditor() {
                 {icao}
                 <span className="ml-1.5 font-normal text-zinc-500">{airport?.name}</span>
               </h1>
-              <span className="shrink-0 text-xs text-zinc-500">
-                {formatSimulator(document.simulator)}
-              </span>
-              <span
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                  state.dirty ? 'bg-amber-400' : 'bg-emerald-400/70'
-                }`}
-                aria-label={state.dirty ? 'Saving draft' : 'Draft saved locally'}
-                title={
-                  state.dirty
-                    ? 'Saving draft'
-                    : savedAt
-                      ? 'Draft saved locally'
-                      : 'Local draft ready'
-                }
-              />
+              <SimulatorBadge simulator={document.simulator} />
+              {document.simulator === 'msfs' ? <ExperimentalBadge /> : null}
             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
+            <ContributionGuideLink tooltipSide="bottom" />
             <IconButton
               label="Undo"
               icon={Undo2}
@@ -1249,112 +1753,130 @@ export default function ContributionEditor() {
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto lg:grid-cols-[13rem_minmax(0,1fr)_17rem] lg:overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto lg:grid-cols-[17rem_minmax(0,1fr)_18rem] lg:overflow-hidden">
           <aside className="order-2 border-r border-zinc-800/80 bg-zinc-950 lg:order-1 lg:overflow-y-auto">
-            <div className="p-2">
-              <button
-                type="button"
-                onClick={() => selectTool('draw')}
-                className="flex h-9 w-full items-center justify-center gap-2 rounded-md bg-zinc-100 text-xs font-medium text-zinc-950 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-              >
-                <MapPinPlus className="h-4 w-4" />
-                Add object
-              </button>
-              <p className="mt-2 px-1 text-xs leading-4 text-zinc-500">
-                Click an object to edit it. Click empty map space to deselect.
-              </p>
+            <div className="flex min-h-11 items-center justify-between border-b border-zinc-800 px-3">
+              <h2 className="text-xs font-medium text-zinc-200">Objects</h2>
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs tabular-nums text-zinc-400">
+                {document.objects.length}
+              </span>
             </div>
-            <Section
-              title="Objects"
-              icon={CircleDot}
-              open={objectsOpen}
-              onToggle={() => setObjectsOpen((value) => !value)}
-              badge={document.objects.length}
-            >
-              <div className="space-y-1 px-2 pb-3">
-                {document.objects.map((object, objectIndex) => {
-                  const objectIssues = issues.filter((issue) => issue.partId === object.partId);
-                  const part = partMetadata.get(object.partId);
-                  return (
-                    <button
-                      type="button"
-                      key={`${object.id}:${objectIndex}`}
-                      onClick={() => handleSelect(object.partId, { focus: true })}
-                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
-                        object.partId === state.selectedId
-                          ? 'bg-zinc-100 text-zinc-950'
-                          : 'text-zinc-300 hover:bg-zinc-900'
-                      }`}
-                    >
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{
-                          backgroundColor: objectDisplayColor(object, uniqueObjectColors),
-                        }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[11px] font-medium">
-                          {object.name}
-                        </span>
+            <div className="space-y-1 p-2">
+              {document.objects.map((object, objectIndex) => {
+                const objectIssues = issues.filter((issue) => issue.partId === object.partId);
+                const part = partMetadata.get(object.partId);
+                return (
+                  <div
+                    key={`${object.id}:${objectIndex}`}
+                    className={`rounded-md ${
+                      object.partId === state.selectedId
+                        ? 'bg-zinc-100 text-zinc-950'
+                        : 'bg-zinc-900/30 text-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1 p-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSelect(object.partId, { focus: true })}
+                        className={`flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
+                          object.partId === state.selectedId ? '' : 'hover:bg-zinc-800/70'
+                        }`}
+                      >
                         <span
-                          className={`block truncate font-mono text-xs ${
-                            object.partId === state.selectedId ? 'text-zinc-600' : 'text-zinc-500'
-                          }`}
-                        >
-                          {object.id || 'BARS ID required'}
-                        </span>
-                      </span>
-                      {part?.total > 1 ? (
-                        <span className="shrink-0 text-xs tabular-nums text-zinc-500">
-                          {part.index}/{part.total}
-                        </span>
-                      ) : null}
-                      {objectIssues.length > 0 ? (
-                        <AlertTriangle
-                          className={`h-3.5 w-3.5 ${
-                            objectIssues.some((issue) => issue.severity === 'error')
-                              ? 'text-rose-400'
-                              : 'text-amber-400'
-                          }`}
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor: objectDisplayColor(object, uniqueObjectColors),
+                          }}
                         />
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </Section>
-
-            <Section
-              title="Validation"
-              icon={AlertTriangle}
-              open={validationOpen}
-              onToggle={() => setValidationOpen((value) => !value)}
-              badge={issues.length}
-            >
-              <div className="max-h-[28vh] space-y-2 overflow-y-auto px-3 pb-4">
-                {issues.length === 0 ? (
-                  <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
-                    Ready to test. No geometry issues found.
-                  </p>
-                ) : (
-                  issues.map((issue) => (
-                    <button
-                      type="button"
-                      key={issue.id}
-                      onClick={() => handleIssueSelect(issue)}
-                      className={`w-full rounded-lg border px-3 py-2 text-left text-[11px] leading-4 ${
-                        issue.severity === 'error'
-                          ? 'border-rose-500/25 bg-rose-500/5 text-rose-200'
-                          : 'border-amber-500/20 bg-amber-500/5 text-amber-100'
-                      }`}
-                    >
-                      <span className="font-mono text-xs opacity-60">{issue.objectId}</span>
-                      <span className="mt-0.5 block">{issue.message}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </Section>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[11px] font-medium">
+                            {object.name}
+                          </span>
+                          <span
+                            className={`block truncate font-mono text-xs ${object.partId === state.selectedId ? 'text-zinc-600' : 'text-zinc-500'}`}
+                          >
+                            {object.id || 'BARS ID required'}
+                          </span>
+                        </span>
+                        {part?.total > 1 ? (
+                          <span className="text-xs tabular-nums text-zinc-500">
+                            {part.index}/{part.total}
+                          </span>
+                        ) : null}
+                        {objectIssues.length > 0 ? (
+                          <AlertTriangle
+                            className={`h-3.5 w-3.5 ${objectIssues.some((issue) => issue.severity === 'error') ? 'text-rose-400' : 'text-amber-400'}`}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          dispatch({ type: 'select', id: object.partId });
+                          setQuickEditingId((id) => (id === object.partId ? null : object.partId));
+                        }}
+                        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
+                          object.partId === state.selectedId
+                            ? 'text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950'
+                            : 'text-zinc-500 hover:bg-zinc-800 hover:text-white'
+                        }`}
+                        aria-label={`Quick edit ${object.name}`}
+                        aria-expanded={quickEditingId === object.partId}
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => dispatch({ type: 'delete-object', id: object.partId })}
+                        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 ${
+                          object.partId === state.selectedId
+                            ? 'text-zinc-600 hover:bg-rose-100 hover:text-rose-700'
+                            : 'text-zinc-500 hover:bg-rose-500/10 hover:text-rose-300'
+                        }`}
+                        aria-label={`Delete ${object.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                    {quickEditingId === object.partId ? (
+                      <div
+                        className={`grid gap-2 border-t px-2 pb-2 pt-2 ${object.partId === state.selectedId ? 'border-zinc-300' : 'border-zinc-800'}`}
+                      >
+                        <label className="text-xs text-zinc-500">
+                          BARS ID
+                          <input
+                            value={object.id}
+                            onChange={(event) =>
+                              dispatch({
+                                type: 'rename-object-id',
+                                partId: object.partId,
+                                id: event.target.value.toUpperCase(),
+                              })
+                            }
+                            className="mt-1 h-8 w-full rounded border border-zinc-700 bg-zinc-900 px-2 font-mono text-xs text-white outline-none focus:border-zinc-500"
+                            spellCheck={false}
+                          />
+                        </label>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <span className="text-zinc-500">Name</span>
+                          <span className="truncate text-right text-zinc-200">{object.name}</span>
+                          <span className="text-zinc-500">Type</span>
+                          <span className="truncate text-right text-zinc-200">
+                            {formatObjectType(object.type)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {document.objects.length === 0 ? (
+                <p className="px-2 py-4 text-center text-xs text-zinc-500">
+                  Add an object from the map toolbar.
+                </p>
+              ) : null}
+            </div>
           </aside>
 
           <section className="relative order-1 min-h-[60vh] overflow-hidden border-b border-zinc-800 bg-zinc-950 lg:order-2 lg:min-h-0 lg:border-b-0">
@@ -1362,26 +1884,35 @@ export default function ContributionEditor() {
               airport={airport}
               document={document}
               referenceScene={referenceScene}
+              renderBundle={renderBundle}
               sourceEntries={sourceSelection?.entries}
               sourceFingerprint={document.source?.fingerprint}
               selectedId={state.selectedId}
               tool={tool}
               visibleCategories={visibleCategories}
               divisionGhostsVisible={divisionGhostsVisible}
+              editorObjectsVisible={editorObjectsVisible}
               snapEnabled={snapEnabled}
               uniqueObjectColors={uniqueObjectColors}
               focusRequest={focusRequest}
+              initialViewport={initialWorkspace.viewport}
               onSelect={handleSelect}
               onCreate={handleCreate}
               onGeometryChange={handleGeometryChange}
               onMapClick={handleMapClick}
               onReferenceClick={handleReferenceClick}
               onTextureStatus={setTextureStatus}
+              onViewportChange={setViewport}
+              measurements={measurements}
+              measurementStart={measurementStart}
+              onMeasurementMove={handleMeasurementMove}
+              onMeasurementCancel={handleMeasurementCancel}
             />
 
             <div className="absolute left-3 top-3 flex flex-col gap-1 rounded-lg border border-zinc-700/80 bg-zinc-950/95 p-1 shadow-xl shadow-black/25 backdrop-blur">
               {TOOLS.filter(
-                (candidate) => !candidate.xplaneOnly || document.simulator === 'xplane'
+                (candidate) =>
+                  !candidate.advanced && (!candidate.xplaneOnly || document.simulator === 'xplane')
               ).map((candidate, index) => (
                 <button
                   type="button"
@@ -1389,10 +1920,12 @@ export default function ContributionEditor() {
                   onClick={() => selectTool(candidate.id)}
                   disabled={
                     !selectedObject &&
-                    !['select', 'draw', 'remove-light', 'marking-debug'].includes(candidate.id)
+                    !['select', 'draw', 'remove-light', 'marking-debug', 'measure'].includes(
+                      candidate.id
+                    )
                   }
                   title={`${candidate.label} (${candidate.shortcut})`}
-                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 disabled:opacity-30 ${
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 disabled:opacity-30 ${
                     index === 2 ? 'mt-1 border-t border-zinc-800 pt-1' : ''
                   } ${
                     tool === candidate.id
@@ -1416,10 +1949,50 @@ export default function ContributionEditor() {
               >
                 <Magnet className="h-4 w-4" />
               </button>
+              {tool === 'measure' && measurements.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMeasurements([]);
+                    setMeasurementStart(null);
+                  }}
+                  title="Clear measurements"
+                  aria-label="Clear measurements"
+                  className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-md border-t border-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              ) : null}
             </div>
+            {tool === 'remove-light' ? (
+              <div className="absolute bottom-3 left-3 max-w-xs rounded-lg border border-rose-400/20 bg-zinc-950/95 px-3 py-2 shadow-xl backdrop-blur">
+                <div className="flex items-center gap-2 text-xs font-medium text-zinc-100">
+                  <Trash2 className="h-3.5 w-3.5 text-rose-300" />
+                  Remove source lights
+                  <span className="rounded-full bg-rose-400/10 px-1.5 py-0.5 font-mono text-rose-200">
+                    {removalBusy
+                      ? '…'
+                      : document.simulator === 'xplane'
+                        ? document.xplaneRemovals.length
+                        : msfsRemovalSourceIds.size}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] leading-4 text-zinc-400">
+                  Click a row to add or remove it. Shift-click two points to remove one section.
+                </p>
+                {removalSectionStart ? (
+                  <p className="mt-1 text-[11px] text-cyan-300">Now Shift-click the section end.</p>
+                ) : null}
+                {document.simulator === 'msfs' && !removalContext ? (
+                  <p className="mt-1 text-[11px] text-amber-300">
+                    Reconnect the scenery package to edit removals.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
-          <aside className="order-3 border-l border-zinc-800/80 bg-zinc-950 lg:overflow-y-auto">
+          <aside className="order-3 flex min-h-0 flex-col border-l border-zinc-800/80 bg-zinc-950 lg:overflow-y-auto">
             <div className="grid h-11 grid-cols-2 border-b border-zinc-800 p-1">
               <button
                 type="button"
@@ -1452,7 +2025,6 @@ export default function ContributionEditor() {
                     <FolderOpen className="h-4 w-4 text-zinc-300" />
                     <div>
                       <p className="text-xs font-medium text-zinc-200">Local source setup</p>
-                      <p className="mt-0.5 text-xs text-zinc-500">Files stay in this browser</p>
                     </div>
                   </div>
 
@@ -1506,6 +2078,22 @@ export default function ContributionEditor() {
                         onDrop={handleTextureLibraryDrop}
                       />
                     ) : null}
+                    {document.simulator === 'msfs' && textureStatus.total > 0 ? (
+                      <div className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/30 px-2.5 py-2 text-xs text-zinc-400">
+                        {textureStatus.phase === 'loading' ? (
+                          <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                        ) : textureStatus.renderError || textureStatus.failed > 0 ? (
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-emerald-300" />
+                        )}
+                        <span className="min-w-0 truncate">
+                          {textureStatus.phase === 'loading'
+                            ? `Decoding MSFS textures · ${textureStatus.loaded}/${textureStatus.total}`
+                            : textureStatusDetail(textureStatus)}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
 
                   {sourceProgress ? (
@@ -1516,7 +2104,7 @@ export default function ContributionEditor() {
                       </div>
                       <div className="mt-2 h-1 overflow-hidden rounded bg-zinc-800">
                         <div
-                          className="h-full rounded bg-white transition-[width]"
+                          className="h-full rounded bg-white transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-smooth-out)]"
                           style={{ width: `${sourceProgress.progress}%` }}
                         />
                       </div>
@@ -1530,187 +2118,154 @@ export default function ContributionEditor() {
                   ) : null}
                 </div>
 
-                <div className="border-y border-zinc-800 px-3 py-3">
-                  <label className="flex cursor-pointer items-center justify-between gap-3">
-                    <span>
-                      <span className="block text-xs font-medium text-zinc-200">Snapping</span>
-                      <span className="block text-xs text-zinc-500">
-                        Snap points to simulator lines and lights
-                      </span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={snapEnabled}
-                      onChange={(event) => setSnapEnabled(event.target.checked)}
-                      className="h-4 w-4 accent-white"
+                <div className="border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen((open) => !open)}
+                    aria-expanded={advancedOpen}
+                    className="flex min-h-11 w-full items-center justify-between px-4 text-left text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-900/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45"
+                  >
+                    Advanced
+                    <ChevronDown
+                      className={`h-4 w-4 text-zinc-500 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${advancedOpen ? 'rotate-180' : ''}`}
+                      aria-hidden="true"
                     />
-                  </label>
-                  <div className="mt-3 border-t border-zinc-800 pt-3">
-                    <p className="text-xs font-medium text-zinc-200">Object colors</p>
-                    <div className="mt-2 grid grid-cols-2 rounded-md bg-zinc-900 p-1">
-                      <button
-                        type="button"
-                        onClick={() => setUniqueObjectColors(false)}
-                        className={`h-7 rounded text-xs font-medium transition-colors ${
-                          !uniqueObjectColors
-                            ? 'bg-zinc-700 text-white'
-                            : 'text-zinc-500 hover:text-zinc-200'
-                        }`}
-                      >
-                        By type
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setUniqueObjectColors(true)}
-                        className={`h-7 rounded text-xs font-medium transition-colors ${
-                          uniqueObjectColors
-                            ? 'bg-zinc-700 text-white'
-                            : 'text-zinc-500 hover:text-zinc-200'
-                        }`}
-                      >
-                        Unique
-                      </button>
-                    </div>
-                    <p className="mt-1.5 text-xs leading-4 text-zinc-500">
-                      By type shows stop bars red and all other objects green.
-                    </p>
-                  </div>
-                </div>
-                {document.simulator === 'xplane' ? (
-                  <div className="px-3 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-medium text-zinc-200">Source light removals</p>
-                        <p className="mt-1 text-xs leading-4 text-zinc-500">
-                          Red rows on the map will be removed from the generated X-Plane scenery.
-                          Use the remove tool, then click a source light row to include or exclude
-                          it.
-                        </p>
-                      </div>
-                      <span
-                        className="shrink-0 rounded-full bg-rose-500/10 px-2 py-1 font-mono text-xs text-rose-300"
-                        aria-label={`${document.xplaneRemovals.length} source light removal rows`}
-                        role="status"
-                      >
-                        {document.xplaneRemovals.length}
-                      </span>
-                    </div>
-                    {document.xplaneRemovals.length > 0 ? (
-                      <div className="mt-3 max-h-40 space-y-1 overflow-y-auto">
-                        {document.xplaneRemovals.map((selector) => (
-                          <div
-                            key={`${selector.feature}:${selector.code}:${selector.run}`}
-                            className="flex min-h-9 items-center gap-2 rounded-md bg-zinc-900 px-2"
+                  </button>
+                  {advancedOpen ? (
+                    <div className="border-t border-zinc-800">
+                      <div className="grid gap-2 border-b border-zinc-800 p-3">
+                        {TOOLS.filter((candidate) => candidate.advanced).map((candidate) => (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            onClick={() => selectTool(candidate.id)}
+                            className={`flex min-h-9 items-center gap-2 rounded-md border px-2.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
+                              tool === candidate.id
+                                ? 'border-zinc-600 bg-zinc-800 text-white'
+                                : 'border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                            }`}
                           >
-                            <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-400">
-                              code {selector.code} · run {selector.run} ·{' '}
-                              {Math.round((selector.end - selector.start) * 100)}%
+                            <candidate.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                            {candidate.label}
+                            <span className="ml-auto font-mono text-xs text-zinc-600">
+                              {candidate.shortcut}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => dispatch({ type: 'remove-xplane-removal', selector })}
-                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-rose-500/10 hover:text-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-                              aria-label={`Keep source light code ${selector.code}, run ${selector.run}`}
-                              title="Keep these source lights"
-                            >
-                              <X className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                          </div>
+                          </button>
                         ))}
                       </div>
-                    ) : (
-                      <p className="mt-3 rounded-md bg-zinc-900 px-2.5 py-2 text-xs text-zinc-500">
-                        No source light rows are marked for removal. Select the removal tool, then
-                        select a source light row on the map.
-                      </p>
-                    )}
-                  </div>
-                ) : null}
-
-                <div>
-                  <div className="flex min-h-11 items-center px-4 text-xs font-medium text-zinc-300">
-                    Reference layers
-                  </div>
-                  <div className="grid grid-cols-[1fr_3rem] px-4 pb-1 text-xs uppercase tracking-wider text-zinc-500">
-                    <span>Layer</span>
-                    <span className="text-center">Show</span>
-                  </div>
-                  <div className="space-y-0.5 px-2 pb-3">
-                    <div className="grid grid-cols-[1fr_3rem] items-center rounded-md px-2 py-1.5 hover:bg-zinc-950/50">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-200" />
-                        <span className="block truncate text-[11px] font-medium text-zinc-300">
-                          Division ghosts
-                        </span>
+                      <div className="border-b border-zinc-800 px-3 py-3">
+                        <SwitchControl
+                          label="Unique colors"
+                          description="One consistent color per BARS ID"
+                          checked={uniqueObjectColors}
+                          onChange={setUniqueObjectColors}
+                        />
                       </div>
-                      <ToggleIcon
-                        active={divisionGhostsVisible}
-                        label={`${divisionGhostsVisible ? 'Hide' : 'Show'} division ghosts`}
-                        onClick={() => setDivisionGhostsVisible((visible) => !visible)}
-                        activeIcon={Eye}
-                        inactiveIcon={EyeOff}
-                      />
-                    </div>
-                    {SNAP_CATEGORIES.map((category) => {
-                      const visible = visibleCategories.has(category.id);
-                      return (
-                        <div
-                          key={category.id}
-                          className="grid grid-cols-[1fr_3rem] items-center rounded-md px-2 py-1.5 hover:bg-zinc-950/50"
-                        >
+                      <div className="flex min-h-11 items-center px-4 text-xs font-medium text-zinc-300">
+                        Reference layers
+                      </div>
+                      <div className="grid grid-cols-[1fr_3rem] px-4 pb-1 text-xs uppercase tracking-wider text-zinc-500">
+                        <span>Layer</span>
+                        <span className="text-center">Show</span>
+                      </div>
+                      <div className="space-y-0.5 px-2 pb-3">
+                        <div className="grid grid-cols-[1fr_3rem] items-center rounded-md px-2 py-1.5 hover:bg-zinc-950/50">
                           <div className="flex min-w-0 items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: category.color }}
-                            />
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400" />
                             <span className="block truncate text-[11px] font-medium text-zinc-300">
-                              {category.label}
+                              BARS objects
                             </span>
                           </div>
                           <ToggleIcon
-                            active={visible}
-                            label={`${visible ? 'Hide' : 'Show'} ${category.label}`}
-                            onClick={() =>
-                              setVisibleCategories(toggleSet(visibleCategories, category.id))
-                            }
+                            active={editorObjectsVisible}
+                            label={`${editorObjectsVisible ? 'Hide' : 'Show'} BARS objects`}
+                            onClick={() => setEditorObjectsVisible((visible) => !visible)}
                             activeIcon={Eye}
                             inactiveIcon={EyeOff}
                           />
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="grid grid-cols-[1fr_3rem] items-center rounded-md px-2 py-1.5 hover:bg-zinc-950/50">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-200" />
+                            <span className="block truncate text-[11px] font-medium text-zinc-300">
+                              Division ghosts
+                            </span>
+                          </div>
+                          <ToggleIcon
+                            active={divisionGhostsVisible}
+                            label={`${divisionGhostsVisible ? 'Hide' : 'Show'} division ghosts`}
+                            onClick={() => setDivisionGhostsVisible((visible) => !visible)}
+                            activeIcon={Eye}
+                            inactiveIcon={EyeOff}
+                          />
+                        </div>
+                        {SNAP_CATEGORIES.map((category) => {
+                          const visible = visibleCategories.has(category.id);
+                          return (
+                            <div
+                              key={category.id}
+                              className="grid grid-cols-[1fr_3rem] items-center rounded-md px-2 py-1.5 hover:bg-zinc-950/50"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span
+                                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                  style={{ backgroundColor: category.color }}
+                                />
+                                <span className="block truncate text-[11px] font-medium text-zinc-300">
+                                  {category.label}
+                                </span>
+                              </div>
+                              <ToggleIcon
+                                active={visible}
+                                label={`${visible ? 'Hide' : 'Show'} ${category.label}`}
+                                onClick={() =>
+                                  setVisibleCategories(toggleSet(visibleCategories, category.id))
+                                }
+                                activeIcon={Eye}
+                                inactiveIcon={EyeOff}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
 
             {rightPanel === 'object' && selectedObject ? (
               <div className="p-3">
-                <label className="block text-xs font-medium text-zinc-500">
-                  Name
-                  <div className="mt-1.5 flex gap-1.5">
-                    <input
-                      value={selectedObject.name}
-                      onChange={(event) =>
-                        dispatch({
-                          type: 'update-object',
-                          id: selectedObject.partId,
-                          changes: { name: event.target.value },
-                        })
-                      }
-                      className="h-9 min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 text-xs text-zinc-100 outline-none transition-colors focus:border-zinc-500"
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <span
+                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor: objectDisplayColor(selectedObject, uniqueObjectColors),
+                      }}
                     />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-zinc-100">
+                        {selectedObject.name}
+                      </p>
+                      <p className="mt-0.5 font-mono text-xs text-zinc-500">
+                        {selectedObject.id || 'BARS ID required'}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {formatObjectType(selectedObject.type)}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => dispatch({ type: 'delete-object', id: selectedObject.partId })}
-                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-rose-500/10 hover:text-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-rose-500/10 hover:text-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
                       aria-label="Delete selected object"
                       title="Delete object"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                </label>
+                </div>
                 <BarsIdField
                   value={selectedObject.id}
                   color={selectedObject.color}
@@ -1748,10 +2303,16 @@ export default function ContributionEditor() {
               <div className="flex min-h-32 flex-col items-center justify-center px-5 text-center">
                 <MousePointer2 className="h-4 w-4 text-zinc-600" />
                 <p className="mt-2 text-[11px] leading-4 text-zinc-500">
-                  Select an object to edit its name, BARS ID, shape or direction.
+                  Select an object to edit its BARS ID, shape or direction.
                 </p>
               </div>
             ) : null}
+            <ValidationPanel
+              issues={issues}
+              open={validationOpen}
+              onToggle={() => setValidationOpen((value) => !value)}
+              onIssueSelect={handleIssueSelect}
+            />
           </aside>
         </div>
 
@@ -1991,20 +2552,48 @@ UploadStep.propTypes = {
   onDrop: PropTypes.func.isRequired,
 };
 
-function Section({ title, icon: Icon, open, onToggle, badge, children }) {
+function ValidationPanel({ issues, open, onToggle, onIssueSelect }) {
+  const errors = issues.filter((issue) => issue.severity === 'error').length;
+  const warnings = issues.length - errors;
   return (
-    <div className="border-b border-zinc-800">
+    <div className="sticky bottom-0 mt-auto border-t border-zinc-800 bg-zinc-950/98 backdrop-blur">
       <button
         type="button"
         onClick={onToggle}
-        className="flex min-h-12 w-full items-center gap-2 px-4 text-left text-xs font-medium text-zinc-300 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45"
+        className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs font-medium text-zinc-300 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45"
       >
-        <Icon className="h-4 w-4 text-zinc-500" />
-        <span className="flex-1">{title}</span>
-        <span className="font-mono text-xs text-zinc-500">{badge}</span>
+        {issues.length === 0 ? (
+          <Check className="h-4 w-4 text-emerald-400" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 text-amber-300" />
+        )}
+        <span className="flex-1">{issues.length === 0 ? 'Ready to test' : 'Validation'}</span>
+        {errors > 0 ? <span className="text-rose-300">{errors} errors</span> : null}
+        {warnings > 0 ? <span className="text-amber-300">{warnings} warnings</span> : null}
         <ChevronDown className={`h-3.5 w-3.5 transition ${open ? '' : '-rotate-90'}`} />
       </button>
-      {open ? children : null}
+      {open && issues.length > 0 ? (
+        <div className="max-h-56 space-y-0.5 overflow-y-auto border-t border-zinc-800 p-2">
+          {issues.map((issue) => (
+            <button
+              type="button"
+              key={issue.id}
+              onClick={() => onIssueSelect(issue)}
+              className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+            >
+              <span
+                className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+                  issue.severity === 'error' ? 'bg-rose-400' : 'bg-amber-300'
+                }`}
+              />
+              <span className="min-w-0 text-[11px] leading-4 text-zinc-300">
+                <span className="mr-1 font-mono text-zinc-500">{issue.objectId}</span>
+                {issue.message}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2047,13 +2636,43 @@ function ToggleIcon({
   );
 }
 
-Section.propTypes = {
-  title: PropTypes.string.isRequired,
-  icon: PropTypes.elementType.isRequired,
+function SwitchControl({ label, description, checked, onChange }) {
+  const inputId = useId();
+  return (
+    <label htmlFor={inputId} className="flex cursor-pointer items-center justify-between gap-3">
+      <span>
+        <span className="block text-xs font-medium text-zinc-200">{label}</span>
+        <span className="block text-xs text-zinc-500">{description}</span>
+      </span>
+      <span className="relative inline-flex h-6 w-10 shrink-0 items-center">
+        <input
+          id={inputId}
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          className="peer sr-only"
+        />
+        <span className="absolute inset-0 rounded-full border border-zinc-700 bg-zinc-900 transition-colors peer-checked:border-cyan-400 peer-checked:bg-cyan-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500/60 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-zinc-950" />
+        <span className="relative ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-zinc-400 text-zinc-900 transition-transform peer-checked:translate-x-4 peer-checked:bg-zinc-950">
+          {checked ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+ValidationPanel.propTypes = {
+  issues: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      objectId: PropTypes.string.isRequired,
+      message: PropTypes.string.isRequired,
+      severity: PropTypes.string.isRequired,
+    })
+  ).isRequired,
   open: PropTypes.bool.isRequired,
   onToggle: PropTypes.func.isRequired,
-  badge: PropTypes.number.isRequired,
-  children: PropTypes.node.isRequired,
+  onIssueSelect: PropTypes.func.isRequired,
 };
 
 IconButton.propTypes = {
@@ -2071,21 +2690,24 @@ ToggleIcon.propTypes = {
   inactiveIcon: PropTypes.elementType.isRequired,
 };
 
-function uniqueManualId(objects) {
-  let index = 1;
-  while (objects.some((object) => object.id === `BARS_MANUAL_${index}`)) index += 1;
-  return `BARS_MANUAL_${index}`;
-}
+SwitchControl.propTypes = {
+  label: PropTypes.string.isRequired,
+  description: PropTypes.string.isRequired,
+  checked: PropTypes.bool.isRequired,
+  onChange: PropTypes.func.isRequired,
+};
 
 function objectDisplayColor(object, uniqueObjectColors) {
-  if (uniqueObjectColors) return object.color;
+  if (uniqueObjectColors) return colorForObjectId(object.id);
   return object.type === 'stopbar' ? '#ef4444' : '#22c55e';
 }
 
-function uniqueSiblingId(objects, baseId) {
-  let index = 2;
-  while (objects.some((object) => object.id === `${baseId}_${index}`)) index += 1;
-  return `${baseId}_${index}`;
+function formatObjectType(type) {
+  if (type === 'stopbar') return 'Stop bar';
+  if (type === 'lead_on') return 'Lead on';
+  if (type === 'taxiway') return 'Taxiway';
+  if (type === 'stand') return 'Stand';
+  return type ? String(type).replaceAll('_', ' ') : 'Unknown type';
 }
 
 function uniquePartId(objects, barsObjectId) {
@@ -2136,6 +2758,14 @@ function textureStatusDetail(status) {
       : '';
   const rendered =
     status.meshGroups > 0 ? ` · ${status.drawnGroups}/${status.meshGroups} batches drawn` : '';
+  if (status.packageTotal > 0) {
+    const packageTextures = `${status.packageLoaded}/${status.packageTotal} package textures decoded`;
+    const fallbacks =
+      status.fallbackLoaded > 0 ? ` · ${status.fallbackLoaded} material fallbacks` : '';
+    return unavailable > 0
+      ? `${packageTextures}${fallbacks}${drawn}${rendered} · ${unavailable} unavailable`
+      : `${packageTextures}${fallbacks}${drawn}${rendered}`;
+  }
   if (unavailable === 0 && status.loaded > 0 && status.cached === status.loaded && drawn) {
     return `${status.loaded} cached textures${drawn}${rendered}`;
   }

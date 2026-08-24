@@ -1,5 +1,8 @@
+/* oxlint-disable react-doctor/js-combine-iterations -- Geoman synchronization keeps feature filtering and layer projection as separate lifecycle stages. */
+
 const DRAW_PREVIEW_ID = '__editor-draw-preview__';
 const REFERENCE_SNAP_PREFIX = '__reference-snap__:';
+const LIGHT_ROW_SNAP_GEOMETRIES = new Set(['Point', 'LineString', 'MultiLineString']);
 
 export function createGeomanEditorFeatures(objects, selectedId) {
   return objects
@@ -20,17 +23,34 @@ export function createGeomanEditorFeatures(objects, selectedId) {
     }));
 }
 
-export function createGeomanReferenceSnapTargets(referenceFeatures) {
+export function createGeomanReferenceSnapTargets(
+  referenceFeatures,
+  { maximumFeatures = Infinity } = {}
+) {
   const features = [];
+  const lineFeatures = [];
+  const pointFeatures = [];
+  const bounded = Number.isFinite(maximumFeatures);
+  const poolLimit = bounded ? Math.max(0, Math.floor(maximumFeatures)) : Infinity;
+
+  const addFeature = (feature, kind) => {
+    if (!bounded) {
+      features.push(feature);
+      return;
+    }
+    const pool = kind === 'line' ? lineFeatures : pointFeatures;
+    if (pool.length < poolLimit) pool.push(feature);
+  };
 
   for (const [featureIndex, feature] of (referenceFeatures ?? []).entries()) {
+    if (!referenceFeatureIsSnappable(feature)) continue;
     const sourceId = String(feature.properties?.sourceId ?? feature.id ?? '');
     if (!sourceId) continue;
     if (feature.geometry?.type === 'Point') {
       const coordinate = feature.geometry.coordinates;
       if (!validCoordinate(coordinate)) continue;
       const id = `${REFERENCE_SNAP_PREFIX}${sourceId}:${featureIndex}:point`;
-      features.push({
+      addFeature({
         type: 'Feature',
         id,
         properties: {
@@ -40,19 +60,20 @@ export function createGeomanReferenceSnapTargets(referenceFeatures) {
           barsReferenceSnap: true,
         },
         geometry: { type: 'Point', coordinates: [...coordinate] },
-      });
+      }, 'point');
       continue;
     }
-    const lines =
-      feature.geometry?.type === 'LineString'
-        ? [feature.geometry.coordinates]
-        : feature.geometry?.type === 'MultiLineString'
-          ? feature.geometry.coordinates
-          : [];
+    const lines = snapLinesFromGeometry(feature.geometry);
     for (const [lineIndex, coordinates] of lines.entries()) {
-      if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
+      if (
+        !Array.isArray(coordinates) ||
+        coordinates.length < 2 ||
+        !coordinates.every(validCoordinate)
+      ) {
+        continue;
+      }
       const id = `${REFERENCE_SNAP_PREFIX}${sourceId}:${featureIndex}:${lineIndex}`;
-      features.push({
+      addFeature({
         type: 'Feature',
         id,
         properties: {
@@ -64,11 +85,22 @@ export function createGeomanReferenceSnapTargets(referenceFeatures) {
           type: 'LineString',
           coordinates: coordinates.map((coordinate) => [...coordinate]),
         },
-      });
+      }, 'line');
     }
   }
 
-  return { features };
+  return {
+    features: bounded
+      ? balancedSnapTargets(lineFeatures, pointFeatures, maximumFeatures)
+      : features,
+  };
+}
+
+function referenceFeatureIsSnappable(feature) {
+  const category = feature.properties?.snapCategory;
+  const geometryType = feature.geometry?.type;
+  if (category === 'light-rows') return LIGHT_ROW_SNAP_GEOMETRIES.has(geometryType);
+  return category === 'fixtures' && geometryType === 'Point';
 }
 
 export function applyEditorGeometryPreviews(
@@ -122,4 +154,33 @@ function validCoordinate(value) {
     Number.isFinite(value[0]) &&
     Number.isFinite(value[1])
   );
+}
+
+function snapLinesFromGeometry(geometry) {
+  if (geometry?.type === 'LineString') return [geometry.coordinates];
+  if (geometry?.type === 'MultiLineString' || geometry?.type === 'Polygon') {
+    return geometry.coordinates;
+  }
+  if (geometry?.type === 'MultiPolygon') return geometry.coordinates.flat();
+  return [];
+}
+
+function balancedSnapTargets(lineFeatures, pointFeatures, maximumFeatures) {
+  const limit = Math.max(0, Math.floor(Number(maximumFeatures) || 0));
+  if (limit === 0) return [];
+
+  const preferredLineCount = Math.ceil(limit * 0.6);
+  const selectedLines = lineFeatures.slice(0, preferredLineCount);
+  const selectedPoints = pointFeatures.slice(0, limit - selectedLines.length);
+  let remaining = limit - selectedLines.length - selectedPoints.length;
+  if (remaining > 0) {
+    selectedLines.push(...lineFeatures.slice(selectedLines.length, selectedLines.length + remaining));
+    remaining = limit - selectedLines.length - selectedPoints.length;
+  }
+  if (remaining > 0) {
+    selectedPoints.push(
+      ...pointFeatures.slice(selectedPoints.length, selectedPoints.length + remaining)
+    );
+  }
+  return [...selectedLines, ...selectedPoints];
 }

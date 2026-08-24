@@ -1,14 +1,16 @@
+/* oxlint-disable react-doctor/js-flatmap-filter react-doctor/js-combine-iterations -- Reducer helpers keep validation, normalization, and projection stages explicit to preserve editor history semantics. */
+
 import { colorForObjectId, normalizeDocument } from './editor-model.js';
-import { distanceMeters, lineLengthMeters, nearestPointOnLine } from './editor-geometry.js';
-import {
-  bindingSelectorKey,
-  selectorFromBinding,
-  selectorKey,
-} from './editor-snapping.js';
+import { distanceMeters, lineLengthMeters } from './editor-geometry.js';
+import { bindingSelectorKey, selectorFromBinding, selectorKey } from './editor-snapping.js';
 
 const MAX_HISTORY_LENGTH = 100;
 const ENDPOINT_GAP_METERS = 2;
 const TINY_SEGMENT_METERS = 0.15;
+const GUIDANCE_TYPES = new Set(['lead_on', 'taxiway', 'stand']);
+export const MISSING_DIVISION_RATIO_LIMIT = 0.15;
+export const MIN_MISSING_DIVISIONS_TO_BLOCK = 2;
+export const MIN_MISSING_STOPBARS_TO_BLOCK = 2;
 
 export function createEditorState(document) {
   const normalized = normalizeDocument(document);
@@ -64,18 +66,24 @@ export function editorReducer(state, action) {
       }));
     case 'rename-object-id':
       return commit(state, (document) => {
-        const selected = document.objects.find(
-          (object) => object.partId === action.partId
-        );
+        const selected = document.objects.find((object) => object.partId === action.partId);
         if (!selected) return document;
+        const id = String(action.id ?? '')
+          .trim()
+          .toUpperCase();
+        const division = document.originalDivisions.find(
+          (candidate) => String(candidate.id).toUpperCase() === id
+        );
         return {
           ...document,
           objects: document.objects.map((object) =>
-            object.groupId === selected.groupId && object.id === selected.id
+            object.partId === selected.partId
               ? {
                   ...object,
-                  id: action.id,
-                  color: colorForObjectId(action.id),
+                  id,
+                  name: division?.name || id || 'New object',
+                  type: division?.type || object.type,
+                  color: colorForObjectId(id),
                 }
               : object
           ),
@@ -83,7 +91,13 @@ export function editorReducer(state, action) {
       });
     case 'update-object-geometry':
       return commit(state, (document) =>
-        updateObjectGeometry(document, action.id, action.coordinates, action.match)
+        updateObjectGeometry(
+          document,
+          action.id,
+          action.coordinates,
+          action.match,
+          action.sourceBindings
+        )
       );
     case 'update-source':
       return commit(state, (document) => ({ ...document, source: action.source }));
@@ -91,10 +105,7 @@ export function editorReducer(state, action) {
       const next = commit(state, (document) => ({
         ...document,
         objects: [...document.objects, action.object],
-        xplaneRemovals: mergeSelectors(
-          document.xplaneRemovals,
-          selectorsFromMatch(action.match)
-        ),
+        xplaneRemovals: mergeSelectors(document.xplaneRemovals, selectorsFromMatch(action.match)),
       }));
       return {
         ...next,
@@ -124,6 +135,52 @@ export function editorReducer(state, action) {
           (selector) => selectorKey(selector) !== selectorKey(action.selector)
         ),
       }));
+    case 'replace-msfs-source-removals':
+      return commit(state, (document) => ({
+        ...document,
+        removals: [
+          ...document.removals.filter((removal) => removal.origin !== 'msfs-source'),
+          ...(action.removals ?? []),
+        ],
+      }));
+    case 'replace-msfs-manual-removals':
+      return commit(state, (document) => ({
+        ...document,
+        removals: [
+          ...document.removals.filter((removal) => removal.origin !== 'msfs-manual'),
+          ...(action.removals ?? []).map((removal) => ({
+            ...removal,
+            origin: 'msfs-manual',
+          })),
+        ],
+      }));
+    case 'upsert-msfs-auto-removals':
+      return commit(state, (document) => {
+        const affectedSourceIds = new Set((action.sourceIds ?? []).map(String));
+        const affectedRemovalIds = new Set((action.removalIds ?? []).map(String));
+        return {
+          ...document,
+          removals: [
+            ...document.removals.filter((removal) => {
+              if (
+                affectedRemovalIds.has(String(removal.id)) &&
+                ['msfs-source', 'msfs-auto'].includes(removal.origin)
+              ) {
+                return false;
+              }
+              const overlaps = (removal.sourceIds ?? []).some((id) =>
+                affectedSourceIds.has(String(id))
+              );
+              if (!overlaps) return true;
+              return !['msfs-source', 'msfs-auto'].includes(removal.origin);
+            }),
+            ...(action.removals ?? []).map((removal) => ({
+              ...removal,
+              origin: 'msfs-auto',
+            })),
+          ],
+        };
+      });
     default:
       return state;
   }
@@ -145,7 +202,8 @@ function removeObjectAndOrphanedSelectors(document, partId) {
     ...document,
     objects,
     xplaneRemovals: document.xplaneRemovals.filter(
-      (selector) => !removedKeys.has(selectorKey(selector)) || retainedKeys.has(selectorKey(selector))
+      (selector) =>
+        !removedKeys.has(selectorKey(selector)) || retainedKeys.has(selectorKey(selector))
     ),
   };
 }
@@ -160,12 +218,12 @@ function toggleManualSelector(selectors, selector) {
   return [...selectors, selector];
 }
 
-function updateObjectGeometry(document, id, coordinates, match) {
+function updateObjectGeometry(document, id, coordinates, match, sourceBindings) {
   const previous = document.objects.find((object) => object.partId === id);
   const previousKeys = new Set(
     (previous?.sourceBindings ?? []).map(bindingSelectorKey).filter(Boolean)
   );
-  const nextBindings = bindingsFromMatch(match);
+  const nextBindings = Array.isArray(sourceBindings) ? sourceBindings : bindingsFromMatch(match);
   const nextObjects = document.objects.map((object) =>
     object.partId === id
       ? {
@@ -187,10 +245,7 @@ function updateObjectGeometry(document, id, coordinates, match) {
   for (const object of nextObjects) {
     for (const binding of object.sourceBindings ?? []) {
       if (!affectedKeys.has(bindingSelectorKey(binding))) continue;
-      xplaneRemovals = mergeSelector(
-        xplaneRemovals,
-        selectorFromBinding(binding)
-      );
+      xplaneRemovals = mergeSelector(xplaneRemovals, selectorFromBinding(binding));
     }
   }
   return { ...document, objects: nextObjects, xplaneRemovals };
@@ -269,19 +324,37 @@ export function validateEditorDocument(document) {
     }
   }
 
-  const representedIds = new Set(document.objects.map((object) => object.id));
-  for (const division of document.originalDivisions ?? []) {
-    if (representedIds.has(division.id)) continue;
+  const originalDivisions = document.originalDivisions ?? [];
+  const representedIds = new Set(
+    document.objects.map((object) => String(object.id).trim().toUpperCase()).filter(Boolean)
+  );
+  const missingDivisions = originalDivisions.filter(
+    (division) => !representedIds.has(String(division.id).trim().toUpperCase())
+  );
+  const missingStopbars = missingDivisions.filter((division) => division.type === 'stopbar').length;
+  const missingRatio = originalDivisions.length
+    ? missingDivisions.length / originalDivisions.length
+    : 0;
+  const missingDivisionsBlock =
+    (missingDivisions.length >= MIN_MISSING_DIVISIONS_TO_BLOCK &&
+      missingRatio > MISSING_DIVISION_RATIO_LIMIT) ||
+    missingStopbars >= MIN_MISSING_STOPBARS_TO_BLOCK;
+
+  for (const division of missingDivisions) {
+    const divisionName = division.name || division.id;
+    const message = missingDivisionsBlock
+      ? `${divisionName} was not matched. ${missingDivisions.length} of ${originalDivisions.length} BARS objects are missing; resolve enough to continue.`
+      : `${divisionName} was not matched. Review or add it before testing.`;
     issues.push(
       issue(
         'missing-division',
-        'error',
+        missingDivisionsBlock ? 'error' : 'warning',
         {
           id: division.id,
           partId: `original:${division.id}`,
           target: 'division',
         },
-        `${division.name || division.id} was not matched to simulator scenery.`
+        message
       )
     );
   }
@@ -290,18 +363,21 @@ export function validateEditorDocument(document) {
     {
       id: object.partId ?? object.id,
       objectId: object.id,
+      objectType: object.type,
       side: 'start',
       coordinate: object.coordinates[0],
     },
     {
       id: object.partId ?? object.id,
       objectId: object.id,
+      objectType: object.type,
       side: 'end',
       coordinate: object.coordinates.at(-1),
     },
   ]);
   for (const endpoint of endpoints) {
     if (!endpoint.coordinate) continue;
+    if (GUIDANCE_TYPES.has(endpoint.objectType)) continue;
     const nearest = endpoints
       .filter((candidate) => candidate.id !== endpoint.id && candidate.coordinate)
       .map((candidate) => ({
@@ -322,21 +398,6 @@ export function validateEditorDocument(document) {
   }
 
   return deduplicateIssues(issues);
-}
-
-export function objectAtCoordinate(document, coordinate, toleranceMeters = 8) {
-  let nearest = null;
-  for (const object of document.objects) {
-    const projection = nearestPointOnLine(coordinate, object.coordinates);
-    if (
-      projection &&
-      projection.distanceMeters <= toleranceMeters &&
-      (!nearest || projection.distanceMeters < nearest.projection.distanceMeters)
-    ) {
-      nearest = { object, projection };
-    }
-  }
-  return nearest;
 }
 
 function commit(state, transform) {

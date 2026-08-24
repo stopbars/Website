@@ -1,9 +1,13 @@
+/* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Normalization and validation are deliberately separate document-boundary stages. */
+
 import {
   findDescendants,
   localName,
   parseXml,
   walkNodes,
 } from '../draft-generator/extractor/xml.js';
+import { nearestPointOnGeometry } from './editor-geometry.js';
+import { deduplicateExactDivisionPoints } from '../../utils/divisionPoints.js';
 
 export const EDITOR_DOCUMENT_VERSION = 1;
 export const EDITOR_STORAGE_VERSION = 'bars-contribution-editor/v1';
@@ -22,6 +26,7 @@ export function createEditorDocument({
   const hasDraftGeojson = Array.isArray(draftGeojson?.features);
   const featureObjects = objectsFromDraftGeojson(draftGeojson);
   const originalDivisions = originalDivisionsFromDraftGeojson(draftGeojson);
+  const geojsonRemovals = removalsFromDraftGeojson(draftGeojson);
   const objects = hasDraftGeojson ? featureObjects : (parsed?.objects ?? []);
 
   return normalizeDocument({
@@ -31,7 +36,7 @@ export function createEditorDocument({
     altitude: parsed?.altitude ?? altitude,
     objects,
     originalDivisions,
-    removals: parsed?.removals ?? [],
+    removals: geojsonRemovals.length > 0 ? geojsonRemovals : (parsed?.removals ?? []),
     xplaneRemovals: parsed?.xplaneRemovals ?? [],
     source: source ?? null,
     createdAt: new Date().toISOString(),
@@ -184,6 +189,10 @@ export function normalizeDocument(document) {
       .map((removal, index) => ({
         id: String(removal?.id ?? `remove:${index + 1}`),
         coordinates: closeRing((removal?.coordinates ?? []).filter(validCoordinate)),
+        sourceIds: normalizeStringList(removal?.sourceIds),
+        origin: String(removal?.origin ?? 'imported'),
+        mustKeepZoneIds: normalizeStringList(removal?.mustKeepZoneIds),
+        selections: normalizeRemovalSelections(removal?.selections),
       }))
       .filter((removal) => removal.coordinates.length >= 4),
     xplaneRemovals: normalizeXPlaneRemovals(document?.xplaneRemovals),
@@ -203,7 +212,12 @@ export function editorDocumentToGeojson(document) {
         type: 'Feature',
         id: removal.id,
         geometry: { type: 'Polygon', coordinates: [removal.coordinates] },
-        properties: { featureType: 'editor-removal', editorId: removal.id },
+        properties: {
+          featureType: 'editor-removal',
+          editorId: removal.id,
+          sourceIds: removal.sourceIds,
+          origin: removal.origin,
+        },
       })),
       ...normalized.objects.map((object) => ({
         type: 'Feature',
@@ -248,6 +262,7 @@ export function originalDivisionsToGeojson(document) {
         featureType: 'original-division',
         divisionId: division.id,
         title: division.name,
+        divisionType: division.type,
         color:
           linkedDivisionColors.get(division.id) ??
           objectColors.get(division.id) ??
@@ -265,7 +280,7 @@ function divisionIdFromGroupId(groupId) {
 export function originalDivisionsFromPoints(points) {
   const divisions = [];
   const seen = new Set();
-  for (const point of points ?? []) {
+  for (const point of deduplicateExactDivisionPoints(points)) {
     const id = String(point?.id ?? '').trim();
     if (!id || seen.has(id)) continue;
     const rawCoordinates = Array.isArray(point?.coordinates)
@@ -288,6 +303,7 @@ export function originalDivisionsFromPoints(points) {
     const division = normalizeOriginalDivision({
       id,
       name: point?.name || id,
+      type: point?.type || 'unknown',
       geometry,
     });
     if (!division) continue;
@@ -297,8 +313,14 @@ export function originalDivisionsFromPoints(points) {
   return divisions;
 }
 
-export function barsIdSuggestions(originalDivisions, query, limit = 6) {
-  const normalizedQuery = String(query ?? '').trim().toUpperCase();
+export function barsIdSuggestions(originalDivisions, query, limit = 6, options = {}) {
+  const normalizedQuery = String(query ?? '')
+    .trim()
+    .toUpperCase();
+  const coordinate = Array.isArray(options.coordinate) ? options.coordinate : null;
+  const excludedIds = new Set(
+    [...(options.excludeIds ?? [])].map((id) => String(id).trim().toUpperCase()).filter(Boolean)
+  );
   const ranked = [];
   const seen = new Set();
   for (const division of originalDivisions ?? []) {
@@ -306,6 +328,7 @@ export function barsIdSuggestions(originalDivisions, query, limit = 6) {
     if (!id) continue;
     const key = id.toUpperCase();
     if (seen.has(key)) continue;
+    if (!normalizedQuery && excludedIds.has(key)) continue;
     seen.add(key);
     const name = String(division?.name ?? id);
     const normalizedName = name.toUpperCase();
@@ -317,12 +340,16 @@ export function barsIdSuggestions(originalDivisions, query, limit = 6) {
       else if (normalizedName.includes(normalizedQuery)) score = 3;
       else continue;
     }
-    ranked.push({ id, name, score });
+    const proximity = coordinate
+      ? (nearestPointOnGeometry(coordinate, division.geometry)?.distanceMeters ?? Infinity)
+      : Infinity;
+    ranked.push({ id, name, score, proximity });
   }
   return ranked
     .sort(
       (left, right) =>
         left.score - right.score ||
+        left.proximity - right.proximity ||
         left.id.localeCompare(right.id, undefined, { sensitivity: 'base' })
     )
     .slice(0, Math.max(0, limit))
@@ -384,6 +411,42 @@ function objectsFromDraftGeojson(geojson) {
   return objects;
 }
 
+function removalsFromDraftGeojson(geojson) {
+  const removals = [];
+  for (const feature of geojson?.features ?? []) {
+    if (feature.properties?.featureType !== 'removal' || feature.geometry?.type !== 'Polygon') {
+      continue;
+    }
+    removals.push({
+      id: `remove:${removals.length + 1}`,
+      coordinates: feature.geometry.coordinates?.[0] ?? [],
+      sourceIds: feature.properties?.sourceIds ?? [],
+      origin: feature.properties?.origin ?? 'msfs-source',
+      mustKeepZoneIds: feature.properties?.mustKeepZoneIds ?? [],
+      selections: feature.properties?.selections ?? [],
+    });
+  }
+  return removals;
+}
+
+function normalizeRemovalSelections(selections) {
+  return (selections ?? []).flatMap((selection) => {
+    const sourceId = String(selection?.sourceId ?? '').trim();
+    if (!sourceId) return [];
+    const start = Number(selection?.rangeStartMeters);
+    const end = Number(selection?.rangeEndMeters);
+    return [
+      Number.isFinite(start) && Number.isFinite(end)
+        ? {
+            sourceId,
+            rangeStartMeters: Math.min(start, end),
+            rangeEndMeters: Math.max(start, end),
+          }
+        : { sourceId },
+    ];
+  });
+}
+
 function sourceBindingsFromProperties(properties) {
   if (!properties.sourceRowId && !properties.sourceFeatureId) return [];
   return [
@@ -408,6 +471,7 @@ function originalDivisionsFromDraftGeojson(geojson) {
     const division = normalizeOriginalDivision({
       id,
       name: properties.title || id,
+      type: properties.divisionType || 'unknown',
       geometry: feature.geometry,
     });
     if (!division) continue;
@@ -425,6 +489,7 @@ function normalizeOriginalDivision(division) {
     return {
       id,
       name: String(division?.name ?? id),
+      type: String(division?.type ?? 'unknown'),
       geometry: {
         type: 'Point',
         coordinates: geometry.coordinates.map(Number),
@@ -440,6 +505,7 @@ function normalizeOriginalDivision(division) {
     return {
       id,
       name: String(division?.name ?? id),
+      type: String(division?.type ?? 'unknown'),
       geometry: {
         type: 'LineString',
         coordinates: geometry.coordinates.map(([lon, lat]) => [Number(lon), Number(lat)]),
@@ -462,7 +528,7 @@ function normalizeObject(object, index = 0) {
     coordinates: (object?.coordinates ?? [])
       .filter(validCoordinate)
       .map(([lon, lat]) => [Number(lon), Number(lat)]),
-    color: object?.color || colorForObjectId(id),
+    color: colorForObjectId(id),
     matchPercent: finiteOptionalNumber(object?.matchPercent),
     reason: object?.reason ? String(object.reason) : '',
     sourceBindings: Array.isArray(object?.sourceBindings) ? object.sourceBindings : [],
@@ -553,6 +619,15 @@ function validCoordinate(value) {
     Math.abs(Number(value[0])) <= 180 &&
     Math.abs(Number(value[1])) <= 90
   );
+}
+
+function normalizeStringList(values) {
+  const normalized = new Set();
+  for (const value of values ?? []) {
+    const text = String(value);
+    if (text) normalized.add(text);
+  }
+  return [...normalized];
 }
 
 function finiteNumber(value, fallback) {

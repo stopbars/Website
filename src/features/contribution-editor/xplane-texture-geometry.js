@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-cache-property-access react-doctor/js-combine-iterations -- Texture geometry keeps coordinate reads and validation stages explicit for rendering diagnostics. */
+
 import earcut from 'earcut';
 import {
   xPlaneLinePhysicalWidth,

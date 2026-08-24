@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-flatmap-filter -- Marking expansion is bounded and the explicit validity filter documents accepted pattern entries. */
+
 import { createXPlaneLineTexturePattern } from './scenery-texture.js';
 
 const APT_MARKING_BASE_WIDTH_METRES = new Map([

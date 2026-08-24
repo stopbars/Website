@@ -1,7 +1,11 @@
+/* oxlint-disable react-doctor/js-flatmap-filter -- Snap candidates are bounded and explicit validity filtering documents eligible geometry. */
+
 import {
   lineLengthMeters,
   nearestPointOnLine,
+  project,
   sliceLineBetween,
+  unproject,
 } from './editor-geometry.js';
 
 const DEFAULT_MATCH_TOLERANCE_METERS = 1;
@@ -11,7 +15,8 @@ const MAX_LENGTH_RATIO_DIFFERENCE = 0.08;
 export function matchSnappedReference(
   coordinates,
   referenceFeatures,
-  toleranceMeters = DEFAULT_MATCH_TOLERANCE_METERS
+  toleranceMeters = DEFAULT_MATCH_TOLERANCE_METERS,
+  { allowDerived = false } = {}
 ) {
   if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
   const objectLength = lineLengthMeters(coordinates);
@@ -24,7 +29,7 @@ export function matchSnappedReference(
     if (
       properties.snapCategory !== 'light-rows' ||
       properties.removable === false ||
-      properties.exactness === 'derived'
+      (!allowDerived && properties.exactness === 'derived')
     ) {
       continue;
     }
@@ -75,6 +80,98 @@ export function referenceMatchFromProjections(feature, first, last) {
     bindings: [binding],
     selectors: selector ? [selector] : [],
   };
+}
+
+export function removalBindingFromExtendedReference(coordinates, feature) {
+  const sourceCoordinates = feature?.geometry?.coordinates;
+  if (
+    !Array.isArray(coordinates) ||
+    coordinates.length < 2 ||
+    !Array.isArray(sourceCoordinates) ||
+    sourceCoordinates.length < 2
+  ) {
+    return null;
+  }
+  const totalLength = lineLengthMeters(sourceCoordinates);
+  if (totalLength < MIN_MATCHED_LENGTH_METERS) return null;
+  const projections = [];
+  for (const coordinate of coordinates) {
+    const projection = nearestPointOnExtendedLine(coordinate, sourceCoordinates);
+    if (projection) projections.push(projection);
+  }
+  if (projections.length < 2) return null;
+  const rangeStartMeters = clamp(
+    Math.min(...projections.map((projection) => projection.alongMeters)),
+    0,
+    totalLength
+  );
+  const rangeEndMeters = clamp(
+    Math.max(...projections.map((projection) => projection.alongMeters)),
+    0,
+    totalLength
+  );
+  if (rangeEndMeters - rangeStartMeters < MIN_MATCHED_LENGTH_METERS) return null;
+  return referenceMatchFromProjections(
+    feature,
+    { alongMeters: rangeStartMeters },
+    { alongMeters: rangeEndMeters }
+  ).binding;
+}
+
+export function nearbyRemovalBindingFromExtendedReference(
+  coordinates,
+  feature,
+  toleranceMeters = DEFAULT_MATCH_TOLERANCE_METERS
+) {
+  const sourceCoordinates = feature?.geometry?.coordinates;
+  if (
+    !Array.isArray(coordinates) ||
+    coordinates.length < 2 ||
+    !Array.isArray(sourceCoordinates) ||
+    sourceCoordinates.length < 2
+  ) {
+    return null;
+  }
+  const runs = [];
+  let currentRun = [];
+  for (const coordinate of coordinates) {
+    const projection = nearestPointOnExtendedLine(coordinate, sourceCoordinates);
+    if (projection && projection.distanceMeters <= toleranceMeters) {
+      currentRun.push({ coordinate, projection });
+    } else {
+      if (currentRun.length >= 2) runs.push(currentRun);
+      currentRun = [];
+    }
+  }
+  if (currentRun.length >= 2) runs.push(currentRun);
+
+  const totalLength = lineLengthMeters(sourceCoordinates);
+  let best = null;
+  for (const run of runs) {
+    const rangeStartMeters = clamp(
+      Math.min(...run.map(({ projection }) => projection.alongMeters)),
+      0,
+      totalLength
+    );
+    const rangeEndMeters = clamp(
+      Math.max(...run.map(({ projection }) => projection.alongMeters)),
+      0,
+      totalLength
+    );
+    const projectedLength = rangeEndMeters - rangeStartMeters;
+    if (projectedLength < MIN_MATCHED_LENGTH_METERS) continue;
+    const objectLength = lineLengthMeters(run.map(({ coordinate }) => coordinate));
+    if (Math.abs(objectLength / projectedLength - 1) > 0.25) continue;
+    if (!best || projectedLength > best.projectedLength) {
+      best = { rangeStartMeters, rangeEndMeters, projectedLength };
+    }
+  }
+  if (!best) return null;
+  return referenceMatchFromProjections(
+    feature,
+    { alongMeters: best.rangeStartMeters },
+    { alongMeters: best.rangeEndMeters }
+  ).binding;
 }
 
 export function selectorKey(selector) {
@@ -216,4 +313,55 @@ function containedLineMatch(subject, subjectLength, container, toleranceMeters) 
     containerSliceLength,
     maximumDistanceMeters,
   };
+}
+
+function nearestPointOnExtendedLine(coordinate, sourceCoordinates) {
+  const candidates = [nearestPointOnLine(coordinate, sourceCoordinates)].filter(Boolean);
+  const startRay = endpointRayProjection(
+    coordinate,
+    sourceCoordinates[0],
+    sourceCoordinates[1],
+    0,
+    (fraction) => fraction <= 0
+  );
+  if (startRay) candidates.push(startRay);
+  const finalSegmentStart = sourceCoordinates.at(-2);
+  const finalSegmentEnd = sourceCoordinates.at(-1);
+  const finalSegmentLength = lineLengthMeters([finalSegmentStart, finalSegmentEnd]);
+  const endRay = endpointRayProjection(
+    coordinate,
+    finalSegmentStart,
+    finalSegmentEnd,
+    lineLengthMeters(sourceCoordinates) - finalSegmentLength,
+    (fraction) => fraction >= 1
+  );
+  if (endRay) candidates.push(endRay);
+  return candidates.reduce((nearest, candidate) =>
+    !nearest || candidate.distanceMeters < nearest.distanceMeters ? candidate : nearest
+  , null);
+}
+
+function endpointRayProjection(coordinate, startCoordinate, endCoordinate, distanceBefore, accepts) {
+  const referenceLatitude = coordinate?.[1];
+  if (!Number.isFinite(referenceLatitude)) return null;
+  const point = project(coordinate, referenceLatitude);
+  const start = project(startCoordinate, referenceLatitude);
+  const end = project(endCoordinate, referenceLatitude);
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (!(lengthSquared > 0)) return null;
+  const fraction = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
+  if (!accepts(fraction)) return null;
+  const projected = { x: start.x + dx * fraction, y: start.y + dy * fraction };
+  const segmentLength = Math.sqrt(lengthSquared);
+  return {
+    coordinate: unproject(projected, referenceLatitude),
+    distanceMeters: Math.hypot(point.x - projected.x, point.y - projected.y),
+    alongMeters: distanceBefore + segmentLength * fraction,
+  };
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
 }

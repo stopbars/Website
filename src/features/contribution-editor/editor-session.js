@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Session persistence keeps normalization, filtering, and projection stages explicit at the storage boundary. */
+
 import { EDITOR_STORAGE_VERSION, normalizeDocument } from './editor-model.js';
 import {
   createTextureEntryIndex,
@@ -17,17 +19,19 @@ const MAX_TEXTURE_SOURCE_BYTES = 16 * 1024 * 1024;
 const MEMORY_SESSIONS = new Map();
 const MEMORY_DRAFTS = new Map();
 const MEMORY_REFERENCES = new Map();
+const MEMORY_WORKSPACES = new Map();
 let databasePromise;
 
 export function setEditorSession(key, value) {
   MEMORY_SESSIONS.set(normalizeKey(key), normalizeSession(value));
 }
 
-export function takeEditorSession(key) {
-  const normalized = normalizeKey(key);
-  const session = MEMORY_SESSIONS.get(normalized) ?? null;
-  MEMORY_SESSIONS.delete(normalized);
-  return normalizeSession(session);
+export function getEditorSession(key) {
+  return normalizeSession(MEMORY_SESSIONS.get(normalizeKey(key)) ?? null);
+}
+
+export function clearEditorSession(key) {
+  MEMORY_SESSIONS.delete(normalizeKey(key));
 }
 
 export function editorSessionNeedsHydration(session) {
@@ -72,6 +76,27 @@ export async function clearEditorDraft(icao, simulator) {
   removeLocalRecord(key);
   const database = await openDatabase();
   if (database) await deleteDatabaseRecord(database, key);
+}
+
+export async function saveEditorWorkspace(icao, simulator, workspace) {
+  const record = {
+    key: workspaceKey(icao, simulator),
+    version: EDITOR_STORAGE_VERSION,
+    workspace: normalizeWorkspace(workspace),
+    savedAt: new Date().toISOString(),
+  };
+  MEMORY_WORKSPACES.set(record.key, record);
+  writeLocalRecord(record.key, record);
+  const database = await openDatabase();
+  if (database) await putDatabaseRecord(database, record);
+  return record;
+}
+
+export function loadEditorWorkspaceImmediate(icao, simulator) {
+  const key = workspaceKey(icao, simulator);
+  const record = readLocalRecord(key) ?? MEMORY_WORKSPACES.get(key);
+  if (record?.version !== EDITOR_STORAGE_VERSION) return null;
+  return { ...record, workspace: normalizeWorkspace(record.workspace) };
 }
 
 export async function saveReferenceScene(icao, simulator, scene, sourceName, fingerprint) {
@@ -250,9 +275,7 @@ export async function hydrateReferenceTextureDefinitions(scene) {
       for (const definition of missingAptDefinitions) {
         const markingCode = Number(definition.slice('apt-marking:'.length));
         const legacy = legacyRecords.find(
-          (record) =>
-            record?.properties &&
-            stockAptDefinitionCode(record.key) === markingCode
+          (record) => record?.properties && stockAptDefinitionCode(record.key) === markingCode
         );
         if (legacy) cached.set(definition, legacy.properties);
       }
@@ -295,6 +318,41 @@ export function documentKey(icao, simulator) {
 
 function referenceKey(icao, simulator) {
   return `${EDITOR_STORAGE_VERSION}:reference:${String(icao).toUpperCase()}:${simulator}`;
+}
+
+function workspaceKey(icao, simulator) {
+  return `${EDITOR_STORAGE_VERSION}:workspace:${String(icao).toUpperCase()}:${simulator}`;
+}
+
+function normalizeWorkspace(workspace = {}) {
+  const viewport = workspace.viewport ?? {};
+  const normalizedViewport =
+    Number.isFinite(viewport.longitude) &&
+    Number.isFinite(viewport.latitude) &&
+    Number.isFinite(viewport.zoom)
+      ? {
+          longitude: viewport.longitude,
+          latitude: viewport.latitude,
+          zoom: viewport.zoom,
+          bearing: Number.isFinite(viewport.bearing) ? viewport.bearing : 0,
+          pitch: Number.isFinite(viewport.pitch) ? viewport.pitch : 0,
+        }
+      : null;
+  return {
+    selectedId: typeof workspace.selectedId === 'string' ? workspace.selectedId : null,
+    tool: typeof workspace.tool === 'string' ? workspace.tool : 'select',
+    visibleCategories: Array.isArray(workspace.visibleCategories)
+      ? workspace.visibleCategories.map(String)
+      : [],
+    divisionGhostsVisible: Boolean(workspace.divisionGhostsVisible),
+    editorObjectsVisible: workspace.editorObjectsVisible !== false,
+    snapEnabled: workspace.snapEnabled !== false,
+    validationOpen: Boolean(workspace.validationOpen),
+    rightPanel: workspace.rightPanel === 'object' ? 'object' : 'scenery',
+    uniqueObjectColors: Boolean(workspace.uniqueObjectColors),
+    advancedOpen: Boolean(workspace.advancedOpen),
+    viewport: normalizedViewport,
+  };
 }
 
 function normalizeKey(key) {

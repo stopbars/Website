@@ -1,26 +1,16 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+/* oxlint-disable react-doctor/no-giant-component react-doctor/async-await-in-loop react-doctor/no-prop-callback-in-effect -- MapLibre, Geoman, texture workers, and their parent-facing status projection share one imperative lifecycle; ordered worker jobs preserve stable accounting. */
+
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import Map, {
-  Layer,
-  NavigationControl,
-  Popup,
-  ScaleControl,
-  Source,
-} from 'react-map-gl/maplibre';
+import Map, { Layer, NavigationControl, Popup, ScaleControl, Source } from 'react-map-gl/maplibre';
 import { createGeomanInstance } from '@geoman-io/maplibre-geoman-free';
-import {
-  editorDocumentToGeojson,
-  originalDivisionsToGeojson,
-} from './editor-model.js';
+import { editorDocumentToGeojson, originalDivisionsToGeojson } from './editor-model.js';
 import {
   applyEditorGeometryPreviews,
   createGeomanEditorFeatures,
   createGeomanReferenceSnapTargets,
 } from './geoman-editor.js';
-import {
-  decodedTextureCache,
-  decodedTextureKey,
-} from './decoded-texture-cache.js';
+import { decodedTextureCache, decodedTextureKey } from './decoded-texture-cache.js';
 import { loadReferenceTextures } from './editor-session.js';
 import {
   referenceFeatureIsVisible,
@@ -31,9 +21,13 @@ import {
   createReferenceTextureFallbacks,
   installReferenceTextureFallbacks,
 } from './marking-patterns.js';
-import { XPlaneTextureLayer } from './XPlaneTextureLayer.js';
+import { SimulatorTextureLayer } from './SimulatorTextureLayer.js';
 import { realWorldLineWidthExpression } from './scenery-texture.js';
 import { createTextureEntryIndex, findTextureEntry } from './texture-assets.js';
+import { maintainCustomLayerBefore } from './custom-layer-order.js';
+import { reconnectMsfsRenderBundleFiles } from '../msfs-renderer/msfs-texture-files.js';
+import { distanceMeters } from './editor-geometry.js';
+import { mergeRemovalDisplayFeatures } from './removal-display.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css';
 
@@ -42,6 +36,12 @@ const EDITOR_LAYER_IDS = [
   'editor-selected-casing',
   'editor-lines',
   'editor-points',
+];
+const MEASUREMENT_LAYER_IDS = [
+  'editor-measurement-hit',
+  'editor-measurement-lines',
+  'editor-measurement-points',
+  'editor-measurement-labels',
 ];
 const ORIGINAL_DIVISION_LAYER_IDS = [
   'original-division-hit',
@@ -60,6 +60,32 @@ const REFERENCE_LAYER_IDS = [
   'reference-removal-lines',
   'reference-points',
 ];
+const MSFS_SNAP_TARGET_LIMIT = 2_000;
+const MSFS_SNAP_CATEGORY_PRIORITY = ['light-rows', 'fixtures'];
+const MSFS_SNAP_GEOMETRIES = new Set(['Point', 'LineString', 'MultiLineString']);
+
+function msfsReferenceSnapFeatures(features) {
+  const selected = [];
+  for (const category of MSFS_SNAP_CATEGORY_PRIORITY) {
+    for (const feature of features ?? []) {
+      if (feature.properties?.snapCategory !== category) continue;
+      if (!MSFS_SNAP_GEOMETRIES.has(feature.geometry?.type)) continue;
+      selected.push(feature);
+    }
+  }
+  return selected;
+}
+
+function msfsRenderGroupIsVisible(group, visibleCategories) {
+  if (group.markingTexture || group.lineTexture) {
+    return visibleCategories.has('painted-lines');
+  }
+  if (group.renderPass === 'apron' || group.renderPass === 'taxiway-base') {
+    return visibleCategories.has('pavement-edges');
+  }
+  return true;
+}
+
 const MAX_LOCAL_TEXTURE_BYTES = 32 * 1024 * 1024;
 const MAX_TOTAL_TEXTURE_BYTES = 256 * 1024 * 1024;
 const MAX_TEXTURE_EDGE = 1024;
@@ -139,12 +165,7 @@ function isMarkingFeature(feature) {
   );
 }
 
-function createMarkingDiagnostic({
-  feature,
-  clickedCoordinate,
-  renderedLayerId,
-  resolvedEntry,
-}) {
+function createMarkingDiagnostic({ feature, clickedCoordinate, renderedLayerId, resolvedEntry }) {
   const properties = feature?.properties ?? {};
   const geometry = feature?.geometry ?? null;
   const coordinates = geometry?.coordinates ?? [];
@@ -230,25 +251,35 @@ const EditorMap = memo(function EditorMap({
   airport,
   document,
   referenceScene,
+  renderBundle,
   sourceEntries,
   sourceFingerprint,
   selectedId,
   tool,
   visibleCategories,
   divisionGhostsVisible,
+  editorObjectsVisible,
+  measurements,
+  measurementStart,
+  onMeasurementMove,
+  onMeasurementCancel,
   snapEnabled,
   uniqueObjectColors,
   focusRequest,
+  initialViewport,
   onSelect,
   onCreate,
   onGeometryChange,
   onMapClick,
   onReferenceClick,
   onTextureStatus,
+  onViewportChange,
 }) {
   const mapRef = useRef(null);
   const xplaneTextureLayersRef = useRef({ terrain: null, overlay: null });
+  const msfsTextureLayerRef = useRef(null);
   const reconcileXPlaneLayersRef = useRef(null);
+  const reconcileMsfsLayerRef = useRef(null);
   const textureRenderErrorRef = useRef('');
   const didInitialFitRef = useRef(false);
   const geomanRef = useRef(null);
@@ -257,47 +288,97 @@ const EditorMap = memo(function EditorMap({
   const geomanCallbacksRef = useRef({ onCreate, onGeometryChange, onSelect });
   const documentObjectsRef = useRef(document.objects);
   const originalDivisionsRef = useRef(document.originalDivisions);
-  geomanCallbacksRef.current = { onCreate, onGeometryChange, onSelect };
-  documentObjectsRef.current = document.objects;
-  originalDivisionsRef.current = document.originalDivisions;
+  const measurementFrameRef = useRef(0);
+  const pendingMeasurementCursorRef = useRef(null);
+  const measurementDragRef = useRef(null);
+  useLayoutEffect(() => {
+    geomanCallbacksRef.current = { onCreate, onGeometryChange, onSelect };
+    documentObjectsRef.current = document.objects;
+    originalDivisionsRef.current = document.originalDivisions;
+  }, [document.objects, document.originalDivisions, onCreate, onGeometryChange, onSelect]);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [geomanReady, setGeomanReady] = useState(false);
   const [liveEdit, setLiveEdit] = useState(null);
   const [liveDrawCoordinates, setLiveDrawCoordinates] = useState(null);
   const [divisionPopup, setDivisionPopup] = useState(null);
   const [markingPopup, setMarkingPopup] = useState(null);
+  const [measurementCursor, setMeasurementCursor] = useState(null);
+  const [measurementDrag, setMeasurementDrag] = useState(null);
+  const [measurementHovered, setMeasurementHovered] = useState(false);
+  const editorDocumentGeojson = useMemo(() => editorDocumentToGeojson(document), [document]);
+  const editorObjectGeojson = useMemo(
+    () => ({
+      ...editorDocumentGeojson,
+      features: editorDocumentGeojson.features.filter(
+        (feature) => feature.properties?.featureType !== 'editor-removal'
+      ),
+    }),
+    [editorDocumentGeojson]
+  );
+  const editorRemovalGeojson = useMemo(
+    () => buildEditorRemovalDisplayGeojson(editorDocumentGeojson),
+    [editorDocumentGeojson]
+  );
   const editorGeojson = useMemo(
     () =>
       applyEditorGeometryPreviews(
-        editorDocumentToGeojson(document),
+        editorObjectGeojson,
         selectedId,
         liveEdit,
         tool === 'draw' ? liveDrawCoordinates : null
       ),
-    [document, liveDrawCoordinates, liveEdit, selectedId, tool]
+    [editorObjectGeojson, liveDrawCoordinates, liveEdit, selectedId, tool]
+  );
+  const displayedMeasurements = useMemo(
+    () =>
+      measurementDrag
+        ? measurements.map((measurement) =>
+            measurement.id === measurementDrag.id
+              ? {
+                  ...measurement,
+                  coordinates: measurementDrag.coordinates,
+                  distanceMeters: distanceMeters(
+                    measurementDrag.coordinates[0],
+                    measurementDrag.coordinates[1]
+                  ),
+                }
+              : measurement
+          )
+        : measurements,
+    [measurementDrag, measurements]
+  );
+  const measurementGeojson = useMemo(
+    () => buildMeasurementGeojson(displayedMeasurements, measurementStart, measurementCursor),
+    [displayedMeasurements, measurementCursor, measurementStart]
   );
   const referenceGeojson = useMemo(() => {
     const geojson = referenceSceneGeojson(referenceScene);
-    const selected = new Set(
+    const xplaneSelected = new Set(
       (document.xplaneRemovals ?? []).map(
         (selector) => `${selector.feature}:${selector.code}:${selector.run}`
       )
     );
+    const msfsSelectedIds = new Set();
+    for (const removal of document.removals ?? []) {
+      for (const sourceId of removal.sourceIds ?? []) msfsSelectedIds.add(String(sourceId));
+    }
     return {
       ...geojson,
       features: geojson.features.map((feature) => {
         const properties = feature.properties ?? {};
         const key = `${properties.sourceFeatureId}:${properties.lightCode}:${properties.sourceRunIndex}`;
+        const sourceId = String(properties.sourceId ?? feature.id ?? '');
+        const msfsSelected = msfsSelectedIds.has(sourceId);
         return {
           ...feature,
           properties: {
             ...properties,
-            removalSelected: selected.has(key),
+            removalSelected: document.simulator === 'msfs' ? msfsSelected : xplaneSelected.has(key),
           },
         };
       }),
     };
-  }, [document.xplaneRemovals, referenceScene]);
+  }, [document.removals, document.simulator, document.xplaneRemovals, referenceScene]);
   const referenceFeaturesById = useMemo(() => {
     const featuresById = new globalThis.Map();
     for (const feature of referenceScene?.features ?? []) {
@@ -309,14 +390,8 @@ const EditorMap = memo(function EditorMap({
     }
     return featuresById;
   }, [referenceScene?.features]);
-  const textureEntryIndex = useMemo(
-    () => createTextureEntryIndex(sourceEntries),
-    [sourceEntries]
-  );
-  const originalDivisionGeojson = useMemo(
-    () => originalDivisionsToGeojson(document),
-    [document]
-  );
+  const textureEntryIndex = useMemo(() => createTextureEntryIndex(sourceEntries), [sourceEntries]);
+  const originalDivisionGeojson = useMemo(() => originalDivisionsToGeojson(document), [document]);
   const referenceLatitude = useMemo(
     () =>
       Number(airport?.latitude) ||
@@ -333,11 +408,18 @@ const EditorMap = memo(function EditorMap({
   const referenceSnapTargets = useMemo(
     () =>
       createGeomanReferenceSnapTargets(
-        (referenceScene?.features ?? []).filter((feature) =>
-          referenceFeatureIsVisible(feature, visibleCategories)
-        )
+        document.simulator === 'msfs'
+          ? msfsReferenceSnapFeatures(
+              (referenceScene?.features ?? []).filter((feature) =>
+                referenceFeatureIsVisible(feature, visibleCategories)
+              )
+            )
+          : (referenceScene?.features ?? []).filter((feature) =>
+              referenceFeatureIsVisible(feature, visibleCategories)
+            ),
+        document.simulator === 'msfs' ? { maximumFeatures: MSFS_SNAP_TARGET_LIMIT } : undefined
       ),
-    [referenceScene?.features, visibleCategories]
+    [document.simulator, referenceScene?.features, visibleCategories]
   );
   const editorLineColor = uniqueObjectColors
     ? ['get', 'color']
@@ -345,6 +427,8 @@ const EditorMap = memo(function EditorMap({
   const originalDivisionColor = uniqueObjectColors
     ? ['coalesce', ['get', 'color'], '#a5f3fc']
     : '#a5f3fc';
+  const editorObjectVisibility = editorObjectsVisible ? 'visible' : 'none';
+  const removalMode = tool === 'remove-light';
   const documentBounds = useMemo(
     () => geojsonBounds(editorGeojson.features),
     [editorGeojson.features]
@@ -414,7 +498,7 @@ const EditorMap = memo(function EditorMap({
     const coordinates =
       division?.geometry?.type === 'Point'
         ? [division.geometry.coordinates]
-        : division?.geometry?.coordinates ?? object?.coordinates;
+        : (division?.geometry?.coordinates ?? object?.coordinates);
     const bounds = coordinatesBounds(coordinates);
     if (!bounds || !mapRef.current) return;
     const [west, south, east, north] = bounds;
@@ -459,6 +543,8 @@ const EditorMap = memo(function EditorMap({
     );
   }, [focusRequest, mapLoaded]);
 
+  // Geoman allocates asynchronously; this cleanup owns every listener and destroys late instances.
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     const map = mapRef.current?.getMap?.();
     if (!map || !mapLoaded) return undefined;
@@ -500,9 +586,7 @@ const EditorMap = memo(function EditorMap({
       if (event.name === 'gm:draw:shape_with_data') {
         if (event.action === 'start' || event.action === 'update') {
           const geometry = event.featureData?.getGeoJson?.().geometry;
-          setLiveDrawCoordinates(
-            geometry?.type === 'LineString' ? geometry.coordinates : null
-          );
+          setLiveDrawCoordinates(geometry?.type === 'LineString' ? geometry.coordinates : null);
         }
         return;
       }
@@ -619,10 +703,7 @@ const EditorMap = memo(function EditorMap({
   }, [mapLoaded]);
 
   const editorGeometrySignature = useMemo(
-    () =>
-      JSON.stringify(
-        document.objects.map((object) => [object.partId, object.coordinates])
-      ),
+    () => JSON.stringify(document.objects.map((object) => [object.partId, object.coordinates])),
     [document.objects]
   );
 
@@ -631,8 +712,7 @@ const EditorMap = memo(function EditorMap({
     if (!geoman || !geomanReady) return undefined;
     let cancelled = false;
     const syncVersion = ++geomanSyncVersionRef.current;
-    const isCurrent = () =>
-      !cancelled && geomanSyncVersionRef.current === syncVersion;
+    const isCurrent = () => !cancelled && geomanSyncVersionRef.current === syncVersion;
     const sync = async () => {
       geomanSyncingRef.current = true;
       try {
@@ -640,10 +720,9 @@ const EditorMap = memo(function EditorMap({
         if (!isCurrent()) return;
         await geoman.features.deleteAll();
         if (!isCurrent()) return;
-        const editableFeatures = createGeomanEditorFeatures(
-          document.objects,
-          selectedId
-        );
+        const editableFeatures = editorObjectsVisible
+          ? createGeomanEditorFeatures(document.objects, selectedId)
+          : [];
         const snappingFeatures = snapEnabled ? referenceSnapTargets.features : [];
         const geomanFeatures = [...editableFeatures, ...snappingFeatures];
         if (geomanFeatures.length > 0) {
@@ -675,6 +754,7 @@ const EditorMap = memo(function EditorMap({
         if (geomanSyncVersionRef.current === syncVersion) {
           geomanSyncingRef.current = false;
           reconcileXPlaneLayersRef.current?.();
+          reconcileMsfsLayerRef.current?.();
         }
       }
     };
@@ -686,6 +766,7 @@ const EditorMap = memo(function EditorMap({
     };
   }, [
     document.objects,
+    editorObjectsVisible,
     editorGeometrySignature,
     geomanReady,
     referenceSnapTargets,
@@ -713,11 +794,11 @@ const EditorMap = memo(function EditorMap({
       }));
     };
     const layers = {
-      terrain: new XPlaneTextureLayer(reportStats, {
+      terrain: new SimulatorTextureLayer(reportStats, {
         id: 'xplane-terrain-textures',
         textureSources: sharedTextureSources,
       }),
-      overlay: new XPlaneTextureLayer(reportStats, {
+      overlay: new SimulatorTextureLayer(reportStats, {
         id: 'xplane-airport-textures',
         textureSources: sharedTextureSources,
       }),
@@ -773,6 +854,143 @@ const EditorMap = memo(function EditorMap({
     };
   }, [document.simulator, mapLoaded, onTextureStatus]);
 
+  // Texture status is an intentional parent-facing projection of this owned layer lifecycle.
+  // oxlint-disable-next-line react-doctor/no-prop-callback-in-effect
+  useEffect(() => {
+    const map = mapRef.current?.getMap?.();
+    if (!map || !mapLoaded || document.simulator !== 'msfs' || !renderBundle) return undefined;
+    const connectedBundle = reconnectMsfsRenderBundleFiles(renderBundle, sourceEntries);
+    const descriptors = connectedBundle.textures || [];
+    const layer = new SimulatorTextureLayer(
+      (stats) => onTextureStatus?.((current) => ({ ...current, ...stats })),
+      { id: 'msfs-scenery-textures' }
+    );
+    layer.setGeometry(connectedBundle.groups);
+    msfsTextureLayerRef.current = layer;
+    const directDescriptors = descriptors.filter((descriptor) => descriptor.image);
+    const workerDescriptors = descriptors.filter(
+      (descriptor) => !descriptor.image && descriptor.file
+    );
+    const packageDescriptors = descriptors.filter((descriptor) => descriptor.source === 'package');
+    const skipped = descriptors.length - directDescriptors.length - workerDescriptors.length;
+    for (const descriptor of directDescriptors) {
+      layer.setTexture(descriptor.pattern, descriptor.image, {
+        wrap: descriptor.wrap !== false,
+        lineTexture: descriptor.lineTexture === true,
+      });
+    }
+    onTextureStatus?.({
+      phase: workerDescriptors.length > 0 ? 'loading' : 'ready',
+      total: descriptors.length,
+      loaded: directDescriptors.length,
+      packageTotal: packageDescriptors.length,
+      packageLoaded: directDescriptors.filter((descriptor) => descriptor.source === 'package')
+        .length,
+      fallbackLoaded: directDescriptors.filter((descriptor) => descriptor.source === 'fallback')
+        .length,
+      missing: 0,
+      failed: 0,
+      skipped,
+      meshGroups: renderBundle.groups.length,
+      drawableGroups: directDescriptors.length,
+      drawnGroups: 0,
+      drawnTriangles: 0,
+      renderError: '',
+      cached: 0,
+      connected: workerDescriptors.length,
+    });
+    const worker =
+      workerDescriptors.length > 0
+        ? new Worker(new URL('../msfs-renderer/msfs-texture.worker.js', import.meta.url), {
+            type: 'module',
+          })
+        : null;
+    const requests = new globalThis.Map(
+      workerDescriptors.map((texture, index) => [index + 1, texture])
+    );
+    if (worker) {
+      worker.onmessage = (event) => {
+        const descriptor = requests.get(event.data?.id);
+        if (!descriptor) return;
+        requests.delete(event.data.id);
+        if (event.data.image) {
+          layer.setTexture(descriptor.pattern, event.data.image, {
+            wrap: descriptor.wrap !== false,
+            lineTexture: descriptor.lineTexture === true,
+          });
+        }
+        onTextureStatus?.((current) => ({
+          ...current,
+          phase: requests.size === 0 ? 'ready' : 'loading',
+          loaded: (current.loaded || 0) + (event.data.image ? 1 : 0),
+          packageLoaded:
+            (current.packageLoaded || 0) +
+            (event.data.image && descriptor.source === 'package' ? 1 : 0),
+          fallbackLoaded:
+            (current.fallbackLoaded || 0) +
+            (event.data.image && descriptor.source === 'fallback' ? 1 : 0),
+          failed: (current.failed || 0) + (event.data.error ? 1 : 0),
+        }));
+      };
+      worker.onerror = (event) => {
+        const failed = requests.size;
+        requests.clear();
+        onTextureStatus?.((current) => ({
+          ...current,
+          phase: 'error',
+          failed: (current.failed || 0) + failed,
+          renderError: event.message || 'MSFS textures could not be decoded.',
+        }));
+      };
+      for (const [id, descriptor] of requests) worker.postMessage({ id, descriptor });
+    }
+    // The first contribution handoff can mount this effect before react-map-gl
+    // has installed the reference layers. Keep trying until an anchor exists;
+    // a one-shot styledata listener can miss the event that adds those layers.
+    const placement = maintainCustomLayerBefore(
+      map,
+      layer,
+      ['reference-painted-fills', 'reference-lines', 'editor-removals'],
+      {
+        onError: (error) => {
+          onTextureStatus?.((current) => ({
+            ...current,
+            phase: 'error',
+            renderError: error instanceof Error ? error.message : String(error),
+          }));
+        },
+      }
+    );
+    reconcileMsfsLayerRef.current = placement.reconcile;
+    return () => {
+      worker?.terminate();
+      placement.stop();
+      if (map.getLayer(layer.id)) map.removeLayer(layer.id);
+      if (msfsTextureLayerRef.current === layer) msfsTextureLayerRef.current = null;
+      if (reconcileMsfsLayerRef.current === placement.reconcile) {
+        reconcileMsfsLayerRef.current = null;
+      }
+    };
+  }, [document.simulator, mapLoaded, onTextureStatus, renderBundle, sourceEntries]);
+
+  useEffect(() => {
+    if (document.simulator !== 'msfs') return;
+    msfsTextureLayerRef.current?.setGroupVisibility((group) =>
+      msfsRenderGroupIsVisible(group, visibleCategories)
+    );
+  }, [document.simulator, renderBundle, visibleCategories]);
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap?.();
+    if (!map || !mapLoaded || document.simulator !== 'xplane') return;
+    for (const id of ['xplane-terrain-textures', 'xplane-airport-textures']) {
+      if (map.getLayer(id)) {
+        map.setLayoutProperty(id, 'visibility', removalMode ? 'none' : 'visible');
+      }
+    }
+    map.triggerRepaint();
+  }, [document.simulator, mapLoaded, removalMode]);
+
   useEffect(() => {
     if (document.simulator !== 'xplane' || !mapLoaded) return;
     const layers = xplaneTextureLayersRef.current;
@@ -818,13 +1036,22 @@ const EditorMap = memo(function EditorMap({
 
   useEffect(() => {
     const map = mapRef.current?.getMap?.();
-    if (!map || !mapLoaded || !map.isStyleLoaded() || document.simulator === 'xplane') return;
+    if (
+      !map ||
+      !mapLoaded ||
+      !map.isStyleLoaded() ||
+      document.simulator === 'xplane' ||
+      (document.simulator === 'msfs' && renderBundle)
+    )
+      return;
     installReferenceTextureFallbacks(map, referenceScene?.features);
-  }, [document.simulator, mapLoaded, referenceScene?.features]);
+  }, [document.simulator, mapLoaded, referenceScene?.features, renderBundle]);
 
+  // Texture status is an intentional parent-facing projection of this owned loading lifecycle.
+  // oxlint-disable-next-line react-doctor/no-prop-callback-in-effect
   useEffect(() => {
     const map = mapRef.current?.getMap?.();
-    if (!map || !mapLoaded) return undefined;
+    if (!map || !mapLoaded || document.simulator !== 'xplane') return undefined;
     let cancelled = false;
     let retryTimer;
     const entryIndex = createTextureEntryIndex(sourceEntries);
@@ -862,7 +1089,7 @@ const EditorMap = memo(function EditorMap({
 
     const load = async () => {
       if (!map.isStyleLoaded()) {
-        retryTimer = setTimeout(load, 50);
+        retryTimer = window.setTimeout(load, 50);
         return;
       }
       let loadedSourceBytes = 0;
@@ -875,11 +1102,7 @@ const EditorMap = memo(function EditorMap({
       let missing = 0;
       let skipped = 0;
       for (const [pattern, texture] of textureList) {
-        const decodedKey = decodedTextureKey(
-          texture.path,
-          texture.properties,
-          texture.lineTexture
-        );
+        const decodedKey = decodedTextureKey(texture.path, texture.properties, texture.lineTexture);
         const decoded = decodedTextureCache.get(decodedKey);
         if (decoded) {
           jobs.push({
@@ -991,7 +1214,7 @@ const EditorMap = memo(function EditorMap({
     });
     return () => {
       cancelled = true;
-      clearTimeout(retryTimer);
+      window.clearTimeout(retryTimer);
       for (const worker of workers) worker.terminate();
     };
   }, [
@@ -1002,6 +1225,13 @@ const EditorMap = memo(function EditorMap({
     sourceFingerprint,
     onTextureStatus,
   ]);
+
+  const clearMeasurementCursor = useCallback(() => {
+    pendingMeasurementCursorRef.current = null;
+    if (measurementFrameRef.current) cancelAnimationFrame(measurementFrameRef.current);
+    measurementFrameRef.current = 0;
+    setMeasurementCursor(null);
+  }, []);
 
   const handleClick = useCallback(
     (event) => {
@@ -1014,24 +1244,24 @@ const EditorMap = memo(function EditorMap({
       const referenceFeature = features.find((feature) =>
         REFERENCE_LAYER_IDS.includes(feature.layer.id)
       );
+      if (tool === 'measure') {
+        if (features.some(isCompletedMeasurementFeature)) return;
+        clearMeasurementCursor();
+        onMapClick(coordinate, { editorFeature, divisionFeature, referenceFeature });
+        return;
+      }
       if (tool === 'marking-debug') {
         const renderedMarking = features.find(
-          (feature) =>
-            REFERENCE_LAYER_IDS.includes(feature.layer.id) && isMarkingFeature(feature)
+          (feature) => REFERENCE_LAYER_IDS.includes(feature.layer.id) && isMarkingFeature(feature)
         );
         if (!renderedMarking) {
           setMarkingPopup(null);
           return;
         }
-        const featureId = String(
-          renderedMarking.id ?? renderedMarking.properties?.sourceId ?? ''
-        );
-        const originalFeature =
-          referenceFeaturesById.get(featureId) ?? renderedMarking;
+        const featureId = String(renderedMarking.id ?? renderedMarking.properties?.sourceId ?? '');
+        const originalFeature = referenceFeaturesById.get(featureId) ?? renderedMarking;
         const texturePath = originalFeature.properties?.textureAssetPath;
-        const resolvedEntry = texturePath
-          ? findTextureEntry(textureEntryIndex, texturePath)
-          : null;
+        const resolvedEntry = texturePath ? findTextureEntry(textureEntryIndex, texturePath) : null;
         setMarkingPopup({
           longitude: coordinate[0],
           latitude: coordinate[1],
@@ -1046,7 +1276,9 @@ const EditorMap = memo(function EditorMap({
         return;
       }
       if (referenceFeature && ['follow', 'draw', 'continue', 'remove-light'].includes(tool)) {
-        onReferenceClick(referenceFeature, coordinate);
+        onReferenceClick(referenceFeature, coordinate, {
+          selectSection: Boolean(event.originalEvent?.shiftKey),
+        });
         return;
       }
       if (editorFeature && !['draw', 'follow'].includes(tool)) {
@@ -1071,6 +1303,7 @@ const EditorMap = memo(function EditorMap({
       onMapClick(coordinate, { editorFeature, divisionFeature, referenceFeature });
     },
     [
+      clearMeasurementCursor,
       onMapClick,
       onReferenceClick,
       onSelect,
@@ -1083,9 +1316,7 @@ const EditorMap = memo(function EditorMap({
   const copyMarkingDiagnostic = useCallback(async () => {
     if (!markingPopup?.diagnostic) return;
     try {
-      await navigator.clipboard.writeText(
-        JSON.stringify(markingPopup.diagnostic, null, 2)
-      );
+      await navigator.clipboard.writeText(JSON.stringify(markingPopup.diagnostic, null, 2));
       setMarkingPopup((current) => (current ? { ...current, copied: true } : current));
     } catch {
       setMarkingPopup((current) =>
@@ -1099,7 +1330,103 @@ const EditorMap = memo(function EditorMap({
     if (map) installReferenceTextureFallbacks(map, referenceScene?.features);
   }, [referenceScene?.features]);
 
-  const initialViewState = {
+  const handleMouseMove = useCallback(
+    (event) => {
+      const currentDrag = measurementDragRef.current;
+      if (currentDrag) {
+        const nextDrag = {
+          ...currentDrag,
+          coordinates:
+            currentDrag.endpointIndex == null
+              ? currentDrag.originalCoordinates.map(([longitude, latitude]) => [
+                  longitude + (event.lngLat.lng - currentDrag.pointerStart[0]),
+                  latitude + (event.lngLat.lat - currentDrag.pointerStart[1]),
+                ])
+              : currentDrag.originalCoordinates.map((coordinate, index) =>
+                  index === currentDrag.endpointIndex
+                    ? [event.lngLat.lng, event.lngLat.lat]
+                    : coordinate
+                ),
+        };
+        measurementDragRef.current = nextDrag;
+        setMeasurementDrag(nextDrag);
+        return;
+      }
+      setMeasurementHovered(
+        tool === 'measure' && (event.features ?? []).some(isCompletedMeasurementFeature)
+      );
+      if (tool !== 'measure' || !measurementStart) return;
+      pendingMeasurementCursorRef.current = [event.lngLat.lng, event.lngLat.lat];
+      if (measurementFrameRef.current) return;
+      measurementFrameRef.current = requestAnimationFrame(() => {
+        measurementFrameRef.current = 0;
+        setMeasurementCursor(pendingMeasurementCursorRef.current);
+      });
+    },
+    [measurementStart, tool]
+  );
+
+  const handleMouseDown = useCallback(
+    (event) => {
+      if (tool !== 'measure' || event.originalEvent?.button !== 0) return;
+      const measurementFeature = (event.features ?? []).find(isCompletedMeasurementFeature);
+      const measurementId = String(measurementFeature?.properties?.measurementId ?? '');
+      const measurement = measurements.find((candidate) => candidate.id === measurementId);
+      if (!measurement) return;
+      event.originalEvent?.preventDefault?.();
+      clearMeasurementCursor();
+      mapRef.current?.getMap?.().dragPan.disable();
+      const nextDrag = {
+        id: measurement.id,
+        endpointIndex:
+          measurementFeature.layer.id === 'editor-measurement-points' &&
+          Number.isInteger(Number(measurementFeature.properties?.endpointIndex))
+            ? Number(measurementFeature.properties.endpointIndex)
+            : null,
+        pointerStart: [event.lngLat.lng, event.lngLat.lat],
+        originalCoordinates: measurement.coordinates,
+        coordinates: measurement.coordinates,
+      };
+      measurementDragRef.current = nextDrag;
+      setMeasurementDrag(nextDrag);
+    },
+    [clearMeasurementCursor, measurements, tool]
+  );
+
+  const finishMeasurementDrag = useCallback(() => {
+    const currentDrag = measurementDragRef.current;
+    if (currentDrag) onMeasurementMove(currentDrag.id, currentDrag.coordinates);
+    measurementDragRef.current = null;
+    mapRef.current?.getMap?.().dragPan.enable();
+    setMeasurementDrag(null);
+  }, [onMeasurementMove]);
+
+  const handleContextMenu = useCallback(
+    (event) => {
+      if (tool !== 'measure' || !measurementStart) return;
+      event.preventDefault?.();
+      event.originalEvent?.preventDefault?.();
+      clearMeasurementCursor();
+      onMeasurementCancel();
+    },
+    [clearMeasurementCursor, measurementStart, onMeasurementCancel, tool]
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    setMeasurementHovered(false);
+    if (measurementDragRef.current) finishMeasurementDrag();
+    else clearMeasurementCursor();
+  }, [clearMeasurementCursor, finishMeasurementDrag]);
+
+  useEffect(
+    () => () => {
+      if (measurementFrameRef.current) cancelAnimationFrame(measurementFrameRef.current);
+      mapRef.current?.getMap?.().dragPan.enable();
+    },
+    []
+  );
+
+  const initialViewState = initialViewport ?? {
     longitude: airport?.longitude ?? referenceScene?.bounds?.[0] ?? 0,
     latitude: airport?.latitude ?? referenceScene?.bounds?.[1] ?? 0,
     zoom: 15,
@@ -1112,23 +1439,34 @@ const EditorMap = memo(function EditorMap({
         initialViewState={initialViewState}
         mapStyle={AIRFIELD_STYLE}
         onLoad={() => setMapLoaded(true)}
+        onMoveEnd={(event) => onViewportChange?.(event.viewState)}
         onStyleImageMissing={handleStyleImageMissing}
         onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={finishMeasurementDrag}
+        onMouseLeave={handleMouseLeave}
         interactiveLayerIds={[
           ...EDITOR_LAYER_IDS,
+          ...MEASUREMENT_LAYER_IDS,
           ...(divisionGhostsVisible ? ORIGINAL_DIVISION_LAYER_IDS : []),
           ...REFERENCE_LAYER_IDS,
         ]}
         antialias
         renderWorldCopies={false}
         maxPitch={0}
-        doubleClickZoom={tool !== 'draw'}
+        doubleClickZoom={!['draw', 'measure'].includes(tool)}
         cursor={
-          tool === 'draw'
-            ? 'crosshair'
-            : ['follow', 'remove-light', 'marking-debug'].includes(tool)
-              ? 'cell'
-              : 'default'
+          measurementDrag
+            ? 'grabbing'
+            : tool === 'measure' && measurementHovered
+              ? 'grab'
+              : ['draw', 'measure'].includes(tool)
+                ? 'crosshair'
+                : ['follow', 'remove-light', 'marking-debug'].includes(tool)
+                  ? 'cell'
+                  : 'default'
         }
       >
         <NavigationControl position="bottom-right" showCompass={false} />
@@ -1152,7 +1490,9 @@ const EditorMap = memo(function EditorMap({
               ]}
               paint={{
                 'fill-color': ['coalesce', ['get', 'surfaceColor'], '#3f6212'],
-                'fill-opacity': ['case', ['==', ['get', 'surfaceLabel'], 'Grass'], 0.82, 0.78],
+                'fill-opacity': removalMode
+                  ? 0.05
+                  : ['case', ['==', ['get', 'surfaceLabel'], 'Grass'], 0.82, 0.78],
               }}
             />
           ) : null}
@@ -1185,7 +1525,7 @@ const EditorMap = memo(function EditorMap({
                 ['coalesce', ['get', 'surfaceOpacity'], document.simulator === 'xplane' ? 1 : 0.78],
                 ['==', ['get', 'snapCategory'], 'painted-lines'],
                 0.96,
-                0.12,
+                removalMode ? 0.04 : 0.12,
               ],
             }}
           />
@@ -1202,7 +1542,7 @@ const EditorMap = memo(function EditorMap({
               ]}
               paint={{
                 'fill-color': ['coalesce', ['get', 'markingColor'], '#f5f5f4'],
-                'fill-opacity': 0.96,
+                'fill-opacity': removalMode ? 0.05 : 0.96,
               }}
             />
           ) : null}
@@ -1256,7 +1596,9 @@ const EditorMap = memo(function EditorMap({
             paint={{
               'line-color': REFERENCE_COLOR,
               'line-width': REFERENCE_LINE_WIDTH,
-              'line-opacity': 0.82,
+              'line-opacity': removalMode
+                ? ['case', ['==', ['get', 'snapCategory'], 'light-rows'], 0.95, 0.08]
+                : 0.82,
             }}
           />
           {document.simulator !== 'xplane' ? (
@@ -1290,12 +1632,14 @@ const EditorMap = memo(function EditorMap({
             paint={{
               'line-color': ['coalesce', ['get', 'markingColor'], '#facc15'],
               'line-width': REFERENCE_LINE_WIDTH,
-              'line-opacity': [
-                'case',
-                ['!=', ['coalesce', ['get', 'renderPattern'], ''], ''],
-                document.simulator === 'xplane' ? 0 : 0.72,
-                1,
-              ],
+              'line-opacity': removalMode
+                ? 0.06
+                : [
+                    'case',
+                    ['!=', ['coalesce', ['get', 'renderPattern'], ''], ''],
+                    document.simulator === 'xplane' ? 0 : 0.72,
+                    1,
+                  ],
             }}
           />
           {document.simulator === 'xplane' ? (
@@ -1326,18 +1670,21 @@ const EditorMap = memo(function EditorMap({
               'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2, 19, 5],
               'circle-stroke-color': '#09090b',
               'circle-stroke-width': 1,
-              'circle-opacity': 0.85,
+              'circle-opacity': removalMode ? 0.15 : 0.85,
             }}
           />
         </Source>
 
-        <Source id="editor-draft" type="geojson" data={editorGeojson}>
+        <Source id="editor-removal-draft" type="geojson" data={editorRemovalGeojson}>
           <Layer
             id="editor-removals"
             type="fill"
             filter={['==', ['get', 'featureType'], 'editor-removal']}
             paint={{ 'fill-color': '#f59e0b', 'fill-opacity': 0.18 }}
           />
+        </Source>
+
+        <Source id="editor-draft" type="geojson" data={editorGeojson}>
           <Layer
             id="editor-lines"
             type="line"
@@ -1346,11 +1693,15 @@ const EditorMap = memo(function EditorMap({
               ['==', ['get', 'featureType'], 'editor-object'],
               ['!=', ['get', 'editorId'], selectedId ?? ''],
             ]}
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            layout={{
+              visibility: editorObjectVisibility,
+              'line-cap': 'round',
+              'line-join': 'round',
+            }}
             paint={{
               'line-color': editorLineColor,
               'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 19, 6],
-              'line-opacity': 0.94,
+              'line-opacity': removalMode ? 0.1 : 0.94,
             }}
           />
           <Layer
@@ -1361,6 +1712,7 @@ const EditorMap = memo(function EditorMap({
               ['==', ['get', 'featureType'], 'editor-object'],
               ['==', ['geometry-type'], 'Point'],
             ]}
+            layout={{ visibility: editorObjectVisibility }}
             paint={{
               'circle-color': editorLineColor,
               'circle-radius': 6,
@@ -1372,7 +1724,11 @@ const EditorMap = memo(function EditorMap({
             id="editor-selected-casing"
             type="line"
             filter={['==', ['get', 'editorId'], selectedId ?? '']}
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            layout={{
+              visibility: editorObjectVisibility,
+              'line-cap': 'round',
+              'line-join': 'round',
+            }}
             paint={{
               'line-color': '#ffffff',
               'line-width': ['interpolate', ['linear'], ['zoom'], 13, 6, 19, 10],
@@ -1383,7 +1739,11 @@ const EditorMap = memo(function EditorMap({
             id="editor-selected"
             type="line"
             filter={['==', ['get', 'editorId'], selectedId ?? '']}
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            layout={{
+              visibility: editorObjectVisibility,
+              'line-cap': 'round',
+              'line-join': 'round',
+            }}
             paint={{
               'line-color': editorLineColor,
               'line-width': ['interpolate', ['linear'], ['zoom'], 13, 4, 19, 8],
@@ -1395,6 +1755,7 @@ const EditorMap = memo(function EditorMap({
             type="symbol"
             filter={['==', ['get', 'editorId'], selectedId ?? '']}
             layout={{
+              visibility: editorObjectVisibility,
               'symbol-placement': 'line-center',
               'text-field': '▶',
               'text-size': 18,
@@ -1405,6 +1766,56 @@ const EditorMap = memo(function EditorMap({
             }}
             paint={{
               'text-color': '#ffffff',
+              'text-halo-color': '#09090b',
+              'text-halo-width': 2,
+            }}
+          />
+        </Source>
+
+        <Source id="editor-measurements" type="geojson" data={measurementGeojson}>
+          <Layer
+            id="editor-measurement-hit"
+            type="line"
+            filter={['==', ['get', 'featureType'], 'measurement-line']}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{ 'line-color': '#ffffff', 'line-width': 16, 'line-opacity': 0 }}
+          />
+          <Layer
+            id="editor-measurement-lines"
+            type="line"
+            filter={['==', ['get', 'featureType'], 'measurement-line']}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{
+              'line-color': '#22d3ee',
+              'line-width': 2.5,
+              'line-opacity': 0.95,
+              'line-dasharray': [2, 1.5],
+            }}
+          />
+          <Layer
+            id="editor-measurement-points"
+            type="circle"
+            filter={['==', ['get', 'featureType'], 'measurement-point']}
+            paint={{
+              'circle-color': '#22d3ee',
+              'circle-radius': 4,
+              'circle-stroke-color': '#ecfeff',
+              'circle-stroke-width': 1.5,
+            }}
+          />
+          <Layer
+            id="editor-measurement-labels"
+            type="symbol"
+            filter={['==', ['get', 'featureType'], 'measurement-label']}
+            layout={{
+              'text-field': ['get', 'label'],
+              'text-size': 12,
+              'text-offset': [0, -1],
+              'text-allow-overlap': true,
+              'text-ignore-placement': true,
+            }}
+            paint={{
+              'text-color': '#ecfeff',
               'text-halo-color': '#09090b',
               'text-halo-width': 2,
             }}
@@ -1461,17 +1872,24 @@ const EditorMap = memo(function EditorMap({
             className="editor-division-popup"
             onClose={() => setDivisionPopup(null)}
           >
-            <div className="min-w-40 pr-5 text-left">
-              <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-cyan-300/70">
-                Original division
-              </p>
-              <p className="mt-1 truncate text-xs font-medium text-zinc-100">
+            <div className="min-w-48 pr-6 text-left">
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-300/70" aria-hidden="true" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-200/80">
+                  Original division
+                </p>
+              </div>
+              <p className="mt-2 max-w-56 truncate text-sm font-medium text-zinc-100">
                 {divisionPopup.name}
               </p>
-              <p className="mt-0.5 font-mono text-[10px] text-zinc-400">
-                {divisionPopup.id}
-              </p>
-              <p className="mt-2 text-[9px] text-zinc-500">Reference outline · not exported</p>
+              <div className="mt-2 flex items-center justify-between gap-3 border-t border-zinc-700/60 pt-2">
+                <code className="truncate font-mono text-[10px] text-zinc-400">
+                  {divisionPopup.id}
+                </code>
+                <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium text-zinc-400">
+                  Not exported
+                </span>
+              </div>
             </div>
           </Popup>
         ) : null}
@@ -1539,7 +1957,6 @@ const EditorMap = memo(function EditorMap({
             </div>
           </Popup>
         ) : null}
-
       </Map>
     </div>
   );
@@ -1648,6 +2065,231 @@ function coordinatesBounds(coordinates) {
   return bounds.every(Number.isFinite) ? bounds : null;
 }
 
+function buildEditorRemovalDisplayGeojson(geojson) {
+  const generatedSourceIds = new Set();
+  for (const feature of geojson.features ?? []) {
+    if (
+      feature.properties?.featureType !== 'editor-removal' ||
+      !['msfs-auto', 'msfs-manual'].includes(feature.properties?.origin)
+    ) {
+      continue;
+    }
+    for (const sourceId of feature.properties?.sourceIds ?? []) {
+      generatedSourceIds.add(String(sourceId));
+    }
+  }
+
+  const features = [];
+  const generatedFeatures = [];
+  for (const feature of geojson.features ?? []) {
+    if (feature.properties?.featureType !== 'editor-removal') continue;
+    const sourceIds = (feature.properties?.sourceIds ?? []).map(String);
+    if (
+      feature.properties?.origin === 'msfs-source' &&
+      sourceIds.some((sourceId) => generatedSourceIds.has(sourceId))
+    ) {
+      continue;
+    }
+    if (
+      feature.geometry?.type === 'Polygon' &&
+      ['msfs-auto', 'msfs-manual'].includes(feature.properties?.origin)
+    ) {
+      generatedFeatures.push({
+        ...feature,
+        geometry: {
+          ...feature.geometry,
+          coordinates: feature.geometry.coordinates.map((ring) =>
+            simplifyClosedDisplayRing(ring, 0.35)
+          ),
+        },
+      });
+    } else {
+      features.push(feature);
+    }
+  }
+  return {
+    type: 'FeatureCollection',
+    features: [...features, ...mergeRemovalDisplayFeatures(generatedFeatures)],
+  };
+}
+
+function simplifyClosedDisplayRing(ring, toleranceMeters) {
+  if (!Array.isArray(ring) || ring.length <= 5) return ring;
+  const points = coordinatesEqual(ring[0], ring.at(-1)) ? ring.slice(0, -1) : [...ring];
+  if (points.length <= 4) return [...points, points[0]];
+  let farthestIndex = 1;
+  let farthestDistance = -1;
+  for (let index = 1; index < points.length; index += 1) {
+    const distance = distanceMeters(points[0], points[index]);
+    if (distance > farthestDistance) {
+      farthestDistance = distance;
+      farthestIndex = index;
+    }
+  }
+  const firstHalf = simplifyOpenDisplayLine(points.slice(0, farthestIndex + 1), toleranceMeters);
+  const secondHalf = simplifyOpenDisplayLine(
+    [...points.slice(farthestIndex), points[0]],
+    toleranceMeters
+  );
+  const simplified = [...firstHalf.slice(0, -1), ...secondHalf.slice(0, -1)];
+  return simplified.length >= 3 ? [...simplified, simplified[0]] : ring;
+}
+
+function simplifyOpenDisplayLine(coordinates, toleranceMeters) {
+  if (coordinates.length <= 2) return [...coordinates];
+  const kept = new Set([0, coordinates.length - 1]);
+  const ranges = [[0, coordinates.length - 1]];
+  while (ranges.length > 0) {
+    const [startIndex, endIndex] = ranges.pop();
+    if (endIndex <= startIndex + 1) continue;
+    let furthestIndex = -1;
+    let furthestDistance = -1;
+    for (let index = startIndex + 1; index < endIndex; index += 1) {
+      const distance = localSegmentDistanceMeters(
+        coordinates[index],
+        coordinates[startIndex],
+        coordinates[endIndex]
+      );
+      if (distance > furthestDistance) {
+        furthestDistance = distance;
+        furthestIndex = index;
+      }
+    }
+    if (furthestDistance <= toleranceMeters || furthestIndex < 0) continue;
+    kept.add(furthestIndex);
+    ranges.push([startIndex, furthestIndex], [furthestIndex, endIndex]);
+  }
+  return [...kept].sort((left, right) => left - right).map((index) => coordinates[index]);
+}
+
+function localSegmentDistanceMeters(point, start, end) {
+  const latitude = ((point[1] + start[1] + end[1]) / 3) * (Math.PI / 180);
+  const longitudeScale = 111_320 * Math.max(0.001, Math.cos(latitude));
+  const latitudeScale = 110_540;
+  const endX = (end[0] - start[0]) * longitudeScale;
+  const endY = (end[1] - start[1]) * latitudeScale;
+  const pointX = (point[0] - start[0]) * longitudeScale;
+  const pointY = (point[1] - start[1]) * latitudeScale;
+  const lengthSquared = endX * endX + endY * endY;
+  const ratio =
+    lengthSquared > 0
+      ? Math.max(0, Math.min(1, (pointX * endX + pointY * endY) / lengthSquared))
+      : 0;
+  return Math.hypot(pointX - endX * ratio, pointY - endY * ratio);
+}
+
+function coordinatesEqual(left, right) {
+  return left?.[0] === right?.[0] && left?.[1] === right?.[1];
+}
+
+function buildMeasurementGeojson(measurements, measurementStart, measurementCursor) {
+  const features = [];
+  for (const measurement of measurements ?? []) {
+    const [start, end] = measurement.coordinates ?? [];
+    if (!validMapCoordinate(start) || !validMapCoordinate(end)) continue;
+    features.push(
+      {
+        type: 'Feature',
+        id: `${measurement.id}:line`,
+        geometry: { type: 'LineString', coordinates: [start, end] },
+        properties: { featureType: 'measurement-line', measurementId: measurement.id },
+      },
+      ...[start, end].map((coordinate, index) => ({
+        type: 'Feature',
+        id: `${measurement.id}:point:${index}`,
+        geometry: { type: 'Point', coordinates: coordinate },
+        properties: {
+          featureType: 'measurement-point',
+          measurementId: measurement.id,
+          endpointIndex: index,
+        },
+      })),
+      {
+        type: 'Feature',
+        id: `${measurement.id}:label`,
+        geometry: {
+          type: 'Point',
+          coordinates: [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2],
+        },
+        properties: {
+          featureType: 'measurement-label',
+          measurementId: measurement.id,
+          label: formatMeasurementDistance(measurement.distanceMeters),
+        },
+      }
+    );
+  }
+  if (validMapCoordinate(measurementStart)) {
+    features.push({
+      type: 'Feature',
+      id: 'measurement:draft:start',
+      geometry: { type: 'Point', coordinates: measurementStart },
+      properties: { featureType: 'measurement-point' },
+    });
+  }
+  if (validMapCoordinate(measurementStart) && validMapCoordinate(measurementCursor)) {
+    const liveDistance = distanceMeters(measurementStart, measurementCursor);
+    if (liveDistance > 0.05) {
+      features.push(
+        {
+          type: 'Feature',
+          id: 'measurement:draft:line',
+          geometry: {
+            type: 'LineString',
+            coordinates: [measurementStart, measurementCursor],
+          },
+          properties: { featureType: 'measurement-line' },
+        },
+        {
+          type: 'Feature',
+          id: 'measurement:draft:end',
+          geometry: { type: 'Point', coordinates: measurementCursor },
+          properties: { featureType: 'measurement-point' },
+        },
+        {
+          type: 'Feature',
+          id: 'measurement:draft:label',
+          geometry: {
+            type: 'Point',
+            coordinates: [
+              (measurementStart[0] + measurementCursor[0]) / 2,
+              (measurementStart[1] + measurementCursor[1]) / 2,
+            ],
+          },
+          properties: {
+            featureType: 'measurement-label',
+            label: formatMeasurementDistance(liveDistance),
+          },
+        }
+      );
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function formatMeasurementDistance(value) {
+  const meters = Number(value);
+  if (!Number.isFinite(meters)) return '';
+  if (meters >= 1_000) return `${(meters / 1_000).toFixed(meters >= 10_000 ? 1 : 2)} km`;
+  return `${meters < 100 ? meters.toFixed(1) : Math.round(meters)} m`;
+}
+
+function validMapCoordinate(value) {
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  );
+}
+
+function isCompletedMeasurementFeature(feature) {
+  return (
+    MEASUREMENT_LAYER_IDS.includes(feature?.layer?.id) &&
+    Boolean(String(feature?.properties?.measurementId ?? '').trim())
+  );
+}
+
 EditorMap.propTypes = {
   airport: PropTypes.shape({
     latitude: PropTypes.number,
@@ -1655,6 +2297,11 @@ EditorMap.propTypes = {
   }),
   document: PropTypes.object.isRequired,
   referenceScene: PropTypes.object,
+  renderBundle: PropTypes.shape({
+    version: PropTypes.number.isRequired,
+    groups: PropTypes.array.isRequired,
+    textures: PropTypes.array.isRequired,
+  }),
   sourceEntries: PropTypes.arrayOf(
     PropTypes.shape({
       path: PropTypes.string.isRequired,
@@ -1667,6 +2314,17 @@ EditorMap.propTypes = {
   tool: PropTypes.string.isRequired,
   visibleCategories: PropTypes.instanceOf(Set).isRequired,
   divisionGhostsVisible: PropTypes.bool.isRequired,
+  editorObjectsVisible: PropTypes.bool.isRequired,
+  measurements: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      coordinates: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number).isRequired).isRequired,
+      distanceMeters: PropTypes.number.isRequired,
+    })
+  ).isRequired,
+  measurementStart: PropTypes.arrayOf(PropTypes.number),
+  onMeasurementMove: PropTypes.func.isRequired,
+  onMeasurementCancel: PropTypes.func.isRequired,
   snapEnabled: PropTypes.bool.isRequired,
   uniqueObjectColors: PropTypes.bool.isRequired,
   focusRequest: PropTypes.shape({
@@ -1674,12 +2332,20 @@ EditorMap.propTypes = {
     kind: PropTypes.oneOf(['object', 'division']),
     nonce: PropTypes.number,
   }),
+  initialViewport: PropTypes.shape({
+    longitude: PropTypes.number.isRequired,
+    latitude: PropTypes.number.isRequired,
+    zoom: PropTypes.number.isRequired,
+    bearing: PropTypes.number,
+    pitch: PropTypes.number,
+  }),
   onSelect: PropTypes.func.isRequired,
   onCreate: PropTypes.func.isRequired,
   onGeometryChange: PropTypes.func.isRequired,
   onMapClick: PropTypes.func.isRequired,
   onReferenceClick: PropTypes.func.isRequired,
   onTextureStatus: PropTypes.func,
+  onViewportChange: PropTypes.func,
 };
 
 export default EditorMap;

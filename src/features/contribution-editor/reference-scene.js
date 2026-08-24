@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-cache-property-access react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Reference-scene construction keeps source normalization, validation, and projection stages separate for diagnostics. */
+
 import { stableId } from '../draft-generator/extractor/classify.js';
 import { markingPatternName, withAptMarkingFallbackProperties } from './marking-patterns.js';
 import { xPlaneLinePhysicalWidth } from './scenery-texture.js';
@@ -45,27 +47,53 @@ export function buildReferenceScene(data, simulator) {
   const features = [];
   const seen = new Set();
   const renderedDsfLines = new Set();
+  const mustKeepSourceIds = new Set();
+  for (const zone of data.mustKeepZones ?? []) {
+    const sourceId = String(zone.sourceId ?? '');
+    if (sourceId) mustKeepSourceIds.add(sourceId);
+  }
   const append = (feature) => {
     const sourceId = String(feature.properties?.sourceId ?? feature.id ?? '');
     const key = `${sourceId}:${feature.geometry?.type}:${JSON.stringify(feature.geometry?.coordinates)}`;
     if (!sourceId || !feature.geometry || seen.has(key)) return;
     seen.add(key);
-    features.push(feature);
+    const semanticType = String(feature.properties?.semanticType ?? '');
+    const msfsRemovalTarget =
+      simulator === 'msfs' &&
+      ['stopbar', 'lead-on', 'taxi-centerline'].includes(semanticType) &&
+      !mustKeepSourceIds.has(sourceId) &&
+      feature.properties?.removable !== false;
+    features.push(
+      simulator === 'msfs'
+        ? {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              mustKeep: mustKeepSourceIds.has(sourceId),
+              msfsRemovalTarget,
+            },
+          }
+        : feature
+    );
     const dsfLineKey = xplaneDsfVisualLineKey(feature);
     if (dsfLineKey) renderedDsfLines.add(dsfLineKey);
   };
 
-  for (const feature of data.referenceFeatures ?? []) append(normalizeFeature(feature, simulator));
-  for (const row of data.lightRows ?? []) {
-    const feature = normalizeFeature(referenceFromRow(row, simulator), simulator);
-    if (
-      row.sourceType === 'xplane-dsf-painted-line' &&
-      renderedDsfLines.has(xplaneDsfVisualLineKey(feature))
-    ) {
-      continue;
+  const appendRows = () => {
+    for (const row of data.lightRows ?? []) {
+      const feature = normalizeFeature(referenceFromRow(row, simulator), simulator);
+      if (
+        row.sourceType === 'xplane-dsf-painted-line' &&
+        renderedDsfLines.has(xplaneDsfVisualLineKey(feature))
+      ) {
+        continue;
+      }
+      append(feature);
     }
-    append(feature);
-  }
+  };
+  if (simulator === 'msfs') appendRows();
+  for (const feature of data.referenceFeatures ?? []) append(normalizeFeature(feature, simulator));
+  if (simulator !== 'msfs') appendRows();
   for (const runway of data.runways ?? []) {
     for (const feature of referencesFromRunway(runway, simulator, data)) {
       append(normalizeFeature(feature, simulator));
@@ -95,11 +123,12 @@ export function buildReferenceScene(data, simulator) {
   const preferredFeatures =
     simulator === 'xplane' ? preferSourceBackedRunwayMarkings(features) : features;
   return {
-    version: 1,
+    version: 2,
     simulator,
     features: preferredFeatures,
     bounds: featureBounds(preferredFeatures),
     categories: SNAP_CATEGORIES,
+    diagnostics: data.referenceDiagnostics ?? null,
   };
 }
 
@@ -111,7 +140,9 @@ export function referenceTexturePattern(feature) {
 }
 
 export function normalizeReferenceScene(scene) {
-  if (!scene || scene.simulator !== 'xplane' || !Array.isArray(scene.features)) return scene;
+  if (!scene || !Array.isArray(scene.features)) return scene;
+  if (scene.simulator === 'msfs') return normalizeMsfsReferenceCategories(scene);
+  if (scene.simulator !== 'xplane') return scene;
   const preferredFeatures = preferSourceBackedRunwayMarkings(scene.features);
   const visualDsfLines = new Set(
     preferredFeatures
@@ -171,6 +202,18 @@ export function normalizeReferenceScene(scene) {
       },
     });
   }
+  return changed ? { ...scene, features } : scene;
+}
+
+function normalizeMsfsReferenceCategories(scene) {
+  let changed = false;
+  const features = scene.features.map((feature) => {
+    if (feature.properties?.snapCategory) return feature;
+    const snapCategory = msfsReferenceCategory(feature.properties?.sourceType);
+    if (!snapCategory) return feature;
+    changed = true;
+    return { ...feature, properties: { ...feature.properties, snapCategory } };
+  });
   return changed ? { ...scene, features } : scene;
 }
 
@@ -381,11 +424,9 @@ function referenceFromRow(row, simulator) {
 }
 
 function referencesFromRunway(runway, simulator, data) {
+  runway = normalizeRunway(runway);
+  if (!runway) return [];
   const centerline = runwayEndpoints(runway);
-  if (!centerline) return [];
-  if (!Number.isFinite(runway.lengthMeters) || runway.lengthMeters <= 0) {
-    runway = { ...runway, lengthMeters: coordinateDistanceMeters(centerline[0], centerline[1]) };
-  }
   const runwayHeading = bearingDegrees(centerline[0], centerline[1]);
   const polygon = runwayPolygon(centerline[0], centerline[1], Number(runway.widthMeters) || 30);
   const id = String(runway.id || stableId('editor-runway', JSON.stringify(runway)));
@@ -406,23 +447,6 @@ function referencesFromRunway(runway, simulator, data) {
         surfaceCode: runway.surfaceCode || 0,
         materialKind: runway.materialKind || '',
         textureHeading: runwayHeading,
-        simulator,
-      },
-    },
-    {
-      type: 'Feature',
-      id: `${id}:centreline`,
-      geometry: { type: 'LineString', coordinates: centerline },
-      properties: {
-        featureType: 'simulator-reference',
-        sourceId: `${id}:centreline`,
-        sourceType: runway.sourceType || 'runway',
-        sourceFile: runway.sourceFile || '',
-        title:
-          `Runway ${runway.primaryLabel || ''}/${runway.secondaryLabel || ''} centreline`.trim(),
-        semanticType: 'runway-centreline',
-        snapCategory: 'runways',
-        exactness: 'exact',
         simulator,
       },
     },
@@ -473,6 +497,41 @@ function referencesFromRunway(runway, simulator, data) {
   );
   features.push(...runwayLightReferences(runway, simulator, id));
   return features;
+}
+
+export function normalizeRunway(runway) {
+  const centerline = runwayEndpoints(runway);
+  if (!centerline) return null;
+  const lengthMeters =
+    Number.isFinite(runway.lengthMeters) && runway.lengthMeters > 0
+      ? runway.lengthMeters
+      : coordinateDistanceMeters(centerline[0], centerline[1]);
+  const firstLabel = runway.first?.label || runway.primaryLabel || '';
+  const secondLabel = runway.second?.label || runway.secondaryLabel || '';
+  return {
+    ...runway,
+    lengthMeters,
+    primaryLabel: runway.primaryLabel || firstLabel,
+    secondaryLabel: runway.secondaryLabel || secondLabel,
+    first: {
+      displacedThresholdMeters: 0,
+      overrunMeters: 0,
+      markingCode: 0,
+      ...runway.first,
+      lon: centerline[0][0],
+      lat: centerline[0][1],
+      label: firstLabel,
+    },
+    second: {
+      displacedThresholdMeters: 0,
+      overrunMeters: 0,
+      markingCode: 0,
+      ...runway.second,
+      lon: centerline[1][0],
+      lat: centerline[1][1],
+      label: secondLabel,
+    },
+  };
 }
 
 function xplaneMaterialKind(surfaceCode) {
@@ -1113,6 +1172,9 @@ function normalizeFeature(feature, simulator) {
   const texturePattern = opaqueTexturePattern(baseProperties.texturePattern, textureNoAlpha);
   const properties = {
     ...baseProperties,
+    ...(simulator === 'msfs' && !baseProperties.snapCategory
+      ? { snapCategory: msfsReferenceCategory(baseProperties.sourceType) }
+      : {}),
     textureNoAlpha,
     ...(texturePattern ? { texturePattern } : {}),
   };
@@ -1141,6 +1203,21 @@ function normalizeFeature(feature, simulator) {
         : '',
     },
   };
+}
+
+function msfsReferenceCategory(sourceType) {
+  const type = String(sourceType ?? '');
+  if (type === 'msfs-bgl-painted-line-cf') return 'painted-lines';
+  if (type === 'msfs-bgl-apron-v6-d0') return 'pavement-edges';
+  if (type.includes('light')) return 'light-rows';
+  if (
+    type === 'msfs-bgl-library-object' ||
+    type === 'msfs-bgl-named-simobject' ||
+    type === 'msfs-projected-mesh-bounds'
+  ) {
+    return 'fixtures';
+  }
+  return undefined;
 }
 
 const LEGACY_NO_ALPHA_DEFINITIONS = new Set(['lib/airport/ground/terrain/soil_1.pol']);
