@@ -218,9 +218,9 @@ export const Navbar = () => {
               <button
                 type="button"
                 onClick={dismissNotam}
-                className={`inline-flex size-10 items-center justify-center justify-self-end rounded-md transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${notamStyles.button}`}
-                aria-label="Dismiss notice"
-                title="Dismiss notice"
+                className={`inline-flex size-7 items-center justify-center justify-self-end rounded-sm transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950 ${notamStyles.button}`}
+                aria-label="Dismiss NOTAM"
+                title="Dismiss NOTAM"
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -301,7 +301,7 @@ export const Navbar = () => {
                   disabled={authLoading || loading}
                   className="flex items-center space-x-2 px-4"
                 >
-                  <span>{authLoading || loading ? 'Loading...' : 'Continue with VATSIM'}</span>
+                  <span>{authLoading || loading ? 'Loading...' : 'Login with VATSIM'}</span>
                   {authLoading || loading ? (
                     <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin ml-2"></div>
                   ) : (
@@ -418,7 +418,7 @@ export const Navbar = () => {
                     className="flex items-center space-x-2 px-4 w-full justify-center h-12"
                   >
                     <span className="font-medium">
-                      {authLoading || loading ? 'Loading...' : 'Continue with VATSIM'}
+                      {authLoading || loading ? 'Loading...' : 'Login with VATSIM'}
                     </span>
                     {authLoading || loading ? (
                       <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin ml-2"></div>

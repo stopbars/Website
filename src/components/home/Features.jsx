@@ -4,24 +4,32 @@ import { useRevealGroup } from '../../hooks/useRevealGroup';
 
 const FEATURES = [
   {
-    title: 'Realistic controlled airport lighting',
+    title: 'Stopbars',
     className: 'sm:col-span-2 lg:col-span-8 lg:min-h-[31rem]',
   },
   {
-    title: 'Follow the Greens',
+    title: 'Follow The Greens',
     className: 'sm:col-span-1 lg:col-span-4 lg:min-h-[31rem]',
   },
   {
-    title: 'Live VATSIM control',
+    title: 'Lead On/Off',
+    className: 'sm:col-span-1 lg:col-span-4',
+  },
+  {
+    title: 'Uni/Bi Directional Lighting',
+    className: 'sm:col-span-1 lg:col-span-4',
+  },
+  {
+    title: 'Live VATSIM Integration',
     className: 'sm:col-span-1 lg:col-span-4',
   },
   {
     title: 'MSFS and X-Plane',
-    className: 'sm:col-span-1 lg:col-span-4',
+    className: 'sm:col-span-2 lg:col-span-8 lg:min-h-[31rem]',
   },
   {
-    title: 'Default and add-on scenery',
-    className: 'sm:col-span-1 lg:col-span-4',
+    title: 'Default & Third-party Scenery',
+    className: 'sm:col-span-1 lg:col-span-4 lg:min-h-[31rem]',
   },
 ];
 
@@ -33,7 +41,7 @@ export const Features = () => {
     <section ref={sectionRef} className="home-section" id="features">
       <div className="home-shell">
         <div className="home-section-header mx-auto max-w-2xl text-center">
-          <h2 className="home-section-title">Core features</h2>
+          <h2 className="home-section-title">Core Features</h2>
         </div>
 
         <div

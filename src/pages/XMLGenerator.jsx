@@ -486,18 +486,18 @@ const XMLGenerator = () => {
         }}
         icon={TriangleAlert}
         iconColor="orange"
-        title="MSFS editor is experimental"
+        title="MSFS Editor is Experimental"
         description="Some airport packages may not render completely or correctly. Review the generated scenery carefully before submitting, or use the legacy in-simulator workflow."
         maxWidth="lg"
         buttons={[
           {
-            label: 'Continue with MSFS editor',
+            label: 'Continue with MSFS Editor',
             onClick: continueWithMsfsEditor,
             disabled: !msfsAcknowledgementChecked,
             className: 'min-w-0 flex-1 px-4 text-sm',
           },
           {
-            label: 'Use legacy XML instead',
+            label: 'Use Legacy XML',
             variant: 'outline',
             className: 'min-w-0 flex-1 px-4 text-sm',
             onClick: () => {

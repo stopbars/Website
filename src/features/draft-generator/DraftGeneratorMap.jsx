@@ -330,7 +330,7 @@ const DraftGeneratorMap = memo(function DraftGeneratorMap({
               }`}
             >
               <Bug className="h-4 w-4" />
-              SIM geometry
+              Simulator Geometry
             </button>
             {showSimulatorGeometry ? (
               <div className="space-y-1 rounded-lg border border-zinc-700 bg-zinc-950/90 px-3 py-2 text-[11px] text-zinc-300 shadow-lg backdrop-blur">

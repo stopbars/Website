@@ -1739,7 +1739,7 @@ export default function ContributionEditor() {
               className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
             >
               <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Download draft</span>
+              <span className="hidden sm:inline">Download Draft</span>
             </button>
             <button
               type="button"
@@ -2163,10 +2163,6 @@ export default function ContributionEditor() {
                       </div>
                       <div className="flex min-h-11 items-center px-4 text-xs font-medium text-zinc-300">
                         Reference layers
-                      </div>
-                      <div className="grid grid-cols-[1fr_3rem] px-4 pb-1 text-xs uppercase tracking-wider text-zinc-500">
-                        <span>Layer</span>
-                        <span className="text-center">Show</span>
                       </div>
                       <div className="space-y-0.5 px-2 pb-3">
                         <div className="grid grid-cols-[1fr_3rem] items-center rounded-md px-2 py-1.5 hover:bg-zinc-950/50">

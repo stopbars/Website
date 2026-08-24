@@ -234,7 +234,7 @@ const Credits = () => {
                               </p>
                             </div>
                             <ArrowUpRight
-                              className="h-4 w-4 shrink-0 text-zinc-600 transition-[color,transform] duration-[var(--duration-quick)] group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-zinc-300"
+                              className="h-4 w-4 shrink-0 text-zinc-600 group-hover:text-zinc-300"
                               aria-hidden="true"
                             />
                           </div>

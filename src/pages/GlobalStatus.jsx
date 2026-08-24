@@ -279,20 +279,20 @@ const GlobalStatus = () => {
               </div>
 
               {!loading && airportsLoaded && (
-                <div className="self-start rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 sm:min-w-44">
-                  <div className="flex items-center gap-2 text-zinc-200">
-                    <span
-                      className={`h-2 w-2 shrink-0 rounded-full ${!activityPending && totalConnections > 0 ? 'bg-emerald-400' : 'bg-zinc-500'}`}
-                      aria-hidden="true"
-                    />
-                    {activityPending ? (
-                      <span className="text-sm">Checking live connections…</span>
-                    ) : (
-                      <span className="text-xl font-semibold tabular-nums">{totalConnections}</span>
-                    )}
-                  </div>
-                  {!activityPending && (
-                    <p className="mt-0.5 text-xs text-zinc-500">Pilots and controllers connected</p>
+                <div className="inline-flex self-start items-center gap-2 whitespace-nowrap rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm">
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${!activityPending && totalConnections > 0 ? 'bg-emerald-400' : 'bg-zinc-500'}`}
+                    aria-hidden="true"
+                  />
+                  {activityPending ? (
+                    <span className="text-zinc-400">Checking live connections…</span>
+                  ) : (
+                    <>
+                      <span className="font-semibold tabular-nums text-zinc-100">
+                        {totalConnections}
+                      </span>
+                      <span className="text-zinc-500">Pilots and controllers connected</span>
+                    </>
                   )}
                 </div>
               )}
@@ -659,7 +659,7 @@ const GlobalStatus = () => {
                   to="/contribute"
                   className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-[background-color,border-color,color,transform] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
                 >
-                  Contribute support
+                  Contribute
                 </RouteLink>
               </Card>
             </>

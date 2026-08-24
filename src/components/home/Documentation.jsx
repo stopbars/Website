@@ -10,13 +10,14 @@ export const Documentation = () => {
   useRevealGroup(sectionRef);
 
   return (
-    <section ref={sectionRef} className="deferred-section home-section" id="contribute">
+    <section
+      ref={sectionRef}
+      className="deferred-section home-section home-section-spacious"
+      id="contribute"
+    >
       <div className="home-shell">
         <div data-reveal>
           <div className="home-section-header mx-auto max-w-2xl text-center">
-            <span className="mb-4 inline-block rounded-full border border-red-500/20 bg-red-500/10 px-4 py-1.5 text-sm font-medium text-red-400">
-              Open source
-            </span>
             <h2 className="home-section-title">Become a contributor</h2>
             <p className="home-section-copy">
               Help expand BARS through scenery contributions and open-source development
@@ -47,8 +48,7 @@ export const Documentation = () => {
               <h3 className="mb-3 text-xl font-semibold text-white">Open-source development</h3>
               <p className="mb-6 flex-1 text-sm leading-relaxed text-zinc-400">
                 Every contribution makes a difference. Our infrastructure welcomes developers to
-                review, improve, and extend BARS. We welcome all who want to help build the future
-                of BARS.
+                review, improve, and extend BARS. We welcome all who want to help build BARS.
               </p>
               <Button
                 variant="secondary"

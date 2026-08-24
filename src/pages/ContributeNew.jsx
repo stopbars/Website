@@ -8,7 +8,7 @@ import { ContributionFlowHeader } from '../components/contributions/Contribution
 import { AlertCircle, ArrowRight, BookOpen, Search } from 'lucide-react';
 
 const AIRPORT_SUGGESTIONS = ['YSSY', 'EGLL', 'KJFK', 'WSSS', 'OMDB', 'KLAX', 'RJTT'];
-const SUGGESTION_INTERVAL_MS = 2400;
+const SUGGESTION_INTERVAL_MS = 2000;
 const SUGGESTION_TRANSITION_MS = 220;
 const CONTRIBUTION_GUIDE_URL = 'https://docs.stopbars.com/contributions';
 
@@ -151,7 +151,7 @@ function AirportSearchForm() {
             onBlur={() => setIsFocused(false)}
             maxLength={4}
             aria-invalid={Boolean(error)}
-            aria-describedby={error ? 'icao-help icao-error' : 'icao-help'}
+            aria-describedby={error ? 'icao-error' : undefined}
             className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 pl-10 text-lg uppercase text-white outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-600 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/35"
           />
           <span
@@ -176,9 +176,6 @@ function AirportSearchForm() {
             </span>
           </span>
         </div>
-        <p id="icao-help" className="mt-2 text-sm text-zinc-500">
-          Four letters or numbers.
-        </p>
         {error && (
           <div id="icao-error" className="mt-2 flex items-center gap-1.5 text-sm text-red-400">
             <AlertCircle className="h-4 w-4" aria-hidden="true" />
@@ -188,7 +185,7 @@ function AirportSearchForm() {
       </div>
 
       <Button type="submit" className="w-full">
-        Review map
+        Review airport
         <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </Button>
 

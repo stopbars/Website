@@ -327,6 +327,10 @@ h1[tabindex='-1']:focus {
   padding-block: 5rem;
 }
 
+.home-section-spacious {
+  padding-block: 6rem;
+}
+
 .home-shell {
   width: 100%;
   max-width: 80rem;
@@ -378,6 +382,10 @@ h1[tabindex='-1']:focus {
 @media (min-width: 40rem) {
   .home-section {
     padding-block: 6rem;
+  }
+
+  .home-section-spacious {
+    padding-block: 8rem;
   }
 
   .home-section-title {

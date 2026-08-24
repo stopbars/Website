@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, CircleAlert, MapPin, Plane, RefreshCw, Users } from 'lucide-react';
+import { ChevronRight, CircleAlert, MapPin, Plane, RefreshCw, TowerControl } from 'lucide-react';
 import { Card } from '../shared/Card';
 import { PageLoading } from '../shared/PageLoading';
 import { RouteLink } from '../shared/RouteLink';
@@ -190,7 +190,7 @@ export const Airports = () => {
             <div className="mb-2 flex flex-wrap items-center gap-3">
               <h2 className="home-section-title">Live airport activity</h2>
               {!loading && (
-                <div className="inline-flex min-h-8 items-center gap-2 rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300">
+                <div className="mt-3 inline-flex min-h-8 items-center gap-2 rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300">
                   <span
                     className={`h-2 w-2 rounded-full ${refreshError ? 'bg-red-400' : totalConnections > 0 ? 'bg-emerald-400' : 'bg-zinc-500'}`}
                     aria-hidden="true"
@@ -302,7 +302,7 @@ export const Airports = () => {
                       <div className="space-y-5">
                         <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm text-zinc-300">
                           <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-zinc-500" aria-hidden="true" />
+                            <TowerControl className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                             {formatCount(liveState?.controllers || 0, 'controller')}
                           </div>
                           <div className="flex items-center gap-2">

@@ -435,7 +435,7 @@ const ContributeDetails = () => {
 
                   <div>
                     <label htmlFor="contribution-notes" className="block text-sm font-medium mb-2">
-                      Notes <span className="font-normal text-zinc-500">(optional)</span>
+                      Notes <span className="ml-1 font-normal text-zinc-500">(optional)</span>
                     </label>
                     <textarea
                       id="contribution-notes"
