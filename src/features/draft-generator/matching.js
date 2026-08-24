@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter react-doctor/js-cache-property-access react-doctor/js-tosorted-immutable -- Matching keeps validation, projection, and scoring stages explicit for geometry auditability; the supported test runtime also lacks toSorted. */
+
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 const ROW_SECTION_PADDING_METERS = 0.75;
 const MINIMUM_PARTITION_CENTER_SEPARATION_METERS = 4;
@@ -39,6 +41,13 @@ const MAXIMUM_CONNECTED_STOPBAR_ENDPOINT_GAP_METERS = 8;
 const MAXIMUM_CONNECTED_STOPBAR_TURN_DEGREES = 100;
 const MAXIMUM_CONNECTED_STOPBAR_LENGTH_METERS = 200;
 const MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS = 4;
+const MINIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS = 2;
+const MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS = 12;
+const MAXIMUM_LOGICAL_GUIDANCE_JUMP_TURN_DEGREES = 20;
+const MAXIMUM_LOGICAL_GUIDANCE_DIVISION_MEAN_DISTANCE_METERS = 3;
+const MAXIMUM_LOGICAL_GUIDANCE_DIVISION_DISTANCE_METERS = 6;
+const MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS = 0.65;
+const RECONSTRUCTED_STOPBAR_STRAIGHTNESS_TOLERANCE_METERS = 1.5;
 const MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS = 120;
 const MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS = 180;
 const MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES = 25;
@@ -309,11 +318,13 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
   );
   const ownershipEdges = preferConnectedStopbarCompositeEdges(
     suppressRedundantRegisteredStopbars(
-      suppressSubordinateRegisteredGuidanceOwners(
-        suppressClearlySubordinateCompositeOwners(
-          suppressWeakSecondaryCandidateOwners(suppressRedundantCompositeEdges(priorityEdges))
+        suppressSubordinateRegisteredGuidanceOwners(
+          suppressClearlySubordinateCompositeOwners(
+            suppressParallelInferredPlacementOwners(
+              suppressWeakSecondaryCandidateOwners(suppressRedundantCompositeEdges(priorityEdges))
+            )
+          )
         )
-      )
     )
   );
   const connectedOwnershipEdges = addConnectedGuidanceTrunkOwners(
@@ -334,12 +345,14 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
     allocationEvaluations,
     preparedRunways
   );
-  const completedAllocatedEdges = completeAllocatedGuidanceRows(
-    allocatedEdges,
-    baseCandidates,
-    matchableDivision,
-    referenceLatitude,
-    edges
+  const completedAllocatedEdges = suppressParallelInferredPlacementOwners(
+    completeAllocatedGuidanceRows(
+      allocatedEdges,
+      baseCandidates,
+      matchableDivision,
+      referenceLatitude,
+      edges
+    )
   );
   for (const edge of completedAllocatedEdges) {
     const divisionKey = stableIdentifier(edge.division);
@@ -904,7 +917,11 @@ function simulatorSectionForDivision(division, candidate, config, referenceLatit
       : bestAlignedProjectionRun(
           projections,
           config.containmentMeanDistance ?? config.meanDistance,
-          Math.max(20, (division.length / Math.max(projections.length - 1, 1)) * 4)
+          Math.max(20, (division.length / Math.max(projections.length - 1, 1)) * 4),
+          Math.min(
+            config.coverageDistance,
+            (config.containmentMeanDistance ?? config.meanDistance) + 1
+          )
         );
   const sectionProjections = alignedRun ?? projections;
   const projectionStart = Math.max(
@@ -955,20 +972,39 @@ function simulatorSectionForDivision(division, candidate, config, referenceLatit
   });
 }
 
-function bestAlignedProjectionRun(projections, maximumDistance, maximumProjectionStep) {
+function bestAlignedProjectionRun(
+  projections,
+  maximumDistance,
+  maximumProjectionStep,
+  maximumBridgeDistance = maximumDistance
+) {
   const minimumRunLength = Math.max(2, Math.ceil(projections.length * 0.12));
   const runs = [];
   let run = [];
+  let bridge = [];
   for (const projection of projections) {
-    const previous = run.at(-1);
+    const previous = bridge.at(-1) ?? run.at(-1);
     const projectionIsContinuous =
       !previous || Math.abs(projection.along - previous.along) <= maximumProjectionStep;
     if (projection.distance <= maximumDistance && projectionIsContinuous) {
+      run.push(...bridge);
+      bridge = [];
       run.push(projection);
+      continue;
+    }
+    if (
+      run.length > 0 &&
+      projection.distance <= maximumBridgeDistance &&
+      projectionIsContinuous
+    ) {
+      // Keep a small drift gap pending until strict alignment resumes. This joins
+      // one continuous row without growing a run whose only evidence is at an end.
+      bridge.push(projection);
       continue;
     }
     if (run.length > 0) runs.push(run);
     run = projection.distance <= maximumDistance ? [projection] : [];
+    bridge = [];
   }
   if (run.length > 0) runs.push(run);
 
@@ -1549,6 +1585,9 @@ function matchingConfigurationDiagnostic() {
       maximumConnectedStopbarTurnDegrees: MAXIMUM_CONNECTED_STOPBAR_TURN_DEGREES,
       maximumConnectedStopbarLengthMeters: MAXIMUM_CONNECTED_STOPBAR_LENGTH_METERS,
       maximumGuidanceConnectionGapMeters: MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS,
+      minimumStopbarBoundaryExtensionMeters: MINIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS,
+      maximumLogicalGuidanceJumpMeters: MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS,
+      maximumLogicalGuidanceJumpTurnDegrees: MAXIMUM_LOGICAL_GUIDANCE_JUMP_TURN_DEGREES,
       maximumStopbarBoundaryExtensionMeters: MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS,
       maximumStraightFallbackExtensionMeters: MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS,
       maximumStraightFallbackTurnDegrees: MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES,
@@ -2052,8 +2091,7 @@ function simplifyReconstructedReplacementRow(row, divisionType) {
   if (
     row?.inferred !== true ||
     row.reconstructMode !== 'exact-bgl-placement-control-points' ||
-    !GUIDANCE_DIVISION_TYPES.has(divisionType) ||
-    vertices.length <= 3
+    vertices.length <= 2
   ) {
     return row;
   }
@@ -2062,6 +2100,25 @@ function simplifyReconstructedReplacementRow(row, divisionType) {
   const projected = vertices.map((vertex) =>
     projectCoordinate({ lat: vertex.lat, lon: vertex.lon }, referenceLatitude)
   );
+  if (divisionType === 'stopbar') {
+    const maximumDeviation = projected
+      .slice(1, -1)
+      .reduce(
+        (maximum, point) =>
+          Math.max(maximum, pointToSegmentDistance(point, projected[0], projected.at(-1))),
+        0
+      );
+    if (maximumDeviation > RECONSTRUCTED_STOPBAR_STRAIGHTNESS_TOLERANCE_METERS) return row;
+    return {
+      ...row,
+      vertices: [vertices[0], vertices.at(-1)],
+      replacementGeometryDerived: 'straight-source-stopbar-endpoints',
+      replacementGeometryToleranceMeters: RECONSTRUCTED_STOPBAR_STRAIGHTNESS_TOLERANCE_METERS,
+      replacementSourceVertexCount: vertices.length,
+    };
+  }
+  if (!GUIDANCE_DIVISION_TYPES.has(divisionType) || vertices.length <= 3) return row;
+
   const keptIndices = simplifyPolylineIndices(
     projected,
     RECONSTRUCTED_REPLACEMENT_SIMPLIFICATION_TOLERANCE_METERS
@@ -2191,6 +2248,8 @@ function allocateSimulatorGeometry(
       });
     }
 
+    const candidateAllocatedEdges = [];
+    const rejectedEndpointAllocations = [];
     for (let index = 0; index < ordered.length; index += 1) {
       const edge = ordered[index];
       const { start: sectionStart, end: sectionEnd } = edge.section;
@@ -2350,9 +2409,21 @@ function allocateSimulatorGeometry(
         diagnosticEvaluations.push(evaluation);
       }
       if (meetsAllocationMinimum) {
-        allocated.push({ ...edge, section });
+        const allocatedEdge = { ...edge, section };
+        allocated.push(allocatedEdge);
+        candidateAllocatedEdges.push({ allocatedEdge, matchedSection: edge.section });
+      } else if (partitionGuidance && section?.prepared?.valid) {
+        rejectedEndpointAllocations.push({ edge, section });
       }
     }
+    reclaimRejectedGuidanceEndpointPartitions({
+      candidate,
+      candidateAllocatedEdges,
+      rejectedEndpointAllocations,
+      naturalBoundaries,
+      referenceLatitude,
+      diagnosticEvaluations,
+    });
   }
 
   return allocated.sort(
@@ -2362,6 +2433,114 @@ function allocateSimulatorGeometry(
       stableIdentifier(left.division).localeCompare(stableIdentifier(right.division)) ||
       stableIdentifier(left.candidate).localeCompare(stableIdentifier(right.candidate))
   );
+}
+
+function suppressParallelInferredPlacementOwners(edges) {
+  const kept = [];
+  const ordered = [...edges].sort(
+    (left, right) =>
+      right.metrics.score - left.metrics.score ||
+      stableIdentifier(left.candidate).localeCompare(stableIdentifier(right.candidate))
+  );
+  for (const edge of ordered) {
+    const redundant = kept.some(
+      (owner) =>
+        stableIdentifier(owner.division) === stableIdentifier(edge.division) &&
+        isExactPlacementRow(owner.candidate.raw) &&
+        isExactPlacementRow(edge.candidate.raw) &&
+        areParallelAlternativeSections(owner.section.prepared, edge.section.prepared)
+    );
+    if (!redundant) kept.push(edge);
+  }
+  return kept;
+}
+
+function areParallelAlternativeSections(left, right) {
+  if (!left?.valid || !right?.valid) return false;
+  if (orientationDifference(left.orientation, right.orientation) > 12) return false;
+  if (distance(left.center, right.center) > 8) return false;
+  const maximumParallelDistanceMeters = 6;
+  const forward = nearestDistanceSummary(left.samples, right.projected);
+  const reverse = nearestDistanceSummary(right.samples, left.projected);
+  return (
+    forward.covered(maximumParallelDistanceMeters) >= 0.7 &&
+    reverse.covered(maximumParallelDistanceMeters) >= 0.7
+  );
+}
+
+function reclaimRejectedGuidanceEndpointPartitions({
+  candidate,
+  candidateAllocatedEdges,
+  rejectedEndpointAllocations,
+  naturalBoundaries,
+  referenceLatitude,
+  diagnosticEvaluations,
+}) {
+  if (candidateAllocatedEdges.length === 0 || rejectedEndpointAllocations.length === 0) return;
+
+  candidateAllocatedEdges.sort(
+    (left, right) => left.allocatedEdge.section.start - right.allocatedEdge.section.start
+  );
+  const endpointTolerance = 0.1;
+  const reclaim = (record, start, end, side) => {
+    if (record.allocatedEdge.division.raw.type !== 'lead_on') return;
+    ({ start, end } = clampAllocationToStopbarCell(
+      start,
+      end,
+      record.matchedSection,
+      naturalBoundaries
+    ));
+    const section = simulatorSectionForRange(
+      candidate,
+      record.allocatedEdge.division,
+      start,
+      end,
+      referenceLatitude,
+      record.matchedSection
+    );
+    if (
+      !section?.prepared?.valid ||
+      !sectionMeetsAllocationMinimum(record.allocatedEdge, section.length)
+    ) {
+      return;
+    }
+    const previousSection = record.allocatedEdge.section;
+    record.allocatedEdge.section = section;
+    diagnosticEvaluations?.push({
+      divisionId: record.allocatedEdge.division.raw.id,
+      simulatorRowId: candidate.raw.id,
+      outcome: 'reallocated-rejected-endpoint-partition',
+      side,
+      reclaimedRange: {
+        startMeters: round(side === 'start' ? section.start : previousSection.end, 3),
+        endMeters: round(side === 'start' ? previousSection.start : section.end, 3),
+      },
+      allocatedRange: {
+        startMeters: round(section.start, 3),
+        endMeters: round(section.end, 3),
+      },
+    });
+  };
+
+  const first = candidateAllocatedEdges[0];
+  const rejectedStart = rejectedEndpointAllocations.find(
+    ({ section }) =>
+      section.start <= endpointTolerance &&
+      section.end >= first.allocatedEdge.section.start - endpointTolerance
+  );
+  if (rejectedStart) {
+    reclaim(first, 0, first.allocatedEdge.section.end, 'start');
+  }
+
+  const last = candidateAllocatedEdges.at(-1);
+  const rejectedEnd = rejectedEndpointAllocations.find(
+    ({ section }) =>
+      section.end >= candidate.length - endpointTolerance &&
+      section.start <= last.allocatedEdge.section.end + endpointTolerance
+  );
+  if (rejectedEnd) {
+    reclaim(last, last.allocatedEdge.section.start, candidate.length, 'end');
+  }
 }
 
 function preferStopbarAnchoredContinuousGuidanceOwner(
@@ -2671,7 +2850,7 @@ function completeAllocatedGuidanceRows(
       continue;
     }
 
-    for (const endpoint of allocatedEdgeEndpoints(edge)) {
+    for (const endpoint of allocatedEdgeConnectionEndpoints(edge)) {
       const options = [];
       for (const { connector, connectorSide } of nearbyGuidanceEndpoints(
         endpointIndex,
@@ -2693,8 +2872,13 @@ function completeAllocatedGuidanceRows(
         const nextPoint =
           connectorSide === 'start' ? connector.projected[1] : connector.projected.at(-2);
         const gap = distance(endpoint.point, connectionPoint);
-        if (gap > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS || !nextPoint) continue;
-        if (guidanceConnectionTouchesStopbar(endpoint.point, divisions)) continue;
+        if (gap > MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS || !nextPoint) continue;
+        if (
+          guidanceConnectionTouchesStopbar(endpoint.point, divisions) ||
+          guidanceGapCrossesStopbar(endpoint.point, connectionPoint, divisions)
+        ) {
+          continue;
+        }
         const preferredEvidenceOwner = preferredEvidenceOwners.get(stableIdentifier(connector));
         if (preferredEvidenceOwner) continue;
 
@@ -2709,7 +2893,11 @@ function completeAllocatedGuidanceRows(
           connectorSide,
           divisions
         );
-        if (stopbarCompletion && turn <= MAXIMUM_STOPBAR_EXTENSION_TURN_DEGREES) {
+        if (
+          endpoint.candidateEndpoint &&
+          stopbarCompletion &&
+          turn <= MAXIMUM_STOPBAR_EXTENSION_TURN_DEGREES
+        ) {
           options.push({
             connector,
             connectorSide,
@@ -2723,8 +2911,47 @@ function completeAllocatedGuidanceRows(
 
         const isLowerPriorityFallback =
           evidencePriority(connector.raw) > evidencePriority(edge.candidate.raw);
+        const isLogicalSamePriorityJump =
+          endpoint.candidateEndpoint &&
+          evidencePriority(connector.raw) === evidencePriority(edge.candidate.raw) &&
+          gap > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
+          turn <= MAXIMUM_LOGICAL_GUIDANCE_JUMP_TURN_DEGREES &&
+          connector.length <= MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS &&
+          logicalGuidanceJumpFollowsDivision(connector, edge.division);
+        const isStraightSamePriorityContinuation =
+          evidencePriority(connector.raw) === evidencePriority(edge.candidate.raw) &&
+          gap <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
+          turn <= MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES &&
+          connector.length <= MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS &&
+          logicalGuidanceJumpFollowsDivision(connector, edge.division);
+        if (isStraightSamePriorityContinuation) {
+          options.push({
+            connector,
+            connectorSide,
+            gap,
+            turn,
+            targetAlong: connectorSide === 'start' ? connector.length : 0,
+            extensionLength: connector.length,
+            basis: 'straight-source-continuation',
+          });
+          continue;
+        }
+        if (isLogicalSamePriorityJump) {
+          options.push({
+            connector,
+            connectorSide,
+            gap,
+            turn,
+            targetAlong: connectorSide === 'start' ? connector.length : 0,
+            extensionLength: connector.length,
+            basis: 'logical-source-jump',
+          });
+          continue;
+        }
         if (
+          endpoint.candidateEndpoint &&
           isLowerPriorityFallback &&
+          gap <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
           turn <= MAXIMUM_STRAIGHT_FALLBACK_TURN_DEGREES &&
           connector.length <= MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS
         ) {
@@ -2744,6 +2971,10 @@ function completeAllocatedGuidanceRows(
         (left, right) =>
           evidencePriority(left.connector.raw) - evidencePriority(right.connector.raw) ||
           Number(right.basis === 'stopbar-boundary') - Number(left.basis === 'stopbar-boundary') ||
+          Number(right.basis === 'logical-source-jump') -
+            Number(left.basis === 'logical-source-jump') ||
+          Number(right.basis === 'straight-source-continuation') -
+            Number(left.basis === 'straight-source-continuation') ||
           left.extensionLength - right.extensionLength ||
           left.turn - right.turn ||
           left.gap - right.gap ||
@@ -2780,7 +3011,11 @@ function completeAllocatedGuidanceRows(
           alignmentMode:
             selected.basis === 'stopbar-boundary'
               ? 'source-connected-stopbar-boundary'
-              : 'source-connected-fallback',
+              : selected.basis === 'logical-source-jump'
+                ? 'source-connected-logical-jump'
+                : selected.basis === 'straight-source-continuation'
+                  ? 'source-connected-straight-continuation'
+                  : 'source-connected-fallback',
           sourceConnectionGapMeters: round(selected.gap, 3),
           sourceConnectionTurnDegrees: round(selected.turn, 1),
           sourceConnectionExtensionMeters: round(selected.extensionLength, 3),
@@ -2860,8 +3095,8 @@ function buildGuidanceEndpointIndex(candidates) {
 }
 
 function nearbyGuidanceEndpoints(index, point) {
-  const cellX = Math.floor(point.x / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS);
-  const cellY = Math.floor(point.y / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS);
+  const cellX = Math.floor(point.x / MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS);
+  const cellY = Math.floor(point.y / MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS);
   const entries = [];
   for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
     for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
@@ -2872,9 +3107,19 @@ function nearbyGuidanceEndpoints(index, point) {
 }
 
 function guidanceEndpointCellKey(x, y) {
-  return `${Math.floor(x / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS)}:${Math.floor(
-    y / MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS
+  return `${Math.floor(x / MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS)}:${Math.floor(
+    y / MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS
   )}`;
+}
+
+function logicalGuidanceJumpFollowsDivision(connector, division) {
+  const alignment = nearestDistanceSummary(connector.samples, division.projected);
+  return (
+    alignment.mean <= MAXIMUM_LOGICAL_GUIDANCE_DIVISION_MEAN_DISTANCE_METERS &&
+    alignment.maximum <= MAXIMUM_LOGICAL_GUIDANCE_DIVISION_DISTANCE_METERS &&
+    orientationDifference(connector.orientation, division.orientation) <=
+      MAXIMUM_LOGICAL_GUIDANCE_JUMP_TURN_DEGREES
+  );
 }
 
 function guidancePolylinesConnectAtEndpoints(left, right) {
@@ -3052,6 +3297,7 @@ function allocatedEdgeEndpoints(edge) {
       side: 'start',
       point: edge.candidate.projected[0],
       inward: edge.candidate.projected[1],
+      candidateEndpoint: true,
     });
   }
   if (edge.candidate.length - edge.section.end <= 0.1 && edge.candidate.projected.length >= 2) {
@@ -3059,6 +3305,34 @@ function allocatedEdgeEndpoints(edge) {
       side: 'end',
       point: edge.candidate.projected.at(-1),
       inward: edge.candidate.projected.at(-2),
+      candidateEndpoint: true,
+    });
+  }
+  return endpoints;
+}
+
+function allocatedEdgeConnectionEndpoints(edge) {
+  const endpoints = allocatedEdgeEndpoints(edge);
+  if (edge.section.start > 0.1) {
+    endpoints.push({
+      side: 'start',
+      point: projectedPointAtDistance(edge.candidate.projected, edge.section.start),
+      inward: projectedPointAtDistance(
+        edge.candidate.projected,
+        Math.min(edge.section.end, edge.section.start + 2)
+      ),
+      candidateEndpoint: false,
+    });
+  }
+  if (edge.candidate.length - edge.section.end > 0.1) {
+    endpoints.push({
+      side: 'end',
+      point: projectedPointAtDistance(edge.candidate.projected, edge.section.end),
+      inward: projectedPointAtDistance(
+        edge.candidate.projected,
+        Math.max(edge.section.start, edge.section.end - 2)
+      ),
+      candidateEndpoint: false,
     });
   }
   return endpoints;
@@ -3085,7 +3359,10 @@ function nearestStopbarBoundaryCompletion(connector, connectorSide, divisions) {
     if (stopbar.raw.type !== 'stopbar') continue;
     for (const targetAlong of polylineCrossingStations(connector, stopbar)) {
       const extensionLength = Math.abs(targetAlong - connectionAlong);
-      if (extensionLength <= 0.2 || extensionLength > MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS) {
+      if (
+        extensionLength < MINIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS ||
+        extensionLength > MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS
+      ) {
         continue;
       }
       options.push({ targetAlong, extensionLength, stopbar });
@@ -3796,14 +4073,23 @@ function sourceSectionsForMergedCandidate(edge, referenceLatitude) {
   return members
     .map((candidate) => {
       const directionMatches = polylineDirectionMatches(edge.candidate, candidate);
-      const normalizedStart = edge.section.start / Math.max(edge.candidate.length, 0.001);
-      const normalizedEnd = edge.section.end / Math.max(edge.candidate.length, 0.001);
-      const start = directionMatches
-        ? normalizedStart * candidate.length
-        : (1 - normalizedEnd) * candidate.length;
-      const end = directionMatches
-        ? normalizedEnd * candidate.length
-        : (1 - normalizedStart) * candidate.length;
+      const sectionStart = projectedPointAtDistance(
+        edge.candidate.projected,
+        edge.section.start
+      );
+      const sectionEnd = projectedPointAtDistance(edge.candidate.projected, edge.section.end);
+      const projectedStart = projectPointToPolyline(sectionStart, candidate.projected).along;
+      const projectedEnd = projectPointToPolyline(sectionEnd, candidate.projected).along;
+      let start = Math.min(projectedStart, projectedEnd);
+      let end = Math.max(projectedStart, projectedEnd);
+      if (edge.section.start <= 0.05) {
+        if (directionMatches) start = 0;
+        else end = candidate.length;
+      }
+      if (edge.section.end >= edge.candidate.length - 0.05) {
+        if (directionMatches) end = candidate.length;
+        else start = 0;
+      }
       return {
         candidate,
         section: simulatorSectionForRange(candidate, edge.division, start, end, referenceLatitude),
@@ -3836,7 +4122,11 @@ function mergeCoLocatedSimulatorRows(items, referenceLatitude) {
           (candidate) =>
             candidate.family === family &&
             evidencePriority(candidate.members[0].raw) === evidencePriority(item.raw) &&
-            candidate.members.some((member) => areCoLocatedSimulatorPolylines(item, member))
+            candidate.members.some(
+              (member) =>
+                simulatorRowsShareSourceFile(item.raw, member.raw) &&
+                areCoLocatedSimulatorPolylines(item, member)
+            )
         )
       : undefined;
     if (group) group.members.push(item);
@@ -3896,14 +4186,43 @@ function mergedSimulatorRow(members, index) {
 function areCoLocatedSimulatorPolylines(left, right) {
   if (!left.valid || !right.valid) return false;
   const ratio = left.length / right.length;
-  if (ratio < 0.97 || ratio > 1.03) return false;
-  if (distance(left.center, right.center) > 0.45) return false;
-
   const forward = nearestDistanceSummary(left.samples, right.projected);
   const reverse = nearestDistanceSummary(right.samples, left.projected);
+  const sameCompleteGeometry =
+    ratio >= 0.97 &&
+    ratio <= 1.03 &&
+    distance(left.center, right.center) <= 0.45 &&
+    (forward.mean + reverse.mean) / 2 <= 0.3 &&
+    Math.max(forward.maximum, reverse.maximum) <= 0.6;
+  if (sameCompleteGeometry) return true;
+
+  const minimumOverlapRatio = 0.65;
+  const strongOverlapRatio = 0.9;
+  const forwardOverlap = forward.covered(MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS);
+  const reverseOverlap = reverse.covered(MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS);
   return (
-    (forward.mean + reverse.mean) / 2 <= 0.3 && Math.max(forward.maximum, reverse.maximum) <= 0.6
+    ratio >= 0.6 &&
+    ratio <= 1 / 0.6 &&
+    orientationDifference(left.orientation, right.orientation) <= 8 &&
+    forwardOverlap >= minimumOverlapRatio &&
+    reverseOverlap >= minimumOverlapRatio &&
+    Math.max(forwardOverlap, reverseOverlap) >= strongOverlapRatio
   );
+}
+
+function guidanceGapCrossesStopbar(start, end, divisions) {
+  const gap = {
+    projected: [start, end],
+    orientation: segmentOrientation(start, end),
+  };
+  return divisions.some(
+    (division) =>
+      division.raw.type === 'stopbar' && polylineCrossingStations(gap, division).length > 0
+  );
+}
+
+function simulatorRowsShareSourceFile(left, right) {
+  return !left?.sourceFile || !right?.sourceFile || left.sourceFile === right.sourceFile;
 }
 
 function collapseDuplicateLeadOns(items, source) {
@@ -3953,7 +4272,7 @@ function areEffectivelySamePolyline(left, right) {
 
 function duplicatePreference(item, source) {
   if (source === 'division') return item.projected?.length ?? 0;
-  return (Number(item.raw?.confidence) || 0) * 100 + (item.projected?.length ?? 0);
+  return (Number(item.raw?.confidence) || 0) * 1_000_000 + (item.length ?? 0);
 }
 
 function boundsCouldMatch(left, right, config) {

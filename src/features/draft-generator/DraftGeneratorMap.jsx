@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-adjust-state-on-prop-change -- A bounds/source change intentionally invalidates the map popup selection. */
+
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import Map, { Layer, NavigationControl, Popup, ScaleControl, Source } from 'react-map-gl/maplibre';
@@ -379,16 +381,10 @@ const DraftGeneratorMap = memo(function DraftGeneratorMap({
             }`}
           >
             <Palette className="h-4 w-4" />
-            BARS ID colours
+            Unique colors
           </button>
         ) : null}
       </div>
-
-      {!geojsonUrl ? (
-        <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-lg border border-white/10 bg-zinc-950/85 px-4 py-3 text-sm text-zinc-300 shadow-xl backdrop-blur">
-          Select a scenery folder to align the draft with simulator lighting.
-        </div>
-      ) : null}
     </div>
   );
 });

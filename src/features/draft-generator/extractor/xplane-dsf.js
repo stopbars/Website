@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter react-doctor/js-length-check-first -- DSF extraction keeps decoding, validation, and projection stages explicit for scenery diagnostics. */
+
 import { stableId } from './classify.js';
 import { haversineDistanceMeters } from './geo.js';
 

@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations -- Worker output keeps validation, diagnostics, and projection stages separate for deterministic reporting. */
+
 import { extractAirportLightData } from './extractor/extract.js';
 import { scanInput } from './extractor/scanner.js';
 import { mountFiles, unmountFiles } from './shims/virtual-fs.js';
@@ -8,6 +10,7 @@ import { validateAirportUpload } from './airport-upload-validation.js';
 import { detectScenerySimulator } from './local-package.js';
 import { extractXPlaneAirportData } from './extractor/xplane-apt.js';
 import { buildReferenceScene } from '../contribution-editor/reference-scene.js';
+import { buildMsfsRemovalContext } from '../contribution-editor/msfs-removal.js';
 
 const DEFAULT_SIZES = {
   library: 3,
@@ -22,7 +25,8 @@ self.addEventListener('message', async (event) => {
 
   try {
     const result = await generateDraft(message);
-    self.postMessage({ type: 'complete', id: message.id, result });
+    const transferables = renderBundleTransferables(result.renderBundle);
+    self.postMessage({ type: 'complete', id: message.id, result }, transferables);
   } catch (error) {
     self.postMessage({
       type: 'error',
@@ -149,7 +153,29 @@ async function generateDraft(message) {
     const simulatorGeojsonBlob = new Blob([JSON.stringify(output.simulatorGeojson)], {
       type: 'application/geo+json',
     });
-    const referenceScene = buildReferenceScene(data, simulator);
+    let renderBundle = null;
+    let referenceData = data;
+    if (simulator === 'msfs' && fileScan.bglFiles.length > 0) {
+      postStage(message.id, 'Building MSFS editor reference scenery', 96);
+      const msfsSource = await decodeMsfsSource(message.entries, ({ fraction, stage }) =>
+        postStage(message.id, stage || 'Decoding MSFS scenery', 96 + Math.round(fraction * 3))
+      );
+      renderBundle = msfsSource.renderBundle;
+      referenceData = {
+        ...data,
+        referenceFeatures: [...(data.referenceFeatures || []), ...msfsSource.referenceFeatures],
+        runways: msfsSource.runways.length ? msfsSource.runways : data.runways,
+        referenceDiagnostics: msfsSource.diagnostics,
+      };
+    } else if (simulator === 'msfs') {
+      renderBundle = {
+        version: 1,
+        groups: [],
+        textures: [],
+        diagnostics: { warnings: ['No compiled BGL render groups were available.'] },
+      };
+    }
+    const referenceScene = buildReferenceScene(referenceData, simulator);
     const referenceSceneBlob = new Blob([JSON.stringify(referenceScene)], {
       type: 'application/json',
     });
@@ -197,6 +223,8 @@ async function generateDraft(message) {
       geojsonBlob,
       simulatorGeojsonBlob,
       referenceSceneBlob,
+      renderBundle,
+      removalContext: simulator === 'msfs' ? buildMsfsRemovalContext(data) : null,
       simulator,
       bounds: featureBounds(output.geojson.features),
       matchedCount: new Set(output.matched.map((match) => String(match.division.id))).size,
@@ -228,6 +256,36 @@ async function generateDraft(message) {
 
 function postStage(id, stage, progress) {
   self.postMessage({ type: 'stage', id, stage, progress });
+}
+
+function decodeMsfsSource(entries, onStage) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../msfs-renderer/msfs-render.worker.js', import.meta.url), {
+      type: 'module',
+    });
+    worker.onmessage = (event) => {
+      if (event.data?.type === 'stage') onStage(event.data);
+      if (event.data?.type === 'complete') {
+        worker.terminate();
+        resolve(event.data.result);
+      }
+      if (event.data?.type === 'error') {
+        worker.terminate();
+        reject(new Error(event.data.error));
+      }
+    };
+    worker.onerror = (event) => {
+      worker.terminate();
+      reject(new Error(event.message || 'MSFS renderer worker failed.'));
+    };
+    worker.postMessage({ type: 'decode', id: 1, entries });
+  });
+}
+
+function renderBundleTransferables(bundle) {
+  return (bundle?.groups || [])
+    .map((group) => group.vertices?.buffer)
+    .filter((buffer, index, buffers) => buffer && buffers.indexOf(buffer) === index);
 }
 
 function featureBounds(features) {

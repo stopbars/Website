@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Draft geometry keeps validation and projection stages separate so release output remains auditable. */
+
 import { generateRemovalGeometry } from './extractor/extract.js';
 import {
   haversineDistanceMeters,
@@ -20,6 +22,7 @@ const MAXIMUM_ISOLATED_CROSSING_OVERLAP_METERS = 6;
 const CROSSING_SAMPLE_INTERVAL_METERS = 0.5;
 const MAXIMUM_SAFETY_PASSES = 12;
 const REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS = 0.1;
+const MAXIMUM_REMOVAL_STOPBAR_BOUNDARY_ROW_DISTANCE_METERS = 1;
 const DEBUG_ID_NEIGHBOR_COUNT = 8;
 const DEBUG_ID_COLORS = [
   '#0067ff',
@@ -35,10 +38,18 @@ const DEBUG_ID_COLORS = [
 
 export function buildDraftOutput(data, matching, options) {
   const isXPlane = data.meta?.simulator === 'xplane';
+  const replacements = replacementMatches(matching.matches);
+  const removalConstrainedMatches = constrainRemovalMatchesAtReplacementBoundaries(
+    matching.matches,
+    replacements,
+    data.instances ?? []
+  );
   const placementOnlyMatches = matching.matches.filter(
     (match) => match.row.removalEligible === false
   );
-  const removalMatches = matching.matches.filter((match) => match.row.removalEligible !== false);
+  const removalMatches = removalConstrainedMatches.filter(
+    (match) => match.row.removalEligible !== false
+  );
   const selective = isXPlane
     ? {
         approved: removalMatches,
@@ -53,7 +64,7 @@ export function buildDraftOutput(data, matching, options) {
         'Simulator geometry matched and the BARS object was added, but its automatic removal area needs manual review.',
     }))
   );
-  const replacements = replacementMatches(matching.matches);
+  const guidanceStopbarCrossingAudit = auditGeneratedGuidanceStopbarCrossings(replacements);
   const safeReplacements = replacementMatches([...selective.approved, ...placementOnlyMatches]);
   const safetyDivisionIds = new Set(removalWarnings.map((item) => String(item.division?.id ?? '')));
   const unsafeReplacements = replacements.filter((match) =>
@@ -104,6 +115,161 @@ export function buildDraftOutput(data, matching, options) {
     })),
     duplicateDivisionLeadOns: matching.duplicateDivisionLeadOns,
     duplicateSimulatorLeadOns: matching.duplicateSimulatorLeadOns,
+    guidanceStopbarBoundaryTrims: replacements
+      .filter((match) => match.row.replacementStopbarBoundary)
+      .map((match) => ({
+        divisionId: String(match.division.id),
+        divisionName: match.division.name,
+        ...match.row.replacementStopbarBoundary,
+      })),
+    guidanceStopbarCrossingAudit,
+    removalStopbarBoundaryTrims: removalConstrainedMatches
+      .filter((match) => match.row.removalStopbarBoundary)
+      .map((match) => ({
+        divisionId: String(match.division.id),
+        divisionName: match.division.name,
+        rowId: match.row.id,
+        ...match.row.removalStopbarBoundary,
+      })),
+    removalPerformance: selective.performance,
+  };
+}
+
+function constrainRemovalMatchesAtReplacementBoundaries(matches, replacements, instances) {
+  const replacementsByDivisionId = new Map(
+    replacements.map((replacement) => [String(replacement.division.id), replacement])
+  );
+  const stopbarsByDivisionId = new Map(
+    replacements
+      .filter((replacement) => replacement.division.type === 'stopbar')
+      .map((replacement) => [String(replacement.division.id), replacement])
+  );
+  const instancesById = new Map(instances.map((instance) => [String(instance.id), instance]));
+
+  return matches.map((match) => {
+    const replacement = replacementsByDivisionId.get(String(match.division.id));
+    const boundary = replacement?.row.replacementStopbarBoundary;
+    const stopbar = stopbarsByDivisionId.get(String(boundary?.stopbarDivisionId ?? ''));
+    const vertices = match.row.vertices ?? [];
+    if (!boundary || !stopbar || vertices.length < 2 || replacement.row.vertices.length < 2) {
+      return match;
+    }
+
+    const boundaryVertex = replacement.row.vertices[0];
+    const retainedEnd = replacement.row.vertices.at(-1);
+    if (
+      pointToPolylineDistanceMeters(boundaryVertex, vertices) >
+      MAXIMUM_REMOVAL_STOPBAR_BOUNDARY_ROW_DISTANCE_METERS
+    ) {
+      return match;
+    }
+    const distances = cumulativeVertexDistances(vertices);
+    const totalLength = distances.at(-1) ?? 0;
+    const boundaryProgress = coordinateProgressAlongDivision(boundaryVertex, vertices);
+    const keepStart =
+      haversineDistanceMeters(retainedEnd, vertices[0]) <=
+      haversineDistanceMeters(retainedEnd, vertices.at(-1));
+    const retainedVertices = keepStart
+      ? sliceVerticesByDistance(vertices, distances, 0, boundaryProgress)
+      : sliceVerticesByDistance(vertices, distances, boundaryProgress, totalLength);
+    if (keepStart) retainedVertices[retainedVertices.length - 1] = boundaryVertex;
+    else retainedVertices[0] = boundaryVertex;
+    if (retainedVertices.length < 2 || rowLengthMeters({ vertices: retainedVertices }) < 0.05) {
+      return match;
+    }
+
+    const originalSourceInstanceIds = match.row.sourceInstanceIds ?? [];
+    const retainedSourceInstanceIds = originalSourceInstanceIds.filter((id) => {
+      const instance = instancesById.get(String(id));
+      return (
+        instance &&
+        Number.isFinite(instance.lat) &&
+        Number.isFinite(instance.lon) &&
+        pointToPolylineDistanceMeters(instance, retainedVertices) <= 0.75
+      );
+    });
+    const sourceRangeStart = Number(match.row.sourceRangeStartMeters);
+    const sourceRangeEnd = Number(match.row.sourceRangeEndMeters);
+    const hasSourceRange = Number.isFinite(sourceRangeStart) && Number.isFinite(sourceRangeEnd);
+    const retainedRange = hasSourceRange
+      ? keepStart
+        ? {
+            sourceRangeStartMeters: sourceRangeStart,
+            sourceRangeEndMeters: Math.min(sourceRangeEnd, sourceRangeStart + boundaryProgress),
+          }
+        : {
+            sourceRangeStartMeters: Math.max(
+              sourceRangeStart,
+              sourceRangeStart + boundaryProgress
+            ),
+            sourceRangeEndMeters: sourceRangeEnd,
+          }
+      : {};
+
+    return {
+      ...match,
+      row: {
+        ...match.row,
+        vertices: retainedVertices,
+        ...(originalSourceInstanceIds.length > 0
+          ? { sourceInstanceIds: retainedSourceInstanceIds }
+          : {}),
+        ...retainedRange,
+        removalGeometryDerived: 'matched-stopbar-boundary-trim',
+        removalStopbarBoundary: {
+          stopbarDivisionId: String(stopbar.division.id),
+          stopbarName: stopbar.division.name,
+          boundaryBasis: boundary.boundaryBasis,
+          keptSide: keepStart ? 'source-row-start' : 'source-row-end',
+          originalVertexCount: vertices.length,
+          finalVertexCount: retainedVertices.length,
+          originalSourceInstanceCount: originalSourceInstanceIds.length,
+          finalSourceInstanceCount: retainedSourceInstanceIds.length,
+          ...(hasSourceRange
+            ? {
+                originalSourceRangeStartMeters: sourceRangeStart,
+                originalSourceRangeEndMeters: sourceRangeEnd,
+                finalSourceRangeStartMeters: retainedRange.sourceRangeStartMeters,
+                finalSourceRangeEndMeters: retainedRange.sourceRangeEndMeters,
+              }
+            : {}),
+        },
+      },
+    };
+  });
+}
+
+function auditGeneratedGuidanceStopbarCrossings(replacements) {
+  const leadOns = replacements.filter(
+    (match) => match.division.type === 'lead_on' && (match.row.vertices?.length ?? 0) >= 2
+  );
+  const stopbars = replacements.filter(
+    (match) => match.division.type === 'stopbar' && (match.row.vertices?.length ?? 0) >= 2
+  );
+  const interiorCrossings = [];
+  for (const leadOn of leadOns) {
+    for (const stopbar of stopbars) {
+      for (const crossing of guidanceStopbarCrossings(leadOn.row.vertices, stopbar.row.vertices)) {
+        if (crossing.intersectionRatio <= 0.000001 || crossing.intersectionRatio >= 0.999999) {
+          continue;
+        }
+        interiorCrossings.push({
+          leadOnDivisionId: String(leadOn.division.id),
+          leadOnName: leadOn.division.name,
+          stopbarDivisionId: String(stopbar.division.id),
+          stopbarName: stopbar.division.name,
+          sameName: String(leadOn.division.name) === String(stopbar.division.name),
+          leadSegmentIndex: crossing.leadSegmentIndex,
+          crossingFraction: Number(crossing.intersectionRatio.toFixed(6)),
+        });
+      }
+    }
+  }
+  return {
+    leadOnReplacementCount: leadOns.length,
+    stopbarReplacementCount: stopbars.length,
+    remainingInteriorCrossingCount: interiorCrossings.length,
+    interiorCrossings,
   };
 }
 
@@ -190,8 +356,23 @@ function replacementMatches(matches) {
       right.score - left.score
   );
 
+  const grouped = new Map();
   for (const match of ordered) {
-    const replacement = match.replacementRow ? { ...match, row: match.replacementRow } : match;
+    const key = `${String(match.division.id)}|${String(
+      match.simulatorGroupId ?? match.row.sourceParentRowId ?? match.row.id
+    )}`;
+    const group = grouped.get(key) ?? [];
+    group.push(match);
+    grouped.set(key, group);
+  }
+
+  for (const group of grouped.values()) {
+    const match = group[0];
+    const replacementRow = match.replacementRow ?? match.row;
+    const replacement = {
+      ...match,
+      row: extendReplacementToSourceEndpoints(replacementRow, group, match.division),
+    };
     const isCovered = replacements.some(
       (existing) =>
         String(existing.division.id) === String(replacement.division.id) &&
@@ -199,7 +380,323 @@ function replacementMatches(matches) {
     );
     if (!isCovered) replacements.push(replacement);
   }
-  return replacements;
+  return trimLeadOnReplacementsAtMatchedStopbars(
+    joinLogicalGuidanceReplacementGaps(replacements),
+    matches
+  );
+}
+
+function trimLeadOnReplacementsAtMatchedStopbars(replacements, sourceMatches) {
+  const stopbars = replacements.filter(
+    (match) => match.division.type === 'stopbar' && (match.row.vertices?.length ?? 0) >= 2
+  );
+  return replacements.map((match) => {
+    if (match.division.type !== 'lead_on' || (match.row.vertices?.length ?? 0) < 2) return match;
+
+    const namedStopbars = stopbars.filter(
+      (stopbar) => String(stopbar.division.name) === String(match.division.name)
+    );
+    const crossings = namedStopbars
+      .flatMap((stopbar) =>
+        guidanceStopbarCrossings(match.row.vertices, stopbar.row.vertices).map((crossing) => ({
+          ...crossing,
+          stopbar,
+        }))
+      )
+      .sort((left, right) => left.leadProgress - right.leadProgress);
+    const crossing = crossings[0];
+    if (!crossing) return match;
+
+    const retained = match.row.vertices.slice(crossing.leadSegmentIndex + 1);
+    if (retained.length === 0) return match;
+    const exactSourceVertices = sourceMatches
+      .filter((source) => String(source.division.id) === String(match.division.id))
+      .flatMap((source) => source.row.vertices ?? []);
+    const exactBoundaryVertex = nearestSourceVertexBeyondStopbar(
+      exactSourceVertices,
+      crossing.stopbarVertices,
+      retained.at(-1)
+    );
+    const useExactBoundary =
+      exactBoundaryVertex &&
+      retained.every((vertex) => haversineDistanceMeters(vertex, exactBoundaryVertex) > 0.05);
+    const boundaryVertex = useExactBoundary ? exactBoundaryVertex : crossing.intersection;
+    const vertices = [
+      boundaryVertex,
+      ...retained.filter((vertex) => haversineDistanceMeters(vertex, boundaryVertex) > 0.05),
+    ];
+    if (vertices.length < 2) return match;
+
+    return {
+      ...match,
+      row: {
+        ...match.row,
+        vertices,
+        replacementGeometryDerived: 'matched-stopbar-boundary-trim',
+        replacementSourceVertexCount: match.row.vertices.length,
+        replacementStopbarBoundary: {
+          stopbarDivisionId: String(crossing.stopbar.division.id),
+          stopbarName: crossing.stopbar.division.name,
+          crossingLeadSegmentIndex: crossing.leadSegmentIndex,
+          crossingFraction: Number(crossing.intersectionRatio.toFixed(6)),
+          boundaryBasis: useExactBoundary
+            ? 'nearest-exact-source-light-beyond-stopbar'
+            : 'exact-source-geometry-intersection',
+          originalVertexCount: match.row.vertices.length,
+          finalVertexCount: vertices.length,
+        },
+      },
+    };
+  });
+}
+
+function guidanceStopbarCrossings(guidanceVertices, stopbarVertices) {
+  const crossings = [];
+  for (let leadIndex = 1; leadIndex < guidanceVertices.length; leadIndex += 1) {
+    for (let stopbarIndex = 1; stopbarIndex < stopbarVertices.length; stopbarIndex += 1) {
+      const intersection = segmentIntersectionRatios(
+        guidanceVertices[leadIndex - 1],
+        guidanceVertices[leadIndex],
+        stopbarVertices[stopbarIndex - 1],
+        stopbarVertices[stopbarIndex]
+      );
+      if (!intersection) continue;
+      crossings.push({
+        leadSegmentIndex: leadIndex - 1,
+        leadProgress: leadIndex - 1 + intersection.left,
+        intersectionRatio: intersection.left,
+        intersection: interpolateCoordinate(
+          guidanceVertices[leadIndex - 1],
+          guidanceVertices[leadIndex],
+          intersection.left
+        ),
+        stopbarVertices,
+      });
+    }
+  }
+  return crossings;
+}
+
+function interpolateCoordinate(start, end, ratio) {
+  return {
+    lat: Number(start.lat) + (Number(end.lat) - Number(start.lat)) * ratio,
+    lon:
+      Number(start.lon ?? start.lng) +
+      (Number(end.lon ?? end.lng) - Number(start.lon ?? start.lng)) * ratio,
+  };
+}
+
+function segmentIntersectionRatios(leftStart, leftEnd, rightStart, rightEnd) {
+  const referenceLatitude =
+    (Number(leftStart.lat) + Number(leftEnd.lat) + Number(rightStart.lat) + Number(rightEnd.lat)) /
+    4;
+  const longitudeScale = Math.cos((referenceLatitude * Math.PI) / 180);
+  const point = (coordinate) => ({
+    x: Number(coordinate.lon ?? coordinate.lng) * longitudeScale,
+    y: Number(coordinate.lat),
+  });
+  const a = point(leftStart);
+  const b = point(leftEnd);
+  const c = point(rightStart);
+  const d = point(rightEnd);
+  const left = { x: b.x - a.x, y: b.y - a.y };
+  const right = { x: d.x - c.x, y: d.y - c.y };
+  const denominator = left.x * right.y - left.y * right.x;
+  if (Math.abs(denominator) <= 1e-12) return null;
+  const offset = { x: c.x - a.x, y: c.y - a.y };
+  const leftRatio = (offset.x * right.y - offset.y * right.x) / denominator;
+  const rightRatio = (offset.x * left.y - offset.y * left.x) / denominator;
+  const epsilon = 1e-6;
+  return leftRatio >= -epsilon &&
+    leftRatio <= 1 + epsilon &&
+    rightRatio >= -epsilon &&
+    rightRatio <= 1 + epsilon
+    ? { left: leftRatio, right: rightRatio }
+    : null;
+}
+
+function nearestSourceVertexBeyondStopbar(sourceVertices, stopbarVertices, retainedEnd) {
+  if (sourceVertices.length === 0) return null;
+  const endSide = polylineSide(retainedEnd, stopbarVertices);
+  if (Math.abs(endSide) <= 1e-12) return null;
+  return sourceVertices
+    .filter((vertex) => polylineSide(vertex, stopbarVertices) * endSide > 0)
+    .map((vertex) => ({
+      vertex,
+      distance: pointToPolylineDistanceMeters(vertex, stopbarVertices),
+    }))
+    .sort((left, right) => left.distance - right.distance)[0]?.vertex;
+}
+
+function polylineSide(point, vertices) {
+  const nearest = vertices
+    .slice(1)
+    .map((end, index) => {
+      const start = vertices[index];
+      return {
+        start,
+        end,
+        distance: pointToPolylineDistanceMeters(point, [start, end]),
+      };
+    })
+    .sort((left, right) => left.distance - right.distance)[0];
+  if (!nearest) return 0;
+  const longitudeScale = Math.cos((Number(point.lat) * Math.PI) / 180);
+  const px = Number(point.lon ?? point.lng) * longitudeScale;
+  const py = Number(point.lat);
+  const ax = Number(nearest.start.lon ?? nearest.start.lng) * longitudeScale;
+  const ay = Number(nearest.start.lat);
+  const bx = Number(nearest.end.lon ?? nearest.end.lng) * longitudeScale;
+  const by = Number(nearest.end.lat);
+  return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+function extendReplacementToSourceEndpoints(replacementRow, matches, division) {
+  const divisionCoordinates = division?.coordinates ?? [];
+  if (divisionCoordinates.length < 2 || (replacementRow.vertices?.length ?? 0) < 2) {
+    return replacementRow;
+  }
+
+  let vertices = orientVerticesAlongDivision(replacementRow.vertices, divisionCoordinates);
+  for (const match of matches) {
+    const sourceVertices = orientVerticesAlongDivision(match.row.vertices ?? [], divisionCoordinates);
+    if (sourceVertices.length < 2) continue;
+
+    const currentStart = coordinateProgressAlongDivision(vertices[0], divisionCoordinates);
+    const currentEnd = coordinateProgressAlongDivision(vertices.at(-1), divisionCoordinates);
+    const sourceStart = coordinateProgressAlongDivision(sourceVertices[0], divisionCoordinates);
+    const sourceEnd = coordinateProgressAlongDivision(sourceVertices.at(-1), divisionCoordinates);
+    if (sourceStart < currentStart - 0.1) {
+      const prefix = sourceVertices.filter(
+        (vertex) =>
+          coordinateProgressAlongDivision(vertex, divisionCoordinates) < currentStart - 0.01
+      );
+      vertices = [...prefix, ...vertices];
+    }
+    if (sourceEnd > currentEnd + 0.1) {
+      const suffix = sourceVertices.filter(
+        (vertex) =>
+          coordinateProgressAlongDivision(vertex, divisionCoordinates) > currentEnd + 0.01
+      );
+      vertices = [...vertices, ...suffix];
+    }
+  }
+
+  return {
+    ...replacementRow,
+    vertices,
+    replacementGeometryDerived:
+      vertices.length === replacementRow.vertices.length
+        ? replacementRow.replacementGeometryDerived
+        : 'co-located-source-row-endpoint-union',
+  };
+}
+
+function orientVerticesAlongDivision(vertices, divisionCoordinates) {
+  if (vertices.length < 2) return [...vertices];
+  const start = coordinateProgressAlongDivision(vertices[0], divisionCoordinates);
+  const end = coordinateProgressAlongDivision(vertices.at(-1), divisionCoordinates);
+  return start <= end ? [...vertices] : [...vertices].reverse();
+}
+
+function coordinateProgressAlongDivision(coordinate, divisionCoordinates) {
+  const referenceLatitude =
+    divisionCoordinates.reduce((sum, point) => sum + Number(point.lat || 0), 0) /
+    divisionCoordinates.length;
+  const longitudeScale = 111_320 * Math.cos((referenceLatitude * Math.PI) / 180);
+  const latitudeScale = 111_320;
+  const projected = divisionCoordinates.map((point) => ({
+    x: Number(point.lng ?? point.lon) * longitudeScale,
+    y: Number(point.lat) * latitudeScale,
+  }));
+  const target = {
+    x: Number(coordinate.lng ?? coordinate.lon) * longitudeScale,
+    y: Number(coordinate.lat) * latitudeScale,
+  };
+  let travelled = 0;
+  let best = { distance: Infinity, along: 0 };
+  for (let index = 1; index < projected.length; index += 1) {
+    const start = projected[index - 1];
+    const end = projected[index];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.001) continue;
+    const fraction = Math.max(
+      0,
+      Math.min(1, ((target.x - start.x) * dx + (target.y - start.y) * dy) / length ** 2)
+    );
+    const nearest = { x: start.x + dx * fraction, y: start.y + dy * fraction };
+    const candidate = {
+      distance: Math.hypot(target.x - nearest.x, target.y - nearest.y),
+      along: travelled + length * fraction,
+    };
+    if (candidate.distance < best.distance) best = candidate;
+    travelled += length;
+  }
+  return best.along;
+}
+
+function joinLogicalGuidanceReplacementGaps(replacements) {
+  const completed = replacements.filter(
+    (match) =>
+      match.metrics?.sourceConnectionBasis !== 'logical-source-jump' &&
+      match.metrics?.sourceConnectionBasis !== 'straight-source-continuation'
+  );
+  const logical = replacements.filter(
+    (match) =>
+      match.metrics?.sourceConnectionBasis === 'logical-source-jump' ||
+      match.metrics?.sourceConnectionBasis === 'straight-source-continuation'
+  );
+
+  for (const match of logical) {
+    const options = completed
+      .map((existing, index) => ({
+        index,
+        existing,
+        joined: joinRowsAtClosestEndpoints(existing.row, match.row),
+      }))
+      .filter(
+        ({ existing, joined }) =>
+          String(existing.division.id) === String(match.division.id) &&
+          joined &&
+          joined.gapMeters <= Number(match.metrics?.sourceConnectionGapMeters || 0) + 0.5
+      )
+      .sort((left, right) => left.joined.gapMeters - right.joined.gapMeters);
+    const selected = options[0];
+    if (!selected) {
+      completed.push(match);
+      continue;
+    }
+    completed[selected.index] = {
+      ...selected.existing,
+      row: {
+        ...selected.existing.row,
+        vertices: selected.joined.vertices,
+        replacementGeometryDerived:
+          match.metrics?.sourceConnectionBasis === 'straight-source-continuation'
+            ? 'straight-source-continuation-union'
+            : 'logical-source-jump-union',
+        replacementLogicalGapMeters: match.metrics?.sourceConnectionGapMeters,
+      },
+    };
+  }
+  return completed;
+}
+
+function joinRowsAtClosestEndpoints(left, right) {
+  if ((left.vertices?.length ?? 0) < 2 || (right.vertices?.length ?? 0) < 2) return null;
+  const options = [false, true].flatMap((reverseLeft) =>
+    [false, true].map((reverseRight) => {
+      const leftVertices = reverseLeft ? [...left.vertices].reverse() : [...left.vertices];
+      const rightVertices = reverseRight ? [...right.vertices].reverse() : [...right.vertices];
+      return {
+        gapMeters: haversineDistanceMeters(leftVertices.at(-1), rightVertices[0]),
+        vertices: [...leftVertices, ...rightVertices],
+      };
+    })
+  );
+  return options.sort((leftOption, rightOption) => leftOption.gapMeters - rightOption.gapMeters)[0];
 }
 
 function rowFollowsRow(candidate, reference) {
@@ -223,9 +720,11 @@ function rowLengthMeters(row) {
 }
 
 function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
+  const startedAt = performance.now();
   let approved = [...initialMatches];
   const originalSelectedRows = approved.map((match) => match.row);
   const rejected = [];
+  const passes = [];
   let geometry;
 
   if (approved.length === 0) {
@@ -233,6 +732,7 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
       approved,
       rejected,
       geometry: emptyRemovalGeometry(),
+      performance: { totalMilliseconds: performance.now() - startedAt, passes },
     };
   }
 
@@ -243,8 +743,11 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
       maxPasses: MAXIMUM_SAFETY_PASSES,
       remaining: approved.length,
     });
-    geometry = generateForMatches(data, approved, originalSelectedRows);
+    const generationStartedAt = performance.now();
+    geometry = generateRemovalGeometryForMatches(data, approved, originalSelectedRows);
+    const generationMilliseconds = performance.now() - generationStartedAt;
 
+    const auditStartedAt = performance.now();
     const unselectedTargetConflicts = new Set(
       rowsCoveringSelectiveProtectionZones(
         geometry.selectiveProtectionZones,
@@ -266,9 +769,10 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
       activeRows
     );
     const protectedLightConflicts = conflictIdsBySourceRow(protectedLightDetails, activeRows);
-    const removalRings = geometry.removalPolygons.map((polygon) =>
-      polygon.coordinates.map(([lon, lat]) => ({ lon, lat }))
-    );
+    const removalRings = geometry.removalPolygons.map((polygon) => {
+      const ring = polygon.coordinates.map(([lon, lat]) => ({ lon, lat }));
+      return { ring, bounds: geometryBounds(ring) };
+    });
     // oxlint-disable-next-line react-doctor/js-flatmap-filter -- Explicit transform and validation stages keep this bounded safety pass auditable.
     const unsafe = approved
       .map((match) => {
@@ -304,8 +808,22 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
         };
       })
       .filter(Boolean);
+    const auditMilliseconds = performance.now() - auditStartedAt;
+    passes.push({
+      pass: pass + 1,
+      approvedMatches: approved.length,
+      generationMilliseconds,
+      auditMilliseconds,
+      geometry: geometry.performance,
+      rejectedMatches: unsafe.length,
+    });
     if (unsafe.length === 0) {
-      return { approved, rejected, geometry };
+      return {
+        approved,
+        rejected,
+        geometry,
+        performance: { totalMilliseconds: performance.now() - startedAt, passes },
+      };
     }
 
     const unsafeRows = new Set(unsafe.map((match) => match.row.id));
@@ -318,6 +836,7 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
       approved,
       rejected,
       geometry: emptyRemovalGeometry(),
+      performance: { totalMilliseconds: performance.now() - startedAt, passes },
     };
   }
   throw new Error(
@@ -365,9 +884,11 @@ function rowIsCoveredByRemovals(row, removalRings) {
   if (vertices.length === 0) return false;
   return vertices.every((vertex) =>
     removalRings.some(
-      (ring) =>
-        pointInPolygon(vertex, ring) ||
-        pointToPolylineDistanceMeters(vertex, ring) <= REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS
+      ({ ring, bounds }) =>
+        pointNearGeometryBounds(vertex, bounds, REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS) &&
+        (pointInPolygon(vertex, ring) ||
+          pointToPolylineDistanceMeters(vertex, ring) <=
+            REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS)
     )
   );
 }
@@ -375,21 +896,34 @@ function rowIsCoveredByRemovals(row, removalRings) {
 function rowsCoveringSelectiveProtectionZones(protectionZones, removalPolygons, rows) {
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const protectedPoints = (protectionZones ?? []).flatMap((zone) =>
-    zone.geometryType === 'Point' ? [zone.point] : (zone.vertices ?? [])
+    (zone.geometryType === 'Point' ? [zone.point] : (zone.vertices ?? [])).map((point) => ({
+      point,
+      zone,
+    }))
   );
   const rowIds = new Set();
   for (const polygon of removalPolygons) {
     const ring = polygon.coordinates.map(([lon, lat]) => ({ lon, lat }));
-    if (!protectedPoints.some((point) => pointInPolygon(point, ring))) continue;
+    const bounds = geometryBounds(ring);
     const sourceRowIds = polygon.sourceRowIds?.length
       ? polygon.sourceRowIds
       : [polygon.sourceRowId];
-    const hasKnownSourceRow = sourceRowIds.some((rowId) => rowsById.has(rowId));
+    const knownSourceRows = sourceRowIds.map((rowId) => rowsById.get(rowId)).filter(Boolean);
+    const stopbarOnly =
+      knownSourceRows.length > 0 &&
+      knownSourceRows.every((row) => sourceClassification(row) === 'stopbar');
+    const protectedPointsInside = protectedPoints
+      .filter(({ zone }) => !stopbarOnly || zone.classification === 'runway')
+      .map(({ point }) => point)
+      .filter(
+        (point) => pointWithinGeometryBounds(point, bounds) && pointInPolygon(point, ring)
+      );
+    if (protectedPointsInside.length === 0) continue;
+    const hasKnownSourceRow = knownSourceRows.length > 0;
     const localSourceRowIds = sourceRowIds.filter((rowId) => {
       const row = rowsById.get(rowId);
-      return protectedPoints.some(
+      return protectedPointsInside.some(
         (point) =>
-          pointInPolygon(point, ring) &&
           row?.vertices?.length > 0 &&
           pointToPolylineDistanceMeters(point, row.vertices) <= ISOLATED_CROSSING_DISTANCE_METERS
       );
@@ -401,11 +935,56 @@ function rowsCoveringSelectiveProtectionZones(protectionZones, removalPolygons, 
   return rowIds;
 }
 
-function generateForMatches(
+function geometryBounds(vertices) {
+  const bounds = {
+    minLat: Infinity,
+    minLon: Infinity,
+    maxLat: -Infinity,
+    maxLon: -Infinity,
+  };
+  for (const vertex of vertices) {
+    bounds.minLat = Math.min(bounds.minLat, Number(vertex.lat));
+    bounds.minLon = Math.min(bounds.minLon, Number(vertex.lon ?? vertex.lng));
+    bounds.maxLat = Math.max(bounds.maxLat, Number(vertex.lat));
+    bounds.maxLon = Math.max(bounds.maxLon, Number(vertex.lon ?? vertex.lng));
+  }
+  return bounds;
+}
+
+function pointWithinGeometryBounds(point, bounds) {
+  const lon = Number(point.lon ?? point.lng);
+  return (
+    Number(point.lat) >= bounds.minLat &&
+    Number(point.lat) <= bounds.maxLat &&
+    lon >= bounds.minLon &&
+    lon <= bounds.maxLon
+  );
+}
+
+function pointNearGeometryBounds(point, bounds, toleranceMeters) {
+  const latitudePad = toleranceMeters / 110_000;
+  const maximumAbsoluteLatitude = Math.min(
+    89.9,
+    Math.max(Math.abs(bounds.minLat), Math.abs(bounds.maxLat)) + latitudePad
+  );
+  const longitudePad =
+    toleranceMeters /
+    (110_000 * Math.max(0.001, Math.cos((maximumAbsoluteLatitude * Math.PI) / 180)));
+  const lon = Number(point.lon ?? point.lng);
+  return (
+    Number(point.lat) >= bounds.minLat - latitudePad &&
+    Number(point.lat) <= bounds.maxLat + latitudePad &&
+    lon >= bounds.minLon - longitudePad &&
+    lon <= bounds.maxLon + longitudePad
+  );
+}
+
+export function generateRemovalGeometryForMatches(
   data,
   matches,
   originalSelectedRows = matches.map((match) => match.row)
 ) {
+  const preparationStartedAt = performance.now();
   const selectedRows = matches.map((match) => match.row);
   const rows = consolidateRemovalRows(data.lightRows ?? [], selectedRows);
   const sourceInstanceIds = new Set(selectedRows.flatMap((row) => row.sourceInstanceIds ?? []));
@@ -415,21 +994,34 @@ function generateForMatches(
   const originallySelectedSourceInstanceIds = new Set(
     originalSelectedRows.flatMap((row) => row.sourceInstanceIds ?? [])
   );
+  const selectionPreparedAt = performance.now();
   const recordSelectiveXPlaneRemoval = isRecordSelectiveXPlaneRemoval(data, selectedRows);
   const selectiveZones = recordSelectiveXPlaneRemoval
     ? []
     : selectiveTargetMustKeepZones(data, originalSelectedRows, originallySelectedSourceInstanceIds);
+  const selectiveZonesBuiltAt = performance.now();
+  const isolatedCrossingContext = buildIsolatedGuidanceCrossingContext(selectedRows);
   const selectiveProtectionZones = selectiveZones.filter(
-    (zone) => !isIsolatedGuidanceCrossingZone(zone, selectedRows)
+    (zone) => !isIsolatedGuidanceCrossingZone(zone, isolatedCrossingContext)
   );
+  const selectiveZonesFilteredAt = performance.now();
   const protectedSourceZones = (data.mustKeepZones ?? []).filter(
     (zone) =>
       !(recordSelectiveXPlaneRemoval && zone.sourceType === 'xplane-runway-light-zone') &&
       !isConservativeRunwayEnvelopeSuperseded(zone, selectedRows)
   );
+  const sourceZonesFilteredAt = performance.now();
   const mustKeepZones = [...protectedSourceZones, ...selectiveProtectionZones];
+  const geometry = generateRemovalGeometry(sourceInstances, rows, DEFAULT_SIZES, mustKeepZones);
   return {
-    ...generateRemovalGeometry(sourceInstances, rows, DEFAULT_SIZES, mustKeepZones),
+    ...geometry,
+    performance: {
+      ...geometry.performance,
+      selectionPreparationMilliseconds: selectionPreparedAt - preparationStartedAt,
+      selectiveZoneBuildMilliseconds: selectiveZonesBuiltAt - selectionPreparedAt,
+      selectiveZoneFilterMilliseconds: selectiveZonesFilteredAt - selectiveZonesBuiltAt,
+      sourceZoneFilterMilliseconds: sourceZonesFilteredAt - selectiveZonesFilteredAt,
+    },
     selectiveProtectionZones,
   };
 }
@@ -442,7 +1034,18 @@ function isRecordSelectiveXPlaneRemoval(data, selectedRows) {
   );
 }
 
-function isIsolatedGuidanceCrossingZone(zone, selectedRows) {
+function buildIsolatedGuidanceCrossingContext(selectedRows) {
+  return selectedRows
+    .filter(
+      (row) =>
+        GUIDANCE_CLASSIFICATIONS.has(sourceClassification(row)) &&
+        Array.isArray(row.vertices) &&
+        row.vertices.length >= 2
+    )
+    .map((row) => ({ row, bounds: geometryBounds(row.vertices) }));
+}
+
+function isIsolatedGuidanceCrossingZone(zone, selectedGuidanceRows) {
   if (
     !GUIDANCE_CLASSIFICATIONS.has(zone.classification) ||
     zone.geometryType !== 'LineString' ||
@@ -451,10 +1054,33 @@ function isIsolatedGuidanceCrossingZone(zone, selectedRows) {
   ) {
     return false;
   }
-  return selectedRows.some(
-    (row) =>
-      GUIDANCE_CLASSIFICATIONS.has(sourceClassification(row)) &&
+  const zoneBounds = geometryBounds(zone.vertices);
+  return selectedGuidanceRows.some(
+    ({ row, bounds }) =>
+      geometryBoundsWithinDistance(bounds, zoneBounds, ISOLATED_CROSSING_DISTANCE_METERS) &&
       isIsolatedPolylineCrossing(row.vertices, zone.vertices)
+  );
+}
+
+function geometryBoundsWithinDistance(left, right, distanceMeters) {
+  const latitudePad = distanceMeters / 110_000;
+  const maximumAbsoluteLatitude = Math.min(
+    89.9,
+    Math.max(
+      Math.abs(left.minLat),
+      Math.abs(left.maxLat),
+      Math.abs(right.minLat),
+      Math.abs(right.maxLat)
+    ) + latitudePad
+  );
+  const longitudePad =
+    distanceMeters /
+    (110_000 * Math.max(0.001, Math.cos((maximumAbsoluteLatitude * Math.PI) / 180)));
+  return !(
+    left.maxLat + latitudePad < right.minLat ||
+    right.maxLat + latitudePad < left.minLat ||
+    left.maxLon + longitudePad < right.minLon ||
+    right.maxLon + longitudePad < left.minLon
   );
 }
 
@@ -479,10 +1105,12 @@ function isIsolatedPolylineCrossing(left, right) {
   if (!Array.isArray(left) || left.length < 2 || !Array.isArray(right) || right.length < 2) {
     return false;
   }
+  if (polylineToPolylineDistanceMeters(left, right) > ISOLATED_CROSSING_DISTANCE_METERS) {
+    return false;
+  }
   const leftOverlap = polylineNearLength(left, right);
   const rightOverlap = polylineNearLength(right, left);
   return (
-    polylineToPolylineDistanceMeters(left, right) <= ISOLATED_CROSSING_DISTANCE_METERS &&
     leftOverlap <= MAXIMUM_ISOLATED_CROSSING_OVERLAP_METERS &&
     rightOverlap <= MAXIMUM_ISOLATED_CROSSING_OVERLAP_METERS
   );
@@ -906,7 +1534,13 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
     features.push({
       type: 'Feature',
       geometry: { type: 'Polygon', coordinates: [removal.coordinates] },
-      properties: { featureType: 'removal', title: 'Selective removal area' },
+      properties: {
+        featureType: 'removal',
+        title: 'Selective removal area',
+        sourceIds: removal.sourceRowIds ?? (removal.sourceRowId ? [removal.sourceRowId] : []),
+        origin: 'msfs-source',
+        mustKeepZoneIds: removal.mustKeepZoneIds ?? [],
+      },
     });
   }
 

@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-flatmap-filter -- Upload validation stages stay explicit so every rejected input remains independently auditable. */
+
 import { haversineDistanceMeters } from './extractor/geo.js';
 
 const MINIMUM_AIRPORT_RADIUS_METERS = 10_000;

@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations -- Extraction keeps source validation and projection as separate auditable stages. */
+
 import { promises as fs } from 'node:fs';
 import { extractBglData } from './bgl.js';
 import {
@@ -810,9 +812,10 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
   const groupingMilliseconds = performance.now() - groupingStartedAt;
   const polygonBuildStartedAt = performance.now();
   for (const group of removalGroups) {
+    const protectionZones = protectionZonesForTarget(group.classification, mustKeepZones);
     const protectedGeometry = buildProtectedRemovalPolygons(
       group,
-      mustKeepZones,
+      protectionZones,
       mustKeepBounds,
       mustKeepSpatialIndex
     );
@@ -874,7 +877,7 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
     const protectedSquare = buildSafePointRemoval(
       instance,
       config.size,
-      mustKeepZones,
+      protectionZonesForTarget(instance.classification, mustKeepZones),
       stableId('instance-removal', instance.id)
     );
     if (!protectedSquare.polygon) {
@@ -924,6 +927,19 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
       conflictFilterMilliseconds,
     },
   };
+}
+
+function protectionZonesForTarget(classification, zones) {
+  if (classification !== 'stopbar') return zones;
+  return zones.filter(isRunwayMustKeepZone);
+}
+
+function isRunwayMustKeepZone(zone) {
+  return (
+    String(zone?.sourceType ?? '').includes('runway-light-zone') ||
+    String(zone?.lightType ?? '').startsWith('runway-') ||
+    String(zone?.classification ?? '').startsWith('runway')
+  );
 }
 
 function buildProtectedRemovalPolygons(group, mustKeepZones, mustKeepBounds, mustKeepSpatialIndex) {

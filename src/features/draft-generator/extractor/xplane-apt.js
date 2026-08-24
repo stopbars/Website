@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations -- apt.dat parsing keeps validation and projection stages visible for source-backed geometry diagnostics. */
+
 import { stableId } from './classify.js';
 import { buildMustKeepZones } from './extract.js';
 import { haversineDistanceMeters, offsetPointMeters } from './geo.js';

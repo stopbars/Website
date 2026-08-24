@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-combine-iterations -- BGL extraction keeps decoding, filtering, and provenance stages separate for release diagnostics. */
+
 import { Buffer } from 'node:buffer';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
