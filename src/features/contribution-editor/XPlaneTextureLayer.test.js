@@ -60,6 +60,21 @@ test('premultiplies translucent texture pixels exactly once before mipmapping', 
   layer.setTexture('marking', image, { lineTexture: true });
 
   assert.deepEqual([...image.data], [100, 50, 25, 128]);
+  assert.equal(layer.textureSources.get('marking').lineTexture, true);
+});
+
+test('does not repeat alpha premultiplication already completed in a texture worker', () => {
+  const layer = new XPlaneTextureLayer();
+  const image = {
+    width: 1,
+    height: 1,
+    data: new Uint8ClampedArray([100, 50, 25, 128]),
+    premultiplied: true,
+  };
+
+  layer.setTexture('marking', image, { lineTexture: true });
+
+  assert.deepEqual([...image.data], [100, 50, 25, 128]);
 });
 
 test('shares decoded pixels while uploading only textures used by each render pass', () => {
@@ -86,6 +101,249 @@ test('shares decoded pixels while uploading only textures used by each render pa
   assert.equal(overlay.getStats().drawableGroups, 0);
 });
 
+test('changes render-group visibility without rebuilding geometry or textures', () => {
+  const layer = new XPlaneTextureLayer();
+  layer.setGeometry([
+    { id: 'surface', pattern: 'surface', vertices: new Float32Array() },
+    {
+      id: 'marking',
+      pattern: 'marking',
+      markingTexture: true,
+      vertices: new Float32Array(),
+    },
+  ]);
+  const image = { width: 1, height: 1, data: new Uint8Array([255, 255, 255, 255]) };
+  layer.setTexture('surface', image);
+  layer.setTexture('marking', image);
+
+  layer.setGroupVisibility((group) => !group.markingTexture);
+
+  assert.equal(layer.groups.length, 2);
+  assert.equal(layer.textureSources.size, 2);
+  assert.equal(layer.getStats().drawableGroups, 1);
+});
+
+test('packs render groups into one buffer while preserving draw ranges and order', () => {
+  const gl = fakeWebGl2();
+  const layer = new XPlaneTextureLayer();
+  const vertices = new Float32Array([0, 0, 0, 0, 0.000_001, 0, 1, 0, 0, 0.000_001, 0, 1]);
+  layer.setGeometry([
+    { id: 'first', pattern: 'surface', origin: [0.75, 0.25], vertices },
+    { id: 'second', pattern: 'surface', origin: [0.75, 0.25], vertices },
+  ]);
+  layer.setTexture('surface', {
+    width: 1,
+    height: 1,
+    data: new Uint8Array([255, 255, 255, 255]),
+  });
+  layer.onAdd({ transform: { worldSize: 512 }, triggerRepaint() {} }, gl);
+
+  layer.render(gl, {
+    modelViewProjectionMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+  });
+
+  assert.deepEqual(gl.drawCalls, [
+    { mode: gl.TRIANGLES, first: 0, count: 3 },
+    { mode: gl.TRIANGLES, first: 3, count: 3 },
+  ]);
+  assert.deepEqual(layer.drawRanges.get('second'), { first: 3, count: 3 });
+});
+
+test('reduces a 1001-group MSFS scene to the one group inside the viewport', () => {
+  const gl = fakeWebGl2();
+  const layer = new XPlaneTextureLayer();
+  const vertices = new Float32Array([0, 0, 0, 0, 0.000_001, 0, 1, 0, 0, 0.000_001, 0, 1]);
+  layer.setGeometry([
+    {
+      id: 'nearby',
+      pattern: 'surface',
+      origin: [0.75, 0.25],
+      mercatorBounds: [0.75, 0.25, 0.751, 0.251],
+      vertices,
+    },
+    ...Array.from({ length: 1_000 }, (_, index) => ({
+      id: `outside-${index}`,
+      pattern: 'surface',
+      origin: [0.1, 0.1],
+      mercatorBounds: [0.1, 0.1, 0.101, 0.101],
+      vertices,
+    })),
+  ]);
+  layer.setTexture('surface', {
+    width: 1,
+    height: 1,
+    data: new Uint8Array([255, 255, 255, 255]),
+  });
+  layer.onAdd(
+    {
+      transform: { worldSize: 512 },
+      triggerRepaint() {},
+      getBounds() {
+        return {
+          getWest: () => 80,
+          getEast: () => 100,
+          getNorth: () => 70,
+          getSouth: () => 60,
+        };
+      },
+    },
+    gl
+  );
+
+  layer.render(gl, {
+    modelViewProjectionMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+  });
+
+  assert.equal(gl.drawCalls.length, 1);
+});
+
+test('coalesces texture statistics until browser activity settles', () => {
+  const originalWindow = globalThis.window;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = new Map();
+  let nextTimer = 0;
+  globalThis.window = {};
+  globalThis.setTimeout = (callback) => {
+    const id = ++nextTimer;
+    timers.set(id, callback);
+    return id;
+  };
+  globalThis.clearTimeout = (id) => timers.delete(id);
+
+  try {
+    const reports = [];
+    const layer = new XPlaneTextureLayer((stats) => reports.push(stats));
+    layer.setGeometry([{ pattern: 'surface', vertices: new Float32Array() }]);
+    layer.setTexture('surface', {
+      width: 1,
+      height: 1,
+      data: new Uint8Array([255, 255, 255, 255]),
+    });
+    layer.cancelScheduledStats();
+    layer.map = { isMoving: () => true };
+    layer.scheduleStats();
+
+    assert.equal(timers.size, 0);
+    layer.map = { isMoving: () => false };
+    layer.scheduleStats();
+    layer.scheduleStats();
+    assert.equal(timers.size, 1);
+    assert.equal(reports.length, 0);
+    timers.values().next().value();
+    assert.deepEqual(reports, [
+      { meshGroups: 1, drawableGroups: 1, drawnGroups: 0, drawnTriangles: 0 },
+    ]);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
+test('defers WebGL texture uploads until inertial map movement ends', () => {
+  const gl = fakeWebGl2();
+  const handlers = new Map();
+  let moving = false;
+  let repaints = 0;
+  const map = {
+    transform: { worldSize: 512 },
+    isMoving: () => moving,
+    on: (event, handler) => handlers.set(event, handler),
+    off: (event) => handlers.delete(event),
+    triggerRepaint: () => {
+      repaints += 1;
+    },
+  };
+  const layer = new XPlaneTextureLayer();
+  layer.setGeometry([{ pattern: 'surface', vertices: new Float32Array(12) }]);
+  layer.setTexture('surface', {
+    width: 1,
+    height: 1,
+    data: new Uint8Array([255, 255, 255, 255]),
+  });
+  layer.onAdd(map, gl);
+
+  assert.equal(gl.textureUploadCalls.length, 1);
+  moving = true;
+  handlers.get('movestart')();
+  layer.setTexture('surface', {
+    width: 1,
+    height: 1,
+    data: new Uint8Array([64, 64, 64, 255]),
+  });
+  assert.equal(gl.textureUploadCalls.length, 1);
+  assert.deepEqual([...layer.pendingTexturePatterns], ['surface']);
+
+  moving = false;
+  handlers.get('moveend')();
+  assert.equal(gl.textureUploadCalls.length, 2);
+  assert.equal(layer.pendingTexturePatterns.size, 0);
+  assert.ok(repaints >= 2);
+});
+
+test('keeps interrupted inertia free of queued texture uploads on the second mouse-down', () => {
+  const originalWindow = globalThis.window;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = new Map();
+  let nextTimer = 0;
+  globalThis.window = {};
+  globalThis.setTimeout = (callback) => {
+    const id = ++nextTimer;
+    timers.set(id, callback);
+    return id;
+  };
+  globalThis.clearTimeout = (id) => timers.delete(id);
+
+  try {
+    const gl = fakeWebGl2();
+    const handlers = new Map();
+    let moving = false;
+    const map = {
+      transform: { worldSize: 512 },
+      isMoving: () => moving,
+      on: (event, handler) => handlers.set(event, handler),
+      off: (event) => handlers.delete(event),
+      triggerRepaint() {},
+    };
+    const layer = new XPlaneTextureLayer();
+    layer.setGeometry([{ pattern: 'surface', vertices: new Float32Array(12) }]);
+    layer.setTexture('surface', {
+      width: 1,
+      height: 1,
+      data: new Uint8Array([255, 255, 255, 255]),
+    });
+    layer.onAdd(map, gl);
+    layer.cancelScheduledStats();
+
+    moving = true;
+    handlers.get('movestart')();
+    layer.setTexture('surface', {
+      width: 1,
+      height: 1,
+      data: new Uint8Array([64, 64, 64, 255]),
+    });
+    moving = false;
+    handlers.get('mousedown')();
+    handlers.get('moveend')();
+
+    assert.equal(gl.textureUploadCalls.length, 1);
+    assert.equal(timers.size, 0);
+
+    handlers.get('mouseup')();
+    assert.equal(timers.size, 2);
+    for (const callback of [...timers.values()]) callback();
+    assert.equal(gl.textureUploadCalls.length, 2);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
 function fakeWebGl2() {
   let nextObject = 0;
   const shaderSources = [];
@@ -93,6 +351,7 @@ function fakeWebGl2() {
   const originClipCalls = [];
   const anisotropyCalls = [];
   const blendCalls = [];
+  const textureUploadCalls = [];
   const uniformFloatCalls = new Map();
   const anisotropy = {
     TEXTURE_MAX_ANISOTROPY_EXT: 0x84fe,
@@ -131,6 +390,7 @@ function fakeWebGl2() {
     originClipCalls,
     anisotropyCalls,
     blendCalls,
+    textureUploadCalls,
     uniformFloatCalls,
     getExtension(name) {
       return name === 'EXT_texture_filter_anisotropic' ? anisotropy : null;
@@ -184,7 +444,9 @@ function fakeWebGl2() {
     deleteTexture() {},
     bindTexture() {},
     pixelStorei() {},
-    texImage2D() {},
+    texImage2D(...values) {
+      textureUploadCalls.push(values);
+    },
     texParameteri() {},
     texParameterf(...values) {
       anisotropyCalls.push(values);

@@ -136,14 +136,16 @@ function decodeDxt5Alpha(bytes, offset) {
     }
     palette.push(0, 255);
   }
-  let indices = 0n;
-  for (let byte = 0; byte < 6; byte += 1) {
-    indices |= BigInt(bytes[offset + 2 + byte]) << BigInt(byte * 8);
+  const alpha = new Array(16);
+  // Eight 3-bit indices fit exactly in each 24-bit half of the alpha block.
+  for (let half = 0; half < 2; half += 1) {
+    const start = offset + 2 + half * 3;
+    const indices = bytes[start] | (bytes[start + 1] << 8) | (bytes[start + 2] << 16);
+    for (let pixel = 0; pixel < 8; pixel += 1) {
+      alpha[half * 8 + pixel] = palette[(indices >>> (pixel * 3)) & 7];
+    }
   }
-  return Array.from({ length: 16 }, (_, pixel) => {
-    const index = Number((indices >> BigInt(pixel * 3)) & 0x07n);
-    return palette[index];
-  });
+  return alpha;
 }
 
 function rgb565(value) {

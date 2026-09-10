@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import {
   createDecodedTextureCache,
   decodedTextureKey,
+  msfsDecodedTextureKey,
 } from './decoded-texture-cache.js';
 
 function image(bytes) {
@@ -13,11 +15,11 @@ describe('decoded texture cache', () => {
     const cache = createDecodedTextureCache(8);
     cache.set('first', image(4));
     cache.set('second', image(4));
-    expect(cache.get('first')).not.toBeNull();
+    assert.notEqual(cache.get('first'), null);
     cache.set('third', image(4));
-    expect(cache.get('second')).toBeNull();
-    expect(cache.get('first')).not.toBeNull();
-    expect(cache.get('third')).not.toBeNull();
+    assert.equal(cache.get('second'), null);
+    assert.notEqual(cache.get('first'), null);
+    assert.notEqual(cache.get('third'), null);
   });
 
   it('separates different line atlas compositions of the same source file', () => {
@@ -29,13 +31,32 @@ describe('decoded texture cache', () => {
       textureScaleY: 12,
       lineTextureLayers: [{ s1: 0, sm: 8, s2: 16 }],
     }, true);
-    expect(first).not.toBe(second);
+    assert.notEqual(first, second);
   });
 
   it('separates opaque NO_ALPHA decoding from alpha-blended decoding', () => {
     const blended = decodedTextureKey('textures/soil.dds', { textureNoAlpha: false });
     const opaque = decodedTextureKey('textures/soil.dds', { textureNoAlpha: true });
 
-    expect(blended).not.toBe(opaque);
+    assert.notEqual(blended, opaque);
+  });
+
+  it('separates MSFS texture transformations and source packages', () => {
+    const descriptor = {
+      pattern: 'paint',
+      path: 'texture/paint.dds',
+      file: { size: 512, lastModified: 10 },
+      lineLayout: { uMin: 0.1, uMax: 0.2 },
+      tint: [1, 0.5, 0.5],
+    };
+
+    assert.notEqual(
+      msfsDecodedTextureKey('first', descriptor),
+      msfsDecodedTextureKey('second', descriptor)
+    );
+    assert.notEqual(
+      msfsDecodedTextureKey('first', descriptor),
+      msfsDecodedTextureKey('first', { ...descriptor, tint: [1, 1, 1] })
+    );
   });
 });

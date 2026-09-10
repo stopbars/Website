@@ -5,6 +5,8 @@ import { decodeDdsOrBc7Texture, decodeKtx2Texture } from './msfs-texture.js';
 import { mercatorTextureGroups } from '../contribution-editor/xplane-mercator-geometry.js';
 
 const EARTH_RADIUS = 6_378_137;
+const WGS84_ECCENTRICITY_SQUARED = 6.69437999014e-3;
+const MSFS_PROJECTED_MESH_NORTH_METERS_PER_DEGREE = 111_150;
 const MAX_AIRPORT_BYTES = 64 * 1024 * 1024;
 const PROJECTED_MESH_PLANAR_BASES = [
   { label: 'x-east-negative-z-north', eastX: 1, eastZ: 0, northX: 0, northZ: -1, northSign: -1 },
@@ -117,6 +119,7 @@ export async function loadMsfsSceneryFolder(
   const taxiwaySurfaceRender = buildTaxiwaySurfaceRenderGroups(airportData.taxiwayPaths);
   groups.push(...taxiwaySurfaceRender.groups);
   const apronRender = buildApronRenderGroups(airportData.apronMeshes, apronMaterialLibrary);
+  attachApronFallbackDiagnostics(airportData.apronBoundaries, apronRender.groups);
   groups.push(...apronRender.groups);
   const paintedLineRender = await buildPaintedLineRenderGroups(
     airportData.paintedLines,
@@ -322,7 +325,7 @@ function buildLightPoints(lightRows) {
       const path = [lines[0][0], ...lines.map((line) => line[1])];
       const spacing = Number(properties.spacingOrFalloff);
       const positions =
-        Number.isFinite(spacing) && spacing > 0.25
+        properties.snapToVertices !== true && Number.isFinite(spacing) && spacing > 0.25
           ? samplePathAtSpacing(path, spacing)
           : path.map((coordinate, index) => ({ coordinate, distance: null, vertexIndex: index }));
       for (const [index, position] of positions.entries()) {
@@ -447,8 +450,19 @@ function samplePathAtSpacing(path, spacing) {
 
 function distanceMeters(first, second) {
   const latitude = ((first[1] + second[1]) / 2) * (Math.PI / 180);
-  const dx = (second[0] - first[0]) * (Math.PI / 180) * EARTH_RADIUS * Math.cos(latitude);
-  const dy = (second[1] - first[1]) * (Math.PI / 180) * EARTH_RADIUS;
+  const sinLatitude = Math.sin(latitude);
+  const denominator = Math.sqrt(
+    1 - WGS84_ECCENTRICITY_SQUARED * sinLatitude * sinLatitude
+  );
+  const primeVerticalRadius = EARTH_RADIUS / denominator;
+  const meridionalRadius =
+    (EARTH_RADIUS * (1 - WGS84_ECCENTRICITY_SQUARED)) / denominator ** 3;
+  const dx =
+    (second[0] - first[0]) *
+    (Math.PI / 180) *
+    primeVerticalRadius *
+    Math.cos(latitude);
+  const dy = (second[1] - first[1]) * (Math.PI / 180) * meridionalRadius;
   return Math.hypot(dx, dy);
 }
 
@@ -1341,6 +1355,7 @@ function decodeApronEdgeLights(view, offset, size, sourcePath) {
       coloration,
       scale: view.getFloat32(offset + 0x10, true),
       spacingOrFalloff: view.getFloat32(offset + 0x14, true),
+      snapToVertices: (view.getUint8(offset + 0x07) & 0x04) !== 0,
       minimumRadius: radii.length ? Math.min(...radii) : null,
       maximumRadius: radii.length ? Math.max(...radii) : null,
     },
@@ -1793,6 +1808,7 @@ async function buildPaintedLineRenderGroups(collection, materialLibrary) {
       accumulators.set(accumulatorKey, accumulator);
       textureFiles.set(pattern, usage.material.textureFile);
       feature.properties.exactTextureRendered = true;
+      feature.properties.exactTexturePattern = pattern;
       feature.properties.textureLayout = textureLayout.label;
       feature.properties.geometryLayout = geometryLayout.label;
       feature.properties.textureLayoutBasis = selectedLayout.basis;
@@ -2056,14 +2072,14 @@ function appendLineTriangle(output, ...values) {
   }
 }
 
-function buildTaxiwaySurfaceRenderGroups(paths) {
+export function buildTaxiwaySurfaceRenderGroups(paths) {
   const accumulators = new Map();
   let featureCount = 0;
   for (const path of paths || []) {
-    // drawSurface is the compiled source-of-truth for whether the simulator creates pavement for
-    // this graph edge. PATH/TAXI records with it cleared still describe topology and markings but
-    // must not become invented slabs in the preview.
-    if (!path.drawSurface || !path.geometryResolved || !path.end) continue;
+    // Most pavement must carry the compiled drawSurface bit. A small class of surface-0 TAXI/PATH
+    // junction records omits it even though the short, full-width segment closes authored pavement
+    // between adjacent paths. Keep that fallback bounded by path class and metric geometry.
+    if (!taxiwayPathHasFallbackSurface(path)) continue;
     const vertices = buildMsfsLineTextureTriangles([path.start, path.end], path.widthMeters, 16);
     if (!vertices.length) continue;
     const surface = Number(path.surface || 0);
@@ -2088,8 +2104,10 @@ function buildTaxiwaySurfaceRenderGroups(paths) {
         unresolvedMaterial: true,
         placementPriority: 0,
         drawBefore: null,
-        // Taxiway surfaces are rendered after APRON and before RUNWAY.
-        renderStage: 3,
+        // This is an opaque reconstruction from TaxiwayPath width, not the simulator's authored
+        // pavement mesh. Draw it below exact apron records so it fills genuine gaps without
+        // covering source-backed concrete, asphalt, joints, drains or other apron details.
+        renderStage: 0,
         materialOrder: 0,
         sourceSequence: Number(path.sourceRecordOffset || 0),
         renderPass: 'taxiway-base',
@@ -2138,6 +2156,24 @@ function buildTaxiwaySurfaceRenderGroups(paths) {
   };
 }
 
+export function taxiwayPathHasFallbackSurface(path) {
+  if (!path?.geometryResolved || !path.end) return false;
+  if (path.drawSurface) return true;
+  const pathType = Number(path.pathType);
+  const surface = Number(path.surface);
+  const widthMeters = Number(path.widthMeters);
+  const lengthMeters = Number(path.lengthMeters);
+  return (
+    (pathType === 1 || pathType === 4) &&
+    surface === 0 &&
+    widthMeters >= 20 &&
+    widthMeters <= 80 &&
+    lengthMeters >= 1 &&
+    lengthMeters <= 40 &&
+    lengthMeters <= widthMeters
+  );
+}
+
 function taxiwayPathTypeLabel(pathType) {
   return (
     { 1: 'taxiway', 2: 'runway', 3: 'parking', 4: 'path', 5: 'closed', 6: 'vehicle' }[pathType] ||
@@ -2155,7 +2191,7 @@ function taxiwaySurfaceColor(surface, pathType) {
   return [82, 84, 83];
 }
 
-function buildApronRenderGroups(apronMeshes, materialLibrary) {
+export function buildApronRenderGroups(apronMeshes, materialLibrary) {
   const accumulators = new Map();
   const textureFiles = new Map();
   const resolvedMaterials = new Set();
@@ -2203,9 +2239,7 @@ function buildApronRenderGroups(apronMeshes, materialLibrary) {
       )
     );
     const colorationMode = globalThis.__msfsPreviewApronColorationModeOverride || 'compiled';
-    const hasRecordTint =
-      colorationMode !== 'material' &&
-      (coloration.red > 0 || coloration.green > 0 || coloration.blue > 0);
+    const hasRecordTint = colorationMode !== 'material' && hasVisibleRecordTint(coloration);
     const recordTint = hasRecordTint
       ? [coloration.red / 255, coloration.green / 255, coloration.blue / 255]
       : [1, 1, 1];
@@ -2219,17 +2253,28 @@ function buildApronRenderGroups(apronMeshes, materialLibrary) {
           .padStart(2, '0')
       )
       .join('');
-    const fallbackEvidence = material?.textureFile ? null : unresolvedApronFallbackEvidence(mesh);
-    const fallbackModeSuffix = fallbackEvidence ? `--${fallbackEvidence.renderMode}` : '';
+    // Keep geometry evidence ready even when the package supplies a texture file. The package
+    // texture remains authoritative when it decodes, but this evidence lets the render bundle
+    // install a safe solid fallback if decoding fails later.
+    const fallbackEvidence = unresolvedApronFallbackEvidence(mesh, {
+      materialName: material?.name || '',
+    });
+    const fallbackModeSuffix = fallbackEvidence
+      ? `--${fallbackEvidence.renderMode}--${fallbackEvidence.appearance}`
+      : '';
     const basePattern =
       material?.pattern ||
       `bars-apron-fallback-${safeName(guid || 'unknown')}${fallbackModeSuffix}`;
-    const pattern = hasTint ? `${basePattern}--tint-${tintHex}` : basePattern;
+    const fallbackAppearanceSuffix = fallbackEvidence
+      ? `--fallback-${fallbackEvidence.appearance}`
+      : '';
+    const patternWithAppearance = `${basePattern}${fallbackAppearanceSuffix}`;
+    const pattern = hasTint ? `${patternWithAppearance}--tint-${tintHex}` : patternWithAppearance;
     // Stretch decals need clamp sampling while tiled pavement needs repeat sampling. Keep them in
     // separate batches even when a package reuses one material GUID for both projection modes.
     // Combining them forced every atlas decal to repeat and bled unrelated cells across its edge.
     const samplerMode = properties.stretchUv ? 'clamp' : 'repeat';
-    const key = `${guid}|${drawStage}|${priority}|${sourceOpacity}|${tint.join(',')}|${samplerMode}|${fallbackEvidence?.renderMode || 'resolved'}`;
+    const key = `${guid}|${drawStage}|${priority}|${sourceOpacity}|${tint.join(',')}|${samplerMode}|${fallbackEvidence?.renderMode || 'resolved'}|${fallbackEvidence?.appearance || 'source-color'}`;
     if (material?.textureFile) textureFiles.set(pattern, material.textureFile);
     let accumulator = accumulators.get(key);
     if (!accumulator) {
@@ -2263,6 +2308,7 @@ function buildApronRenderGroups(apronMeshes, materialLibrary) {
         unresolvedMaterial: !material?.textureFile,
         packageMaterialLibraryPresent,
         fallbackRenderMode: fallbackEvidence?.renderMode || null,
+        fallbackAppearance: fallbackEvidence?.appearance || null,
         fallbackEvidenceBasis: fallbackEvidence?.basis || null,
         placementPriority: priority,
         drawBefore: null,
@@ -2446,7 +2492,34 @@ function buildApronRenderGroups(apronMeshes, materialLibrary) {
   };
 }
 
-function unresolvedApronFallbackEvidence(mesh) {
+export function attachApronFallbackDiagnostics(apronBoundaries, groups) {
+  const diagnosticsByRecordOffset = new Map();
+  for (const group of groups ?? []) {
+    for (const range of group.apronRecordRanges ?? []) {
+      const sourceRecordOffset = Number(range.sourceRecordOffset);
+      if (!Number.isFinite(sourceRecordOffset)) continue;
+      const diagnostic = {
+        fallbackRenderMode: range.fallbackRenderMode ?? group.fallbackRenderMode ?? null,
+        fallbackEvidenceBasis:
+          range.fallbackEvidence?.basis ?? group.fallbackEvidenceBasis ?? null,
+      };
+      for (const [key, value] of Object.entries(range.fallbackEvidence ?? {})) {
+        if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+          diagnostic[`fallback${key[0].toUpperCase()}${key.slice(1)}`] = value;
+        }
+      }
+      diagnosticsByRecordOffset.set(sourceRecordOffset, diagnostic);
+    }
+  }
+  for (const feature of apronBoundaries?.features ?? []) {
+    const sourceRecordOffset = Number(feature.properties?.sourceRecordOffset);
+    const diagnostic = diagnosticsByRecordOffset.get(sourceRecordOffset);
+    if (diagnostic) feature.properties = { ...feature.properties, ...diagnostic };
+  }
+  return apronBoundaries;
+}
+
+export function unresolvedApronFallbackEvidence(mesh, { materialName = '' } = {}) {
   const properties = mesh.properties || {};
   const localVertices = mesh.vertices.map((coordinate) =>
     coordinateDeltaMeters(coordinate, mesh.vertices[0])
@@ -2477,11 +2550,11 @@ function unresolvedApronFallbackEvidence(mesh) {
   const boundsAreaSquareMeters = Math.max((bounds[2] - bounds[0]) * (bounds[3] - bounds[1]), 0.001);
   const coverageRatio = areaSquareMeters / boundsAreaSquareMeters;
   const coloration = properties.materialColoration || {};
+  const normalizedMaterialName = String(materialName).toLowerCase();
+  const namedAlphaPatternCarrier = /(concrete.*joint|hatched|zebra)/i.test(materialName);
+  const namedAsphalt = /asphalt/i.test(materialName);
   const sourceColored =
-    Number(coloration.alpha || 0) > 0 &&
-    (Number(coloration.red || 0) > 0 ||
-      Number(coloration.green || 0) > 0 ||
-      Number(coloration.blue || 0) > 0);
+    Number(coloration.alpha || 0) > 0 && hasVisibleRecordTint(coloration);
   const triangleDensityPer1000SquareMeters =
     (mesh.triangles.length * 1000) / Math.max(areaSquareMeters, 0.001);
   const boundsWidthMeters = Math.max(bounds[2] - bounds[0], 0.001);
@@ -2491,6 +2564,10 @@ function unresolvedApronFallbackEvidence(mesh) {
     Math.min(boundsWidthMeters, boundsHeightMeters);
   const orientedBounds = minimumAreaOrientedBounds(occupiedLocalVertices);
   const orientedCoverageRatio = areaSquareMeters / Math.max(orientedBounds.areaSquareMeters, 0.001);
+  const orientedShortSideMeters = Math.sqrt(
+    orientedBounds.areaSquareMeters / Math.max(orientedBounds.aspectRatio, 1)
+  );
+  const orientedLongSideMeters = orientedShortSideMeters * orientedBounds.aspectRatio;
   const denseBoundsCoverage =
     mesh.triangles.length >= 6 && coverageRatio >= 0.42 && triangleDensityPer1000SquareMeters >= 2;
   // Concave and articulated pavement can legitimately occupy far less than half of its axis-
@@ -2522,6 +2599,54 @@ function unresolvedApronFallbackEvidence(mesh) {
     areaSquareMeters >= 1500 &&
     coverageRatio >= 0.15 &&
     triangleDensityPer1000SquareMeters >= 1;
+  // Medium stage-0 panels use the same compiled pavement contract as the larger base meshes, but
+  // a handful of vertices is enough to describe them. Oriented occupancy and a useful short side
+  // distinguish these panels from sparse airport-wide masks and narrow painted carriers.
+  const mediumSimplePavement =
+    !properties.groundMerging &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 0 &&
+    Number(properties.priority || 0) === 0 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length >= 3 &&
+    areaSquareMeters >= 250 &&
+    areaSquareMeters < 1500 &&
+    orientedShortSideMeters >= 8 &&
+    orientedCoverageRatio >= 0.7;
+  // Higher-priority stage-0 records are often exact darker pavement insets over the base apron.
+  // Keep the rule to compact, near-solid, source-coloured footprints so an unresolved texture does
+  // not erase a real asphalt or concrete overlay.
+  const compactPriorityPavement =
+    !properties.groundMerging &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 0 &&
+    Number(properties.priority || 0) >= 2 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length >= 2 &&
+    mesh.triangles.length <= 24 &&
+    areaSquareMeters >= 100 &&
+    areaSquareMeters <= 1500 &&
+    orientedShortSideMeters >= 5 &&
+    orientedCoverageRatio >= 0.75;
+  // A two-triangle stage-0 strip can be an authored pavement joint or border. Its oriented bounds
+  // are much more useful than the axis-aligned box for rotated strips.
+  const narrowPavementDetail =
+    !properties.groundMerging &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 0 &&
+    Number(properties.priority || 0) === 0 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length === 2 &&
+    areaSquareMeters >= 20 &&
+    areaSquareMeters <= 500 &&
+    orientedShortSideMeters >= 0.4 &&
+    orientedShortSideMeters <= 3 &&
+    orientedLongSideMeters >= 15 &&
+    orientedBounds.aspectRatio >= 8 &&
+    orientedCoverageRatio >= 0.85;
   // Medium panels can be deliberately simple pentagons/trapezoids and fall just below the
   // broad-area test above. Require a tightly bounded, fully opaque, non-ground-merging stage-0
   // world surface with enough occupied area and density. The upper area bound is important:
@@ -2550,19 +2675,98 @@ function unresolvedApronFallbackEvidence(mesh) {
     Number(properties.priority || 0) === 0 &&
     Number(properties.opacity ?? 1) >= 0.999 &&
     mesh.triangles.length >= 4 &&
-    areaSquareMeters >= 10000 &&
+    areaSquareMeters >= 5_000 &&
+    orientedLongSideMeters >= 500 &&
+    orientedShortSideMeters >= 5 &&
     orientedBounds.aspectRatio >= 10 &&
     orientedCoverageRatio >= 0.85;
+  // Large authored pavement panels can be one exact quad. Triangle density becomes artificially
+  // tiny as that rectangle grows, so use its near-solid axis and oriented coverage instead.
+  // Requiring a broad short side and bounded area keeps narrow marking carriers and airport-wide
+  // masks out of this source-coloured stage-0 fallback.
+  const largeSolidQuadPavement =
+    !properties.groundMerging &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 0 &&
+    Number(properties.priority || 0) === 0 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length === 2 &&
+    areaSquareMeters >= 5_000 &&
+    areaSquareMeters <= 50_000 &&
+    coverageRatio >= 0.85 &&
+    orientedCoverageRatio >= 0.95 &&
+    orientedShortSideMeters >= 15 &&
+    orientedLongSideMeters >= 100 &&
+    orientedBounds.aspectRatio <= 20;
+  // Ground-merging does not always mean an alpha-mask carrier. Road networks can compile as many
+  // disconnected, source-coloured stage-0 pavement triangles, while broad car parks can compile
+  // as a handful of near-solid panels. Admit those two bounded topologies without treating a
+  // simple or colourless ground-merging plate as opaque pavement.
+  const groundMergingRoadPavement =
+    Boolean(properties.groundMerging) &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 0 &&
+    Number(properties.opacity ?? 1) >= 0.84 &&
+    mesh.triangles.length >= 24 &&
+    areaSquareMeters >= 1_000 &&
+    orientedShortSideMeters >= 8 &&
+    orientedLongSideMeters >= 100 &&
+    orientedCoverageRatio >= 0.1 &&
+    triangleDensityPer1000SquareMeters >= 2;
+  // Some compact road overlays carry useful geometry and opacity but no compiled RGB. Keep this
+  // separate from the source-coloured road rule and require a dense, bounded multi-triangle
+  // footprint so broad or lightly tessellated colourless alpha carriers remain transparent.
+  const colorlessGroundMergingRoadPavement =
+    !sourceColored &&
+    Boolean(properties.groundMerging) &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 0 &&
+    Number(properties.priority || 0) >= 1 &&
+    Number(properties.opacity ?? 1) >= 0.45 &&
+    Number(properties.opacity ?? 1) <= 0.6 &&
+    mesh.triangles.length >= 24 &&
+    mesh.triangles.length <= 96 &&
+    areaSquareMeters >= 500 &&
+    areaSquareMeters <= 5_000 &&
+    orientedShortSideMeters >= 10 &&
+    orientedLongSideMeters >= 100 &&
+    orientedLongSideMeters <= 500 &&
+    orientedCoverageRatio >= 0.15 &&
+    triangleDensityPer1000SquareMeters >= 10;
+  const groundMergingSolidPavement =
+    Boolean(properties.groundMerging) &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 0 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length >= 4 &&
+    mesh.triangles.length <= 24 &&
+    areaSquareMeters >= 5_000 &&
+    areaSquareMeters <= 75_000 &&
+    orientedShortSideMeters >= 50 &&
+    orientedLongSideMeters >= 100 &&
+    orientedCoverageRatio >= 0.85 &&
+    orientedBounds.aspectRatio <= 8;
   const ordinaryPavementLayer = Number(properties.drawStage || 0) === 0 && !properties.stretchUv;
   const denselyTriangulated =
     ordinaryPavementLayer &&
     (denseBoundsCoverage ||
       complexFilledPavement ||
       largeSimplePavement ||
+      mediumSimplePavement ||
+      compactPriorityPavement ||
       compactSimplePavement ||
-      elongatedOrientedPavement);
+      elongatedOrientedPavement ||
+      largeSolidQuadPavement ||
+      groundMergingRoadPavement ||
+      groundMergingSolidPavement ||
+      colorlessGroundMergingRoadPavement);
   const compactAuthoredDetailEvidence =
     sourceColored &&
+    !namedAlphaPatternCarrier &&
     !properties.stretchUv &&
     Number(properties.priority || 0) >= 2 &&
     areaSquareMeters <= 400 &&
@@ -2570,7 +2774,8 @@ function unresolvedApronFallbackEvidence(mesh) {
     coverageRatio >= 0.05 &&
     Number(properties.opacity ?? 1) > 0;
   const visibleSolidEvidence =
-    sourceColored &&
+    (sourceColored || colorlessGroundMergingRoadPavement) &&
+    !namedAlphaPatternCarrier &&
     denselyTriangulated &&
     !compactAuthoredDetailEvidence &&
     Number(properties.opacity ?? 1) > 0;
@@ -2582,6 +2787,7 @@ function unresolvedApronFallbackEvidence(mesh) {
   // simulator pixels.
   const elongatedStretchCarrierEvidence =
     sourceColored &&
+    !namedAlphaPatternCarrier &&
     Boolean(properties.localUv) &&
     Boolean(properties.stretchUv) &&
     mesh.triangles.length >= 2 &&
@@ -2595,6 +2801,7 @@ function unresolvedApronFallbackEvidence(mesh) {
   // genuinely compact, substantially occupied carriers so large possible alpha masks stay hidden.
   const compactStretchDetailEvidence =
     sourceColored &&
+    !namedAlphaPatternCarrier &&
     Boolean(properties.localUv) &&
     Boolean(properties.stretchUv) &&
     mesh.triangles.length >= 2 &&
@@ -2604,10 +2811,121 @@ function unresolvedApronFallbackEvidence(mesh) {
     Number(properties.drawStage || 0) > 0 &&
     Number(properties.priority || 0) >= 2 &&
     Number(properties.opacity ?? 1) > 0;
+  const compactInsetDetailEvidence =
+    sourceColored &&
+    !properties.groundMerging &&
+    Boolean(properties.localUv) &&
+    Boolean(properties.stretchUv) &&
+    Number(properties.drawStage || 0) === 2 &&
+    Number(properties.priority || 0) >= 4 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length === 2 &&
+    areaSquareMeters >= 4 &&
+    areaSquareMeters <= 20 &&
+    orientedBounds.aspectRatio <= 1.35 &&
+    orientedCoverageRatio >= 0.95;
+  // Some compiled stage-2 marking records lose both their material pixels and colour. The exact
+  // mesh still provides useful evidence when it is a small, substantially occupied, fully opaque
+  // paint footprint. Keep the rule deliberately bounded so colourless base pavement, broad alpha
+  // carriers and ground-merging overlays remain hidden instead of becoming invented white slabs.
+  const colorlessCompactStage2MarkingEvidence =
+    !sourceColored &&
+    !properties.groundMerging &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 2 &&
+    Number(properties.priority || 0) >= 4 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length >= 2 &&
+    mesh.triangles.length <= 96 &&
+    areaSquareMeters >= 1 &&
+    areaSquareMeters <= 300 &&
+    boundsAreaSquareMeters <= 600 &&
+    boundsAspectRatio <= 15 &&
+    coverageRatio >= 0.4;
+  // A separate stage-2 signature covers narrow local+stretch marking strips. Requiring a very
+  // elongated, near-solid oriented footprint distinguishes an exact linear paint carrier from a
+  // sparse or disconnected texture mask. The fallback fills the decoded triangles only.
+  const colorlessLinearStage2MarkingEvidence =
+    !sourceColored &&
+    !properties.groundMerging &&
+    Boolean(properties.localUv) &&
+    Boolean(properties.stretchUv) &&
+    Number(properties.drawStage || 0) === 2 &&
+    Number(properties.priority || 0) >= 4 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length >= 2 &&
+    mesh.triangles.length <= 12 &&
+    areaSquareMeters >= 1 &&
+    areaSquareMeters <= 200 &&
+    boundsAreaSquareMeters <= 200 &&
+    boundsAspectRatio >= 8 &&
+    coverageRatio >= 0.75 &&
+    orientedCoverageRatio >= 0.9;
+  // Wider runway symbols can compile as one fully occupied local+stretch quad rather than a
+  // narrow strip. Admit only a two-triangle, near-solid stage-2 plate with a modest metric bound.
+  // This keeps larger texture carriers and partially occupied alpha masks transparent.
+  const colorlessFilledStage2MarkingEvidence =
+    !sourceColored &&
+    !properties.groundMerging &&
+    Boolean(properties.localUv) &&
+    Boolean(properties.stretchUv) &&
+    Number(properties.drawStage || 0) === 2 &&
+    Number(properties.priority || 0) >= 4 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length === 2 &&
+    areaSquareMeters >= 30 &&
+    areaSquareMeters <= 550 &&
+    boundsAreaSquareMeters <= 550 &&
+    boundsAspectRatio <= 8 &&
+    coverageRatio >= 0.95 &&
+    orientedCoverageRatio >= 0.98;
+  // A single triangle can be one authored component of a compact runway arrow. Accept it only
+  // when the stage and priority identify a late marking, the triangle occupies half of a small
+  // rectangular bound, and the compiled coloration has no visible tint.
+  const colorlessTriangularStage2MarkingEvidence =
+    !sourceColored &&
+    !properties.groundMerging &&
+    !properties.localUv &&
+    !properties.stretchUv &&
+    Number(properties.drawStage || 0) === 2 &&
+    Number(properties.priority || 0) >= 8 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length === 1 &&
+    areaSquareMeters >= 1 &&
+    areaSquareMeters <= 50 &&
+    boundsAreaSquareMeters <= 100 &&
+    coverageRatio >= 0.45 &&
+    coverageRatio <= 0.55;
+  // Full-length runway-edge paint is much larger than an ordinary symbol but still compiles as
+  // one exact quad. Require a near-solid oriented rectangle at least 500 m long and no more than
+  // 3 m wide so large, sparse texture carriers remain transparent.
+  const colorlessRunwayLengthStage2MarkingEvidence =
+    !sourceColored &&
+    !properties.groundMerging &&
+    Boolean(properties.localUv) &&
+    Boolean(properties.stretchUv) &&
+    Number(properties.drawStage || 0) === 2 &&
+    Number(properties.priority || 0) >= 4 &&
+    Number(properties.opacity ?? 1) >= 0.999 &&
+    mesh.triangles.length === 2 &&
+    areaSquareMeters >= 500 &&
+    areaSquareMeters <= 10_000 &&
+    orientedLongSideMeters >= 500 &&
+    orientedShortSideMeters >= 0.3 &&
+    orientedShortSideMeters <= 3 &&
+    orientedBounds.aspectRatio >= 200 &&
+    orientedCoverageRatio >= 0.97;
   const visibleDetailFillEvidence =
     compactAuthoredDetailEvidence ||
     elongatedStretchCarrierEvidence ||
-    compactStretchDetailEvidence;
+    compactStretchDetailEvidence ||
+    narrowPavementDetail ||
+    colorlessCompactStage2MarkingEvidence ||
+    colorlessLinearStage2MarkingEvidence ||
+    colorlessFilledStage2MarkingEvidence ||
+    colorlessTriangularStage2MarkingEvidence ||
+    colorlessRunwayLengthStage2MarkingEvidence;
   return {
     renderMode: visibleSolidEvidence
       ? 'visible-solid-evidence'
@@ -2623,25 +2941,77 @@ function unresolvedApronFallbackEvidence(mesh) {
             ? 'nonzero-compiled-aarrggbb-plus-large-simple-non-ground-merging-base-pavement-topology'
             : compactSimplePavement
               ? 'nonzero-compiled-aarrggbb-plus-compact-simple-non-ground-merging-stage0-pavement-topology'
-              : 'nonzero-compiled-aarrggbb-plus-elongated-oriented-solid-stage0-pavement-topology'
+              : elongatedOrientedPavement
+                ? 'nonzero-compiled-aarrggbb-plus-elongated-oriented-solid-stage0-pavement-topology'
+                : largeSolidQuadPavement
+                  ? 'nonzero-compiled-aarrggbb-plus-large-solid-quad-stage0-pavement-topology'
+                  : groundMergingRoadPavement
+                    ? 'nonzero-compiled-aarrggbb-plus-ground-merging-road-network-topology'
+                    : groundMergingSolidPavement
+                      ? 'nonzero-compiled-aarrggbb-plus-ground-merging-solid-pavement-topology'
+                      : 'colorless-partial-opacity-compact-ground-merging-road-network-topology; bars-owned-dark-pavement-fill'
       : compactAuthoredDetailEvidence
         ? 'nonzero-compiled-aarrggbb-plus-compact-high-priority-authored-detail; bars-owned-solid-exact-geometry-fill'
         : elongatedStretchCarrierEvidence
           ? 'nonzero-compiled-aarrggbb-plus-local-stretchuv-linear-carrier; bars-owned-solid-carrier-fill'
           : compactStretchDetailEvidence
             ? 'nonzero-compiled-aarrggbb-plus-compact-occupied-local-stretchuv-late-detail; bars-owned-solid-exact-geometry-fill'
-            : 'missing-source-alpha; opacity-not-invented; exact-geometry-retained',
+            : colorlessCompactStage2MarkingEvidence
+              ? 'colorless-opaque-compact-stage2-marking-footprint; bars-owned-white-solid-exact-geometry-fill'
+              : colorlessLinearStage2MarkingEvidence
+                ? 'colorless-opaque-linear-stage2-local-stretchuv-footprint; bars-owned-white-solid-exact-geometry-fill'
+                : colorlessFilledStage2MarkingEvidence
+                  ? 'colorless-opaque-filled-stage2-local-stretchuv-marking-plate; bars-owned-white-solid-exact-geometry-fill'
+                  : colorlessTriangularStage2MarkingEvidence
+                    ? 'colorless-opaque-single-triangle-stage2-high-priority-marking; bars-owned-white-solid-exact-geometry-fill'
+                    : colorlessRunwayLengthStage2MarkingEvidence
+                      ? 'colorless-opaque-runway-length-stage2-local-stretchuv-strip; bars-owned-white-solid-exact-geometry-fill'
+                      : namedAlphaPatternCarrier
+                        ? 'material-name-indicates-alpha-pattern-carrier; exact-geometry-retained'
+                        : 'missing-source-alpha; opacity-not-invented; exact-geometry-retained',
+    appearance: compactInsetDetailEvidence
+      ? 'light-border-dark-fill'
+      : compactPriorityPavement ||
+          groundMergingRoadPavement ||
+          groundMergingSolidPavement ||
+          colorlessGroundMergingRoadPavement
+        ? 'dark-pavement'
+      : narrowPavementDetail
+          ? 'dark-pavement-line'
+          : namedAsphalt && Number(properties.drawStage || 0) === 0
+            ? 'dark-pavement'
+          : Number(properties.drawStage || 0) === 0 &&
+              Number(properties.priority || 0) === 0 &&
+              orientedShortSideMeters >= 8
+            ? 'light-pavement'
+            : 'source-color',
     sourceColored,
+    materialName: normalizedMaterialName,
+    namedAlphaPatternCarrier,
+    namedAsphalt,
     denselyTriangulated,
     ordinaryPavementLayer,
     denseBoundsCoverage,
     complexFilledPavement,
     largeSimplePavement,
+    mediumSimplePavement,
+    compactPriorityPavement,
+    narrowPavementDetail,
     compactSimplePavement,
     elongatedOrientedPavement,
+    largeSolidQuadPavement,
+    groundMergingRoadPavement,
+    groundMergingSolidPavement,
+    colorlessGroundMergingRoadPavement,
     compactAuthoredDetailEvidence,
     elongatedStretchCarrierEvidence,
     compactStretchDetailEvidence,
+    compactInsetDetailEvidence,
+    colorlessCompactStage2MarkingEvidence,
+    colorlessLinearStage2MarkingEvidence,
+    colorlessFilledStage2MarkingEvidence,
+    colorlessTriangularStage2MarkingEvidence,
+    colorlessRunwayLengthStage2MarkingEvidence,
     visibleDetailFillEvidence,
     triangleCount: mesh.triangles.length,
     areaSquareMeters,
@@ -2651,8 +3021,16 @@ function unresolvedApronFallbackEvidence(mesh) {
     orientedBoundsAreaSquareMeters: orientedBounds.areaSquareMeters,
     orientedBoundsAspectRatio: orientedBounds.aspectRatio,
     orientedCoverageRatio,
+    orientedShortSideMeters,
+    orientedLongSideMeters,
     triangleDensityPer1000SquareMeters,
   };
+}
+
+export function hasVisibleRecordTint(coloration) {
+  return [coloration?.red, coloration?.green, coloration?.blue].some(
+    (component) => Number(component || 0) > 1
+  );
 }
 
 function minimumAreaOrientedBounds(points) {
@@ -2820,7 +3198,7 @@ function buildRenderGroups(
         localMetricBounds[3] = Math.max(localMetricBounds[3], localNorth);
         // SceneryObject heading is clockwise from north. Rotate the model's east/north axes around
         // its BGL placement before converting metre offsets to geographic coordinates.
-        const coordinate = localMetersToCoordinate(
+        const coordinate = projectedMeshLocalMetersToCoordinate(
           localEast * headingCosine + localNorth * headingSine,
           -localEast * headingSine + localNorth * headingCosine,
           placement.longitude,
@@ -3733,6 +4111,24 @@ function localMetersToCoordinate(east, north, originLongitude, originLatitude) {
   return [
     originLongitude + (east / (EARTH_RADIUS * Math.cos(latitudeRadians))) * (180 / Math.PI),
     originLatitude + (north / EARTH_RADIUS) * (180 / Math.PI),
+  ];
+}
+
+export function projectedMeshLocalMetersToCoordinate(
+  east,
+  north,
+  originLongitude,
+  originLatitude
+) {
+  // Compiled MSFS projected meshes use a flat-earth latitude scale that is distinct from the
+  // Web Mercator longitude scale. Using one spherical or ellipsoidal radius for both axes makes
+  // the north/south error grow with distance from the SceneryObject placement while east/west
+  // placement remains correct.
+  const eastMetersPerDegree =
+    (Math.PI / 180) * EARTH_RADIUS * Math.cos((originLatitude * Math.PI) / 180);
+  return [
+    originLongitude + east / eastMetersPerDegree,
+    originLatitude + north / MSFS_PROJECTED_MESH_NORTH_METERS_PER_DEGREE,
   ];
 }
 

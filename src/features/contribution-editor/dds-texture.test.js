@@ -15,6 +15,23 @@ test('rejects unsupported DDS compression instead of showing corrupt pavement', 
   assert.throws(() => decodeDdsTexture(fixtureDds('DX10', new Uint8Array(16))), /Unsupported/);
 });
 
+test('decodes DXT5 alpha indices across both 24-bit halves and palette modes', () => {
+  for (const [first, second, palette] of [
+    [200, 40, [200, 40, 177, 154, 131, 109, 86, 63]],
+    [40, 200, [40, 200, 72, 104, 136, 168, 0, 255]],
+    [100, 100, [100, 100, 100, 100, 100, 100, 0, 255]],
+  ]) {
+    // First half indexes 0..7, second half indexes 7..0.
+    const block = Uint8Array.of(
+      first, second, 0x88, 0xc6, 0xfa, 0x77, 0x39, 0x05,
+      0xff, 0xff, 0, 0, 0, 0, 0, 0
+    );
+    const decoded = decodeDdsTexture(fixtureDds('DXT5', block));
+    const alpha = [...decoded.data].filter((_, index) => index % 4 === 3);
+    assert.deepEqual(alpha, [...palette, ...palette.toReversed()]);
+  }
+});
+
 function fixtureDds(fourCC, block) {
   const bytes = new Uint8Array(128 + block.length);
   const view = new DataView(bytes.buffer);

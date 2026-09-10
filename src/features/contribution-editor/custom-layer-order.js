@@ -67,3 +67,13 @@ export function maintainCustomLayerBefore(
     },
   };
 }
+
+export function placeLayerImmediatelyBefore(map, layerId, beforeId) {
+  if (!map?.getLayer?.(layerId) || !map.getLayer(beforeId)) return false;
+  const layerIds = (map.getStyle?.()?.layers ?? []).map(({ id }) => id);
+  const layerIndex = layerIds.indexOf(layerId);
+  const beforeIndex = layerIds.indexOf(beforeId);
+  if (layerIndex < 0 || beforeIndex < 0) return false;
+  if (layerIndex !== beforeIndex - 1) map.moveLayer(layerId, beforeId);
+  return true;
+}

@@ -28,6 +28,7 @@ export async function buildMsfsRenderSource(entries, options = {}) {
       tint: matchingGroup?.sourceTint || null,
       lineLayout: matchingGroup?.msfsLineLayout || null,
       source: 'package',
+      fallbackImage: matchingGroup ? fallbackForGroup(matchingGroup) : null,
     });
   }
   const installed = new Set(textures.map((texture) => texture.pattern));
@@ -104,56 +105,56 @@ function collectReferenceFeatures(decoded) {
   ].flatMap((collection) => collection?.features || []);
 }
 
-function fallbackForGroup(group) {
-  const color = (group.sourceTint || [0.28, 0.3, 0.31])
+export function fallbackForGroup(group) {
+  let color = (group.sourceTint || [0.28, 0.3, 0.31])
     .slice(0, 3)
     .map((value) => Math.round(Math.max(0, Math.min(1, Number(value))) * 255));
+  if (group.fallbackAppearance === 'light-pavement') color = liftPavementColor(color);
+  if (group.fallbackAppearance === 'dark-pavement') color = limitPavementColor(color, 105);
+  if (group.fallbackAppearance === 'dark-pavement-line') color = limitPavementColor(color, 75);
+  if (group.fallbackAppearance === 'light-border-dark-fill') return insetTexture(color);
   if (
     group.renderPass === 'taxiway-base' ||
     group.fallbackRenderMode === 'visible-solid-evidence'
   ) {
-    return pavementTexture(color, `${group.meshGuid}|${group.apronUvMode}|${group.taxiwaySurface}`);
+    return solidTexture(color);
   }
   if (group.fallbackRenderMode === 'visible-solid-detail-fill') return solidTexture(color);
   if (group.unresolvedMaterial) return solidTexture([0, 0, 0], 0);
   return null;
 }
 
-function solidTexture(color, alpha = 255) {
-  return { width: 1, height: 1, data: new Uint8ClampedArray([...color, alpha]) };
+function liftPavementColor(color) {
+  const luminance = colorLuminance(color);
+  const target = (luminance + 190) / 2;
+  const scale = target / Math.max(luminance, 1);
+  return color.map((component) => Math.min(255, Math.round(component * scale)));
 }
 
-function pavementTexture(color, seedValue) {
-  const width = 64;
-  const height = 64;
-  const data = new Uint8ClampedArray(width * height * 4);
-  let state = stableSeed(seedValue);
-  for (let y = 0; y < height; y += 1) {
+function limitPavementColor(color, maximumLuminance) {
+  const luminance = colorLuminance(color);
+  if (luminance <= maximumLuminance) return color;
+  const scale = maximumLuminance / luminance;
+  return color.map((component) => Math.round(component * scale));
+}
+
+function colorLuminance(color) {
+  return color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722;
+}
+
+function insetTexture(fillColor) {
+  const width = 16;
+  const data = new Uint8ClampedArray(width * width * 4);
+  const borderColor = liftPavementColor(fillColor);
+  for (let y = 0; y < width; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      state ^= state << 13;
-      state ^= state >>> 17;
-      state ^= state << 5;
-      const variation =
-        ((state >>> 24) / 255 - 0.5) * 10 + (Math.sin(x * 0.23) + Math.cos(y * 0.19)) * 1.5;
-      const offset = (y * width + x) * 4;
-      data[offset] = clamp(color[0] + variation);
-      data[offset + 1] = clamp(color[1] + variation);
-      data[offset + 2] = clamp(color[2] + variation);
-      data[offset + 3] = 255;
+      const color = x < 3 || y < 3 || x >= width - 3 || y >= width - 3 ? borderColor : fillColor;
+      data.set([...color, 255], (y * width + x) * 4);
     }
   }
-  return { width, height, data };
+  return { width, height: width, data };
 }
 
-function stableSeed(value) {
-  let hash = 2166136261;
-  for (const character of String(value || 'msfs-pavement')) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0 || 1;
-}
-
-function clamp(value) {
-  return Math.max(0, Math.min(255, Math.round(value)));
+function solidTexture(color, alpha = 255) {
+  return { width: 1, height: 1, data: new Uint8ClampedArray([...color, alpha]) };
 }

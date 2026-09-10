@@ -67,6 +67,8 @@ void main() {
 
 const PREMULTIPLIED_IMAGES = new WeakSet();
 const PAVEMENT_MIP_BIAS = 0.45;
+const STATS_IDLE_DELAY_MS = 180;
+const TEXTURE_FLUSH_IDLE_DELAY_MS = 180;
 
 export class SimulatorTextureLayer {
   type = 'custom';
@@ -79,8 +81,10 @@ export class SimulatorTextureLayer {
     this.program = null;
     this.groups = [];
     this.groupPatterns = new Set();
-    this.buffers = new Map();
+    this.buffer = null;
+    this.drawRanges = new Map();
     this.textures = new Map();
+    this.pendingTexturePatterns = new Set();
     // Keep the decoded source pixels for the lifetime of the layer. MapLibre can
     // rebuild its style/WebGL resources without the scenery upload changing, so
     // deleting the only CPU-side copy after the first upload makes textures
@@ -93,6 +97,12 @@ export class SimulatorTextureLayer {
     this.lastDrawnTriangles = 0;
     this.lastStatsSignature = '';
     this.statsTimer = null;
+    this.textureFlushTimer = null;
+    this.pointerActive = false;
+    this.handleMoveStart = null;
+    this.handleMoveEnd = null;
+    this.handlePointerDown = null;
+    this.handlePointerUp = null;
   }
 
   setGeometry(groups) {
@@ -140,6 +150,31 @@ export class SimulatorTextureLayer {
   onAdd(map, gl) {
     this.map = map;
     this.gl = gl;
+    this.handleMoveStart = () => {
+      this.cancelScheduledStats();
+      this.cancelScheduledTextureFlush();
+    };
+    this.handleMoveEnd = () => {
+      this.scheduleTextureFlush();
+      this.scheduleStats();
+    };
+    this.handlePointerDown = () => {
+      this.pointerActive = true;
+      this.cancelScheduledStats();
+      this.cancelScheduledTextureFlush();
+    };
+    this.handlePointerUp = () => {
+      this.pointerActive = false;
+      this.scheduleTextureFlush();
+      this.scheduleStats();
+    };
+    map.on?.('movestart', this.handleMoveStart);
+    map.on?.('moveend', this.handleMoveEnd);
+    map.on?.('mousedown', this.handlePointerDown);
+    map.on?.('touchstart', this.handlePointerDown);
+    map.on?.('mouseup', this.handlePointerUp);
+    map.on?.('touchend', this.handlePointerUp);
+    map.on?.('touchcancel', this.handlePointerUp);
     this.anisotropy = textureAnisotropy(gl);
     const webGl2 = isWebGl2Context(gl);
     this.program = createProgram(
@@ -165,7 +200,7 @@ export class SimulatorTextureLayer {
   }
 
   render(gl, options) {
-    if (!this.program || this.opacity <= 0) return;
+    if (!this.program || this.opacity <= 0 || !this.buffer) return;
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.locations.matrix, false, options.modelViewProjectionMatrix);
     gl.uniform1i(this.locations.sampler, 0);
@@ -180,16 +215,28 @@ export class SimulatorTextureLayer {
     let drawnGroups = 0;
     let drawnTriangles = 0;
     const viewportBounds = mercatorViewportBounds(this.map);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    gl.enableVertexAttribArray(this.locations.position);
+    gl.vertexAttribPointer(this.locations.position, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(this.locations.texture);
+    gl.vertexAttribPointer(this.locations.texture, 2, gl.FLOAT, false, 16, 8);
+    let boundTexture = null;
+    let previousOpacity = NaN;
+    let previousFlipV = NaN;
+    let previousMarkingEmphasis = NaN;
+    let previousTextureLodBias = NaN;
     for (const group of this.groups) {
       if (!this.groupVisibility(group)) continue;
       if (!boundsOverlap(group.mercatorBounds, viewportBounds)) continue;
-      const buffer = this.buffers.get(group.id ?? group.pattern);
+      const drawRange = this.drawRanges.get(group.id ?? group.pattern);
       const texture = this.textures.get(group.pattern);
-      if (!buffer || !texture) continue;
-      gl.uniform1f(
-        this.locations.opacity,
-        this.opacity * Math.min(1, Math.max(0, Number(group.sourceOpacity ?? 1)))
-      );
+      if (!drawRange || !texture) continue;
+      const opacity =
+        this.opacity * Math.min(1, Math.max(0, Number(group.sourceOpacity ?? 1)));
+      if (opacity !== previousOpacity) {
+        gl.uniform1f(this.locations.opacity, opacity);
+        previousOpacity = opacity;
+      }
       const originClip = transformOrigin(
         options.modelViewProjectionMatrix,
         group.origin,
@@ -202,25 +249,31 @@ export class SimulatorTextureLayer {
         originClip[2],
         originClip[3]
       );
-      gl.uniform1f(this.locations.flipV, Number(group.flipV ?? (group.lineTexture ? 0 : 1)));
-      gl.uniform1f(
-        this.locations.markingEmphasis,
-        Number(group.markingEmphasis ?? (group.markingTexture || group.lineTexture ? 1 : 0))
+      const flipV = Number(group.flipV ?? (group.lineTexture ? 0 : 1));
+      if (flipV !== previousFlipV) {
+        gl.uniform1f(this.locations.flipV, flipV);
+        previousFlipV = flipV;
+      }
+      const markingEmphasis = Number(
+        group.markingEmphasis ?? (group.markingTexture || group.lineTexture ? 1 : 0)
       );
-      gl.uniform1f(
-        this.locations.textureLodBias,
-        Number(
-          group.textureLodBias ??
-            (group.markingTexture || group.lineTexture ? 0 : PAVEMENT_MIP_BIAS)
-        )
+      if (markingEmphasis !== previousMarkingEmphasis) {
+        gl.uniform1f(this.locations.markingEmphasis, markingEmphasis);
+        previousMarkingEmphasis = markingEmphasis;
+      }
+      const textureLodBias = Number(
+        group.textureLodBias ??
+          (group.markingTexture || group.lineTexture ? 0 : PAVEMENT_MIP_BIAS)
       );
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.enableVertexAttribArray(this.locations.position);
-      gl.vertexAttribPointer(this.locations.position, 2, gl.FLOAT, false, 16, 0);
-      gl.enableVertexAttribArray(this.locations.texture);
-      gl.vertexAttribPointer(this.locations.texture, 2, gl.FLOAT, false, 16, 8);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.drawArrays(gl.TRIANGLES, 0, group.vertices.length / 4);
+      if (textureLodBias !== previousTextureLodBias) {
+        gl.uniform1f(this.locations.textureLodBias, textureLodBias);
+        previousTextureLodBias = textureLodBias;
+      }
+      if (texture !== boundTexture) {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        boundTexture = texture;
+      }
+      gl.drawArrays(gl.TRIANGLES, drawRange.first, drawRange.count);
       drawnGroups += 1;
       drawnTriangles += group.vertices.length / 12;
     }
@@ -232,21 +285,39 @@ export class SimulatorTextureLayer {
     if (drawnGroups !== this.lastDrawnGroups || drawnTriangles !== this.lastDrawnTriangles) {
       this.lastDrawnGroups = drawnGroups;
       this.lastDrawnTriangles = drawnTriangles;
-      this.scheduleStats();
+      if (!this.map?.isMoving?.()) this.scheduleStats();
     }
   }
 
-  onRemove(_map, gl) {
-    if (this.statsTimer !== null) globalThis.clearTimeout(this.statsTimer);
-    this.statsTimer = null;
-    for (const buffer of this.buffers.values()) gl.deleteBuffer(buffer);
+  onRemove(map, gl) {
+    if (this.handleMoveStart) map.off?.('movestart', this.handleMoveStart);
+    if (this.handleMoveEnd) map.off?.('moveend', this.handleMoveEnd);
+    if (this.handlePointerDown) {
+      map.off?.('mousedown', this.handlePointerDown);
+      map.off?.('touchstart', this.handlePointerDown);
+    }
+    if (this.handlePointerUp) {
+      map.off?.('mouseup', this.handlePointerUp);
+      map.off?.('touchend', this.handlePointerUp);
+      map.off?.('touchcancel', this.handlePointerUp);
+    }
+    this.cancelScheduledStats();
+    this.cancelScheduledTextureFlush();
+    if (this.buffer) gl.deleteBuffer(this.buffer);
     for (const texture of this.textures.values()) gl.deleteTexture(texture);
     if (this.program) gl.deleteProgram(this.program);
-    this.buffers.clear();
+    this.buffer = null;
+    this.drawRanges.clear();
     this.textures.clear();
+    this.pendingTexturePatterns.clear();
     this.gl = null;
     this.map = null;
     this.program = null;
+    this.pointerActive = false;
+    this.handleMoveStart = null;
+    this.handleMoveEnd = null;
+    this.handlePointerDown = null;
+    this.handlePointerUp = null;
   }
 
   getStats() {
@@ -274,30 +345,76 @@ export class SimulatorTextureLayer {
       this.reportStats();
       return;
     }
-    if (this.statsTimer !== null) return;
+    if (this.pointerActive || this.map?.isMoving?.()) return;
+    if (this.statsTimer !== null) globalThis.clearTimeout(this.statsTimer);
     this.statsTimer = globalThis.setTimeout(() => {
       this.statsTimer = null;
       this.reportStats();
-    }, 50);
+    }, STATS_IDLE_DELAY_MS);
+  }
+
+  cancelScheduledStats() {
+    if (this.statsTimer === null) return;
+    globalThis.clearTimeout(this.statsTimer);
+    this.statsTimer = null;
+  }
+
+  scheduleTextureFlush() {
+    if (this.pendingTexturePatterns.size === 0) return;
+    if (this.pointerActive || this.map?.isMoving?.()) return;
+    if (!globalThis.window) {
+      this.flushPendingTextures();
+      return;
+    }
+    this.cancelScheduledTextureFlush();
+    this.textureFlushTimer = globalThis.setTimeout(() => {
+      this.textureFlushTimer = null;
+      if (!this.pointerActive && !this.map?.isMoving?.()) this.flushPendingTextures();
+    }, TEXTURE_FLUSH_IDLE_DELAY_MS);
+  }
+
+  cancelScheduledTextureFlush() {
+    if (this.textureFlushTimer === null) return;
+    globalThis.clearTimeout(this.textureFlushTimer);
+    this.textureFlushTimer = null;
   }
 
   rebuildBuffers() {
     const gl = this.gl;
     if (!gl) return;
-    for (const buffer of this.buffers.values()) gl.deleteBuffer(buffer);
-    this.buffers.clear();
+    if (this.buffer) gl.deleteBuffer(this.buffer);
+    this.buffer = null;
+    this.drawRanges.clear();
+    const valueCount = this.groups.reduce(
+      (total, group) => total + (group.vertices?.length ?? 0),
+      0
+    );
+    if (valueCount === 0) return;
+    const vertices = new Float32Array(valueCount);
+    let valueOffset = 0;
     for (const group of this.groups) {
-      const buffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.bufferData(gl.ARRAY_BUFFER, group.vertices, gl.STATIC_DRAW);
-      this.buffers.set(group.id ?? group.pattern, buffer);
+      const groupVertices = group.vertices ?? [];
+      vertices.set(groupVertices, valueOffset);
+      this.drawRanges.set(group.id ?? group.pattern, {
+        first: valueOffset / 4,
+        count: groupVertices.length / 4,
+      });
+      valueOffset += groupVertices.length;
     }
+    this.buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
   }
 
   uploadTexture(pattern) {
     const gl = this.gl;
     const source = this.textureSources.get(pattern);
     if (!gl || !source) return;
+    if (this.pointerActive || this.map?.isMoving?.()) {
+      this.pendingTexturePatterns.add(pattern);
+      return;
+    }
+    this.pendingTexturePatterns.delete(pattern);
     const previous = this.textures.get(pattern);
     if (previous) gl.deleteTexture(previous);
     const texture = gl.createTexture();
@@ -349,6 +466,14 @@ export class SimulatorTextureLayer {
     this.textures.set(pattern, texture);
   }
 
+  flushPendingTextures() {
+    if (this.pendingTexturePatterns.size === 0) return;
+    const patterns = [...this.pendingTexturePatterns];
+    this.pendingTexturePatterns.clear();
+    for (const pattern of patterns) this.uploadTexture(pattern);
+    this.map?.triggerRepaint();
+  }
+
   removeUnusedTextures() {
     const gl = this.gl;
     if (!gl) return;
@@ -356,6 +481,10 @@ export class SimulatorTextureLayer {
       if (this.groupPatterns.has(pattern)) continue;
       gl.deleteTexture(texture);
       this.textures.delete(pattern);
+      this.pendingTexturePatterns.delete(pattern);
+    }
+    for (const pattern of this.pendingTexturePatterns) {
+      if (!this.groupPatterns.has(pattern)) this.pendingTexturePatterns.delete(pattern);
     }
   }
 }

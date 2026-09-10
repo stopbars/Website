@@ -59,4 +59,18 @@ export function decodedTextureKey(path, properties = {}, lineTexture = false) {
   ]);
 }
 
+export function msfsDecodedTextureKey(sourceFingerprint, descriptor = {}) {
+  const file = descriptor.file;
+  return JSON.stringify([
+    'msfs',
+    String(sourceFingerprint ?? ''),
+    String(descriptor.path ?? file?.name ?? '').toLowerCase(),
+    String(descriptor.pattern ?? ''),
+    Number(file?.size) || 0,
+    Number(file?.lastModified) || 0,
+    descriptor.lineLayout ?? null,
+    descriptor.tint ?? null,
+  ]);
+}
+
 export const decodedTextureCache = createDecodedTextureCache();
