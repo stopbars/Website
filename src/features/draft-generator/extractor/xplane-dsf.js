@@ -1,5 +1,8 @@
 /* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter react-doctor/js-length-check-first -- DSF extraction keeps decoding, validation, and projection stages explicit for scenery diagnostics. */
 
+import { dsfSelector } from '../../contribution-editor/xplane-removal-contract.js';
+import { decodeXPlaneDsfBytes } from './xplane-dsf-compression.js';
+
 import { stableId } from './classify.js';
 import { haversineDistanceMeters } from './geo.js';
 
@@ -115,12 +118,20 @@ export async function extractXPlaneDsfEvidence({
     });
 
     let decoded;
+    let sourceSha256;
+    let compressedSource = false;
     try {
       // oxlint-disable-next-line react-doctor/async-await-in-loop -- DSFs are decoded one at a time to bound browser memory.
-      decoded = parseXPlaneDsf(await entry.file.arrayBuffer(), { sourceFile });
+      const sourceBytes = await entry.file.arrayBuffer();
+      compressedSource = matchesSignature(new Uint8Array(sourceBytes), SEVEN_Z_SIGNATURE);
+      sourceSha256 = Array.from(
+        new Uint8Array(await crypto.subtle.digest('SHA-256', sourceBytes)),
+        (byte) => byte.toString(16).padStart(2, '0')
+      ).join('');
+      decoded = parseXPlaneDsf(await decodeXPlaneDsfBytes(sourceBytes), { sourceFile });
       decodedFiles += 1;
     } catch (error) {
-      if (error instanceof XPlaneCompressedDsfError) compressedFiles += 1;
+      if (compressedSource || error instanceof XPlaneCompressedDsfError) compressedFiles += 1;
       warnings.push(`${sourceFile}: ${error instanceof Error ? error.message : String(error)}`);
       continue;
     }
@@ -235,6 +246,22 @@ export async function extractXPlaneDsfEvidence({
         if (asset.isEvidence === false) continue;
         const evidence =
           asset.kind === 'str' ? EVIDENCE.DSF_LIGHT_STRING : EVIDENCE.DSF_PAINTED_LINE;
+        const removal =
+          asset.kind === 'str' &&
+          ['taxi-centerline', 'taxi-edge', 'lead-on', 'stopbar', 'airfield-light'].includes(
+            asset.classification
+          )
+            ? dsfSelector({
+                kind: 'dsf-string',
+                source: sourceFile.slice(sourceFile.indexOf('Earth nav data/')),
+                sha256: sourceSha256,
+                definition: definitionPath,
+                command: polygon.commandOffset,
+                pool: polygon.pool,
+                filter: polygon.filterId,
+                index: windingIndex,
+              })
+            : null;
         lightRows.push({
           id: stableId(
             sourceFile,
@@ -250,8 +277,10 @@ export async function extractXPlaneDsfEvidence({
           sourceType: evidence.sourceType,
           sourceBasis: evidence.sourceBasis,
           evidencePriority: evidence.priority,
-          removalEligible: evidence.removalEligible,
-          placementOnly: !evidence.removalEligible,
+          dsfRemoval: removal,
+          removalCapability: removal ? 'whole-string' : 'unsupported',
+          removalEligible: Boolean(removal),
+          placementOnly: !removal,
           rawTag: asset.kind === 'str' ? 'DSF object string' : 'DSF painted line',
           preset: `dsf-${asset.kind}`,
           vertices,
@@ -300,7 +329,20 @@ export async function extractXPlaneDsfEvidence({
         sourceType: evidence.sourceType,
         sourceBasis: evidence.sourceBasis,
         evidencePriority: evidence.priority,
-        removalEligible: evidence.removalEligible,
+        dsfRemoval: asset.dedicatedLight
+          ? dsfSelector({
+              kind: 'dsf-object',
+              source: sourceFile.slice(sourceFile.indexOf('Earth nav data/')),
+              sha256: sourceSha256,
+              definition: definitionPath,
+              command: object.commandOffset,
+              pool: object.pool,
+              filter: object.filterId,
+              index: object.pointIndex,
+            })
+          : null,
+        removalEligible: asset.dedicatedLight === true,
+        removalCapability: asset.dedicatedLight ? 'placement' : 'unsupported',
         rawTag: 'DSF object placement',
         lat: point.lat,
         lon: point.lon,
@@ -786,6 +828,7 @@ function decodeCommands(bytes, view, span, pools, sourceFile) {
   const addPolygon = (commandOffset, parameter, windingIndices) => {
     polygons.push({
       commandOffset,
+      pool: currentPool,
       definition: currentDefinition,
       filterId: currentFilterId,
       parameter,
@@ -823,6 +866,8 @@ function decodeCommands(bytes, view, span, pools, sourceFile) {
           commandOffset,
           definition: currentDefinition,
           filterId: currentFilterId,
+          pointIndex: index,
+          pool: currentPool,
           point: pointAt(index),
         });
         break;
@@ -835,6 +880,8 @@ function decodeCommands(bytes, view, span, pools, sourceFile) {
             commandOffset,
             definition: currentDefinition,
             filterId: currentFilterId,
+            pointIndex: index,
+            pool: currentPool,
             point: pointAt(index),
           });
         }
@@ -1319,6 +1366,11 @@ function classifyObjectAsset({ definitionPath, resolvedPath, text }) {
   const classified = classifyLightSemantics(semanticText, { object: true, lightNames });
   return {
     resolvedPath,
+    dedicatedLight:
+      /^lib\/airport\/lights\/(?:slow\/)?[^/]+\.obj$/i.test(definitionPath) &&
+      ['taxi-centerline', 'taxi-edge', 'lead-on', 'stopbar', 'airfield-light'].includes(
+        classified?.classification
+      ),
     classification: classified?.classification ?? 'unknown-light',
     confidence: classified?.confidence ?? 0.8,
     reasons: [
