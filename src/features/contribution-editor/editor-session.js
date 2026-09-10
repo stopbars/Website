@@ -1,6 +1,7 @@
 /* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Session persistence keeps normalization, filtering, and projection stages explicit at the storage boundary. */
 
 import { EDITOR_STORAGE_VERSION, normalizeDocument } from './editor-model.js';
+import { normalizeMsfsRemovalContext } from './msfs-removal.js';
 import {
   createTextureEntryIndex,
   findTextureEntry,
@@ -18,6 +19,7 @@ const MAX_TEXTURE_CACHE_BYTES = 384 * 1024 * 1024;
 const MAX_TEXTURE_SOURCE_BYTES = 16 * 1024 * 1024;
 const MEMORY_SESSIONS = new Map();
 const MEMORY_DRAFTS = new Map();
+const MEMORY_ACTIVE_SIMULATORS = new Map();
 const MEMORY_REFERENCES = new Map();
 const MEMORY_WORKSPACES = new Map();
 let databasePromise;
@@ -34,12 +36,28 @@ export function clearEditorSession(key) {
   MEMORY_SESSIONS.delete(normalizeKey(key));
 }
 
-export function editorSessionNeedsHydration(session) {
-  return !session?.document || !session?.referenceScene;
+export function editorSessionKey(icao, simulator) {
+  const normalizedIcao = String(icao ?? '')
+    .trim()
+    .toUpperCase();
+  const normalizedSimulator = validSimulator(simulator);
+  return normalizedSimulator ? `${normalizedIcao}:${normalizedSimulator}` : normalizedIcao;
 }
 
-export async function saveEditorDraft(document) {
-  const normalized = normalizeDocument(document);
+export function editorSessionNeedsHydration(session) {
+  return (
+    session?.requiresPersistentHydration === true || !session?.document || !session?.referenceScene
+  );
+}
+
+export async function saveEditorDraft(document, options = {}) {
+  const normalized = options.normalized === true ? document : normalizeDocument(document);
+  const activeSimulatorRecord = {
+    key: activeSimulatorKey(normalized.icao),
+    version: EDITOR_STORAGE_VERSION,
+    simulator: normalized.simulator,
+    savedAt: new Date().toISOString(),
+  };
   const record = {
     key: documentKey(normalized.icao, normalized.simulator),
     version: EDITOR_STORAGE_VERSION,
@@ -47,27 +65,84 @@ export async function saveEditorDraft(document) {
     savedAt: new Date().toISOString(),
   };
   MEMORY_DRAFTS.set(record.key, record);
-  writeLocalRecord(record.key, record);
+  MEMORY_ACTIVE_SIMULATORS.set(activeSimulatorRecord.key, activeSimulatorRecord);
+  if (shouldWriteLocalDraftFallback(normalized)) {
+    writeLocalRecord(record.key, record);
+  } else {
+    removeLocalRecord(record.key);
+  }
+  writeLocalRecord(activeSimulatorRecord.key, activeSimulatorRecord);
   const database = await openDatabase();
-  if (database) await putDatabaseRecord(database, record);
+  if (database) {
+    await Promise.all([
+      putDatabaseRecord(database, record),
+      putDatabaseRecord(database, activeSimulatorRecord),
+    ]);
+  }
   return record;
+}
+
+function shouldWriteLocalDraftFallback(document) {
+  let coordinateCount = 0;
+  for (const object of document?.objects ?? []) {
+    coordinateCount += object.coordinates?.length ?? 0;
+    if (coordinateCount > 25_000) return false;
+  }
+  for (const removal of document?.removals ?? []) {
+    coordinateCount += removal.coordinates?.length ?? 0;
+    if (coordinateCount > 25_000) return false;
+  }
+  return (document?.objects?.length ?? 0) <= 1_000;
+}
+
+export async function loadPreferredEditorDraft(icao) {
+  const [xplane, msfs, activeSimulator] = await Promise.all([
+    loadEditorDraft(icao, 'xplane'),
+    loadEditorDraft(icao, 'msfs'),
+    loadActiveEditorSimulator(icao),
+  ]);
+  return preferredEditorRecord([xplane, msfs], activeSimulator);
+}
+
+export function loadPreferredEditorDraftImmediate(icao) {
+  return preferredEditorRecord(
+    [loadEditorDraftImmediate(icao, 'xplane'), loadEditorDraftImmediate(icao, 'msfs')],
+    loadActiveEditorSimulatorImmediate(icao)
+  );
 }
 
 export async function loadEditorDraft(icao, simulator) {
   const key = documentKey(icao, simulator);
-  const immediate = loadEditorDraftImmediate(icao, simulator);
-  if (immediate) return immediate;
+  const memory = normalizeDraftRecord(MEMORY_DRAFTS.get(key), icao, simulator);
+  const local = normalizeDraftRecord(readLocalRecord(key), icao, simulator);
   const database = await openDatabase();
-  const record = database ? await getDatabaseRecord(database, key) : null;
-  if (!record || record.version !== EDITOR_STORAGE_VERSION) return null;
-  return { ...record, document: normalizeDocument(record.document) };
+  const persisted = normalizeDraftRecord(
+    database ? await getDatabaseRecord(database, key) : null,
+    icao,
+    simulator
+  );
+  const newest = newestSavedRecord([memory, local, persisted], editorRecordTimestamp);
+  if (!newest) return null;
+  if (newest === persisted) {
+    MEMORY_DRAFTS.set(key, persisted);
+    if (shouldWriteLocalDraftFallback(persisted.document)) {
+      writeLocalRecord(key, persisted);
+    } else {
+      removeLocalRecord(key);
+    }
+  }
+  return newest;
 }
 
 export function loadEditorDraftImmediate(icao, simulator) {
   const key = documentKey(icao, simulator);
-  const record = readLocalRecord(key) ?? MEMORY_DRAFTS.get(key);
-  if (record?.version !== EDITOR_STORAGE_VERSION) return null;
-  return { ...record, document: normalizeDocument(record.document) };
+  return newestSavedRecord(
+    [
+      normalizeDraftRecord(MEMORY_DRAFTS.get(key), icao, simulator),
+      normalizeDraftRecord(readLocalRecord(key), icao, simulator),
+    ],
+    editorRecordTimestamp
+  );
 }
 
 export async function clearEditorDraft(icao, simulator) {
@@ -104,6 +179,8 @@ export async function saveReferenceScene(icao, simulator, scene, sourceName, fin
   const record = {
     key: referenceKey(icao, simulator),
     version: EDITOR_STORAGE_VERSION,
+    icao: normalizeIcao(icao),
+    simulator: validSimulator(simulator),
     scene: normalizeReferenceScene(scene),
     sourceName: String(sourceName ?? ''),
     fingerprint: String(fingerprint ?? ''),
@@ -111,27 +188,52 @@ export async function saveReferenceScene(icao, simulator, scene, sourceName, fin
   };
   MEMORY_REFERENCES.set(record.key, record);
   const serialized = JSON.stringify(record);
-  if (serialized.length <= MAX_LOCAL_REFERENCE_BYTES) writeLocalRecord(record.key, record);
+  if (serialized.length <= MAX_LOCAL_REFERENCE_BYTES) {
+    writeLocalRecord(record.key, record);
+  } else {
+    removeLocalRecord(record.key);
+  }
   if (database) await putDatabaseRecord(database, record);
   return record;
 }
 
 export async function loadReferenceScene(icao, simulator) {
   const key = referenceKey(icao, simulator);
-  const immediate = loadReferenceSceneImmediate(icao, simulator);
-  if (immediate) return immediate;
+  const memory = normalizeReferenceRecord(MEMORY_REFERENCES.get(key), icao, simulator);
+  const local = normalizeReferenceRecord(readLocalRecord(key), icao, simulator);
   const database = await openDatabase();
-  const record = database ? await getDatabaseRecord(database, key) : null;
-  return record?.version === EDITOR_STORAGE_VERSION ? normalizeReferenceRecord(record) : null;
+  const persisted = normalizeReferenceRecord(
+    database ? await getDatabaseRecord(database, key) : null,
+    icao,
+    simulator
+  );
+  const newest = newestSavedRecord([memory, local, persisted]);
+  if (!newest) return null;
+  if (newest === persisted) {
+    MEMORY_REFERENCES.set(key, persisted);
+    if (JSON.stringify(persisted).length <= MAX_LOCAL_REFERENCE_BYTES) {
+      writeLocalRecord(key, persisted);
+    } else {
+      removeLocalRecord(key);
+    }
+  }
+  return newest;
 }
 
 export function loadReferenceSceneImmediate(icao, simulator) {
   const key = referenceKey(icao, simulator);
-  const record = readLocalRecord(key) ?? MEMORY_REFERENCES.get(key);
-  return record?.version === EDITOR_STORAGE_VERSION ? normalizeReferenceRecord(record) : null;
+  return newestSavedRecord([
+    normalizeReferenceRecord(MEMORY_REFERENCES.get(key), icao, simulator),
+    normalizeReferenceRecord(readLocalRecord(key), icao, simulator),
+  ]);
 }
 
-function normalizeReferenceRecord(record) {
+function normalizeReferenceRecord(record, expectedIcao, expectedSimulator) {
+  if (record?.version !== EDITOR_STORAGE_VERSION) return null;
+  if (record.icao && normalizeIcao(record.icao) !== normalizeIcao(expectedIcao)) return null;
+  if (record.simulator && validSimulator(record.simulator) !== validSimulator(expectedSimulator)) {
+    return null;
+  }
   const scene = normalizeReferenceScene(record?.scene);
   return scene === record?.scene ? record : { ...record, scene };
 }
@@ -139,7 +241,10 @@ function normalizeReferenceRecord(record) {
 function normalizeSession(session) {
   if (!session?.referenceScene) return session;
   const referenceScene = normalizeReferenceScene(session.referenceScene);
-  return referenceScene === session.referenceScene ? session : { ...session, referenceScene };
+  const removalContext = normalizeMsfsRemovalContext(session.removalContext);
+  return referenceScene === session.referenceScene && removalContext === session.removalContext
+    ? session
+    : { ...session, referenceScene, removalContext };
 }
 
 export async function cacheReferenceTextures(fingerprint, scene, entries) {
@@ -316,6 +421,73 @@ export function documentKey(icao, simulator) {
   return `${EDITOR_STORAGE_VERSION}:${String(icao).toUpperCase()}:${simulator}`;
 }
 
+function activeSimulatorKey(icao) {
+  return `${EDITOR_STORAGE_VERSION}:active:${String(icao).toUpperCase()}`;
+}
+
+async function loadActiveEditorSimulator(icao) {
+  const immediate = loadActiveEditorSimulatorImmediate(icao);
+  if (immediate) return immediate;
+  const database = await openDatabase();
+  const record = database
+    ? await getDatabaseRecord(database, activeSimulatorKey(icao))
+    : null;
+  return validSimulator(record?.simulator);
+}
+
+function loadActiveEditorSimulatorImmediate(icao) {
+  const key = activeSimulatorKey(icao);
+  const record = readLocalRecord(key) ?? MEMORY_ACTIVE_SIMULATORS.get(key);
+  return record?.version === EDITOR_STORAGE_VERSION ? validSimulator(record.simulator) : null;
+}
+
+export function preferredEditorRecord(records, activeSimulator) {
+  const available = (records ?? []).filter(Boolean);
+  const active = available.find(
+    (record) => record.document?.simulator === validSimulator(activeSimulator)
+  );
+  if (active) return active;
+  return available.reduce((newest, record) => {
+    if (!newest) return record;
+    return editorRecordTimestamp(record).localeCompare(editorRecordTimestamp(newest)) > 0
+      ? record
+      : newest;
+  }, null);
+}
+
+function normalizeDraftRecord(record, expectedIcao, expectedSimulator) {
+  if (record?.version !== EDITOR_STORAGE_VERSION || !record.document) return null;
+  const document = normalizeDocument(record.document);
+  if (
+    normalizeIcao(document.icao) !== normalizeIcao(expectedIcao) ||
+    document.simulator !== validSimulator(expectedSimulator)
+  ) {
+    return null;
+  }
+  return document === record.document ? record : { ...record, document };
+}
+
+function newestSavedRecord(records, timestamp = (record) => String(record?.savedAt || '')) {
+  return (records ?? []).filter(Boolean).reduce((newest, record) => {
+    if (!newest) return record;
+    return timestamp(record).localeCompare(timestamp(newest)) > 0 ? record : newest;
+  }, null);
+}
+
+function editorRecordTimestamp(record) {
+  return String(record?.document?.updatedAt || record?.savedAt || '');
+}
+
+function validSimulator(simulator) {
+  return simulator === 'msfs' || simulator === 'xplane' ? simulator : null;
+}
+
+function normalizeIcao(icao) {
+  return String(icao ?? '')
+    .trim()
+    .toUpperCase();
+}
+
 function referenceKey(icao, simulator) {
   return `${EDITOR_STORAGE_VERSION}:reference:${String(icao).toUpperCase()}:${simulator}`;
 }
@@ -344,6 +516,7 @@ function normalizeWorkspace(workspace = {}) {
     visibleCategories: Array.isArray(workspace.visibleCategories)
       ? workspace.visibleCategories.map(String)
       : [],
+    satelliteVisible: Boolean(workspace.satelliteVisible),
     divisionGhostsVisible: Boolean(workspace.divisionGhostsVisible),
     editorObjectsVisible: workspace.editorObjectsVisible !== false,
     snapEnabled: workspace.snapEnabled !== false,
@@ -544,9 +717,10 @@ async function deleteDatabaseRecord(database, key) {
 
 function writeLocalRecord(key, record) {
   try {
+    globalThis.localStorage?.removeItem(key);
     globalThis.localStorage?.setItem(key, JSON.stringify(record));
   } catch {
-    // Private browsing and quota limits can disable the fallback.
+    removeLocalRecord(key);
   }
 }
 
