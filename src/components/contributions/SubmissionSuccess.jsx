@@ -37,7 +37,7 @@ const useViewportSize = (enabled) => {
   return viewport;
 };
 
-export const SubmissionSuccess = ({ icao }) => {
+export const SubmissionSuccess = ({ icao, published = false }) => {
   const navigate = useNavigate();
   const headingRef = useRef(null);
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -79,19 +79,25 @@ export const SubmissionSuccess = ({ icao }) => {
             <div className="submission-success-enter mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/25">
               <Check className="h-8 w-8 text-emerald-400" strokeWidth={2} aria-hidden="true" />
             </div>
-            <p className="mb-3 text-sm font-medium text-emerald-400">Sent for review</p>
+            <p className="mb-3 text-sm font-medium text-emerald-400">
+              {published ? 'Published after automated checks' : 'Sent for review'}
+            </p>
             <h1
               ref={headingRef}
               tabIndex={-1}
               className="mb-4 text-2xl font-bold text-white focus:outline-none"
             >
-              Contribution submitted
+              {published ? 'Contribution published' : 'Contribution submitted'}
             </h1>
-            <p className="mb-8 text-zinc-400">Your {icao} contribution is ready for review.</p>
+            <p className="mb-8 text-zinc-400">
+              {published
+                ? `Your ${icao} contribution is now available.`
+                : `Your ${icao} contribution is ready for review.`}
+            </p>
             <div className="flex justify-center">
               <Button onClick={() => navigate('/contribute')}>
                 View contributions
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                <ArrowRight className="motion-forward h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </Card>
@@ -103,4 +109,5 @@ export const SubmissionSuccess = ({ icao }) => {
 
 SubmissionSuccess.propTypes = {
   icao: PropTypes.string.isRequired,
+  published: PropTypes.bool,
 };

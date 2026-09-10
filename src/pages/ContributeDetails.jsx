@@ -22,7 +22,18 @@ import {
   contributionSubmissionProof,
 } from '../utils/contributionContracts.js';
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect -- File preloading, package suggestions, validation, and submission are a cohesive wizard; its guarded one-shot requests and ordered state transitions preserve navigation behavior. */
+const FAST_TRACK_PREFERENCE_PREFIX = 'bars:contributions:fast-track:v1:';
+
+const readFastTrackPreference = (vatsimId) => {
+  if (!vatsimId) return false;
+  try {
+    return globalThis.localStorage.getItem(`${FAST_TRACK_PREFERENCE_PREFIX}${vatsimId}`) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect -- File preloading, package suggestions, validation, and submission are a cohesive wizard; its guarded one-shot requests and ordered state transitions preserve navigation behavior. */
 const ContributeDetails = () => {
   const { icao } = useParams();
   const location = useLocation();
@@ -47,17 +58,37 @@ const ContributeDetails = () => {
   const [errorTitle, setErrorTitle] = useState('Error');
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionSuccess, setSubmissionSuccess] = useState(false);
+  const [submissionSuccess, setSubmissionSuccess] = useState(null);
   const [allPackages, setAllPackages] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [fastTrackRequested, setFastTrackRequested] = useState(() =>
+    readFastTrackPreference(user?.vatsim_id)
+  );
   const [simulator, setSimulator] = useState(() =>
     navigationState?.simulator === 'xplane' ? 'xplane' : 'msfs2024'
   );
   const contributionsDisabled =
     contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
   const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
+
+  useEffect(() => {
+    setFastTrackRequested(readFastTrackPreference(user?.vatsim_id));
+  }, [user?.vatsim_id]);
+
+  const updateFastTrackPreference = (enabled) => {
+    setFastTrackRequested(enabled);
+    if (!user?.vatsim_id) return;
+    try {
+      globalThis.localStorage.setItem(
+        `${FAST_TRACK_PREFERENCE_PREFIX}${user.vatsim_id}`,
+        enabled ? 'true' : 'false'
+      );
+    } catch {
+      // The current submission still uses the selected value when storage is unavailable.
+    }
+  };
 
   // Preload file from navigation state if provided
   useEffect(() => {
@@ -259,6 +290,7 @@ const ContributeDetails = () => {
         generationToken: submissionProof.generationToken,
         generationHash: submissionProof.generationHash,
         notes: notesRef.current || undefined,
+        fastTrackRequested: user.fast_track?.enabled === true && fastTrackRequested,
       };
 
       const response = await fetch('https://v2.stopbars.com/contributions', {
@@ -284,7 +316,7 @@ const ContributeDetails = () => {
         }
       }
 
-      setSubmissionSuccess(true);
+      setSubmissionSuccess(await response.json());
     } catch (err) {
       setErrorTitle('Unable to submit contribution');
       setError(err.message || 'Check your connection and try again.');
@@ -296,7 +328,12 @@ const ContributeDetails = () => {
   };
 
   if (submissionSuccess) {
-    return <SubmissionSuccess icao={icao} />;
+    return (
+      <SubmissionSuccess
+        icao={icao}
+        published={submissionSuccess.fastTrack?.status === 'published'}
+      />
+    );
   }
 
   return (
@@ -472,6 +509,32 @@ const ContributeDetails = () => {
                       </p>
                     </div>
                   </div>
+
+                  {user?.fast_track?.enabled ? (
+                    <label
+                      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+                        fastTrackRequested
+                          ? 'border-emerald-500/35 bg-emerald-500/10'
+                          : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={fastTrackRequested}
+                        onChange={(event) => updateFastTrackPreference(event.target.checked)}
+                        className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-white">
+                          Fast-track this contribution
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-zinc-400">
+                          Fast-track access is available based on your contribution history. Turn it
+                          on to skip the usual staff review when automated checks pass.
+                        </span>
+                      </span>
+                    </label>
+                  ) : null}
 
                   <label
                     className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
