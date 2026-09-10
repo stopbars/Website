@@ -50,6 +50,7 @@ PageLoading.propTypes = {
     'contributions',
     'credits',
     'division',
+    'division-tool',
     'faq',
     'faq-list',
     'flow-details',

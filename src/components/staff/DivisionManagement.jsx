@@ -6,6 +6,7 @@ import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
+import { PageLoading } from '../shared/PageLoading';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import {
   Plus,
@@ -298,47 +299,7 @@ const DivisionManagement = () => {
   };
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        {/* Header skeleton */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <div className="animate-pulse bg-zinc-700 h-7 w-48 rounded mb-2"></div>
-            <div className="animate-pulse bg-zinc-700 h-4 w-36 rounded"></div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="animate-pulse bg-zinc-700 h-9 w-28 rounded-lg"></div>
-            <div className="animate-pulse bg-zinc-700 h-9 w-32 rounded-lg"></div>
-          </div>
-        </div>
-        {/* Card skeletons */}
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="p-6">
-              <div className="animate-pulse">
-                {/* Mobile: name/date stacked, buttons below */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="bg-zinc-700 h-6 w-40 rounded"></div>
-                      <div className="bg-zinc-700 h-4 w-8 rounded"></div>
-                    </div>
-                    <div className="bg-zinc-700 h-4 w-24 rounded"></div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
-                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
-                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
-                    <div className="bg-zinc-700 h-9 w-9 rounded-lg"></div>
-                  </div>
-                </div>
-                <div className="bg-zinc-700 h-4 w-3/4 rounded"></div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
+    return <PageLoading label="Loading divisions…" variant="division-tool" />;
   }
 
   return (
@@ -400,6 +361,9 @@ const DivisionManagement = () => {
                             onClick={() => toggleDivisionExpansion(division.id)}
                             variant="outline"
                             className="p-2"
+                            aria-expanded={isExpanded}
+                            aria-controls={`division-details-${division.id}`}
+                            aria-label={`${isExpanded ? 'Hide' : 'Show'} details for ${division.name}`}
                           >
                             {isExpanded ? (
                               <ChevronUp className="w-4 h-4" />
@@ -437,9 +401,11 @@ const DivisionManagement = () => {
                         </div>
                       )}
 
-                      {/* Expanded Details */}
                       {isExpanded && (
-                        <div className="mt-6 pt-6 border-t border-zinc-800">
+                        <div
+                          id={`division-details-${division.id}`}
+                          className="mt-6 pt-6 border-t border-zinc-800"
+                        >
                           {isLoadingDetails ? (
                             <div className="flex items-center justify-center py-8">
                               <Loader className="w-6 h-6 animate-spin text-zinc-400" />

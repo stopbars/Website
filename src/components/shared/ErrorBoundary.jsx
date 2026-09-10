@@ -41,28 +41,37 @@ ErrorBoundaryClass.propTypes = {
   fallback: PropTypes.func.isRequired,
 };
 
-// Route Error component used with errorElement
+// Route error component used with errorElement
 export const RouteError = () => {
   const error = useRouteError();
   const navigate = useNavigate();
+  return (
+    <ErrorFallbackView
+      error={error}
+      onBack={() => navigate(-1)}
+      onRetry={() => navigate(0)}
+      onHome={() => navigate('/')}
+    />
+  );
+};
+
+function useErrorClipboard(error) {
   const [copied, setCopied] = useState(false);
-
-  const resetError = () => {
-    navigate(0); // Refresh the current page
-  };
-
   const copyErrorToClipboard = async () => {
     const errorText = `Error: ${error?.message || 'An unexpected error occurred'}\n\nStack trace:\n${error?.stack || 'No stack trace available'}`;
-
     try {
       await navigator.clipboard.writeText(errorText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy error to clipboard:', err);
+    } catch (clipboardError) {
+      console.error('Failed to copy error to clipboard:', clipboardError);
     }
   };
+  return { copied, copyErrorToClipboard };
+}
 
+function ErrorFallbackView({ error, onBack, onRetry, onHome }) {
+  const { copied, copyErrorToClipboard } = useErrorClipboard(error);
   return (
     <Layout>
       <div className="min-h-[90vh] flex items-center justify-center px-6 pt-24">
@@ -70,9 +79,7 @@ export const RouteError = () => {
           <div className="flex justify-center mb-8">
             <AlertTriangle className="w-20 h-20 text-red-500" />
           </div>
-
           <h1 className="text-4xl font-bold mb-8 text-center">Something Went Wrong</h1>
-
           <div className="bg-zinc-800/50 p-4 rounded-lg mb-8 overflow-auto max-h-48 relative">
             <button
               type="button"
@@ -85,25 +92,22 @@ export const RouteError = () => {
             <p className="text-zinc-300 font-mono text-sm pr-8">
               {error?.message || 'An unexpected error occurred'}
             </p>
-            {error?.stack && (
+            {error?.stack ? (
               <p className="text-zinc-400 text-xs mt-3 font-mono pr-8">
                 {error.stack.split('\n').slice(0, 3).join('\n')}
               </p>
-            )}
+            ) : null}
           </div>
-
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button variant="secondary" onClick={() => navigate(-1)} className="w-full sm:w-auto">
+            <Button variant="secondary" onClick={onBack} className="w-full sm:w-auto">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Go Back
             </Button>
-
-            <Button onClick={() => resetError()} className="w-full sm:w-auto">
+            <Button onClick={onRetry} className="w-full sm:w-auto">
               <RefreshCw className="w-4 h-4 mr-2" />
               Retry
             </Button>
-
-            <Button onClick={() => navigate('/')} className="w-full sm:w-auto">
+            <Button onClick={onHome} className="w-full sm:w-auto">
               <Home className="w-4 h-4 mr-2" />
               Return Home
             </Button>
@@ -112,73 +116,25 @@ export const RouteError = () => {
       </div>
     </Layout>
   );
+}
+
+ErrorFallbackView.propTypes = {
+  error: PropTypes.any,
+  onBack: PropTypes.func.isRequired,
+  onRetry: PropTypes.func.isRequired,
+  onHome: PropTypes.func.isRequired,
 };
 
 // Default fallback UI for ErrorBoundary
 const DefaultFallback = ({ error, resetError }) => {
   const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
-
-  const copyErrorToClipboard = async () => {
-    const errorText = `Error: ${error?.message || 'An unexpected error occurred'}\n\nStack trace:\n${error?.stack || 'No stack trace available'}`;
-
-    try {
-      await navigator.clipboard.writeText(errorText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy error to clipboard:', err);
-    }
-  };
-
   return (
-    <Layout>
-      <div className="min-h-[90vh] flex items-center justify-center px-6 pt-24">
-        <Card className="max-w-2xl w-full p-12">
-          <div className="flex justify-center mb-8">
-            <AlertTriangle className="w-20 h-20 text-red-500" />
-          </div>
-
-          <h1 className="text-4xl font-bold mb-8 text-center">Something Went Wrong</h1>
-
-          <div className="bg-zinc-800/50 p-4 rounded-lg mb-8 overflow-auto max-h-48 relative">
-            <button
-              type="button"
-              onClick={copyErrorToClipboard}
-              className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-white transition-colors rounded"
-              title="Copy error to clipboard"
-            >
-              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-            </button>
-            <p className="text-zinc-300 font-mono text-sm pr-8">
-              {error?.message || 'An unexpected error occurred'}
-            </p>
-            {error?.stack && (
-              <p className="text-zinc-400 text-xs mt-3 font-mono pr-8">
-                {error.stack.split('\n').slice(0, 3).join('\n')}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button variant="secondary" onClick={() => navigate(-1)} className="w-full sm:w-auto">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Go Back
-            </Button>
-
-            <Button onClick={resetError} className="w-full sm:w-auto">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Retry
-            </Button>
-
-            <Button onClick={() => navigate('/')} className="w-full sm:w-auto">
-              <Home className="w-4 h-4 mr-2" />
-              Return Home
-            </Button>
-          </div>
-        </Card>
-      </div>
-    </Layout>
+    <ErrorFallbackView
+      error={error}
+      onBack={() => navigate(-1)}
+      onRetry={resetError}
+      onHome={() => navigate('/')}
+    />
   );
 };
 

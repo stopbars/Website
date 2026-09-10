@@ -209,8 +209,11 @@ const AccountSkeleton = () => (
 const ContributionDashboardSkeleton = () => (
   <div className="mx-auto max-w-7xl px-4 sm:px-6">
     <div className="mb-8 flex flex-col gap-6 sm:mb-12 sm:flex-row sm:items-center sm:justify-between">
-      <PageHeading wide />
-      <SkeletonBlock className="h-10 w-56" />
+      <div className="flex flex-col gap-2">
+        <SkeletonBlock className="h-9 w-72 max-w-[75vw]" />
+        <SkeletonBlock className="h-5 w-[32rem] max-w-[80vw]" />
+      </div>
+      <SkeletonBlock className="h-10 w-48" />
     </div>
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
       <Panel className="order-2 min-h-80 p-5 lg:order-1">
@@ -455,6 +458,56 @@ const FaqListSkeleton = () => (
   </div>
 );
 
+const FaqPageListSkeleton = () => (
+  <Panel className="divide-y divide-zinc-800 overflow-hidden">
+    {Array.from({ length: 5 }, (_, index) => (
+      <div
+        key={index}
+        className="flex min-h-16 items-center justify-between gap-6 px-5 py-4 sm:px-6"
+      >
+        <SkeletonBlock className={`h-5 ${index % 2 === 0 ? 'w-3/5' : 'w-4/5'}`} />
+        <SkeletonBlock className="h-5 w-5 shrink-0" />
+      </div>
+    ))}
+  </Panel>
+);
+
+const DivisionToolSkeleton = () => (
+  <div className="space-y-6">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-2">
+        <SkeletonBlock className="h-7 w-48" />
+        <SkeletonBlock className="h-4 w-56" />
+      </div>
+      <div className="flex gap-4">
+        <SkeletonBlock className="h-9 w-28" />
+        <SkeletonBlock className="h-9 w-32" />
+      </div>
+    </div>
+    <div className="space-y-4">
+      {Array.from({ length: 3 }, (_, index) => (
+        <Panel key={index} className="p-6">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <SkeletonBlock className="h-6 w-40" />
+                <SkeletonBlock className="h-4 w-8" />
+              </div>
+              <SkeletonBlock className="h-4 w-24" />
+            </div>
+            <div className="flex gap-2">
+              {Array.from({ length: 4 }, (_, actionIndex) => (
+                <SkeletonBlock key={actionIndex} className="h-9 w-9" />
+              ))}
+            </div>
+          </div>
+          <SkeletonBlock className="h-4 w-3/4" />
+        </Panel>
+      ))}
+    </div>
+  </div>
+);
+
 const ToolListSkeleton = () => (
   <div className="space-y-6">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -505,12 +558,21 @@ const ToolDetailSkeleton = () => (
 );
 
 const FaqSkeleton = () => (
-  <div className="mx-auto max-w-4xl px-6">
-    <div className="mb-8">
-      <PageHeading centered wide />
+  <div className="mx-auto max-w-3xl">
+    <div className="mb-10 max-w-2xl space-y-4">
+      <SkeletonBlock className="h-12 w-[28rem] max-w-[80vw]" />
+      <SkeletonBlock className="h-7 w-[32rem] max-w-[85vw]" />
+      <SkeletonBlock className="h-4 w-28" />
     </div>
-    <SkeletonBlock className="mx-auto mb-12 h-12 w-full max-w-xl" />
-    <FaqListSkeleton />
+    <div className="mb-8 space-y-2">
+      <SkeletonBlock className="h-5 w-32" />
+      <SkeletonBlock className="h-12 w-full" />
+    </div>
+    <div className="mb-4 flex items-center justify-between">
+      <SkeletonBlock className="h-5 w-28" />
+      <SkeletonBlock className="h-5 w-20" />
+    </div>
+    <FaqPageListSkeleton />
   </div>
 );
 
@@ -606,6 +668,7 @@ const skeletonByVariant = {
 const compactSkeletonByVariant = {
   'airport-list': StatusContentSkeleton,
   'changelog-content': ChangelogContentSkeleton,
+  'division-tool': DivisionToolSkeleton,
   'faq-list': FaqListSkeleton,
   'status-content': StatusContentSkeleton,
   'tool-card-grid': ToolCardGridSkeleton,
@@ -621,7 +684,7 @@ const variantSpacing = {
   contributions: 'pt-32 sm:pt-39',
   credits: 'pt-39',
   division: 'pt-32 md:pt-40',
-  faq: 'pt-40',
+  faq: 'pt-36 sm:pt-40',
   'flow-details': 'pt-32',
   'flow-form': 'pt-32',
   'flow-generator': 'pt-32',
@@ -643,6 +706,7 @@ const loadingSkeletonVariants = [
   'contributions',
   'credits',
   'division',
+  'division-tool',
   'faq',
   'faq-list',
   'flow-details',

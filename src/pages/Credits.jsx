@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import { AlertCircle, ArrowUpRight, FolderGit2, GitCommitHorizontal, Users } from 'lucide-react';
+import { ArrowUpRight, FolderGit2, GitCommitHorizontal, Users } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { Button } from '../components/shared/Button';
+import { LoadErrorCard } from '../components/shared/LoadErrorCard';
 import { Card } from '../components/shared/Card';
 import { PageLoading } from '../components/shared/PageLoading';
 
@@ -124,18 +125,11 @@ const Credits = () => {
           </header>
 
           {error ? (
-            <Card className="border-red-500/20 bg-red-500/5 p-6 sm:p-8" role="alert">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" aria-hidden="true" />
-                <div>
-                  <h2 className="font-semibold text-white">Unable to load credits</h2>
-                  <p className="mt-2 text-sm leading-6 text-zinc-400">{error}</p>
-                  <Button variant="outline" className="mt-5 px-4 py-2.5" onClick={loadContributors}>
-                    Retry
-                  </Button>
-                </div>
-              </div>
-            </Card>
+            <LoadErrorCard
+              title="Unable to load credits"
+              message={error}
+              onRetry={loadContributors}
+            />
           ) : contributors.length === 0 ? (
             <Card className="p-8 text-center sm:p-10">
               <Users className="mx-auto h-8 w-8 text-zinc-500" aria-hidden="true" />
