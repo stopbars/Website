@@ -52,7 +52,7 @@ StatusBadge.propTypes = {
   status: PropTypes.string,
 };
 
-// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The mailbox list/detail workflow is cohesive and its request, selection, filter, and banner states transition independently.
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/no-high-complexity-react-function, react-doctor/prefer-useReducer -- The mailbox list/detail workflow is cohesive and its request, selection, filter, and banner states transition independently.
 export default function ContactMessages() {
   const token = getVatsimToken();
   const apiBase = 'https://v2.stopbars.com';

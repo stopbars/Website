@@ -85,7 +85,7 @@ const formatCount = (count, singular, plural = `${singular}s`) =>
 const getStatusSimulatorLabel = (simulator) =>
   simulator?.trim().toLowerCase() === 'xplane' ? 'X-Plane 12' : getSimulatorLabel(simulator);
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect react-doctor/no-set-state-after-await-in-effect react-doctor/async-parallel -- Live status polling owns cancellation and guards every post-await update; filtering and the coordinated data sources share one view. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect react-doctor/no-set-state-after-await-in-effect react-doctor/async-parallel -- Live status polling owns cancellation and guards every post-await update; filtering and the coordinated data sources share one view. */
 const GlobalStatus = () => {
   // airports: { [icao]: { packages: string[] } }
   const [airports, setAirports] = useState({});

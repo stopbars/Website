@@ -11,6 +11,7 @@ const IS_DEV = import.meta.env.MODE === 'development';
 const baseOptions = {
   api_host: POSTHOG_HOST,
   debug: IS_DEV,
+  disable_session_recording: IS_DEV,
   autocapture: false,
   capture_exceptions: false,
   persistence: 'memory',
@@ -24,6 +25,7 @@ const baseOptions = {
 const consentGrantedOptions = {
   autocapture: true,
   capture_exceptions: true,
+  disable_session_recording: IS_DEV,
   persistence: 'localStorage+cookie',
   session_recording: {
     maskAllInputs: true,
@@ -80,10 +82,10 @@ export function applyConsentGranted(posthog) {
   if (!posthog || !posthog.__BARS_INITIALIZED) return;
   posthog.set_config(consentGrantedOptions);
   posthog.opt_in_capturing();
-  if (posthog.loadSessionRecordingScripts) {
+  if (!IS_DEV && posthog.loadSessionRecordingScripts) {
     posthog.loadSessionRecordingScripts();
   }
-  if (posthog.startSessionRecording) {
+  if (!IS_DEV && posthog.startSessionRecording) {
     posthog.startSessionRecording();
   }
 }

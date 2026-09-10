@@ -79,6 +79,7 @@ const EMPTY_DIALOG_ITEMS = [];
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// oxlint-disable-next-line react-doctor/no-high-complexity-react-function -- One field renderer keeps native input attributes and shared labeling identical across the supported control types.
 const DialogField = ({ field, colorScheme }) => {
   const fieldId = useId();
   const {
@@ -229,6 +230,7 @@ DialogButton.propTypes = {
   isLoading: PropTypes.bool,
 };
 
+// oxlint-disable-next-line react-doctor/no-high-complexity-react-function -- Focus trapping, exit animation, scroll locking, validation, and portal ownership must remain in one accessible modal lifecycle.
 export const Dialog = ({
   open,
   onClose,

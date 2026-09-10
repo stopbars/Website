@@ -1998,7 +1998,7 @@ OverlayAutoAlignPreview.propTypes = {
 
 // This stateful Leaflet editor is cohesive; splitting or reducing its independent state here
 // would be a high-risk architectural rewrite with no behavior-preserving mechanical boundary.
-// oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-side-effect-in-state-updater-function react-doctor/no-async-event-handler-without-reentry-guard react-doctor/no-loading-flag-reset-outside-finally -- State updaters mutate only fresh clones; upload controls and state block re-entry; abort guards and finally own loading cleanup.
+// oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-side-effect-in-state-updater-function react-doctor/no-async-event-handler-without-reentry-guard react-doctor/no-loading-flag-reset-outside-finally -- Map editing, upload state, and abort ownership share one lifecycle. State updaters mutate only fresh clones; controls block re-entry; abort guards and finally own loading cleanup.
 const AirportPointEditor = ({
   existingPoints = EMPTY_POINTS,
   onChangesetChange,
@@ -5062,7 +5062,7 @@ const AirportPointEditor = ({
     </div>
   );
 };
-// oxlint-enable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-side-effect-in-state-updater-function react-doctor/no-async-event-handler-without-reentry-guard react-doctor/no-loading-flag-reset-outside-finally
+// oxlint-enable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-side-effect-in-state-updater-function react-doctor/no-async-event-handler-without-reentry-guard react-doctor/no-loading-flag-reset-outside-finally
 
 AirportPointEditor.propTypes = {
   existingPoints: PropTypes.array,

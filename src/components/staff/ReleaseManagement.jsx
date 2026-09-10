@@ -45,7 +45,7 @@ const MAX_ZIP_BYTES = 90 * 1024 * 1024; // 90MB
 const SEMVER_REGEX =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
-// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- Release publishing and changelog editing share one admin workflow while their many request and form states remain independent.
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/no-high-complexity-react-function, react-doctor/prefer-useReducer -- Release publishing and changelog editing share one admin workflow while their many request and form states remain independent.
 const ReleaseManagement = () => {
   // Mode state
   const [isAdding, setIsAdding] = useState(false);

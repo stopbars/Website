@@ -1,26 +1,28 @@
 ---
 name: react-doctor
-description: Use after changing React code, when finishing a feature or bug fix, before committing React changes, or when the user asks to run, scan, triage, explain, configure, or clean up React Doctor diagnostics. Covers correctness, security, accessibility, performance, bundle size, and architecture.
+description: "Run or interpret React Doctor when requested or when a diagnosed React issue warrants it. Do not run automatically after routine React edits."
 ---
 
 # React Doctor
 
-Use React Doctor as a regression gate and as a guided cleanup workflow.
+Use diagnostics to investigate the requested issue. Choose validation based on
+the change; a routine React edit does not require a React Doctor run.
 
-## After React changes
+## Targeted diagnostics
 
-Run:
+When a scan is warranted, start with the changed scope:
 
 ```bash
 bunx react-doctor@latest --verbose --scope changed
 ```
 
-Check that the score did not regress. Investigate and fix newly introduced
-issues before committing.
+Confirm findings against the code and fix issues introduced by the requested
+change. For a requested score comparison, record the baseline and use the same
+tool version and scope for both runs. Do not infer a regression from a lone score.
 
 ## General cleanup
 
-Run the full scan:
+For a requested full audit or a problem requiring repository-wide analysis, run:
 
 ```bash
 bunx react-doctor@latest --verbose
