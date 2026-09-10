@@ -3,11 +3,144 @@ import test from 'node:test';
 import {
   buildReferenceScene,
   normalizeReferenceScene,
+  normalizeRunway,
   preferSourceBackedRunwayMarkings,
   referenceFeatureIsVisible,
   referenceSurfaceStyle,
   referenceTexturePattern,
 } from './reference-scene.js';
+
+test('merges co-located MSFS light layers into one editable reference row', () => {
+  const lightRow = (id, latitude) => ({
+    id,
+    sourceFile: 'airport.bgl',
+    sourceType: 'bgl-airport-light-row',
+    classification: 'stopbar',
+    confidence: 1,
+    removalEligible: true,
+    vertices: [
+      { lat: latitude, lon: 151 },
+      { lat: latitude, lon: 151.0001 },
+    ],
+  });
+  const scene = buildReferenceScene(
+    {
+      lightRows: [
+        lightRow('layer-a', -33.9),
+        lightRow('layer-b', -33.899999),
+        lightRow('layer-c', -33.900001),
+      ],
+      mustKeepZones: [],
+    },
+    'msfs'
+  );
+  const editableRows = scene.features.filter(
+    (feature) => feature.properties?.msfsRemovalTarget === true
+  );
+
+  assert.equal(editableRows.length, 1);
+  assert.deepEqual(editableRows[0].properties.sourceRowIds.sort(), [
+    'layer-a',
+    'layer-b',
+    'layer-c',
+  ]);
+});
+
+test('keeps a merged MSFS row protected when any raw source row is must-keep', () => {
+  const sourceRows = ['layer-a', 'layer-b'].map((id, index) => ({
+    id,
+    sourceFile: 'airport.bgl',
+    sourceType: 'bgl-airport-light-row',
+    classification: 'lead-on',
+    confidence: 1,
+    removalEligible: true,
+    vertices: [
+      { lat: -33.9 + index * 0.000001, lon: 151 },
+      { lat: -33.9 + index * 0.000001, lon: 151.0001 },
+    ],
+  }));
+  const scene = buildReferenceScene(
+    {
+      lightRows: sourceRows,
+      mustKeepZones: [{ id: 'keep-layer-b', sourceId: 'layer-b' }],
+    },
+    'msfs'
+  );
+  const mergedRow = scene.features.find((feature) =>
+    feature.properties?.sourceRowIds?.includes('layer-b')
+  );
+
+  assert.equal(mergedRow.properties.mustKeep, true);
+  assert.equal(mergedRow.properties.msfsRemovalTarget, false);
+});
+
+test('migrates cached MSFS reference rows to the editor co-location rule', () => {
+  const rowScene = (id, latitude, sourceFile) =>
+    buildReferenceScene(
+      {
+        lightRows: [
+          {
+            id,
+            sourceFile,
+            sourceType: 'bgl-airport-light-row',
+            classification: 'taxi-centerline',
+            removalEligible: true,
+            vertices: [
+              { lat: latitude, lon: 144.84 },
+              { lat: latitude, lon: 144.841 },
+            ],
+          },
+        ],
+        mustKeepZones: [],
+      },
+      'msfs'
+    );
+  const first = rowScene('ymml-aqycy-a', -37.6733, 'lighting-a.bgl');
+  const second = rowScene('ymml-aqycy-b', -37.6732937, 'lighting-b.bgl');
+  const migrated = normalizeReferenceScene({
+    ...first,
+    version: 2,
+    features: [...first.features, ...second.features],
+  });
+  const editableRows = migrated.features.filter(
+    (feature) => feature.properties?.msfsRemovalTarget === true
+  );
+
+  assert.equal(migrated.version, 3);
+  assert.equal(editableRows.length, 1);
+  assert.deepEqual(editableRows[0].properties.sourceRowIds.sort(), [
+    'ymml-aqycy-a',
+    'ymml-aqycy-b',
+  ]);
+});
+
+test('normalizes compiled MSFS runway records before editor references are generated', () => {
+  const runway = normalizeRunway({
+    id: 'compiled-runway',
+    lon: 115.967,
+    lat: -31.94,
+    heading: 30,
+    lengthMeters: 3200,
+    widthMeters: 45,
+    primaryLabel: '03',
+    secondaryLabel: '21',
+    shoulderCode: 102,
+  });
+  assert.equal(runway.first.label, '03');
+  assert.equal(runway.second.label, '21');
+  assert.ok(Number.isFinite(runway.first.lon));
+  assert.ok(Number.isFinite(runway.second.lat));
+  const scene = buildReferenceScene({ runways: [runway] }, 'msfs');
+  assert.equal(scene.version, 3);
+  assert.ok(
+    scene.features.some((feature) => feature.properties.semanticType === 'runway-shoulder')
+  );
+  assert.ok(scene.features.some((feature) => feature.properties.semanticType === 'runway-surface'));
+  assert.equal(
+    scene.features.some((feature) => feature.properties.semanticType === 'runway-centreline'),
+    false
+  );
+});
 
 test('classifies unresolved X-Plane grass definitions as grass instead of pavement', () => {
   const style = referenceSurfaceStyle({
@@ -29,6 +162,105 @@ test('keeps legacy textured references visible when their category is missing', 
     referenceFeatureIsVisible({ properties: { snapCategory: 'pavement-edges' } }, visible),
     false
   );
+});
+
+test('assigns MSFS package references to the correct visibility controls', () => {
+  const makeFeature = (id, sourceType, geometry) => ({
+    type: 'Feature',
+    id,
+    properties: { sourceId: id, sourceType },
+    geometry,
+  });
+  const point = { type: 'Point', coordinates: [115.96, -31.95] };
+  const line = {
+    type: 'LineString',
+    coordinates: [
+      [115.96, -31.95],
+      [115.961, -31.95],
+    ],
+  };
+  const polygon = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [115.96, -31.95],
+        [115.961, -31.95],
+        [115.96, -31.949],
+        [115.96, -31.95],
+      ],
+    ],
+  };
+  const scene = buildReferenceScene(
+    {
+      referenceFeatures: [
+        makeFeature('paint', 'msfs-bgl-painted-line-cf', line),
+        makeFeature('lights', 'msfs-bgl-light-point-derived-from-31', point),
+        makeFeature('object', 'msfs-bgl-library-object', point),
+        makeFeature('apron', 'msfs-bgl-apron-v6-d0', polygon),
+      ],
+    },
+    'msfs'
+  );
+
+  assert.deepEqual(
+    Object.fromEntries(
+      scene.features.map((feature) => [feature.id, feature.properties.snapCategory])
+    ),
+    {
+      paint: 'painted-lines',
+      lights: 'light-rows',
+      object: 'fixtures',
+      apron: 'pavement-edges',
+    }
+  );
+});
+
+test('marks decoded target lights as removable while retaining must-keep BGL lights', () => {
+  const lightRow = (id, classification, latitude) => ({
+    id,
+    sourceType: 'bgl-airport-light-row',
+    classification,
+    removalEligible: true,
+    vertices: [
+      { lon: 151, lat: latitude },
+      { lon: 151.0001, lat: latitude },
+    ],
+  });
+  const scene = buildReferenceScene(
+    {
+      lightRows: [
+        lightRow('target', 'stopbar', -33.9),
+        lightRow('retained', 'runway-edge', -33.901),
+      ],
+      mustKeepZones: [{ id: 'keep-zone', sourceId: 'retained' }],
+    },
+    'msfs'
+  );
+  const byId = new Map(scene.features.map((feature) => [feature.id, feature.properties]));
+  assert.equal(byId.get('target').msfsRemovalTarget, true);
+  assert.equal(byId.get('target').mustKeep, false);
+  assert.equal(byId.get('retained').msfsRemovalTarget, false);
+  assert.equal(byId.get('retained').mustKeep, true);
+});
+
+test('repairs visibility categories on a restored MSFS reference scene', () => {
+  const scene = normalizeReferenceScene({
+    version: 2,
+    simulator: 'msfs',
+    features: [
+      {
+        type: 'Feature',
+        id: 'restored-light',
+        properties: {
+          sourceId: 'restored-light',
+          sourceType: 'msfs-bgl-light-point-derived-from-31',
+        },
+        geometry: { type: 'Point', coordinates: [115.96, -31.95] },
+      },
+    ],
+  });
+
+  assert.equal(scene.features[0].properties.snapCategory, 'light-rows');
 });
 
 test('classifies X-Plane lawn-track terrain decals as grass', () => {

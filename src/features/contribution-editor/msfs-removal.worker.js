@@ -1,4 +1,4 @@
-import { buildSelectedMsfsRemovals } from './msfs-removal.js';
+import { buildImportedMsfsRemovalMigration, buildSelectedMsfsRemovals } from './msfs-removal.js';
 
 let removalContext = null;
 
@@ -8,12 +8,23 @@ self.addEventListener('message', (event) => {
     removalContext = message.context;
     return;
   }
-  if (message?.type !== 'build') return;
+  if (!['build', 'migrate-imported'].includes(message?.type)) return;
   try {
+    const startedAt = performance.now();
+    const result =
+      message.type === 'migrate-imported'
+        ? buildImportedMsfsRemovalMigration(removalContext, message.objects, message.removals)
+        : buildSelectedMsfsRemovals(removalContext, message.selections, message.keepSelections);
     self.postMessage({
       type: 'complete',
       id: message.id,
-      result: buildSelectedMsfsRemovals(removalContext, message.selections),
+      result: {
+        ...result,
+        performanceTrace: {
+          workerMilliseconds: performance.now() - startedAt,
+          removalCount: result.removals?.length ?? 0,
+        },
+      },
     });
   } catch (error) {
     self.postMessage({

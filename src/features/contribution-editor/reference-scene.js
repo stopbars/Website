@@ -1,6 +1,7 @@
 /* oxlint-disable react-doctor/js-cache-property-access react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Reference-scene construction keeps source normalization, validation, and projection stages separate for diagnostics. */
 
 import { stableId } from '../draft-generator/extractor/classify.js';
+import { consolidateCoLocatedSimulatorRows } from '../draft-generator/matching.js';
 import { markingPatternName, withAptMarkingFallbackProperties } from './marking-patterns.js';
 import { xPlaneLinePhysicalWidth } from './scenery-texture.js';
 
@@ -54,6 +55,8 @@ export function buildReferenceScene(data, simulator) {
   }
   const append = (feature) => {
     const sourceId = String(feature.properties?.sourceId ?? feature.id ?? '');
+    const sourceIds = [sourceId, ...(feature.properties?.sourceRowIds ?? []).map(String)];
+    const mustKeep = sourceIds.some((id) => mustKeepSourceIds.has(id));
     const key = `${sourceId}:${feature.geometry?.type}:${JSON.stringify(feature.geometry?.coordinates)}`;
     if (!sourceId || !feature.geometry || seen.has(key)) return;
     seen.add(key);
@@ -61,7 +64,7 @@ export function buildReferenceScene(data, simulator) {
     const msfsRemovalTarget =
       simulator === 'msfs' &&
       ['stopbar', 'lead-on', 'taxi-centerline'].includes(semanticType) &&
-      !mustKeepSourceIds.has(sourceId) &&
+      !mustKeep &&
       feature.properties?.removable !== false;
     features.push(
       simulator === 'msfs'
@@ -69,7 +72,7 @@ export function buildReferenceScene(data, simulator) {
             ...feature,
             properties: {
               ...feature.properties,
-              mustKeep: mustKeepSourceIds.has(sourceId),
+              mustKeep,
               msfsRemovalTarget,
             },
           }
@@ -80,7 +83,11 @@ export function buildReferenceScene(data, simulator) {
   };
 
   const appendRows = () => {
-    for (const row of data.lightRows ?? []) {
+    const lightRows =
+      simulator === 'msfs'
+        ? consolidateCoLocatedSimulatorRows(data.lightRows ?? [])
+        : (data.lightRows ?? []);
+    for (const row of lightRows) {
       const feature = normalizeFeature(referenceFromRow(row, simulator), simulator);
       if (
         row.sourceType === 'xplane-dsf-painted-line' &&
@@ -110,6 +117,9 @@ export function buildReferenceScene(data, simulator) {
         sourceId: String(instance.id),
         sourceType: instance.sourceType || 'placed-object',
         sourceFile: instance.sourceFile || '',
+        dsfRemoval: instance.dsfRemoval ?? null,
+        removable: instance.removalEligible !== false,
+        removalCapability: instance.removalCapability ?? '',
         title: instance.name || instance.classification || 'Placed fixture',
         semanticType: instance.classification || 'fixture',
         snapCategory: 'fixtures',
@@ -123,7 +133,7 @@ export function buildReferenceScene(data, simulator) {
   const preferredFeatures =
     simulator === 'xplane' ? preferSourceBackedRunwayMarkings(features) : features;
   return {
-    version: 2,
+    version: 3,
     simulator,
     features: preferredFeatures,
     bounds: featureBounds(preferredFeatures),
@@ -141,7 +151,17 @@ export function referenceTexturePattern(feature) {
 
 export function normalizeReferenceScene(scene) {
   if (!scene || !Array.isArray(scene.features)) return scene;
-  if (scene.simulator === 'msfs') return normalizeMsfsReferenceCategories(scene);
+  if (scene.simulator === 'msfs') {
+    const categorized = normalizeMsfsReferenceCategories(scene);
+    if (categorized.version >= 3) return categorized;
+    const features = consolidateCachedMsfsLightRows(categorized.features);
+    return {
+      ...categorized,
+      version: 3,
+      features,
+      bounds: featureBounds(features),
+    };
+  }
   if (scene.simulator !== 'xplane') return scene;
   const preferredFeatures = preferSourceBackedRunwayMarkings(scene.features);
   const visualDsfLines = new Set(
@@ -203,6 +223,56 @@ export function normalizeReferenceScene(scene) {
     });
   }
   return changed ? { ...scene, features } : scene;
+}
+
+function consolidateCachedMsfsLightRows(features) {
+  const candidates = [];
+  const retained = [];
+  const sourceFeatures = new Map();
+  for (const feature of features ?? []) {
+    const properties = feature.properties ?? {};
+    if (
+      feature.geometry?.type !== 'LineString' ||
+      properties.snapCategory !== 'light-rows' ||
+      properties.msfsRemovalTarget !== true
+    ) {
+      retained.push(feature);
+      continue;
+    }
+    const sourceId = String(properties.sourceId ?? feature.id ?? '');
+    const row = {
+      id: sourceId,
+      sourceFile: properties.sourceFile || '',
+      sourceType: properties.sourceType || 'bgl-airport-light-row',
+      classification: properties.semanticType || 'taxi-centerline',
+      removalEligible: properties.removable !== false,
+      vertices: feature.geometry.coordinates.map(([lon, lat]) => ({ lat, lon })),
+    };
+    candidates.push(row);
+    sourceFeatures.set(sourceId, feature);
+  }
+  const rows = consolidateCoLocatedSimulatorRows(candidates);
+  const consolidated = rows.map((row) => {
+    const sourceIds = row.sourceRowIds ?? [row.id];
+    const anchor = sourceFeatures.get(String(sourceIds[0])) ?? sourceFeatures.get(String(row.id));
+    if (!anchor || sourceIds.length === 1) return anchor;
+    return {
+      ...anchor,
+      id: row.id,
+      geometry: {
+        type: 'LineString',
+        coordinates: row.vertices.map((vertex) => [vertex.lon, vertex.lat]),
+      },
+      properties: {
+        ...anchor.properties,
+        sourceId: String(row.id),
+        sourceRowIds: sourceIds.map(String),
+        sourceType: row.sourceType,
+        removable: row.removalEligible !== false,
+      },
+    };
+  });
+  return [...retained, ...consolidated.filter(Boolean)];
 }
 
 function normalizeMsfsReferenceCategories(scene) {
@@ -382,7 +452,10 @@ function referenceFromRow(row, simulator) {
     properties: {
       featureType: 'simulator-reference',
       sourceId: String(row.id),
+      sourceRowIds: (row.sourceRowIds ?? []).map(String),
       sourceFeatureId: row.sourceFeatureId || '',
+      dsfRemoval: row.dsfRemoval ?? null,
+      removalCapability: row.removalCapability ?? 'range',
       sourceType: row.sourceType || 'light-row',
       sourceFile: row.sourceFile || '',
       sourceDefinition: row.sourceDefinition || '',
