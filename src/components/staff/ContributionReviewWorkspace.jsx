@@ -1,19 +1,18 @@
-/* oxlint-disable react-doctor/no-set-state-after-await-in-effect react-doctor/prefer-html-dialog react-doctor/js-set-map-lookups -- Review generation owns AbortController cleanup; the full-screen portal implements focus and modal semantics, and visibility lookup is a tiny bounded list. */
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect react-doctor/prefer-html-dialog -- Review generation owns AbortController cleanup; the full-screen portal implements focus and modal semantics. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import {
   AlertTriangle,
-  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
   Copy,
   Download,
-  FileCode2,
   Lightbulb,
   Loader,
+  Palette,
   Route,
   SquarePen,
   UserRound,
@@ -23,28 +22,18 @@ import {
 import XMLMap from '../shared/XMLMap';
 import { Button } from '../shared/Button';
 import { SimulatorBadge } from '../shared/SimulatorBadge';
+import { IconSwap } from '../shared/IconSwap';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { publicationError } from '../../utils/contributionContracts.js';
 
 const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
 const COLOR_MODES = [
-  {
-    id: 'operational',
-    label: 'Actual colors',
-    description: 'As the lights will appear in the simulator.',
-  },
-  {
-    id: 'type',
-    label: 'Object type',
-    description: 'Separates stopbars, lead-ons, stands and taxiway lights.',
-  },
-  {
-    id: 'directionality',
-    label: 'Direction',
-    description: 'Green is bidirectional, orange is directional, grey is unspecified.',
-  },
+  { id: 'object', label: 'Unique objects' },
+  { id: 'operational', label: 'Actual colors' },
+  { id: 'type', label: 'Object types' },
+  { id: 'directionality', label: 'Direction' },
 ];
 
 const TYPE_LABELS = {
@@ -52,6 +41,7 @@ const TYPE_LABELS = {
   lead_on: 'Lead-ons',
   stand: 'Stand lights',
   taxiway: 'Taxiway lights',
+  unknown: 'Unknown',
 };
 
 const TYPE_COLORS = {
@@ -59,128 +49,60 @@ const TYPE_COLORS = {
   lead_on: '#facc15',
   stand: '#c084fc',
   taxiway: '#38bdf8',
+  unknown: '#a1a1aa',
 };
 
-const EMPTY_REVIEW_SUMMARY = {
-  objectCount: 0,
-  lightCount: 0,
-  removeAreaCount: 0,
-  typeCounts: {},
-  objectTypes: [],
-  directionalCount: 0,
-  bidirectionalCount: 0,
-  elevatedCount: 0,
-  ihpCount: 0,
-  issues: [],
-};
+const EMPTY_REVIEW_SUMMARY = { lightCount: 0, typeCounts: {}, objectTypes: [], issues: [] };
 
 const getText = (element, selector) => element?.querySelector(selector)?.textContent?.trim() || '';
 
-const analyseContributionXml = (barsXml, supportsXml) => {
+const analyseContributionXml = (barsXml) => {
   if (!barsXml) return EMPTY_REVIEW_SUMMARY;
 
-  const parser = new DOMParser();
-  const document = parser.parseFromString(barsXml, 'text/xml');
+  const document = new DOMParser().parseFromString(barsXml, 'text/xml');
   if (document.querySelector('parsererror')) {
-    return {
-      ...EMPTY_REVIEW_SUMMARY,
-      issues: ['The generated BARS XML could not be parsed.'],
-    };
+    return { ...EMPTY_REVIEW_SUMMARY, issues: ['The generated XML could not be parsed.'] };
   }
 
   const objects = [...document.getElementsByTagName('BarsObject')];
   const typeCounts = {};
+  const issues = [];
   let lightCount = 0;
-  let directionalCount = 0;
-  let bidirectionalCount = 0;
-  let elevatedCount = 0;
-  let ihpCount = 0;
-  let objectsWithoutLights = 0;
-  let lightsWithoutPosition = 0;
+  let emptyObjects = 0;
+  let invalidPositions = 0;
 
   objects.forEach((object) => {
     const type = object.getAttribute('type') || 'unknown';
-    const objectProperties = object.querySelector(':scope > Properties');
-    const objectDirectionality = getText(objectProperties, 'Directionality').toLowerCase();
-    const objectOrientation = getText(objectProperties, 'Orientation').toLowerCase();
-    const objectElevated = getText(objectProperties, 'Elevated') === 'true';
-    const objectIhp = getText(objectProperties, 'IHP') === 'true';
     const lights = [...object.getElementsByTagName('Light')];
-
-    typeCounts[type] = (typeCounts[type] || 0) + lights.length;
+    typeCounts[type] = (typeCounts[type] || 0) + 1;
     lightCount += lights.length;
-    if (lights.length === 0) objectsWithoutLights += 1;
+    if (lights.length === 0) emptyObjects += 1;
 
     lights.forEach((light) => {
-      const properties = light.querySelector('Properties');
-      const directionality = (
-        getText(properties, 'Directionality') ||
-        objectDirectionality ||
-        getText(properties, 'Orientation') ||
-        objectOrientation
-      ).toLowerCase();
-
-      if (
-        directionality === 'bi-directional' ||
-        directionality === 'bi' ||
-        directionality === 'both'
-      ) {
-        bidirectionalCount += 1;
-      } else if (directionality) {
-        directionalCount += 1;
-      }
-
-      if (getText(properties, 'Elevated') === 'true' || objectElevated) elevatedCount += 1;
-      if (getText(properties, 'IHP') === 'true' || objectIhp) ihpCount += 1;
-
-      const position = getText(light, 'Position')
-        .split(',')
-        .map((value) => Number(value));
+      const position = getText(light, 'Position').split(',').map(Number);
       if (position.length !== 2 || position.some((value) => !Number.isFinite(value))) {
-        lightsWithoutPosition += 1;
+        invalidPositions += 1;
       }
     });
   });
 
-  const issues = [];
   if (objects.length === 0) issues.push('No BARS objects were generated.');
   if (lightCount === 0) issues.push('No lights were generated.');
-  if (objectsWithoutLights > 0) {
-    issues.push(
-      `${objectsWithoutLights} object${objectsWithoutLights === 1 ? '' : 's'} contain no lights.`
-    );
+  if (emptyObjects) {
+    issues.push(`${emptyObjects} object${emptyObjects === 1 ? '' : 's'} contain no lights.`);
   }
-  if (lightsWithoutPosition > 0) {
+  if (invalidPositions) {
     issues.push(
-      `${lightsWithoutPosition} light${lightsWithoutPosition === 1 ? '' : 's'} have no valid position.`
+      `${invalidPositions} light${invalidPositions === 1 ? '' : 's'} have no valid position.`
     );
   }
   if (typeCounts.unknown) {
     issues.push(
-      `${typeCounts.unknown} light${typeCounts.unknown === 1 ? '' : 's'} use an unknown object type.`
+      `${typeCounts.unknown} object${typeCounts.unknown === 1 ? '' : 's'} use an unknown type.`
     );
   }
 
-  let removeAreaCount = 0;
-  if (supportsXml) {
-    const supportsDocument = parser.parseFromString(supportsXml, 'text/xml');
-    if (!supportsDocument.querySelector('parsererror')) {
-      removeAreaCount = supportsDocument.getElementsByTagName('LightSupport').length;
-    }
-  }
-
-  return {
-    objectCount: objects.length,
-    lightCount,
-    removeAreaCount,
-    typeCounts,
-    objectTypes: Object.keys(typeCounts).sort(),
-    directionalCount,
-    bidirectionalCount,
-    elevatedCount,
-    ihpCount,
-    issues,
-  };
+  return { lightCount, typeCounts, objectTypes: Object.keys(typeCounts).sort(), issues };
 };
 
 const formatXml = (xml) => {
@@ -199,8 +121,7 @@ const formatXml = (xml) => {
 };
 
 const downloadXml = (xml, fileName) => {
-  const blob = new Blob([formatXml(xml)], { type: 'application/xml' });
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(new Blob([formatXml(xml)], { type: 'application/xml' }));
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
@@ -210,56 +131,223 @@ const downloadXml = (xml, fileName) => {
   URL.revokeObjectURL(url);
 };
 
-const ReviewMetric = ({ value, label }) => (
-  <div className="min-w-0 rounded-lg bg-black/35 px-3 py-2 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]">
-    <p className="text-lg font-semibold tabular-nums text-white">{value}</p>
-    <p className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-500">
-      {label}
-    </p>
-  </div>
-);
-
-ReviewMetric.propTypes = {
-  value: PropTypes.number.isRequired,
-  label: PropTypes.string.isRequired,
-};
-
-const LayerToggle = ({ active, icon: Icon, label, detail, onClick }) => (
+const ToolbarButton = ({ active, icon: Icon, label, onClick }) => (
   <button
     type="button"
+    aria-label={label}
     aria-pressed={active}
+    title={label}
     onClick={onClick}
-    className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-[background-color,color,box-shadow,transform] duration-[var(--duration-quick)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
-      active
-        ? 'bg-blue-500/12 text-white shadow-[inset_0_0_0_1px_oklch(0.623_0.214_259.815/0.28)]'
-        : 'bg-zinc-900/60 text-zinc-400 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)] hover:bg-zinc-800/80 hover:text-zinc-200'
+    className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg transition-[background-color,color,transform] duration-[var(--duration-quick)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${
+      active ? 'bg-blue-500 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
     }`}
   >
-    <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-400' : ''}`} aria-hidden="true" />
-    <span className="min-w-0 flex-1">
-      <span className="block text-sm font-medium">{label}</span>
-      <span className="block truncate text-xs text-zinc-500">{detail}</span>
-    </span>
-    <span
-      aria-hidden="true"
-      className={`h-2.5 w-2.5 rounded-full ${active ? 'bg-blue-400' : 'bg-zinc-700'}`}
-    />
+    <Icon className="h-4 w-4" aria-hidden="true" />
   </button>
 );
 
-LayerToggle.propTypes = {
+ToolbarButton.propTypes = {
   active: PropTypes.bool.isRequired,
   icon: PropTypes.elementType.isRequired,
   label: PropTypes.string.isRequired,
-  detail: PropTypes.string.isRequired,
   onClick: PropTypes.func.isRequired,
 };
 
-// The review workspace intentionally keeps evidence, filters and the final decision in one view.
-// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer
+const ObjectInspector = ({ object, onClear }) => {
+  if (!object) {
+    return (
+      <div className="rounded-xl bg-zinc-900/55 px-4 py-5 text-center shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]">
+        <p className="text-sm font-medium text-zinc-300">No object selected</p>
+        <p className="mt-1 text-xs text-zinc-500">Select a light or path on the map.</p>
+      </div>
+    );
+  }
+
+  const properties = [
+    ['Type', TYPE_LABELS[object.type] || object.type],
+    ['Lights', object.lightCount],
+    ['Color', object.color],
+    ['Direction', object.directionality],
+    ['Orientation', object.orientation],
+    ['Elevated', object.elevated ? 'Yes' : null],
+    ['IHP', object.ihp ? 'Yes' : null],
+  ].filter(([, value]) => value !== '' && value !== null && value !== undefined);
+
+  return (
+    <section
+      aria-labelledby="selected-object-heading"
+      className="rounded-xl bg-zinc-900/70 p-4 shadow-[inset_0_0_0_1px_oklch(0.623_0.214_259.815/0.3)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-blue-400">
+            Selected object
+          </p>
+          <h3 id="selected-object-heading" className="mt-1 break-all font-mono text-sm text-white">
+            {object.id}
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          className="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70"
+          aria-label="Clear selected object"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+        {properties.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-xs text-zinc-500">{label}</dt>
+            <dd className="mt-0.5 break-words text-sm text-zinc-200">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+};
+
+ObjectInspector.propTypes = {
+  object: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    type: PropTypes.string.isRequired,
+    lightCount: PropTypes.number.isRequired,
+    color: PropTypes.string,
+    directionality: PropTypes.string,
+    orientation: PropTypes.string,
+    elevated: PropTypes.bool,
+    ihp: PropTypes.bool,
+  }),
+  onClear: PropTypes.func.isRequired,
+};
+
+const ContributionDetails = ({
+  contribution,
+  isPending,
+  packageName,
+  packageNameIsValid,
+  isEditingPackage,
+  notesCopied,
+  onEditPackage,
+  onPackageNameChange,
+  onCopyNotes,
+  onDownload,
+}) => (
+  <details className="group rounded-xl bg-zinc-900/45 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]">
+    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between rounded-xl px-3 text-sm font-medium text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70">
+      Contribution details
+      <ChevronDown
+        className="h-4 w-4 text-zinc-500 transition-transform duration-[var(--duration-quick)] group-open:rotate-180"
+        aria-hidden="true"
+      />
+    </summary>
+    <div className="space-y-4 px-3 pb-3">
+      <div className="flex items-start gap-3">
+        <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
+        <div className="min-w-0 text-sm">
+          <p className="truncate text-zinc-200">
+            {contribution.userDisplayName || contribution.userId}
+          </p>
+          {contribution.userDisplayName && (
+            <p className="mt-0.5 font-mono text-xs text-zinc-500">CID {contribution.userId}</p>
+          )}
+          <p className="mt-1 text-xs text-zinc-500">
+            {new Date(contribution.submissionDate).toLocaleString()}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex min-h-8 items-center justify-between gap-2">
+          <p className="text-xs text-zinc-500">Package name</p>
+          {isPending && (
+            <button
+              type="button"
+              onClick={onEditPackage}
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70"
+              aria-label={isEditingPackage ? 'Finish editing package name' : 'Edit package name'}
+            >
+              {isEditingPackage ? (
+                <Check className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <SquarePen className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          )}
+        </div>
+        {isEditingPackage ? (
+          <>
+            <input
+              aria-label="Updated package name"
+              aria-invalid={!packageNameIsValid}
+              value={packageName}
+              onChange={(event) => onPackageNameChange(event.target.value)}
+              className="min-h-10 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-base text-white focus:outline-none focus:ring-2 focus:ring-blue-400/70 sm:text-sm"
+            />
+            {!packageNameIsValid && (
+              <p className="mt-1 text-xs text-red-400">Enter a package name.</p>
+            )}
+          </>
+        ) : (
+          <p className="break-words text-sm text-zinc-200">{packageName}</p>
+        )}
+      </div>
+
+      {contribution.notes && (
+        <div>
+          <div className="flex min-h-8 items-center justify-between gap-2">
+            <p className="text-xs text-zinc-500">Contributor notes</p>
+            <button
+              type="button"
+              onClick={onCopyNotes}
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70"
+              aria-label="Copy contributor notes"
+            >
+              {notesCopied ? (
+                <Check className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+              ) : (
+                <Copy className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+          <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-300">
+            {contribution.notes}
+          </p>
+        </div>
+      )}
+
+      <Button variant="outline" className="w-full px-3 py-2 text-sm" onClick={onDownload}>
+        <Download className="h-4 w-4" aria-hidden="true" />
+        Download submitted XML
+      </Button>
+    </div>
+  </details>
+);
+
+ContributionDetails.propTypes = {
+  contribution: PropTypes.shape({
+    userId: PropTypes.string.isRequired,
+    userDisplayName: PropTypes.string,
+    submissionDate: PropTypes.string.isRequired,
+    notes: PropTypes.string,
+  }).isRequired,
+  isPending: PropTypes.bool.isRequired,
+  packageName: PropTypes.string.isRequired,
+  packageNameIsValid: PropTypes.bool.isRequired,
+  isEditingPackage: PropTypes.bool.isRequired,
+  notesCopied: PropTypes.bool.isRequired,
+  onEditPackage: PropTypes.func.isRequired,
+  onPackageNameChange: PropTypes.func.isRequired,
+  onCopyNotes: PropTypes.func.isRequired,
+  onDownload: PropTypes.func.isRequired,
+};
+
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/no-high-complexity-react-function, react-doctor/prefer-useReducer -- The portal keeps its focus trap, map generation and decision transaction in one lifecycle; visual sections are split into focused components above.
 const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onReject }) => {
   const workspaceRef = useRef(null);
   const previousFocusRef = useRef(null);
+  const copyTimerRef = useRef(null);
   const [generatedFiles, setGeneratedFiles] = useState(null);
   const [generationError, setGenerationError] = useState('');
   const [decisionError, setDecisionError] = useState('');
@@ -269,35 +357,45 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
   const [rejectionReason, setRejectionReason] = useState('');
   const [updatedPackageName, setUpdatedPackageName] = useState(contribution.packageName);
   const [isEditingPackage, setIsEditingPackage] = useState(false);
-  const [notesCopied, setNotesCopied] = useState(false);
+  const [copiedField, setCopiedField] = useState('');
   const [approveConfirmation, setApproveConfirmation] = useState(false);
-  const [showSource, setShowSource] = useState(false);
-  const [colorMode, setColorMode] = useState('operational');
-  const [layers, setLayers] = useState({
-    lights: true,
-    paths: true,
-    removeAreas: false,
-  });
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [colorMode, setColorMode] = useState('object');
+  const [selectedObject, setSelectedObject] = useState(null);
+  const [layers, setLayers] = useState({ lights: true, paths: true, removeAreas: false });
   const [visibleTypes, setVisibleTypes] = useState([]);
+  const visibleTypeSet = useMemo(() => new Set(visibleTypes), [visibleTypes]);
 
   const isBusy = isApproving || isRejecting;
+  const isPending = contribution.status === 'pending';
   const packageNameIsValid = updatedPackageName.trim().length > 0;
   const summary = useMemo(
-    () => analyseContributionXml(generatedFiles?.barsXml, generatedFiles?.supportsXml),
-    [generatedFiles]
+    () => analyseContributionXml(generatedFiles?.barsXml),
+    [generatedFiles?.barsXml]
   );
+
+  const copyValue = useCallback((field, value) => {
+    navigator.clipboard.writeText(value);
+    setCopiedField(field);
+    clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedField(''), 1800);
+  }, []);
+
+  useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   useEffect(() => {
     const controller = new AbortController();
-
     const generateReviewFiles = async () => {
       setIsGenerating(true);
       setGenerationError('');
 
       try {
         const formData = new FormData();
-        const blob = new Blob([contribution.submittedXml], { type: 'application/xml' });
-        formData.append('xmlFile', blob, `${contribution.airportIcao}_contribution.xml`);
+        formData.append(
+          'xmlFile',
+          new Blob([contribution.submittedXml], { type: 'application/xml' }),
+          `${contribution.airportIcao}_contribution.xml`
+        );
         formData.append('icao', contribution.airportIcao);
         formData.append('simulator', contribution.simulator);
 
@@ -306,24 +404,17 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
           body: formData,
           signal: controller.signal,
         });
-
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'The review geometry could not be generated.');
+          throw new Error(errorData.error || 'Unable to generate the review map.');
         }
 
         const data = await response.json();
-        const reviewFiles = {
-          supportsXml: data.supportsXml,
-          barsXml: data.barsXml,
-        };
-        const reviewSummary = analyseContributionXml(reviewFiles.barsXml, reviewFiles.supportsXml);
-        setVisibleTypes(reviewSummary.objectTypes);
-        setGeneratedFiles(reviewFiles);
+        const files = { supportsXml: data.supportsXml, barsXml: data.barsXml };
+        setVisibleTypes(analyseContributionXml(files.barsXml).objectTypes);
+        setGeneratedFiles(files);
       } catch (error) {
-        if (error.name !== 'AbortError') {
-          setGenerationError(error.message);
-        }
+        if (error.name !== 'AbortError') setGenerationError(error.message);
       } finally {
         if (!controller.signal.aborted) setIsGenerating(false);
       }
@@ -349,10 +440,10 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
         requestClose();
         return;
       }
-
       if (event.key !== 'Tab' || !workspaceRef.current) return;
+
       const focusable = [...workspaceRef.current.querySelectorAll(FOCUSABLE_SELECTOR)];
-      if (focusable.length === 0) {
+      if (!focusable.length) {
         event.preventDefault();
         workspaceRef.current.focus();
         return;
@@ -384,19 +475,16 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
     setDecisionError('');
 
     try {
-      const hasPackageNameChanged = updatedPackageName !== contribution.packageName;
+      const packageChanged = updatedPackageName !== contribution.packageName;
       const response = await fetch(
         `https://v2.stopbars.com/contributions/${contribution.id}/decision`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Vatsim-Token': getVatsimToken(),
-          },
+          headers: { 'Content-Type': 'application/json', 'X-Vatsim-Token': getVatsimToken() },
           body: JSON.stringify({
             approved,
             ...(!approved && { rejectionReason: rejectionReason.trim() }),
-            ...(hasPackageNameChanged && { newPackageName: updatedPackageName.trim() }),
+            ...(packageChanged && { newPackageName: updatedPackageName.trim() }),
           }),
         }
       );
@@ -404,7 +492,7 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
         throw new Error(
-          errorBody.error || `Failed to ${approved ? 'approve' : 'reject'} contribution`
+          errorBody.error || `Unable to ${approved ? 'approve' : 'reject'} contribution.`
         );
       }
 
@@ -427,15 +515,8 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
     setVisibleTypes((current) =>
       current.includes(type) ? current.filter((item) => item !== type) : [...current, type]
     );
+    if (selectedObject?.type === type && visibleTypes.includes(type)) setSelectedObject(null);
   };
-
-  const statusLabel = isGenerating
-    ? 'Generating review evidence'
-    : generationError
-      ? 'Map evidence unavailable'
-      : summary.issues.length > 0
-        ? 'Review warnings found'
-        : 'Ready for review';
 
   return createPortal(
     <div
@@ -446,70 +527,57 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
       aria-labelledby="contribution-review-title"
       className="fixed inset-0 z-[70] flex min-h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100 focus:outline-none"
     >
-      <header className="flex min-h-[4.5rem] shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-zinc-950/95 px-4 py-3 sm:px-6">
+      <header className="flex min-h-[4.25rem] shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-zinc-950/95 px-3 py-2.5 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={requestClose}
             disabled={isBusy}
-            className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-[background-color,color,transform,opacity] hover:bg-zinc-800 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 disabled:opacity-50"
+            className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 disabled:opacity-50"
             aria-label="Close contribution review"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <div className="flex items-center gap-2">
               <h2
                 id="contribution-review-title"
-                className="truncate text-lg font-semibold tracking-tight text-white"
+                className="truncate text-base font-semibold text-white sm:text-lg"
               >
                 {contribution.airportIcao} review
               </h2>
               <SimulatorBadge simulator={contribution.simulator} size="sm" />
+              {isGenerating && (
+                <Loader
+                  className="h-3.5 w-3.5 animate-spin text-zinc-500"
+                  aria-label="Loading map"
+                />
+              )}
             </div>
-            <p className="truncate text-sm text-zinc-400">
-              {updatedPackageName || contribution.packageName}
-            </p>
+            <p className="truncate text-xs text-zinc-500 sm:text-sm">{updatedPackageName}</p>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <span
-            role="status"
-            className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium sm:inline-flex ${
-              generationError || summary.issues.length > 0
-                ? 'bg-amber-500/10 text-amber-300'
-                : 'bg-emerald-500/10 text-emerald-300'
-            }`}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <code className="hidden max-w-48 truncate rounded-md bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-500 md:block">
+            {contribution.id}
+          </code>
+          <button
+            type="button"
+            onClick={() => copyValue('id', contribution.id)}
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70"
+            aria-label="Copy contribution ID"
           >
-            {isGenerating ? (
-              <Loader className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : generationError || summary.issues.length > 0 ? (
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-            ) : (
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            {statusLabel}
-          </span>
-          <Button
-            variant="outline"
-            className="min-h-10 px-3 py-2"
-            disabled={!generatedFiles?.barsXml}
-            onClick={() =>
-              downloadXml(
-                generatedFiles.barsXml,
-                `${contribution.airportIcao}_BARS_Contribution.xml`
-              )
-            }
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Download XML</span>
-          </Button>
+            <IconSwap active={copiedField === 'id'}>
+              <Copy className="h-4 w-4" />
+              <Check className="h-4 w-4 text-emerald-400" />
+            </IconSwap>
+          </button>
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:overflow-hidden">
-        <main className="relative min-h-[55dvh] overflow-hidden bg-black lg:min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:overflow-hidden">
+        <main className="relative min-h-[58dvh] overflow-hidden bg-black lg:min-h-0">
           {generatedFiles?.barsXml ? (
             <XMLMap
               xmlData={generatedFiles.barsXml}
@@ -520,410 +588,302 @@ const ContributionReviewWorkspace = ({ contribution, onClose, onApprove, onRejec
               showRemoveAreas={layers.removeAreas}
               colorMode={colorMode}
               visibleTypes={visibleTypes}
+              selectedObjectId={selectedObject?.id}
+              onObjectSelect={setSelectedObject}
+              styleControlPosition="bottom-right"
             />
           ) : (
-            <div className="flex h-full min-h-[55dvh] items-center justify-center p-6 lg:min-h-0">
-              <div className="max-w-md rounded-xl bg-zinc-900/90 p-6 text-center shadow-[0_16px_48px_oklch(0_0_0/0.35),inset_0_0_0_1px_oklch(1_0_0/0.08)]">
-                {generationError ? (
-                  <>
-                    <AlertTriangle
-                      className="mx-auto mb-3 h-8 w-8 text-amber-400"
-                      aria-hidden="true"
-                    />
-                    <h3 className="font-semibold text-white">
-                      Map evidence could not be generated
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-zinc-400">{generationError}</p>
-                  </>
-                ) : (
-                  <>
-                    <Loader
-                      className="mx-auto mb-3 h-8 w-8 animate-spin text-blue-400"
-                      aria-hidden="true"
-                    />
-                    <h3 className="font-semibold text-white">Building review evidence</h3>
-                    <p className="mt-2 text-sm text-zinc-400">
-                      Generating the exact lights and support footprints from this contribution.
-                    </p>
-                  </>
-                )}
-              </div>
+            <div className="flex h-full min-h-[58dvh] items-center justify-center p-6 lg:min-h-0">
+              {generationError ? (
+                <div className="max-w-sm rounded-xl bg-zinc-900 p-5 text-center shadow-[inset_0_0_0_1px_oklch(1_0_0/0.08)]">
+                  <AlertTriangle className="mx-auto h-6 w-6 text-amber-400" aria-hidden="true" />
+                  <p className="mt-3 text-sm font-medium text-white">Unable to generate the map</p>
+                  <p className="mt-1 text-sm leading-6 text-zinc-400">{generationError}</p>
+                </div>
+              ) : (
+                <Loader
+                  className="h-7 w-7 animate-spin text-blue-400"
+                  aria-label="Generating review map"
+                />
+              )}
             </div>
           )}
 
           {generatedFiles?.barsXml && (
-            <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-center sm:inset-x-4">
-              <div className="pointer-events-auto grid w-full max-w-xl grid-cols-3 gap-1.5 rounded-xl bg-zinc-950/88 p-1.5 shadow-[0_16px_48px_oklch(0_0_0/0.35),inset_0_0_0_1px_oklch(1_0_0/0.1)] backdrop-blur-md">
-                <ReviewMetric value={summary.objectCount} label="Objects" />
-                <ReviewMetric value={summary.lightCount} label="Lights" />
-                <ReviewMetric value={summary.removeAreaCount} label="Removal areas" />
+            <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-center">
+              <div className="pointer-events-auto flex max-w-full items-center gap-1 rounded-xl bg-zinc-950/90 p-1.5 shadow-[0_12px_36px_oklch(0_0_0/0.38),inset_0_0_0_1px_oklch(1_0_0/0.1)] backdrop-blur-md">
+                <div className="relative flex min-h-10 items-center gap-2 rounded-lg bg-zinc-900 px-2.5">
+                  <Palette className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
+                  <label htmlFor="review-color-mode" className="sr-only">
+                    Map colors
+                  </label>
+                  <select
+                    id="review-color-mode"
+                    value={colorMode}
+                    onChange={(event) => setColorMode(event.target.value)}
+                    className="min-h-10 appearance-none bg-transparent pe-5 text-sm font-medium text-zinc-200 focus:outline-none"
+                  >
+                    {COLOR_MODES.map((mode) => (
+                      <option key={mode.id} value={mode.id} className="bg-zinc-900">
+                        {mode.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    className="pointer-events-none absolute end-2 h-3.5 w-3.5 text-zinc-600"
+                    aria-hidden="true"
+                  />
+                </div>
+                <ToolbarButton
+                  active={layers.lights}
+                  icon={Lightbulb}
+                  label="Toggle lights"
+                  onClick={() => setLayers((current) => ({ ...current, lights: !current.lights }))}
+                />
+                <ToolbarButton
+                  active={layers.paths}
+                  icon={Route}
+                  label="Toggle object paths"
+                  onClick={() => setLayers((current) => ({ ...current, paths: !current.paths }))}
+                />
+                <ToolbarButton
+                  active={layers.removeAreas}
+                  icon={XCircle}
+                  label="Toggle removal areas"
+                  onClick={() =>
+                    setLayers((current) => ({ ...current, removeAreas: !current.removeAreas }))
+                  }
+                />
               </div>
             </div>
           )}
         </main>
 
         <aside
-          aria-label="Contribution review controls"
+          aria-label="Contribution review"
           className="flex min-h-0 flex-col border-t border-white/10 bg-zinc-950 lg:border-s lg:border-t-0"
         >
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-5">
-            <section aria-labelledby="visual-checks-heading">
-              <div className="mb-3">
-                <h3 id="visual-checks-heading" className="text-sm font-semibold text-white">
-                  Visual checks
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+            <section aria-labelledby="objects-heading">
+              <div className="flex min-h-9 items-center justify-between gap-3">
+                <h3 id="objects-heading" className="text-sm font-semibold text-white">
+                  Objects
                 </h3>
-                <p className="mt-1 text-xs leading-5 text-zinc-500">
-                  Change the view to spot gaps, overlaps and incorrect properties.
-                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVisibleTypes(
+                      visibleTypes.length === summary.objectTypes.length ? [] : summary.objectTypes
+                    );
+                    setSelectedObject(null);
+                  }}
+                  className="min-h-8 rounded-md px-2 text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70"
+                >
+                  {visibleTypes.length === summary.objectTypes.length ? 'Hide all' : 'Show all'}
+                </button>
               </div>
-
-              <div className="grid grid-cols-3 gap-1 rounded-lg bg-black/40 p-1">
-                {COLOR_MODES.map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    aria-pressed={colorMode === mode.id}
-                    title={mode.description}
-                    onClick={() => setColorMode(mode.id)}
-                    className={`min-h-10 rounded-md px-2 text-xs font-medium transition-[background-color,color,box-shadow,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
-                      colorMode === mode.id
-                        ? 'bg-zinc-700 text-white shadow-sm'
-                        : 'text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-300'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 min-h-8 text-xs leading-4 text-zinc-500">
-                {COLOR_MODES.find((mode) => mode.id === colorMode)?.description}
-              </p>
-
-              <div className="mt-3 grid gap-2">
-                <LayerToggle
-                  active={layers.lights}
-                  icon={Lightbulb}
-                  label="Light points"
-                  detail={`${summary.lightCount} generated`}
-                  onClick={() => setLayers((current) => ({ ...current, lights: !current.lights }))}
-                />
-                <LayerToggle
-                  active={layers.paths}
-                  icon={Route}
-                  label="Object paths"
-                  detail="Connects lights belonging to the same object"
-                  onClick={() => setLayers((current) => ({ ...current, paths: !current.paths }))}
-                />
-                <LayerToggle
-                  active={layers.removeAreas}
-                  icon={XCircle}
-                  label="Removal footprints"
-                  detail={`${summary.removeAreaCount} support areas`}
-                  onClick={() =>
-                    setLayers((current) => ({
-                      ...current,
-                      removeAreas: !current.removeAreas,
-                    }))
-                  }
-                />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {summary.objectTypes.map((type) => {
+                  const active = visibleTypeSet.has(type);
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => toggleType(type)}
+                      className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-medium active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${active ? 'bg-zinc-800 text-white' : 'bg-zinc-900/60 text-zinc-500'}`}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: TYPE_COLORS[type] || TYPE_COLORS.unknown }}
+                        aria-hidden="true"
+                      />
+                      {TYPE_LABELS[type] || type}
+                      <span className="tabular-nums text-zinc-500">{summary.typeCounts[type]}</span>
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
-            {summary.objectTypes.length > 0 && (
-              <section aria-labelledby="object-types-heading">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <h3 id="object-types-heading" className="text-sm font-semibold text-white">
-                    Object types
-                  </h3>
-                  <button
-                    type="button"
-                    className="min-h-8 rounded-md px-2 text-xs font-medium text-blue-400 hover:bg-blue-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-                    onClick={() =>
-                      setVisibleTypes(
-                        visibleTypes.length === summary.objectTypes.length
-                          ? []
-                          : summary.objectTypes
-                      )
-                    }
-                  >
-                    {visibleTypes.length === summary.objectTypes.length ? 'Hide all' : 'Show all'}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {summary.objectTypes.map((type) => {
-                    const active = visibleTypes.includes(type);
-                    return (
-                      <button
-                        key={type}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => toggleType(type)}
-                        className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-medium transition-[background-color,color,box-shadow,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
-                          active
-                            ? 'bg-zinc-800 text-zinc-100 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.1)]'
-                            : 'bg-zinc-900 text-zinc-500 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.05)]'
-                        }`}
-                      >
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: TYPE_COLORS[type] || '#a1a1aa' }}
-                          aria-hidden="true"
-                        />
-                        {TYPE_LABELS[type] || type} · {summary.typeCounts[type]}
-                      </button>
-                    );
-                  })}
-                </div>
+            <ObjectInspector object={selectedObject} onClear={() => setSelectedObject(null)} />
+
+            {summary.issues.length > 0 && (
+              <details className="group rounded-xl bg-amber-500/7 shadow-[inset_0_0_0_1px_oklch(0.769_0.188_70.08/0.18)]">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-3 text-sm font-medium text-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70">
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  {summary.issues.length} warning{summary.issues.length === 1 ? '' : 's'}
+                  <ChevronDown
+                    className="ms-auto h-4 w-4 transition-transform duration-[var(--duration-quick)] group-open:rotate-180"
+                    aria-hidden="true"
+                  />
+                </summary>
+                <ul className="space-y-1 px-3 pb-3 text-xs leading-5 text-amber-100/75">
+                  {summary.issues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
+            {!isPending && (
+              <section
+                className={`rounded-xl p-3 ${contribution.status === 'approved' ? 'bg-emerald-500/8' : contribution.status === 'rejected' ? 'bg-red-500/8' : 'bg-zinc-900/60'}`}
+              >
+                <p className="text-sm font-medium capitalize text-white">{contribution.status}</p>
+                {contribution.decisionDate && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {new Date(contribution.decisionDate).toLocaleString()}
+                  </p>
+                )}
+                {contribution.status === 'rejected' && (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-300">
+                    {contribution.rejectionReason || 'No rejection reason was recorded.'}
+                  </p>
+                )}
               </section>
             )}
 
-            <section aria-labelledby="evidence-heading">
-              <h3 id="evidence-heading" className="text-sm font-semibold text-white">
-                Decision evidence
-              </h3>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <ReviewMetric value={summary.directionalCount} label="Directional" />
-                <ReviewMetric value={summary.bidirectionalCount} label="Bidirectional" />
-                <ReviewMetric value={summary.elevatedCount} label="Elevated" />
-                <ReviewMetric value={summary.ihpCount} label="IHP lights" />
-              </div>
-
-              {summary.issues.length > 0 && (
-                <div className="mt-3 rounded-lg bg-amber-500/8 p-3 shadow-[inset_0_0_0_1px_oklch(0.769_0.188_70.08/0.2)]">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
-                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                    Check before deciding
-                  </div>
-                  <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-100/70">
-                    {summary.issues.map((issue) => (
-                      <li key={issue}>• {issue}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </section>
-
-            <section aria-labelledby="submission-heading">
-              <h3 id="submission-heading" className="text-sm font-semibold text-white">
-                Submission
-              </h3>
-              <dl className="mt-3 space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
-                  <div className="min-w-0">
-                    <dt className="text-xs text-zinc-500">Submitted by</dt>
-                    <dd className="truncate text-zinc-200">
-                      {contribution.userDisplayName || contribution.userId}
-                    </dd>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CalendarDays
-                    className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <dt className="text-xs text-zinc-500">Submitted</dt>
-                    <dd className="text-zinc-200">
-                      {new Date(contribution.submissionDate).toLocaleString()}
-                    </dd>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <FileCode2 className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <dt className="text-xs text-zinc-500">Package name</dt>
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingPackage((current) => !current)}
-                        className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-                        aria-label={
-                          isEditingPackage ? 'Finish editing package name' : 'Edit package name'
-                        }
-                      >
-                        {isEditingPackage ? (
-                          <Check className="h-4 w-4" aria-hidden="true" />
-                        ) : (
-                          <SquarePen className="h-4 w-4" aria-hidden="true" />
-                        )}
-                      </button>
-                    </div>
-                    {isEditingPackage ? (
-                      <>
-                        <input
-                          aria-label="Updated package name"
-                          aria-invalid={!packageNameIsValid}
-                          value={updatedPackageName}
-                          onChange={(event) => setUpdatedPackageName(event.target.value)}
-                          className="mt-1 min-h-10 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                        />
-                        {!packageNameIsValid && (
-                          <p className="mt-1 text-xs text-red-400">Package name is required.</p>
-                        )}
-                      </>
-                    ) : (
-                      <dd className="break-words text-zinc-200">{updatedPackageName}</dd>
-                    )}
-                  </div>
-                </div>
-              </dl>
-
-              <div className="mt-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-zinc-500">Contributor notes</p>
-                  {contribution.notes && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(contribution.notes);
-                        setNotesCopied(true);
-                        setTimeout(() => setNotesCopied(false), 2000);
-                      }}
-                      className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-                      aria-label="Copy contributor notes"
-                    >
-                      {notesCopied ? (
-                        <Check className="h-4 w-4 text-emerald-400" aria-hidden="true" />
-                      ) : (
-                        <Copy className="h-4 w-4" aria-hidden="true" />
-                      )}
-                    </button>
-                  )}
-                </div>
-                <p className="mt-1 whitespace-pre-wrap rounded-lg bg-zinc-900/70 p-3 text-sm leading-6 text-zinc-300 shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]">
-                  {contribution.notes || 'No notes provided.'}
-                </p>
-              </div>
-            </section>
-
-            <section>
-              <button
-                type="button"
-                aria-expanded={showSource}
-                onClick={() => setShowSource((current) => !current)}
-                className="flex min-h-10 w-full items-center justify-between rounded-lg px-2 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-              >
-                Source details
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${showSource ? 'rotate-180' : ''}`}
-                  aria-hidden="true"
-                />
-              </button>
-              {showSource && (
-                <div className="mt-2 space-y-2">
-                  <p className="break-all rounded-lg bg-black/35 p-3 font-mono text-xs leading-5 text-zinc-500">
-                    Contribution ID: {contribution.id}
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="w-full px-3 py-2 text-sm"
-                    onClick={() =>
-                      downloadXml(
-                        contribution.submittedXml,
-                        `${contribution.airportIcao}_submitted.xml`
-                      )
-                    }
-                  >
-                    <Download className="h-4 w-4" aria-hidden="true" />
-                    Download submitted XML
-                  </Button>
-                </div>
-              )}
-            </section>
+            <ContributionDetails
+              contribution={contribution}
+              isPending={isPending}
+              packageName={updatedPackageName}
+              packageNameIsValid={packageNameIsValid}
+              isEditingPackage={isEditingPackage}
+              notesCopied={copiedField === 'notes'}
+              onEditPackage={() => setIsEditingPackage((current) => !current)}
+              onPackageNameChange={setUpdatedPackageName}
+              onCopyNotes={() => copyValue('notes', contribution.notes)}
+              onDownload={() =>
+                downloadXml(contribution.submittedXml, `${contribution.airportIcao}_submitted.xml`)
+              }
+            />
           </div>
 
-          <section
-            aria-labelledby="decision-heading"
-            className="shrink-0 border-t border-white/10 bg-zinc-950 p-4 shadow-[0_-16px_40px_oklch(0_0_0/0.24)] sm:p-5"
-          >
-            <h3 id="decision-heading" className="text-sm font-semibold text-white">
-              Decision
-            </h3>
-            {decisionError && (
-              <p role="alert" className="mt-2 rounded-lg bg-red-500/10 p-2.5 text-sm text-red-300">
-                {decisionError}
-              </p>
-            )}
-            {approveConfirmation ? (
-              <div className="mt-3 rounded-lg bg-emerald-500/8 p-3 shadow-[inset_0_0_0_1px_oklch(0.696_0.17_162.48/0.22)]">
-                <p className="text-sm font-medium text-emerald-200">
-                  Publish this contribution to BARS?
+          {isPending && (
+            <section
+              aria-label="Decision"
+              className="shrink-0 border-t border-white/10 bg-zinc-950 p-4 shadow-[0_-16px_36px_oklch(0_0_0/0.22)]"
+            >
+              {decisionError && (
+                <p
+                  id="review-decision-error"
+                  role="alert"
+                  className="mb-3 rounded-lg bg-red-500/10 p-2.5 text-sm text-red-300"
+                >
+                  {decisionError}
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
+              )}
+              {approveConfirmation ? (
+                <div className="rounded-xl bg-emerald-500/8 p-3 shadow-[inset_0_0_0_1px_oklch(0.696_0.17_162.48/0.22)]">
+                  <p className="text-sm font-medium text-emerald-200">Publish this contribution?</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setApproveConfirmation(false)}
+                      disabled={isBusy}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+                      onClick={() => submitDecision(true)}
+                      disabled={isBusy || !packageNameIsValid}
+                    >
+                      {isApproving ? (
+                        <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ) : showRejectForm ? (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!rejectionReason.trim()) {
+                      setDecisionError('Enter a rejection reason.');
+                      return;
+                    }
+                    submitDecision(false);
+                  }}
+                >
+                  <label
+                    htmlFor="review-rejection-reason"
+                    className="text-sm font-medium text-white"
+                  >
+                    Rejection reason
+                  </label>
+                  <textarea
+                    id="review-rejection-reason"
+                    value={rejectionReason}
+                    onChange={(event) => {
+                      setRejectionReason(event.target.value);
+                      if (decisionError === 'Enter a rejection reason.') setDecisionError('');
+                    }}
+                    aria-invalid={decisionError === 'Enter a rejection reason.'}
+                    aria-describedby={
+                      decisionError === 'Enter a rejection reason.'
+                        ? 'review-decision-error'
+                        : undefined
+                    }
+                    rows={3}
+                    required
+                    className="mt-2 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-base text-white focus:outline-none focus:ring-2 focus:ring-red-400/70 sm:text-sm"
+                  />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowRejectForm(false)}
+                      disabled={isBusy}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="destructive"
+                      disabled={isBusy || !packageNameIsValid}
+                    >
+                      {isRejecting ? (
+                        <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <XCircle className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      Reject
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant="outline"
-                    className="px-3 py-2"
-                    onClick={() => setApproveConfirmation(false)}
+                    className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                    onClick={() => setShowRejectForm(true)}
                     disabled={isBusy}
                   >
-                    Cancel
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                    Reject
                   </Button>
                   <Button
-                    className="bg-emerald-500 px-3 py-2 text-zinc-950 hover:bg-emerald-400"
-                    onClick={() => submitDecision(true)}
-                    disabled={isBusy || !packageNameIsValid}
+                    className="bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+                    onClick={() => setApproveConfirmation(true)}
+                    disabled={
+                      isBusy ||
+                      isGenerating ||
+                      !!generationError ||
+                      summary.lightCount === 0 ||
+                      !packageNameIsValid
+                    }
                   >
-                    {isApproving ? (
-                      <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                    )}
-                    Confirm approval
+                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                    Approve
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <Button
-                className="mt-3 w-full bg-emerald-500 px-4 py-2 text-zinc-950 hover:bg-emerald-400"
-                onClick={() => setApproveConfirmation(true)}
-                disabled={
-                  isBusy ||
-                  isGenerating ||
-                  !!generationError ||
-                  summary.lightCount === 0 ||
-                  !packageNameIsValid
-                }
-              >
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                Approve contribution
-              </Button>
-            )}
-
-            <form
-              className="mt-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitDecision(false);
-              }}
-            >
-              <label htmlFor="review-rejection-reason" className="sr-only">
-                Rejection reason
-              </label>
-              <textarea
-                id="review-rejection-reason"
-                value={rejectionReason}
-                onChange={(event) => setRejectionReason(event.target.value)}
-                placeholder="Reason required to reject…"
-                rows={2}
-                required
-                className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-red-500/45"
-              />
-              <Button
-                type="submit"
-                variant="destructive"
-                className="mt-2 w-full px-4 py-2"
-                disabled={isBusy || !rejectionReason.trim() || !packageNameIsValid}
-              >
-                {isRejecting ? (
-                  <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <XCircle className="h-4 w-4" aria-hidden="true" />
-                )}
-                Reject contribution
-              </Button>
-            </form>
-          </section>
+              )}
+            </section>
+          )}
         </aside>
       </div>
     </div>,
@@ -942,6 +902,9 @@ ContributionReviewWorkspace.propTypes = {
     submittedXml: PropTypes.string.isRequired,
     notes: PropTypes.string,
     submissionDate: PropTypes.string.isRequired,
+    status: PropTypes.oneOf(['pending', 'approved', 'rejected', 'outdated']).isRequired,
+    rejectionReason: PropTypes.string,
+    decisionDate: PropTypes.string,
   }).isRequired,
   onClose: PropTypes.func.isRequired,
   onApprove: PropTypes.func.isRequired,

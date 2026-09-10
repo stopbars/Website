@@ -66,6 +66,15 @@ const TYPE_COLORS = {
   taxiway: '#38bdf8',
 };
 
+const getObjectColor = (objectId) => {
+  let hash = 0;
+  for (let index = 0; index < objectId.length; index += 1) {
+    hash = (hash * 31 + objectId.charCodeAt(index)) >>> 0;
+  }
+  const hue = Math.round((hash * 137.508) % 360);
+  return `hsl(${hue} 78% 64%)`;
+};
+
 // The map renderer is cohesive around one MapLibre lifecycle and its layer declarations.
 // oxlint-disable-next-line react-doctor/no-giant-component
 const XMLMap = ({
@@ -78,6 +87,9 @@ const XMLMap = ({
   showLights = true,
   colorMode = 'operational',
   visibleTypes,
+  selectedObjectId,
+  onObjectSelect,
+  styleControlPosition = 'top-right',
 }) => {
   const [viewState, setViewState] = useState({
     longitude: 0,
@@ -86,6 +98,7 @@ const XMLMap = ({
   });
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
+  const [hoveringObject, setHoveringObject] = useState(false);
   const mapRef = useRef(null);
   const pendingBoundsRef = useRef(null);
 
@@ -112,6 +125,12 @@ const XMLMap = ({
       let type = 'solid';
       let color1 = '#cccccc';
       let color2 = '#cccccc';
+
+      if (colorMode === 'object') {
+        color1 = light.objectColor;
+        color2 = color1;
+        return { type, color1, color2, heading };
+      }
 
       if (colorMode === 'type') {
         color1 = TYPE_COLORS[light.type] || '#a1a1aa';
@@ -326,11 +345,20 @@ const XMLMap = ({
         propsElement?.querySelector('Directionality')?.textContent?.toLowerCase() || '';
       const orientation = propsElement?.querySelector('Orientation')?.textContent || '';
       const elevated = propsElement?.querySelector('Elevated')?.textContent === 'true';
+      const ihp = propsElement?.querySelector('IHP')?.textContent === 'true';
       const lightElements = obj.getElementsByTagName('Light');
 
       objectGroups[objId] = {
+        id: objId,
         type: objType,
         positions: [],
+        color,
+        directionality,
+        orientation,
+        elevated,
+        ihp,
+        objectColor: getObjectColor(objId),
+        lightCount: lightElements.length,
       };
 
       for (let j = 0; j < lightElements.length; j++) {
@@ -377,6 +405,7 @@ const XMLMap = ({
             elevated: lightElevated,
             IHP: lightIHP,
             objectId: objId,
+            objectColor: objectGroups[objId].objectColor,
             properties: lightProps
               ? {
                   color: lightProps.querySelector('Color')?.textContent || null,
@@ -402,23 +431,30 @@ const XMLMap = ({
         positions: group.positions,
         type: group.type,
         color: color,
+        objectColor: group.objectColor,
       };
     });
 
     return {
       lights: allLights,
       lines: lines,
+      objects: Object.values(objectGroups),
       center: firstPosition ? [...firstPosition] : null,
     };
   }, []);
 
-  const { parsedLights, polylines } = useMemo(() => {
+  const { parsedLights, polylines, parsedObjects } = useMemo(() => {
     if (!xmlData || !xmlData.includes('BarsObject')) {
-      return { parsedLights: [], polylines: [] };
+      return { parsedLights: [], polylines: [], parsedObjects: [] };
     }
-    const { lights, lines } = parseXML(xmlData);
-    return { parsedLights: lights, polylines: lines };
+    const { lights, lines, objects } = parseXML(xmlData);
+    return { parsedLights: lights, polylines: lines, parsedObjects: objects };
   }, [xmlData, parseXML]);
+
+  const objectById = useMemo(
+    () => new globalThis.Map(parsedObjects.map((object) => [object.id, object])),
+    [parsedObjects]
+  );
 
   const removeAreas = useMemo(() => {
     const areasSource = removeAreasXmlData || xmlData;
@@ -458,6 +494,7 @@ const XMLMap = ({
           color1,
           color2,
           pointType: light.type,
+          objectId: light.objectId,
           sortKey: basePriority * 1_000 + index,
         },
       });
@@ -590,7 +627,13 @@ const XMLMap = ({
             coordinates: line.positions,
           },
           properties: {
-            color: colorMode === 'type' ? TYPE_COLORS[line.type] || '#a1a1aa' : line.color,
+            objectId: line.id,
+            color:
+              colorMode === 'object'
+                ? line.objectColor
+                : colorMode === 'type'
+                  ? TYPE_COLORS[line.type] || '#a1a1aa'
+                  : line.color,
           },
         });
         return visibleFeatures;
@@ -611,6 +654,39 @@ const XMLMap = ({
     };
   }, [removeAreas]);
 
+  const selectedObjectGeoJSON = useMemo(() => {
+    const selectedLine = polylines.find((line) => line.id === selectedObjectId);
+    if (!selectedLine || selectedLine.positions.length < 2) return null;
+
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: selectedLine.positions },
+          properties: {},
+        },
+      ],
+    };
+  }, [polylines, selectedObjectId]);
+
+  const handleObjectClick = useCallback(
+    (event) => {
+      const objectId = event.features?.find((feature) => feature.properties?.objectId)?.properties
+        ?.objectId;
+      if (!objectId || !onObjectSelect) return;
+      onObjectSelect(objectById.get(objectId) || null);
+    },
+    [objectById, onObjectSelect]
+  );
+
+  const interactiveLayerIds = useMemo(() => {
+    if (!onObjectSelect) return [];
+    return [showLights ? 'lights-layer' : null, showPolyLines ? 'polylines-layer' : null].filter(
+      Boolean
+    );
+  }, [onObjectSelect, showLights, showPolyLines]);
+
   return (
     <div className="h-[600px] rounded-lg overflow-hidden relative" style={{ height }}>
       {parsedLights.length > 0 || removeAreas.length > 0 ? (
@@ -621,6 +697,11 @@ const XMLMap = ({
             mapStyle={mapStyle}
             onLoad={handleMapLoad}
             onStyleData={(e) => updateMapImages(e.target)}
+            onClick={handleObjectClick}
+            onMouseEnter={() => setHoveringObject(true)}
+            onMouseLeave={() => setHoveringObject(false)}
+            interactiveLayerIds={interactiveLayerIds}
+            cursor={hoveringObject ? 'pointer' : 'grab'}
             style={{ width: '100%', height: '100%' }}
             ref={mapRef}
           >
@@ -667,6 +748,28 @@ const XMLMap = ({
               </Source>
             )}
 
+            {selectedObjectGeoJSON && (
+              <Source id="selected-object" type="geojson" data={selectedObjectGeoJSON}>
+                <Layer
+                  id="selected-object-halo"
+                  type="line"
+                  paint={{
+                    'line-color': '#ffffff',
+                    'line-width': 7,
+                    'line-opacity': 0.85,
+                  }}
+                />
+                <Layer
+                  id="selected-object-line"
+                  type="line"
+                  paint={{
+                    'line-color': getObjectColor(selectedObjectId),
+                    'line-width': 4,
+                  }}
+                />
+              </Source>
+            )}
+
             {showLights && lightGeoJSON && (
               <Source id="lights" type="geojson" data={lightGeoJSON}>
                 <Layer
@@ -674,7 +777,9 @@ const XMLMap = ({
                   type="symbol"
                   layout={{
                     'icon-image': ['get', 'icon'],
-                    'icon-size': 1,
+                    'icon-size': selectedObjectId
+                      ? ['case', ['==', ['get', 'objectId'], selectedObjectId], 1.35, 0.82]
+                      : 1,
                     'icon-rotate': ['get', 'heading'],
                     'icon-allow-overlap': true,
                     'icon-ignore-placement': true,
@@ -686,13 +791,17 @@ const XMLMap = ({
             )}
           </Map>
 
-          <div className="absolute top-4 right-4 bg-zinc-900/90 border border-zinc-700 rounded-md p-1 z-10">
+          <div
+            className={`absolute z-10 rounded-lg border border-zinc-700 bg-zinc-900/90 p-1 ${
+              styleControlPosition === 'bottom-right' ? 'bottom-8 right-3' : 'right-4 top-4'
+            }`}
+          >
             <button
               type="button"
               onClick={toggleStyle}
-              className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 rounded transition-colors"
+              className="flex min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70"
             >
-              <Layers className="w-4 h-4" />
+              <Layers className="h-4 w-4" aria-hidden="true" />
               <span>{styleName}</span>
             </button>
           </div>
@@ -714,8 +823,11 @@ XMLMap.propTypes = {
   showRemoveAreas: PropTypes.bool,
   removeAreasStyle: PropTypes.oneOf(['fill', 'outline']),
   showLights: PropTypes.bool,
-  colorMode: PropTypes.oneOf(['operational', 'type', 'directionality']),
+  colorMode: PropTypes.oneOf(['operational', 'object', 'type', 'directionality']),
   visibleTypes: PropTypes.arrayOf(PropTypes.string),
+  selectedObjectId: PropTypes.string,
+  onObjectSelect: PropTypes.func,
+  styleControlPosition: PropTypes.oneOf(['top-right', 'bottom-right']),
 };
 
 export default XMLMap;
