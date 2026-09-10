@@ -1,3 +1,4 @@
+import { dsfSelector, xplaneSelectorXml } from './xplane-removal-contract.js';
 /* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Normalization and validation are deliberately separate document-boundary stages. */
 
 import {
@@ -13,6 +14,7 @@ export const EDITOR_DOCUMENT_VERSION = 1;
 export const EDITOR_STORAGE_VERSION = 'bars-contribution-editor/v1';
 
 const VALID_SIMULATORS = new Set(['msfs', 'xplane']);
+const EDITABLE_MSFS_REMOVAL_ORIGINS = new Set(['msfs-source', 'msfs-auto', 'msfs-manual']);
 
 export function createEditorDocument({
   icao,
@@ -21,35 +23,56 @@ export function createEditorDocument({
   draftGeojson,
   draftXml = '',
   source,
+  originalDivisions: suppliedOriginalDivisions = [],
 }) {
   const parsed = draftXml ? parseDraftXml(draftXml) : null;
   const hasDraftGeojson = Array.isArray(draftGeojson?.features);
   const featureObjects = objectsFromDraftGeojson(draftGeojson);
-  const originalDivisions = originalDivisionsFromDraftGeojson(draftGeojson);
+  const embeddedOriginalDivisions = originalDivisionsFromDraftGeojson(draftGeojson);
+  const originalDivisions =
+    embeddedOriginalDivisions.length > 0 ? embeddedOriginalDivisions : suppliedOriginalDivisions;
   const geojsonRemovals = removalsFromDraftGeojson(draftGeojson);
   const objects = hasDraftGeojson ? featureObjects : (parsed?.objects ?? []);
+  const removals = geojsonRemovals.length > 0 ? geojsonRemovals : (parsed?.removals ?? []);
+  const importedMsfsXml = !hasDraftGeojson && parsed?.simulator === 'msfs';
 
-  return normalizeDocument({
-    version: EDITOR_DOCUMENT_VERSION,
-    icao,
-    simulator: parsed?.simulator || simulator,
-    altitude: parsed?.altitude ?? altitude,
-    objects,
-    originalDivisions,
-    removals: geojsonRemovals.length > 0 ? geojsonRemovals : (parsed?.removals ?? []),
-    xplaneRemovals: parsed?.xplaneRemovals ?? [],
-    source: source ?? null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    testedHash: null,
-  });
+  return syncOriginalDivisionMetadata(
+    {
+      version: EDITOR_DOCUMENT_VERSION,
+      icao,
+      simulator: parsed?.simulator || simulator,
+      altitude: parsed?.altitude ?? altitude,
+      objects,
+      originalDivisions,
+      removals: importedMsfsXml
+        ? removals.map((removal) => ({
+            ...removal,
+            importedOrigin: removal.origin,
+            origin: 'imported',
+          }))
+        : removals,
+      xplaneRemovals: parsed?.xplaneRemovals ?? [],
+      source: source ?? null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      testedHash: null,
+    },
+    originalDivisions
+  );
 }
 
 export function parseDraftXml(xmlText) {
   const source = String(xmlText ?? '');
   const parsed = parseXml(source, 'draft.xml');
   const documentNode = parsed.root.children.find((node) => localName(node.name) === 'fsdata');
-  if (!documentNode) throw new Error('This file does not contain an FSData draft.');
+  if (!documentNode) {
+    if (/<BarsLights\b/i.test(source)) {
+      throw new Error(
+        'This is a published runtime map, not an editable contribution. Download the source XML from the contribution dashboard.'
+      );
+    }
+    throw new Error('This file does not contain editable BARS FSData XML.');
+  }
 
   const simulator =
     String(documentNode.attributes.simulator ?? '').toLowerCase() === 'xplane' ? 'xplane' : 'msfs';
@@ -83,15 +106,94 @@ export function parseDraftXml(xmlText) {
           type: 'unknown',
           status: 'matched',
           coordinates: stripClosingVertex(vertices),
-          sourceBindings: [],
+          sourceBindings: findDescendants(
+            node,
+            (child) => localName(child.name) === 'sourcebinding'
+          ).map((child) => {
+            const binding = JSON.parse(child.attributes.data ?? '{}');
+            if (binding.dsfRemoval && !dsfSelector(binding.dsfRemoval))
+              throw new Error('Invalid DSF source binding');
+            return binding;
+          }),
         },
         objects.length
       )
     );
   });
 
+  walkNodes(documentNode, (node) => {
+    const name = localName(node.name);
+    if (name !== 'target' && name !== 'object' && name !== 'removal') return;
+    const removalIndex = Number(node.attributes.removalIndex);
+    const removal = Number.isInteger(removalIndex) ? removals[removalIndex] : undefined;
+    if (!removal) return;
+    if (name === 'removal') {
+      removal.removalMode = normalizeRemovalMode(node.attributes.mode);
+      return;
+    }
+    if (name === 'target') {
+      const lat = Number(node.attributes.lat);
+      const lon = Number(node.attributes.lon);
+      const heading = Number(node.attributes.heading);
+      const supportSizeMeters = Number(node.attributes.supportSizeMeters);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      removal.targetLightPoints ??= [];
+      removal.targetLightPoints.push({
+        lat,
+        lon,
+        heading: Number.isFinite(heading) ? heading : 0,
+        ...(Number.isFinite(supportSizeMeters) && supportSizeMeters > 0
+          ? { supportSizeMeters }
+          : {}),
+      });
+      return;
+    }
+    removal.exclusionFlags = {
+      excludeLibraryObjects: xmlBoolean(node.attributes.excludeLibraryObjects),
+      excludeVFX: xmlBoolean(node.attributes.excludeVFX),
+      excludeSimPropContainers: xmlBoolean(node.attributes.excludeSimPropContainers),
+    };
+  });
+
+  for (const node of findDescendants(
+    documentNode,
+    (candidate) => localName(candidate.name) === 'editorremoval'
+  )) {
+    const removalIndex = Number(node.attributes.removalIndex);
+    let removal = Number.isInteger(removalIndex) ? removals[removalIndex] : undefined;
+    if (!removal) {
+      removal = {
+        id: String(node.attributes.id ?? `editor-remove:${removals.length + 1}`),
+        coordinates: [],
+      };
+      removals.push(removal);
+    }
+    removal.id = String(node.attributes.id ?? removal.id);
+    removal.origin = EDITABLE_MSFS_REMOVAL_ORIGINS.has(String(node.attributes.origin))
+      ? String(node.attributes.origin)
+      : 'msfs-manual';
+    removal.sourceIds = findDescendants(node, (candidate) => localName(candidate.name) === 'source')
+      .map((sourceNode) => String(sourceNode.attributes.id ?? '').trim())
+      .filter(Boolean);
+    removal.selections = editorRemovalSelections(node, 'selection');
+    removal.keepSelections = editorRemovalSelections(node, 'keepselection');
+  }
+
   const xplaneRemovals = [];
   walkNodes(documentNode, (node) => {
+    if (localName(node.name) === 'dsf') {
+      const attrs = node.attributes;
+      const selector = dsfSelector({
+        ...attrs,
+        command: Number(attrs.command),
+        pool: Number(attrs.pool),
+        filter: Number(attrs.filter),
+        index: Number(attrs.index),
+      });
+      if (!selector) throw new Error('Invalid DSF removal selector');
+      xplaneRemovals.push(selector);
+      return;
+    }
     if (localName(node.name) !== 'light') return;
     const feature = String(node.attributes.feature ?? '');
     const code = Number(node.attributes.code);
@@ -123,6 +225,12 @@ export function parseDraftXml(xmlText) {
 export function serializeDraftXml(document) {
   const normalized = normalizeDocument(document);
   const polygons = [];
+  const geometryRemovals = normalized.removals
+    .map((removal, editorIndex) => ({ removal, editorIndex }))
+    .filter(({ removal }) => removal.coordinates.length >= 4);
+  const geometryIndexByEditorIndex = new Map(
+    geometryRemovals.map(({ editorIndex }, removalIndex) => [editorIndex, removalIndex])
+  );
   let groupIndex = 1;
 
   for (const object of normalized.objects) {
@@ -134,13 +242,13 @@ export function serializeDraftXml(document) {
         altitude: normalized.altitude,
         coordinates: object.coordinates,
         guidSeed: `${normalized.icao}:${object.id}:${coordinateFingerprint(object.coordinates)}`,
+        sourceBindings: normalized.simulator === 'xplane' ? object.sourceBindings : [],
       })
     );
     groupIndex += 1;
   }
 
-  for (const removal of normalized.removals) {
-    if (removal.coordinates.length < 3) continue;
+  for (const { removal } of geometryRemovals) {
     polygons.push(
       polygonXml({
         displayName: 'remove',
@@ -153,20 +261,58 @@ export function serializeDraftXml(document) {
     groupIndex += 1;
   }
 
+  const msfsRemovalPlan = geometryRemovals.flatMap(({ removal }, removalIndex) => {
+    const planned =
+      ['msfs-source', 'msfs-auto'].includes(removal.origin) ||
+      removal.removalMode === 'polygon' ||
+      removal.targetLightPoints.length > 0 ||
+      Object.values(removal.exclusionFlags).some(Boolean);
+    const entries = planned
+      ? [
+          `\t\t<Removal removalIndex="${removalIndex}"${removal.removalMode === 'polygon' ? ' mode="polygon"' : ''}/>`,
+        ]
+      : [];
+    entries.push(
+      ...removal.targetLightPoints.map((point) => {
+        const supportSizeMeters = Number(point.supportSizeMeters);
+        return `\t\t<Target removalIndex="${removalIndex}" lat="${point.lat.toFixed(14)}" lon="${point.lon.toFixed(14)}" heading="${point.heading.toFixed(6)}"${Number.isFinite(supportSizeMeters) && supportSizeMeters > 0 ? ` supportSizeMeters="${supportSizeMeters.toFixed(3)}"` : ''}/>`;
+      })
+    );
+    if (Object.values(removal.exclusionFlags).some(Boolean)) {
+      entries.push(
+        `\t\t<Object removalIndex="${removalIndex}"${removal.exclusionFlags.excludeLibraryObjects ? ' excludeLibraryObjects="true"' : ''}${removal.exclusionFlags.excludeVFX ? ' excludeVFX="true"' : ''}${removal.exclusionFlags.excludeSimPropContainers ? ' excludeSimPropContainers="true"' : ''}/>`
+      );
+    }
+    return entries;
+  });
+  const msfsEditorRemovalPlan =
+    normalized.simulator === 'msfs'
+      ? normalized.removals.flatMap((removal, editorIndex) => {
+          const entry = editorRemovalXml(
+            removal,
+            editorIndex,
+            geometryIndexByEditorIndex.get(editorIndex)
+          );
+          return entry ? [entry] : [];
+        })
+      : [];
+
   const rootAttributes =
     normalized.simulator === 'xplane'
-      ? 'version="9.0" simulator="xplane" xplaneRemovalVersion="1"'
+      ? 'version="9.0" simulator="xplane" xplaneRemovalVersion="2"'
       : 'version="9.0"';
   const selectorXml =
-    normalized.simulator === 'xplane' && normalized.xplaneRemovals.length > 0
-      ? `\n\t<XPlaneRemovals version="1">\n${normalized.xplaneRemovals
-          .map(
-            (selector) =>
-              `\t\t<Light feature="${escapeXml(selector.feature)}" code="${selector.code}" run="${selector.run}" start="${selector.start.toFixed(6)}" end="${selector.end.toFixed(6)}"/>`
-          )
+    normalized.simulator === 'xplane'
+      ? `\n\t<XPlaneRemovals version="2">\n${normalized.xplaneRemovals
+          .map(xplaneSelectorXml)
           .join('\n')}\n\t</XPlaneRemovals>`
       : '';
-  return `<?xml version="1.0"?>\n<FSData ${rootAttributes}>\n${polygons.join('\n')}${selectorXml}\n</FSData>`;
+  const msfsRemovalXml =
+    normalized.simulator === 'msfs' &&
+    (msfsRemovalPlan.length > 0 || msfsEditorRemovalPlan.length > 0)
+      ? `\n\t<MSFSRemovals version="1">\n${[...msfsRemovalPlan, ...msfsEditorRemovalPlan].join('\n')}\n\t</MSFSRemovals>`
+      : '';
+  return `<?xml version="1.0"?>\n<FSData ${rootAttributes}>\n${polygons.join('\n')}${selectorXml}${msfsRemovalXml}\n</FSData>`;
 }
 
 export function normalizeDocument(document) {
@@ -191,10 +337,25 @@ export function normalizeDocument(document) {
         coordinates: closeRing((removal?.coordinates ?? []).filter(validCoordinate)),
         sourceIds: normalizeStringList(removal?.sourceIds),
         origin: String(removal?.origin ?? 'imported'),
+        ...(removal?.importedOrigin ? { importedOrigin: String(removal.importedOrigin) } : {}),
         mustKeepZoneIds: normalizeStringList(removal?.mustKeepZoneIds),
         selections: normalizeRemovalSelections(removal?.selections),
+        keepSelections: normalizeRemovalSelections(removal?.keepSelections),
+        sourceLines: normalizeRemovalSourceLines(removal?.sourceLines),
+        targetLightPoints: normalizeTargetLightPoints(removal?.targetLightPoints),
+        exclusionFlags: normalizeExclusionFlags(removal?.exclusionFlags),
+        removalMode: normalizeRemovalMode(removal?.removalMode),
       }))
-      .filter((removal) => removal.coordinates.length >= 4),
+      .filter(
+        (removal) =>
+          removal.coordinates.length >= 4 ||
+          (simulator === 'msfs' &&
+            (EDITABLE_MSFS_REMOVAL_ORIGINS.has(removal.origin) ||
+              (removal.origin === 'imported' &&
+                EDITABLE_MSFS_REMOVAL_ORIGINS.has(removal.importedOrigin))) &&
+            removal.sourceIds.length > 0 &&
+            (removal.selections.length > 0 || removal.keepSelections.length > 0))
+      ),
     xplaneRemovals: normalizeXPlaneRemovals(document?.xplaneRemovals),
     source: document?.source ?? null,
     createdAt: document?.createdAt || new Date().toISOString(),
@@ -203,22 +364,57 @@ export function normalizeDocument(document) {
   };
 }
 
-export function editorDocumentToGeojson(document) {
+export function syncOriginalDivisionMetadata(document, originalDivisions) {
+  const normalized = normalizeDocument({
+    ...document,
+    originalDivisions,
+  });
+  const divisionsById = new Map(
+    normalized.originalDivisions.map((division) => [
+      String(division.id).trim().toUpperCase(),
+      division,
+    ])
+  );
+  const objects = normalized.objects.map((object) => {
+    if (object.type !== 'unknown') return object;
+    const division = divisionsById.get(String(object.id).trim().toUpperCase());
+    if (!division || division.type === 'unknown') return object;
+    return {
+      ...object,
+      name: object.name === object.id && division.name ? division.name : object.name,
+      type: division.type,
+    };
+  });
+  return {
+    ...normalized,
+    objects,
+  };
+}
+
+export function editorDocumentToGeojson(document, { objectColors } = {}) {
   const normalized = normalizeDocument(document);
   return {
     type: 'FeatureCollection',
     features: [
-      ...normalized.removals.map((removal) => ({
-        type: 'Feature',
-        id: removal.id,
-        geometry: { type: 'Polygon', coordinates: [removal.coordinates] },
-        properties: {
-          featureType: 'editor-removal',
-          editorId: removal.id,
-          sourceIds: removal.sourceIds,
-          origin: removal.origin,
-        },
-      })),
+      ...normalized.removals
+        .filter((removal) => removal.coordinates.length >= 4)
+        .map((removal) => ({
+          type: 'Feature',
+          id: removal.id,
+          geometry: { type: 'Polygon', coordinates: [removal.coordinates] },
+          properties: {
+            featureType: 'editor-removal',
+            editorId: removal.id,
+            sourceIds: removal.sourceIds,
+            origin: removal.origin,
+            selections: removal.selections,
+            keepSelections: removal.keepSelections,
+            sourceLines: removal.sourceLines,
+            targetLightPoints: removal.targetLightPoints,
+            exclusionFlags: removal.exclusionFlags,
+            removalMode: removal.removalMode,
+          },
+        })),
       ...normalized.objects.map((object) => ({
         type: 'Feature',
         id: object.partId,
@@ -233,7 +429,7 @@ export function editorDocumentToGeojson(document) {
           title: object.name,
           divisionType: object.type,
           status: object.status,
-          color: object.color,
+          color: objectColors?.get(objectColorKey(object)) ?? object.color,
           matchPercent: object.matchPercent,
         },
       })),
@@ -241,16 +437,28 @@ export function editorDocumentToGeojson(document) {
   };
 }
 
-export function originalDivisionsToGeojson(document) {
+export function objectColorKey(object) {
+  return String(object?.id || object?.partId || '');
+}
+
+export function originalDivisionsToGeojson(document, { objectColors: displayColors } = {}) {
   const normalized = normalizeDocument(document);
   const linkedDivisionColors = new Map();
-  const objectColors = new Map();
+  const storedObjectColors = new Map();
+  const matchedDivisionIds = new Set();
   for (const object of normalized.objects) {
     const linkedDivisionId = divisionIdFromGroupId(object.groupId);
-    if (linkedDivisionId && !linkedDivisionColors.has(linkedDivisionId)) {
-      linkedDivisionColors.set(linkedDivisionId, object.color);
+    for (const id of [linkedDivisionId, object.id]) {
+      const normalizedId = String(id ?? '')
+        .trim()
+        .toUpperCase();
+      if (normalizedId) matchedDivisionIds.add(normalizedId);
     }
-    if (!objectColors.has(object.id)) objectColors.set(object.id, object.color);
+    const color = displayColors?.get(objectColorKey(object)) ?? object.color;
+    if (linkedDivisionId && !linkedDivisionColors.has(linkedDivisionId)) {
+      linkedDivisionColors.set(linkedDivisionId, color);
+    }
+    if (!storedObjectColors.has(object.id)) storedObjectColors.set(object.id, color);
   }
   return {
     type: 'FeatureCollection',
@@ -263,13 +471,33 @@ export function originalDivisionsToGeojson(document) {
         divisionId: division.id,
         title: division.name,
         divisionType: division.type,
+        matched: matchedDivisionIds.has(
+          String(division.id ?? '')
+            .trim()
+            .toUpperCase()
+        ),
+        quickAddable: division.geometry.type === 'LineString',
         color:
           linkedDivisionColors.get(division.id) ??
-          objectColors.get(division.id) ??
+          storedObjectColors.get(division.id) ??
           colorForObjectId(division.id),
       },
     })),
   };
+}
+
+export function originalDivisionHasMatch(objects, divisionId) {
+  const targetId = String(divisionId ?? '')
+    .trim()
+    .toUpperCase();
+  if (!targetId) return false;
+  return (objects ?? []).some((object) => {
+    const linkedDivisionId = divisionIdFromGroupId(object.groupId).trim().toUpperCase();
+    const objectId = String(object.id ?? '')
+      .trim()
+      .toUpperCase();
+    return linkedDivisionId === targetId || objectId === targetId;
+  });
 }
 
 function divisionIdFromGroupId(groupId) {
@@ -424,6 +652,11 @@ function removalsFromDraftGeojson(geojson) {
       origin: feature.properties?.origin ?? 'msfs-source',
       mustKeepZoneIds: feature.properties?.mustKeepZoneIds ?? [],
       selections: feature.properties?.selections ?? [],
+      keepSelections: feature.properties?.keepSelections ?? [],
+      sourceLines: feature.properties?.sourceLines ?? [],
+      targetLightPoints: feature.properties?.targetLightPoints ?? [],
+      exclusionFlags: feature.properties?.exclusionFlags ?? {},
+      removalMode: feature.properties?.removalMode ?? 'targets',
     });
   }
   return removals;
@@ -447,12 +680,75 @@ function normalizeRemovalSelections(selections) {
   });
 }
 
+function editorRemovalSelections(node, name) {
+  return normalizeRemovalSelections(
+    findDescendants(node, (candidate) => localName(candidate.name) === name).map(
+      (selectionNode) => ({
+        sourceId: selectionNode.attributes.sourceId,
+        rangeStartMeters: selectionNode.attributes.rangeStartMeters,
+        rangeEndMeters: selectionNode.attributes.rangeEndMeters,
+      })
+    )
+  );
+}
+
+function normalizeRemovalSourceLines(sourceLines) {
+  return (sourceLines ?? []).flatMap((line) => {
+    const sourceId = String(line?.sourceId ?? '').trim();
+    const coordinates = (line?.coordinates ?? []).filter(validCoordinate);
+    return sourceId && coordinates.length >= 2 ? [{ sourceId, coordinates }] : [];
+  });
+}
+
+function normalizeTargetLightPoints(points) {
+  return (points ?? []).flatMap((point) => {
+    const lat = Number(point?.lat);
+    const lon = Number(point?.lon);
+    const heading = Number(point?.heading);
+    const supportSizeMeters = Number(point?.supportSizeMeters);
+    return Number.isFinite(lat) && Number.isFinite(lon)
+      ? [
+          {
+            lat,
+            lon,
+            heading: Number.isFinite(heading) ? heading : 0,
+            ...(Number.isFinite(supportSizeMeters) && supportSizeMeters > 0
+              ? { supportSizeMeters }
+              : {}),
+          },
+        ]
+      : [];
+  });
+}
+
+function normalizeExclusionFlags(flags) {
+  return {
+    excludeLibraryObjects: flags?.excludeLibraryObjects === true,
+    excludeVFX: flags?.excludeVFX === true,
+    excludeSimPropContainers: flags?.excludeSimPropContainers === true,
+  };
+}
+
+function normalizeRemovalMode(mode) {
+  return mode === 'polygon' ? 'polygon' : 'targets';
+}
+
+function xmlBoolean(value) {
+  return String(value ?? '').toLowerCase() === 'true';
+}
+
 function sourceBindingsFromProperties(properties) {
   if (!properties.sourceRowId && !properties.sourceFeatureId) return [];
   return [
     {
       sourceId: String(properties.sourceRowId || properties.sourceFeatureId),
       sourceFeatureId: properties.sourceFeatureId || undefined,
+      dsfRemoval: dsfSelector(properties.dsfRemoval),
+      lightCode: Number.isInteger(properties.lightCode) ? properties.lightCode : undefined,
+      sourceRunIndex: Number.isInteger(properties.sourceRunIndex)
+        ? properties.sourceRunIndex
+        : undefined,
+      sourceParentLengthMeters: finiteOptionalNumber(properties.sourceParentLengthMeters),
       sourceType: properties.sourceType || undefined,
       rangeStartMeters: finiteOptionalNumber(properties.sourceRangeStartMeters),
       rangeEndMeters: finiteOptionalNumber(properties.sourceRangeEndMeters),
@@ -537,32 +833,79 @@ function normalizeObject(object, index = 0) {
 
 function normalizeXPlaneRemovals(selectors) {
   return (selectors ?? [])
-    .map((selector) => ({
-      feature: String(selector?.feature ?? ''),
-      code: Number(selector?.code),
-      run: Number(selector?.run),
-      start: Number(selector?.start),
-      end: Number(selector?.end),
-    }))
+    .map((selector) =>
+      selector.kind?.startsWith('dsf-')
+        ? (dsfSelector(selector) ??
+          (() => {
+            throw new Error('Invalid DSF removal selector');
+          })())
+        : {
+            feature: String(selector?.feature ?? ''),
+            code: Number(selector?.code),
+            run: Number(selector?.run),
+            start: Number(selector?.start),
+            end: Number(selector?.end),
+          }
+    )
     .filter(
       (selector) =>
-        selector.feature &&
-        Number.isInteger(selector.code) &&
-        Number.isInteger(selector.run) &&
-        Number.isFinite(selector.start) &&
-        Number.isFinite(selector.end)
+        selector.kind?.startsWith('dsf-') ||
+        (selector.feature &&
+          Number.isInteger(selector.code) &&
+          Number.isInteger(selector.run) &&
+          Number.isFinite(selector.start) &&
+          Number.isFinite(selector.end))
     );
 }
 
-function polygonXml({ displayName, groupIndex, altitude, coordinates, guidSeed }) {
+function polygonXml({
+  displayName,
+  groupIndex,
+  altitude,
+  coordinates,
+  guidSeed,
+  sourceBindings = [],
+}) {
   const vertices = coordinates
     .filter(validCoordinate)
     .map(([lon, lat]) => `\t\t<Vertex lat="${lat.toFixed(14)}" lon="${lon.toFixed(14)}"/>`)
     .join('\n');
   return `\t<Polygon version="0.4.0" displayName="${escapeXml(displayName)}" groupIndex="${groupIndex}" altitude="${altitude.toFixed(11)}">
 \t\t<Attribute name="UniqueGUID" guid="{359C73E8-06BE-4FB2-ABCB-EC942F7761D0}" type="GUID" value="{${guidForSeed(guidSeed)}}"/>
-${vertices}
+${vertices}${sourceBindings.map((binding) => `\n\t\t<SourceBinding data="${escapeXml(JSON.stringify(binding))}"/>`).join('')}
 \t</Polygon>`;
+}
+
+function editorRemovalXml(removal, editorIndex, removalIndex) {
+  if (
+    !EDITABLE_MSFS_REMOVAL_ORIGINS.has(removal.origin) ||
+    (removal.sourceIds.length === 0 &&
+      removal.selections.length === 0 &&
+      removal.keepSelections.length === 0)
+  ) {
+    return '';
+  }
+  const removalIndexAttribute = Number.isInteger(removalIndex)
+    ? ` removalIndex="${removalIndex}"`
+    : '';
+  const entries = [
+    ...removal.sourceIds.map((sourceId) => `\t\t\t<Source id="${escapeXml(sourceId)}"/>`),
+    ...removal.selections.map((selection) => editorRemovalSelectionXml('Selection', selection)),
+    ...removal.keepSelections.map((selection) =>
+      editorRemovalSelectionXml('KeepSelection', selection)
+    ),
+  ];
+  return `\t\t<EditorRemoval editorIndex="${editorIndex}"${removalIndexAttribute} id="${escapeXml(removal.id)}" origin="${removal.origin}">\n${entries.join('\n')}\n\t\t</EditorRemoval>`;
+}
+
+function editorRemovalSelectionXml(name, selection) {
+  const start = Number(selection.rangeStartMeters);
+  const end = Number(selection.rangeEndMeters);
+  const rangeAttributes =
+    Number.isFinite(start) && Number.isFinite(end)
+      ? ` rangeStartMeters="${start.toFixed(6)}" rangeEndMeters="${end.toFixed(6)}"`
+      : '';
+  return `\t\t\t<${name} sourceId="${escapeXml(selection.sourceId)}"${rangeAttributes}/>`;
 }
 
 function guidForSeed(seed) {

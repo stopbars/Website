@@ -1,12 +1,19 @@
 /* oxlint-disable react-doctor/js-flatmap-filter react-doctor/js-combine-iterations -- Reducer helpers keep validation, normalization, and projection stages explicit to preserve editor history semantics. */
 
-import { colorForObjectId, normalizeDocument } from './editor-model.js';
+import {
+  colorForObjectId,
+  normalizeDocument,
+  syncOriginalDivisionMetadata,
+} from './editor-model.js';
 import { distanceMeters, lineLengthMeters } from './editor-geometry.js';
 import { bindingSelectorKey, selectorFromBinding, selectorKey } from './editor-snapping.js';
+import { applyXPlaneSelectorEdit } from './removal-intervals.js';
+import { traceEditorSpan } from './editor-performance.js';
 
 const MAX_HISTORY_LENGTH = 100;
 const ENDPOINT_GAP_METERS = 2;
 const TINY_SEGMENT_METERS = 0.15;
+const METERS_PER_DEGREE_LATITUDE = 111_320;
 const GUIDANCE_TYPES = new Set(['lead_on', 'taxiway', 'stand']);
 export const MISSING_DIVISION_RATIO_LIMIT = 0.15;
 export const MIN_MISSING_DIVISIONS_TO_BLOCK = 2;
@@ -28,7 +35,7 @@ export function editorReducer(state, action) {
     case 'replace-document':
       return createEditorState(action.document);
     case 'select':
-      return { ...state, selectedId: action.id };
+      return state.selectedId === action.id ? state : { ...state, selectedId: action.id };
     case 'undo':
       return undo(state);
     case 'redo':
@@ -42,13 +49,16 @@ export function editorReducer(state, action) {
         dirty: false,
       };
     case 'sync-original-divisions': {
-      const present = normalizeDocument({
-        ...state.present,
-        originalDivisions: action.originalDivisions,
-      });
+      const present = syncOriginalDivisionMetadata(state.present, action.originalDivisions);
       if (
         JSON.stringify(present.originalDivisions) ===
-        JSON.stringify(state.present.originalDivisions)
+          JSON.stringify(state.present.originalDivisions) &&
+        present.objects.length === state.present.objects.length &&
+        present.objects.every(
+          (object, index) =>
+            object.type === state.present.objects[index]?.type &&
+            object.name === state.present.objects[index]?.name
+        )
       ) {
         return state;
       }
@@ -128,6 +138,15 @@ export function editorReducer(state, action) {
         ...document,
         xplaneRemovals: toggleManualSelector(document.xplaneRemovals, action.selector),
       }));
+    case 'edit-xplane-removal':
+      return commit(state, (document) => ({
+        ...document,
+        xplaneRemovals: applyXPlaneSelectorEdit(
+          document.xplaneRemovals,
+          action.selector,
+          action.operation
+        ),
+      }));
     case 'remove-xplane-removal':
       return commit(state, (document) => ({
         ...document,
@@ -154,9 +173,78 @@ export function editorReducer(state, action) {
           })),
         ],
       }));
+    case 'replace-msfs-edited-removals':
+      return traceEditorSpan(
+        'reducer:replace-msfs-edited-removals',
+        () =>
+          commit(state, (document) => {
+            const affectedSourceIds = new Set(
+              (action.sourceIds ?? []).map(canonicalMsfsRemovalSourceId)
+            );
+            const affectedRemovalIds = new Set((action.removalIds ?? []).map(String));
+            return {
+              ...document,
+              removals: [
+                ...document.removals.filter((removal) => {
+                  if (affectedRemovalIds.has(String(removal.id))) return false;
+                  if (!['msfs-source', 'msfs-auto', 'msfs-manual'].includes(removal.origin)) {
+                    return true;
+                  }
+                  return !(removal.sourceIds ?? []).some((sourceId) =>
+                    affectedSourceIds.has(canonicalMsfsRemovalSourceId(sourceId))
+                  );
+                }),
+                ...(action.removals ?? []).map((removal) => ({
+                  ...removal,
+                  origin: 'msfs-manual',
+                })),
+              ],
+            };
+          }),
+        {
+          existingRemovalCount: state.present.removals.length,
+          generatedRemovalCount: action.removals?.length ?? 0,
+          affectedSourceCount: action.sourceIds?.length ?? 0,
+        }
+      );
+    case 'migrate-imported-msfs-removals':
+      return commit(state, (document) => {
+        const bindingsByPartId = new Map(
+          (action.bindingsByPartId ?? []).map((entry) => [String(entry.partId), entry.bindings])
+        );
+        const affectedSourceIds = new Set(
+          (action.sourceIds ?? []).map(canonicalMsfsRemovalSourceId)
+        );
+        const replacedRemovalIds = new Set((action.removalIds ?? []).map(String));
+        return {
+          ...document,
+          objects: document.objects.map((object) =>
+            bindingsByPartId.has(String(object.partId))
+              ? { ...object, sourceBindings: bindingsByPartId.get(String(object.partId)) }
+              : object
+          ),
+          removals: [
+            ...document.removals.filter((removal) => {
+              if (removal.origin === 'imported' && replacedRemovalIds.has(String(removal.id))) {
+                return false;
+              }
+              const overlaps = (removal.sourceIds ?? []).some((sourceId) =>
+                affectedSourceIds.has(canonicalMsfsRemovalSourceId(sourceId))
+              );
+              return !overlaps || !['msfs-source', 'msfs-auto'].includes(removal.origin);
+            }),
+            ...(action.removals ?? []).map((removal) => ({
+              ...removal,
+              origin: 'msfs-auto',
+            })),
+          ],
+        };
+      });
     case 'upsert-msfs-auto-removals':
       return commit(state, (document) => {
-        const affectedSourceIds = new Set((action.sourceIds ?? []).map(String));
+        const affectedSourceIds = new Set(
+          (action.sourceIds ?? []).map(canonicalMsfsRemovalSourceId)
+        );
         const affectedRemovalIds = new Set((action.removalIds ?? []).map(String));
         return {
           ...document,
@@ -164,12 +252,12 @@ export function editorReducer(state, action) {
             ...document.removals.filter((removal) => {
               if (
                 affectedRemovalIds.has(String(removal.id)) &&
-                ['msfs-source', 'msfs-auto'].includes(removal.origin)
+                ['imported', 'msfs-source', 'msfs-auto'].includes(removal.origin)
               ) {
                 return false;
               }
               const overlaps = (removal.sourceIds ?? []).some((id) =>
-                affectedSourceIds.has(String(id))
+                affectedSourceIds.has(canonicalMsfsRemovalSourceId(id))
               );
               if (!overlaps) return true;
               return !['msfs-source', 'msfs-auto'].includes(removal.origin);
@@ -184,6 +272,12 @@ export function editorReducer(state, action) {
     default:
       return state;
   }
+}
+
+function canonicalMsfsRemovalSourceId(value) {
+  const sourceId = String(value ?? '').trim();
+  const marker = sourceId.indexOf(':division-section:');
+  return marker > 0 ? sourceId.slice(0, marker) : sourceId;
 }
 
 function removeObjectAndOrphanedSelectors(document, partId) {
@@ -375,16 +469,11 @@ export function validateEditorDocument(document) {
       coordinate: object.coordinates.at(-1),
     },
   ]);
+  const endpointIndex = createEndpointIndex(endpoints, ENDPOINT_GAP_METERS);
   for (const endpoint of endpoints) {
     if (!endpoint.coordinate) continue;
     if (GUIDANCE_TYPES.has(endpoint.objectType)) continue;
-    const nearest = endpoints
-      .filter((candidate) => candidate.id !== endpoint.id && candidate.coordinate)
-      .map((candidate) => ({
-        ...candidate,
-        distance: distanceMeters(endpoint.coordinate, candidate.coordinate),
-      }))
-      .sort((left, right) => left.distance - right.distance)[0];
+    const nearest = endpointIndex.nearest(endpoint);
     if (nearest && nearest.distance > 0.15 && nearest.distance <= ENDPOINT_GAP_METERS) {
       issues.push(
         issue(
@@ -400,13 +489,91 @@ export function validateEditorDocument(document) {
   return deduplicateIssues(issues);
 }
 
+function createEndpointIndex(endpoints, maximumDistanceMeters) {
+  const indexedEndpoints = endpoints
+    .map((endpoint, index) => ({ ...endpoint, index }))
+    .filter((endpoint) => validCoordinate(endpoint.coordinate));
+  const minimumLongitudeScale = indexedEndpoints.reduce((minimum, endpoint) => {
+    const latitude = Math.max(-90, Math.min(90, Number(endpoint.coordinate[1])));
+    const scale =
+      METERS_PER_DEGREE_LATITUDE * Math.max(Math.cos((latitude * Math.PI) / 180), 0.000001);
+    return Math.min(minimum, scale);
+  }, METERS_PER_DEGREE_LATITUDE);
+  const longitudeCellSize = maximumDistanceMeters / minimumLongitudeScale;
+  const latitudeCellSize = maximumDistanceMeters / METERS_PER_DEGREE_LATITUDE;
+  const buckets = new Map();
+
+  for (const endpoint of indexedEndpoints) {
+    const [longitudeCell, latitudeCell] = endpointCell(
+      endpoint.coordinate,
+      longitudeCellSize,
+      latitudeCellSize
+    );
+    const key = `${longitudeCell}:${latitudeCell}`;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(endpoint);
+    else buckets.set(key, [endpoint]);
+  }
+
+  return {
+    nearest(endpoint) {
+      if (!validCoordinate(endpoint.coordinate)) return null;
+      const [longitudeCell, latitudeCell] = endpointCell(
+        endpoint.coordinate,
+        longitudeCellSize,
+        latitudeCellSize
+      );
+      let nearest = null;
+      for (let longitudeOffset = -1; longitudeOffset <= 1; longitudeOffset += 1) {
+        for (let latitudeOffset = -1; latitudeOffset <= 1; latitudeOffset += 1) {
+          const candidates = buckets.get(
+            `${longitudeCell + longitudeOffset}:${latitudeCell + latitudeOffset}`
+          );
+          for (const candidate of candidates ?? []) {
+            if (candidate.id === endpoint.id) continue;
+            const distance = distanceMeters(endpoint.coordinate, candidate.coordinate);
+            if (distance > maximumDistanceMeters) continue;
+            if (
+              !nearest ||
+              distance < nearest.distance ||
+              (distance === nearest.distance && candidate.index < nearest.index)
+            ) {
+              nearest = { ...candidate, distance };
+            }
+          }
+        }
+      }
+      return nearest;
+    },
+  };
+}
+
+function endpointCell(coordinate, longitudeCellSize, latitudeCellSize) {
+  return [
+    Math.floor(coordinate[0] / longitudeCellSize),
+    Math.floor(coordinate[1] / latitudeCellSize),
+  ];
+}
+
+function validCoordinate(value) {
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  );
+}
+
 function commit(state, transform) {
-  const nextDocument = normalizeDocument({
-    ...transform(state.present),
+  const transformed = transform(state.present);
+  if (transformed === state.present || sameDocumentReferences(transformed, state.present)) {
+    return state;
+  }
+  const nextDocument = {
+    ...transformed,
     updatedAt: new Date().toISOString(),
     testedHash: null,
-  });
-  if (JSON.stringify(nextDocument) === JSON.stringify(state.present)) return state;
+  };
   return {
     ...state,
     past: [...state.past.slice(-(MAX_HISTORY_LENGTH - 1)), state.present],
@@ -414,6 +581,16 @@ function commit(state, transform) {
     future: [],
     dirty: true,
   };
+}
+
+function sameDocumentReferences(left, right) {
+  const keys = new Set([...Object.keys(left ?? {}), ...Object.keys(right ?? {})]);
+  keys.delete('updatedAt');
+  keys.delete('testedHash');
+  for (const key of keys) {
+    if (!Object.is(left?.[key], right?.[key])) return false;
+  }
+  return true;
 }
 
 function undo(state) {
