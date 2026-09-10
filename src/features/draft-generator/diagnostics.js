@@ -44,6 +44,7 @@ export function buildGenerationDiagnostic({
     matching,
     generation: {
       replacements: output.replacements,
+      suppressedReplacements: output.suppressedReplacements,
       removalApproved: output.removalApproved,
       placementOnlyMatches: output.placementOnlyMatches,
       removalWarnings: output.removalWarnings,
@@ -95,6 +96,11 @@ function generationSummary(data, matching, output) {
     runways: data.runways?.length ?? 0,
     mustKeepZones: data.mustKeepZones?.length ?? 0,
     replacementObjects: output.replacements?.length ?? 0,
+    generatedDivisionObjects: new Set(
+      (output.replacements ?? []).map((match) => String(match.division.id))
+    ).size,
+    manualReviewObjects: output.unmatched?.length ?? matching.unmatched.length,
+    suppressedReplacementObjects: output.suppressedReplacements?.length ?? 0,
     guidanceStopbarBoundaryTrims: output.guidanceStopbarBoundaryTrims?.length ?? 0,
     remainingGuidanceStopbarInteriorCrossings:
       output.guidanceStopbarCrossingAudit?.remainingInteriorCrossingCount ?? 0,

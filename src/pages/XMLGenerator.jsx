@@ -23,6 +23,7 @@ import { createEditorDocument } from '../features/contribution-editor/editor-mod
 import { reconnectMsfsRenderBundleFiles } from '../features/msfs-renderer/msfs-texture-files.js';
 import {
   cacheReferenceTextures,
+  editorSessionKey,
   requestPersistentEditorStorage,
   saveEditorDraft,
   saveReferenceScene,
@@ -30,6 +31,7 @@ import {
 } from '../features/contribution-editor/editor-session.js';
 import {
   detectScenerySimulator,
+  isCommunityFolderSelection,
   scenerySelectionFingerprint,
   selectionFromDrop,
   selectionFromInput,
@@ -42,7 +44,7 @@ import {
 import { preloadRoute } from '../utils/routeModules.js';
 
 // This workflow coordinates upload, worker progress, preview, and export in one cohesive screen.
-// oxlint-disable react-doctor/no-giant-component react-doctor/no-loading-flag-reset-outside-finally -- This cohesive worker flow resets route loading inside finally after its cancellation check.
+// oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/no-loading-flag-reset-outside-finally -- This cohesive worker flow resets route loading inside finally after its cancellation check.
 const XMLGenerator = () => {
   const { icao: urlIcao } = useParams();
   const navigate = useNavigate();
@@ -183,13 +185,13 @@ const XMLGenerator = () => {
         }
         if (message.type === 'complete') {
           setResult(message.result);
-          setGeneration({ status: 'complete', stage: 'Draft ready', progress: 100 });
+          setGeneration({ status: 'complete', stage: 'XML ready', progress: 100 });
           terminateWorker();
           return;
         }
         if (message.type === 'error') {
           setGeneration({ status: 'error', stage: '', progress: 0 });
-          showError(message.error || 'The draft could not be generated. Choose another folder.');
+          showError(message.error || 'The XML could not be generated. Choose another folder.');
           terminateWorker();
         }
       };
@@ -226,6 +228,11 @@ const XMLGenerator = () => {
 
   const applySelection = useCallback(
     (nextSelection) => {
+      if (isCommunityFolderSelection(nextSelection)) {
+        throw new Error(
+          'You selected the Community folder. Choose the airport package inside it instead.'
+        );
+      }
       if (!nextSelection?.entries?.length) {
         throw new Error('No files were found. Choose the airport scenery package.');
       }
@@ -319,7 +326,8 @@ const XMLGenerator = () => {
       result.simulator === 'msfs'
         ? reconnectMsfsRenderBundleFiles(result.renderBundle, selection?.entries)
         : result.renderBundle;
-    setEditorSession(normalizedIcao, {
+    const sessionKey = editorSessionKey(normalizedIcao, result.simulator);
+    setEditorSession(sessionKey, {
       airport,
       document,
       referenceScene,
@@ -327,8 +335,8 @@ const XMLGenerator = () => {
       removalContext: result.removalContext || null,
       sourceSelection: selection,
     });
-    navigate(`/contribute/editor/${normalizedIcao}`, {
-      state: { sessionKey: normalizedIcao },
+    navigate(`/contribute/editor/${normalizedIcao}?simulator=${result.simulator}`, {
+      state: { sessionKey, simulator: result.simulator },
     });
   };
 
@@ -349,7 +357,7 @@ const XMLGenerator = () => {
   };
 
   if (loadingData) {
-    return <PageLoading page label="Loading draft generator…" />;
+    return <PageLoading page label="Loading XML generator…" />;
   }
 
   return (
@@ -358,7 +366,7 @@ const XMLGenerator = () => {
         <div className="mx-auto max-w-7xl px-6">
           <ContributionFlowHeader
             current="draft"
-            title="Create a draft"
+            title="Create XML"
             icao={normalizedIcao}
             context={`${airport?.icao} · ${airport?.name}`}
           />
@@ -370,7 +378,7 @@ const XMLGenerator = () => {
                 <p className="text-sm text-amber-300">{disabledContributionMessage}</p>
                 {import.meta.env.DEV ? (
                   <p className="mt-1 text-xs text-amber-200">
-                    Draft generation is temporarily enabled in local development.
+                    XML generation is temporarily enabled in local development.
                   </p>
                 ) : null}
               </div>
@@ -383,6 +391,7 @@ const XMLGenerator = () => {
               geojsonUrl={geojsonUrl}
               simulatorGeojsonUrl={simulatorGeojsonUrl}
               divisionGeojson={divisionGeojson}
+              diagnosticBlob={result?.diagnosticBlob}
               bounds={result?.bounds}
             />
 
@@ -469,7 +478,7 @@ const XMLGenerator = () => {
       </div>
 
       <Toast
-        title="Draft generator"
+        title="XML generator"
         description={error}
         variant="destructive"
         show={showErrorToast}
@@ -528,7 +537,7 @@ const XMLGenerator = () => {
     </Layout>
   );
 };
-// oxlint-enable react-doctor/no-giant-component
+// oxlint-enable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function
 
 function buildDivisionGeojson(points) {
   const features = [];
@@ -577,7 +586,7 @@ function GenerationProgress({ generation }) {
       <div
         className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800"
         role="progressbar"
-        aria-label="Draft generation progress"
+        aria-label="XML generation progress"
         aria-valuemin="0"
         aria-valuemax="100"
         aria-valuenow={generation.progress}
@@ -594,7 +603,6 @@ function GenerationProgress({ generation }) {
 function ResultPanel({ result, onDownload, onDownloadDiagnostic, onOpenEditor }) {
   const hasMatches = result.matchedCount > 0;
   const hasManualWork = result.manualCount > 0;
-  const hasRemovalReview = result.simulator !== 'xplane' && result.removalReview.length > 0;
 
   return (
     <section className="mt-5 border-t border-zinc-800 pt-5" aria-labelledby="draft-result-title">
@@ -612,7 +620,7 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onOpenEditor })
         </div>
         <div>
           <h2 id="draft-result-title" className="font-medium text-white">
-            {hasMatches ? 'Draft ready' : 'No automatic matches'}
+            {hasMatches ? 'XML ready' : 'No automatic matches'}
           </h2>
           <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
             {result.matchedCount} matched
@@ -624,7 +632,7 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onOpenEditor })
       {hasManualWork ? (
         <div className="mt-4 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3">
           <p className="text-xs leading-relaxed text-rose-300">
-            Red objects were not added to the draft. Add them in the editor.
+            Red objects were not added to the XML. Add them in the editor.
           </p>
           <div className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
             {result.manualReview.map((item) => (
@@ -637,24 +645,14 @@ function ResultPanel({ result, onDownload, onDownloadDiagnostic, onOpenEditor })
         </div>
       ) : null}
 
-      {hasRemovalReview ? (
-        <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
-          <p className="text-xs leading-relaxed text-amber-200">
-            {result.removalReview.length} matched{' '}
-            {result.removalReview.length === 1 ? 'object was' : 'objects were'} added to the draft,
-            but nearby simulator lighting needs a quick review in the editor.
-          </p>
-        </div>
-      ) : null}
-
       <div className="mt-5 space-y-3 border-t border-zinc-800 pt-5">
         <Button onClick={onOpenEditor} disabled={!hasMatches} className="w-full">
           Open editor
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="motion-forward h-4 w-4" />
         </Button>
         <Button onClick={onDownload} disabled={!hasMatches} variant="outline" className="w-full">
           <Download className="h-4 w-4" />
-          Download draft
+          Download XML
         </Button>
         {import.meta.env.DEV && result.diagnosticBlob ? (
           <Button onClick={onDownloadDiagnostic} variant="secondary" className="w-full">
@@ -700,13 +698,6 @@ ResultPanel.propTypes = {
     matchedCount: PropTypes.number.isRequired,
     manualCount: PropTypes.number.isRequired,
     manualReview: PropTypes.arrayOf(
-      PropTypes.shape({
-        id: PropTypes.string.isRequired,
-        name: PropTypes.string.isRequired,
-        type: PropTypes.string.isRequired,
-      })
-    ).isRequired,
-    removalReview: PropTypes.arrayOf(
       PropTypes.shape({
         id: PropTypes.string.isRequired,
         name: PropTypes.string.isRequired,

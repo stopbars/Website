@@ -185,12 +185,6 @@ async function generateDraft(message) {
       type: item.division?.type || 'unknown',
       reason: item.reason,
     }));
-    const removalReview = output.removalWarnings.map((item) => ({
-      id: String(item.division?.id ?? ''),
-      name: item.division?.name || String(item.division?.id || 'Matched object'),
-      type: item.division?.type || 'unknown',
-      reason: item.reason,
-    }));
     timings.beforeDiagnostic = round(performance.now() - startedAt, 3);
     let diagnosticBlob = null;
     let diagnosticError = '';
@@ -230,7 +224,6 @@ async function generateDraft(message) {
       matchedCount: new Set(output.matched.map((match) => String(match.division.id))).size,
       manualCount: manualReview.length,
       manualReview,
-      removalReview,
       duplicateDivisionLeadOns: output.duplicateDivisionLeadOns.length,
       duplicateSimulatorLeadOns: output.duplicateSimulatorLeadOns.length,
       elapsedSeconds: round((performance.now() - startedAt) / 1000, 1),

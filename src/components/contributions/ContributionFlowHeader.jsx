@@ -7,7 +7,7 @@ import { ContributionGuideLink } from './ContributionGuideLink.jsx';
 const FLOW_STEPS = [
   { id: 'airport', label: 'Airport' },
   { id: 'review', label: 'Review airport' },
-  { id: 'draft', label: 'Draft' },
+  { id: 'draft', label: 'XML' },
   { id: 'editor', label: 'Editor' },
   { id: 'test', label: 'Test' },
   { id: 'submit', label: 'Submit' },

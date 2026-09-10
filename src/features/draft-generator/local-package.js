@@ -13,6 +13,7 @@ const READABLE_EXTENSIONS = new Set([
   '.jpeg',
   '.webp',
   '.dds',
+  '.ktx2',
 ]);
 
 export function detectScenerySimulator(entries) {
@@ -33,6 +34,14 @@ export function scenerySelectionFingerprint(entries) {
     hash = Math.imul(hash, 16777619);
   }
   return `${values.length}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+export function isCommunityFolderSelection(selection) {
+  return (
+    String(selection?.name ?? '')
+      .trim()
+      .toLowerCase() === 'community'
+  );
 }
 
 export function selectionFromInput(fileList) {

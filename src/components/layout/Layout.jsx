@@ -24,7 +24,7 @@ const SITE_NAME = 'BARS';
 
 const getPageTitle = (pathname) => {
   if (/^\/contribute\/editor\/[^/]+\/?$/.test(pathname)) return 'Contribution editor';
-  if (/^\/contribute\/generator\/[^/]+\/?$/.test(pathname)) return 'Draft generator';
+  if (/^\/contribute\/generator\/[^/]+\/?$/.test(pathname)) return 'XML generator';
   if (/^\/contribute\/test\/[^/]+\/?$/.test(pathname)) return 'Test contribution';
   if (/^\/contribute\/details\/[^/]+\/?$/.test(pathname)) return 'Submit contribution';
   if (/^\/contribute\/map\/[^/]+\/?$/.test(pathname)) return 'Review airport';
