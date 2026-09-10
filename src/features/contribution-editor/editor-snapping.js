@@ -1,3 +1,4 @@
+import { dsfSelector, dsfSelectorKey } from './xplane-removal-contract.js';
 /* oxlint-disable react-doctor/js-flatmap-filter -- Snap candidates are bounded and explicit validity filtering documents eligible geometry. */
 
 import {
@@ -33,12 +34,7 @@ export function matchSnappedReference(
     ) {
       continue;
     }
-    const candidate = matchSourceLine(
-      coordinates,
-      objectLength,
-      feature,
-      toleranceMeters
-    );
+    const candidate = matchSourceLine(coordinates, objectLength, feature, toleranceMeters);
     if (candidate) candidates.push(candidate);
   }
   if (candidates.length === 0) return null;
@@ -51,9 +47,7 @@ export function matchSnappedReference(
   return {
     ...best,
     bindings: candidates.map((candidate) => candidate.binding),
-    selectors: candidates
-      .map((candidate) => candidate.selector)
-      .filter(Boolean),
+    selectors: candidates.map((candidate) => candidate.selector).filter(Boolean),
   };
 }
 
@@ -62,6 +56,7 @@ export function referenceMatchFromProjections(feature, first, last) {
   const totalLength = lineLengthMeters(feature?.geometry?.coordinates);
   const binding = {
     sourceId: String(properties.sourceId ?? feature?.id ?? ''),
+    dsfRemoval: dsfSelector(properties.dsfRemoval),
     sourceFeatureId: properties.sourceFeatureId || undefined,
     sourceType: properties.sourceType || undefined,
     rangeStartMeters: Math.min(first.alongMeters, last.alongMeters),
@@ -175,17 +170,15 @@ export function nearbyRemovalBindingFromExtendedReference(
 }
 
 export function selectorKey(selector) {
-  if (
-    !selector?.feature ||
-    !Number.isInteger(selector.code) ||
-    !Number.isInteger(selector.run)
-  ) {
+  if (selector?.kind) return dsfSelectorKey(selector);
+  if (!selector?.feature || !Number.isInteger(selector.code) || !Number.isInteger(selector.run)) {
     return '';
   }
   return `${selector.feature}:${selector.code}:${selector.run}`;
 }
 
 export function bindingSelectorKey(binding) {
+  if (binding?.dsfRemoval) return dsfSelectorKey(binding.dsfRemoval);
   return selectorKey({
     feature: binding?.sourceFeatureId,
     code: binding?.lightCode,
@@ -194,6 +187,12 @@ export function bindingSelectorKey(binding) {
 }
 
 export function selectorFromBinding(binding) {
+  if (binding?.dsfRemoval) {
+    return binding.rangeStartMeters <= 0.001 &&
+      binding.rangeEndMeters >= binding.sourceParentLengthMeters - 0.001
+      ? dsfSelector(binding.dsfRemoval)
+      : null;
+  }
   if (
     !/^[a-f0-9]{16}$/i.test(binding.sourceFeatureId ?? '') ||
     binding.sourceType !== 'xplane-apt-light-string' ||
@@ -245,14 +244,8 @@ function matchSourceLine(coordinates, objectLength, feature, toleranceMeters) {
   let maximumDistanceMeters;
 
   if (objectOnSource) {
-    rangeStartMeters = Math.min(
-      objectOnSource.first.alongMeters,
-      objectOnSource.last.alongMeters
-    );
-    rangeEndMeters = Math.max(
-      objectOnSource.first.alongMeters,
-      objectOnSource.last.alongMeters
-    );
+    rangeStartMeters = Math.min(objectOnSource.first.alongMeters, objectOnSource.last.alongMeters);
+    rangeEndMeters = Math.max(objectOnSource.first.alongMeters, objectOnSource.last.alongMeters);
     matchedLength = objectOnSource.containerSliceLength;
     maximumDistanceMeters = objectOnSource.maximumDistanceMeters;
   } else if (sourceOnObject) {
@@ -267,6 +260,7 @@ function matchSourceLine(coordinates, objectLength, feature, toleranceMeters) {
   const properties = feature.properties ?? {};
   const binding = {
     sourceId: String(properties.sourceId ?? feature.id ?? ''),
+    dsfRemoval: dsfSelector(properties.dsfRemoval),
     sourceFeatureId: properties.sourceFeatureId || undefined,
     sourceType: properties.sourceType || undefined,
     rangeStartMeters,
@@ -336,12 +330,20 @@ function nearestPointOnExtendedLine(coordinate, sourceCoordinates) {
     (fraction) => fraction >= 1
   );
   if (endRay) candidates.push(endRay);
-  return candidates.reduce((nearest, candidate) =>
-    !nearest || candidate.distanceMeters < nearest.distanceMeters ? candidate : nearest
-  , null);
+  return candidates.reduce(
+    (nearest, candidate) =>
+      !nearest || candidate.distanceMeters < nearest.distanceMeters ? candidate : nearest,
+    null
+  );
 }
 
-function endpointRayProjection(coordinate, startCoordinate, endCoordinate, distanceBefore, accepts) {
+function endpointRayProjection(
+  coordinate,
+  startCoordinate,
+  endCoordinate,
+  distanceBefore,
+  accepts
+) {
   const referenceLatitude = coordinate?.[1];
   if (!Number.isFinite(referenceLatitude)) return null;
   const point = project(coordinate, referenceLatitude);

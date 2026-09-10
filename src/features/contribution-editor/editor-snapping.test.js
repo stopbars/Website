@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   bindingSelectorKey,
   matchSnappedReference,
+  nearbyRemovalBindingFromExtendedReference,
+  removalBindingFromExtendedReference,
   selectorKey,
 } from './editor-snapping.js';
 
@@ -48,6 +50,22 @@ test('does not create a removal for a merely nearby or derived line', () => {
     ]),
     null
   );
+});
+
+test('can bind an edited MSFS object to an exact-placement derived light row', () => {
+  const derived = {
+    ...lightFeature,
+    properties: { ...lightFeature.properties, exactness: 'derived' },
+  };
+
+  const match = matchSnappedReference(
+    lightFeature.geometry.coordinates,
+    [derived],
+    1,
+    { allowDerived: true }
+  );
+
+  assert.equal(match.binding.sourceId, 'row-one');
 });
 
 test('uses the same identity for a source binding and its selector', () => {
@@ -96,4 +114,60 @@ test('does not remove a source row that is only crossed by the edited object', (
   ];
 
   assert.equal(matchSnappedReference(crossingObject, [lightFeature]), null);
+});
+
+test('removal clipping projects a sideways object onto the simulator row heading', () => {
+  const sideways = [
+    [151.10005, -33.8999],
+    [151.10015, -33.8999],
+  ];
+
+  const binding = removalBindingFromExtendedReference(sideways, lightFeature);
+
+  assert.ok(binding.rangeStartMeters > 4);
+  assert.ok(binding.rangeStartMeters < 6);
+  assert.ok(binding.rangeEndMeters > 13);
+  assert.ok(binding.rangeEndMeters < 15);
+});
+
+test('removal clipping uses the end heading and clamps an off-end drag to the real row', () => {
+  const beyondEnd = [
+    [151.1001, -33.89995],
+    [151.1003, -33.89995],
+  ];
+
+  const binding = removalBindingFromExtendedReference(beyondEnd, lightFeature);
+
+  assert.ok(binding.rangeStartMeters > 8);
+  assert.equal(binding.rangeEndMeters, binding.sourceParentLengthMeters);
+});
+
+test('removal discovery accepts an aligned segment on a different simulator source ID', () => {
+  const differentRow = {
+    ...lightFeature,
+    id: 'different-row',
+    properties: { ...lightFeature.properties, sourceId: 'different-row' },
+  };
+  const aligned = [
+    [151.10003, -33.899995],
+    [151.10016, -33.899995],
+  ];
+
+  const binding = nearbyRemovalBindingFromExtendedReference(aligned, differentRow, 1.5);
+
+  assert.equal(binding.sourceId, 'different-row');
+  assert.ok(binding.rangeStartMeters > 2);
+  assert.ok(binding.rangeEndMeters > binding.rangeStartMeters);
+});
+
+test('removal discovery rejects a simulator row that is merely crossed', () => {
+  const crossing = [
+    [151.1001, -33.90002],
+    [151.1001, -33.89998],
+  ];
+
+  assert.equal(
+    nearbyRemovalBindingFromExtendedReference(crossing, lightFeature, 3),
+    null
+  );
 });

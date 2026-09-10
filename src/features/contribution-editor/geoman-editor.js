@@ -5,14 +5,15 @@ const REFERENCE_SNAP_PREFIX = '__reference-snap__:';
 const LIGHT_ROW_SNAP_GEOMETRIES = new Set(['Point', 'LineString', 'MultiLineString']);
 
 export function createGeomanEditorFeatures(objects, selectedId) {
+  if (!selectedId) return [];
   return objects
-    .filter((object) => object.coordinates.length >= 2)
+    .filter((object) => object.partId === selectedId && object.coordinates.length >= 2)
     .map((object) => ({
       type: 'Feature',
       id: object.partId,
       properties: {
         __gm_id: object.partId,
-        __gm_disableEdit: object.partId !== selectedId,
+        __gm_disableEdit: false,
         barsPartId: object.partId,
         color: object.color,
       },
@@ -21,6 +22,60 @@ export function createGeomanEditorFeatures(objects, selectedId) {
         coordinates: object.coordinates,
       },
     }));
+}
+
+export async function discardCompletedGeomanDraw(geoman, feature) {
+  if (!geoman || !feature) return;
+  geoman.features.setSelection([], false);
+  try {
+    await geoman.features.delete(feature);
+  } finally {
+    // Deleting a freshly drawn feature can emit a late selection update.
+    geoman.features.setSelection([], false);
+  }
+}
+
+export function limitGeomanFeatureQueries(
+  geoman,
+  map,
+  { featureIdProperty = '__gm_id' } = {}
+) {
+  const adapter = geoman?.mapAdapter;
+  const originalQuery = adapter?.queryFeaturesByScreenCoordinates;
+  if (!adapter || typeof originalQuery !== 'function') return () => {};
+
+  adapter.queryFeaturesByScreenCoordinates = ({ queryCoordinates, sourceNames }) => {
+    const requestedSources = new Set(sourceNames ?? []);
+    const layers = (map.getStyle?.()?.layers ?? [])
+      .filter((layer) => requestedSources.has(layer.source))
+      .map((layer) => layer.id);
+    if (layers.length === 0) return [];
+
+    const features = [];
+    const seen = new Set();
+    for (const renderedFeature of map.queryRenderedFeatures(queryCoordinates, { layers })) {
+      const sourceName = renderedFeature.source;
+      const featureId = renderedFeature.properties?.[featureIdProperty];
+      const key = `${sourceName}:${featureId}`;
+      if (
+        featureId === null ||
+        featureId === undefined ||
+        !requestedSources.has(sourceName) ||
+        seen.has(key)
+      ) {
+        continue;
+      }
+      const feature = geoman.features.get(sourceName, featureId);
+      if (!feature) continue;
+      seen.add(key);
+      features.push(feature);
+    }
+    return features;
+  };
+
+  return () => {
+    adapter.queryFeaturesByScreenCoordinates = originalQuery;
+  };
 }
 
 export function createGeomanReferenceSnapTargets(
@@ -32,6 +87,8 @@ export function createGeomanReferenceSnapTargets(
   const pointFeatures = [];
   const bounded = Number.isFinite(maximumFeatures);
   const poolLimit = bounded ? Math.max(0, Math.floor(maximumFeatures)) : Infinity;
+  const poolHasCapacity = (kind) =>
+    !bounded || (kind === 'line' ? lineFeatures.length : pointFeatures.length) < poolLimit;
 
   const addFeature = (feature, kind) => {
     if (!bounded) {
@@ -43,28 +100,34 @@ export function createGeomanReferenceSnapTargets(
   };
 
   for (const [featureIndex, feature] of (referenceFeatures ?? []).entries()) {
+    if (bounded && lineFeatures.length >= poolLimit && pointFeatures.length >= poolLimit) break;
     if (!referenceFeatureIsSnappable(feature)) continue;
     const sourceId = String(feature.properties?.sourceId ?? feature.id ?? '');
     if (!sourceId) continue;
     if (feature.geometry?.type === 'Point') {
+      if (!poolHasCapacity('point')) continue;
       const coordinate = feature.geometry.coordinates;
       if (!validCoordinate(coordinate)) continue;
       const id = `${REFERENCE_SNAP_PREFIX}${sourceId}:${featureIndex}:point`;
-      addFeature({
-        type: 'Feature',
-        id,
-        properties: {
-          __gm_id: id,
-          __gm_shape: 'circle_marker',
-          __gm_disableEdit: true,
-          barsReferenceSnap: true,
+      addFeature(
+        {
+          type: 'Feature',
+          id,
+          properties: {
+            __gm_id: id,
+            __gm_shape: 'circle_marker',
+            __gm_disableEdit: true,
+            barsReferenceSnap: true,
+          },
+          geometry: { type: 'Point', coordinates: [...coordinate] },
         },
-        geometry: { type: 'Point', coordinates: [...coordinate] },
-      }, 'point');
+        'point'
+      );
       continue;
     }
     const lines = snapLinesFromGeometry(feature.geometry);
     for (const [lineIndex, coordinates] of lines.entries()) {
+      if (!poolHasCapacity('line')) break;
       if (
         !Array.isArray(coordinates) ||
         coordinates.length < 2 ||
@@ -73,19 +136,22 @@ export function createGeomanReferenceSnapTargets(
         continue;
       }
       const id = `${REFERENCE_SNAP_PREFIX}${sourceId}:${featureIndex}:${lineIndex}`;
-      addFeature({
-        type: 'Feature',
-        id,
-        properties: {
-          __gm_id: id,
-          __gm_disableEdit: true,
-          barsReferenceSnap: true,
+      addFeature(
+        {
+          type: 'Feature',
+          id,
+          properties: {
+            __gm_id: id,
+            __gm_disableEdit: true,
+            barsReferenceSnap: true,
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: coordinates.map((coordinate) => [...coordinate]),
+          },
         },
-        geometry: {
-          type: 'LineString',
-          coordinates: coordinates.map((coordinate) => [...coordinate]),
-        },
-      }, 'line');
+        'line'
+      );
     }
   }
 
@@ -96,6 +162,92 @@ export function createGeomanReferenceSnapTargets(
   };
 }
 
+export function createGeomanFeatureSyncState() {
+  return {
+    editorFeaturesById: new Map(),
+    referenceSnapTargets: null,
+    referenceIds: new Set(),
+    snapEnabled: false,
+  };
+}
+
+export function acknowledgeGeomanGeometryEdit(state, id, coordinates) {
+  const featureId = String(id ?? '');
+  const currentFeature = state?.editorFeaturesById?.get(featureId);
+  if (
+    !currentFeature ||
+    currentFeature.geometry?.type !== 'LineString' ||
+    !Array.isArray(coordinates)
+  ) {
+    return false;
+  }
+  state.editorFeaturesById.set(featureId, {
+    ...currentFeature,
+    geometry: {
+      ...currentFeature.geometry,
+      coordinates,
+    },
+  });
+  return true;
+}
+
+export function planGeomanFeatureSync(
+  previousState,
+  { objects, selectedId, editorObjectsVisible, referenceSnapTargets, snapEnabled }
+) {
+  const previous = previousState ?? createGeomanFeatureSyncState();
+  const nextEditorFeatures = editorObjectsVisible
+    ? createGeomanEditorFeatures(objects, selectedId)
+    : [];
+  const nextEditorFeaturesById = new Map(
+    nextEditorFeatures.map((feature) => [String(feature.id), feature])
+  );
+  const deleteIds = new Set();
+  const importFeatures = [];
+
+  for (const [id, previousFeature] of previous.editorFeaturesById) {
+    const nextFeature = nextEditorFeaturesById.get(id);
+    if (!nextFeature || !geomanEditorFeatureEqual(previousFeature, nextFeature)) {
+      deleteIds.add(id);
+    }
+  }
+  for (const [id, nextFeature] of nextEditorFeaturesById) {
+    const previousFeature = previous.editorFeaturesById.get(id);
+    if (!previousFeature || !geomanEditorFeatureEqual(previousFeature, nextFeature)) {
+      importFeatures.push(nextFeature);
+    }
+  }
+
+  const referenceTargetsChanged =
+    previous.referenceSnapTargets !== referenceSnapTargets || previous.snapEnabled !== snapEnabled;
+  const nextReferenceIds = snapEnabled
+    ? new Set((referenceSnapTargets?.features ?? []).map((feature) => String(feature.id)))
+    : new Set();
+  if (referenceTargetsChanged) {
+    for (const id of previous.referenceIds) deleteIds.add(id);
+    if (snapEnabled) importFeatures.push(...(referenceSnapTargets?.features ?? []));
+  }
+
+  return {
+    deleteIds: [...deleteIds],
+    importFeatures,
+    nextState: {
+      editorFeaturesById: nextEditorFeaturesById,
+      referenceSnapTargets,
+      referenceIds: nextReferenceIds,
+      snapEnabled,
+    },
+  };
+}
+
+function geomanEditorFeatureEqual(left, right) {
+  return (
+    left.geometry?.coordinates === right.geometry?.coordinates &&
+    left.properties?.color === right.properties?.color &&
+    left.properties?.__gm_disableEdit === right.properties?.__gm_disableEdit
+  );
+}
+
 function referenceFeatureIsSnappable(feature) {
   const category = feature.properties?.snapCategory;
   const geometryType = feature.geometry?.type;
@@ -103,32 +255,30 @@ function referenceFeatureIsSnappable(feature) {
   return category === 'fixtures' && geometryType === 'Point';
 }
 
-export function applyEditorGeometryPreviews(
-  geojson,
-  selectedId,
-  editPreview,
-  drawPreview
-) {
-  const hasEditPreview =
-    editPreview?.id === selectedId && editPreview.coordinates?.length >= 2;
-  const features = geojson.features.map((feature) => {
-    if (
-      !hasEditPreview ||
-      feature.properties?.editorId !== editPreview.id ||
-      feature.geometry?.type !== 'LineString'
-    ) {
-      return feature;
-    }
-    return {
-      ...feature,
-      geometry: {
-        ...feature.geometry,
-        coordinates: editPreview.coordinates,
-      },
-    };
-  });
+export function applyEditorGeometryPreviews(geojson, selectedId, editPreview, drawPreview) {
+  const hasEditPreview = editPreview?.id === selectedId && editPreview.coordinates?.length >= 2;
+  const hasDrawPreview = drawPreview?.length >= 2;
+  if (!hasEditPreview && !hasDrawPreview) return geojson;
 
-  if (drawPreview?.length >= 2) {
+  const features = hasEditPreview
+    ? geojson.features.map((feature) => {
+        if (
+          feature.properties?.editorId !== editPreview.id ||
+          feature.geometry?.type !== 'LineString'
+        ) {
+          return feature;
+        }
+        return {
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates: editPreview.coordinates,
+          },
+        };
+      })
+    : [...geojson.features];
+
+  if (hasDrawPreview) {
     features.push({
       type: 'Feature',
       id: DRAW_PREVIEW_ID,
@@ -174,7 +324,9 @@ function balancedSnapTargets(lineFeatures, pointFeatures, maximumFeatures) {
   const selectedPoints = pointFeatures.slice(0, limit - selectedLines.length);
   let remaining = limit - selectedLines.length - selectedPoints.length;
   if (remaining > 0) {
-    selectedLines.push(...lineFeatures.slice(selectedLines.length, selectedLines.length + remaining));
+    selectedLines.push(
+      ...lineFeatures.slice(selectedLines.length, selectedLines.length + remaining)
+    );
     remaining = limit - selectedLines.length - selectedPoints.length;
   }
   if (remaining > 0) {
