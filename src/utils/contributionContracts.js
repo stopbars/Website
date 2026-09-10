@@ -95,3 +95,23 @@ export function submittedArtifactDescriptor(contribution) {
         : '',
   };
 }
+
+export function isFsDataXml(xml) {
+  const source = String(xml ?? '').replace(/^\uFEFF/, '');
+  return /<FSData\b/i.test(source);
+}
+
+export function contributionSourceFileName(contribution) {
+  const airport = cleanFileNamePart(contribution?.airportIcao, 'airport').toUpperCase();
+  const packageName = cleanFileNamePart(contribution?.packageName, 'package');
+  const simulator = cleanFileNamePart(contribution?.simulator, 'simulator').toLowerCase();
+  return `${airport}-${packageName}-${simulator}.xml`;
+}
+
+function cleanFileNamePart(value, fallback) {
+  const cleaned = String(value ?? '')
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return cleaned || fallback;
+}

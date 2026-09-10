@@ -9,6 +9,7 @@ import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
 import { Dialog } from '../components/shared/Dialog';
 import { SimulatorBadge } from '../components/shared/SimulatorBadge';
+import { PageLoading } from '../components/shared/PageLoading';
 import {
   Trophy,
   Users,
@@ -23,13 +24,15 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { getVatsimToken } from '../utils/cookieUtils';
 import { getSimulatorLabel } from '../utils/simulatorPresentation';
 import {
-  publishedBarsArtifactDescriptor,
+  contributionSourceFileName,
+  isFsDataXml,
   submittedArtifactDescriptor,
 } from '../utils/contributionContracts.js';
 
@@ -62,7 +65,7 @@ const groupContributionsByAirport = (contributions) => {
   return Object.values(grouped);
 };
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-initialize-state react-doctor/exhaustive-deps react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/js-combine-iterations react-doctor/no-set-state-after-await-in-effect -- Dashboard requests use a mounted guard before post-await updates; tabs, measurement, request state, and bounded lists remain cohesive. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-initialize-state react-doctor/exhaustive-deps react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/js-combine-iterations react-doctor/no-set-state-after-await-in-effect -- Dashboard requests use a mounted guard before post-await updates; tabs, measurement, request state, and bounded lists remain cohesive. */
 const ContributionDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -231,30 +234,31 @@ const ContributionDashboard = () => {
   }, [retryCount, vatsimToken, vatsimUserId]);
   const handleDownload = async (contributionSummary) => {
     try {
-      let descriptor = publishedBarsArtifactDescriptor(contributionSummary);
-      let blob;
+      const response = await fetch(
+        `https://v2.stopbars.com/contributions/${contributionSummary.id}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch the contribution source');
+      const contribution = await response.json();
+      const descriptor = submittedArtifactDescriptor(contribution);
+      let sourceXml = contribution.submittedXml;
 
-      if (descriptor) {
-        const response = await fetch(descriptor.downloadUrl);
-        if (!response.ok) throw new Error('Failed to download the published map artifact');
-        blob = await response.blob();
-      } else {
-        // Legacy contributions without a stable artifact key keep source XML behind an explicit click.
-        const response = await fetch(
-          `https://v2.stopbars.com/contributions/${contributionSummary.id}`
-        );
-        if (!response.ok) throw new Error('Failed to fetch contribution data');
-        const contribution = await response.json();
-        descriptor = submittedArtifactDescriptor(contribution);
-        if (!contribution.submittedXml) throw new Error('Contribution XML is unavailable');
-        blob = new Blob([contribution.submittedXml], { type: descriptor.contentType });
+      if (!sourceXml && descriptor.downloadUrl) {
+        const artifactResponse = await fetch(descriptor.downloadUrl);
+        if (!artifactResponse.ok) throw new Error('Failed to download the contribution source');
+        sourceXml = await artifactResponse.text();
       }
+
+      if (!sourceXml) throw new Error('The original contribution XML is unavailable');
+      if (!isFsDataXml(sourceXml)) {
+        throw new Error('The downloaded contribution source is not editable FSData XML');
+      }
+      const blob = new Blob([sourceXml], { type: descriptor.contentType });
 
       // Create a download link and trigger it
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = descriptor.fileName;
+      a.download = contributionSourceFileName(contribution);
       document.body.appendChild(a);
       a.click();
 
@@ -265,7 +269,7 @@ const ContributionDashboard = () => {
       }, 100);
     } catch (error) {
       console.error('Download error:', error);
-      alert(`Error downloading XML: ${error.message}`);
+      alert(`Error downloading source XML: ${error.message}`);
     }
   };
 
@@ -341,42 +345,7 @@ const ContributionDashboard = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 sm:pt-39 pb-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6" aria-busy="true">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold mb-2">Community Contributions</h1>
-                <p className="text-zinc-400 text-sm sm:text-base">
-                  Help expand the BARS compatibility by contributing your own scenery contributions
-                </p>
-              </div>
-              <div className="h-10 w-56 rounded-lg bg-zinc-800 animate-pulse" />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <Card className="order-2 lg:order-1 p-4 sm:p-6 min-h-80">
-                <div className="h-7 w-44 rounded bg-zinc-800 animate-pulse mb-6" />
-                <div className="space-y-4">
-                  {[0, 1, 2, 3].map((item) => (
-                    <div key={item} className="h-13 rounded-lg bg-zinc-800/60 animate-pulse" />
-                  ))}
-                </div>
-              </Card>
-              <div className="lg:col-span-2 order-1 lg:order-2 min-h-150">
-                <div className="h-10 border-b border-zinc-800 mb-6" />
-                <div className="h-10 rounded-lg bg-zinc-800/60 animate-pulse mb-6" />
-                <div className="space-y-6">
-                  {[0, 1, 2].map((item) => (
-                    <div
-                      key={item}
-                      className="h-36 rounded-lg border border-zinc-800 bg-zinc-900/40 animate-pulse"
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PageLoading page label="Loading contributions…" variant="contributions" />
       </Layout>
     );
   }
@@ -532,6 +501,24 @@ const ContributionDashboard = () => {
                 )}
               </div>
 
+              {currentTab === 'user' && user?.fast_track?.enabled ? (
+                <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-4">
+                  <ShieldCheck
+                    className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-emerald-200">
+                      Fast-track contributions enabled
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-emerald-100/70">
+                      You can choose fast-track publishing from the final details step. Some
+                      submissions may still need staff review.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               {/* User Contribution Summary */}
               {currentTab === 'user' && userContributionSummary && (
                 <div className="mb-6 p-4 bg-zinc-800/50 rounded-lg">
@@ -677,11 +664,11 @@ const ContributionDashboard = () => {
                                   <button
                                     type="button"
                                     onClick={() => handleDownload(contribution)}
-                                    className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ease-[var(--ease-in-out)] flex items-center justify-center gap-2"
-                                    title="Download XML"
+                                    className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] flex items-center justify-center gap-2"
+                                    title="Download editable source XML"
                                   >
                                     <FileDown className="w-4 h-4" />
-                                    Download XML
+                                    Download source XML
                                   </button>
                                 )}
                                 {contribution.status === 'pending' && (
@@ -714,7 +701,7 @@ const ContributionDashboard = () => {
                                             reason: contribution.rejectionReason,
                                           })
                                         }
-                                        className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ease-[var(--ease-in-out)] flex items-center justify-center gap-2 cursor-pointer"
+                                        className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] flex items-center justify-center gap-2 cursor-pointer"
                                         title="View Reason"
                                       >
                                         <AlertOctagon className="w-4 h-4" />
@@ -778,7 +765,7 @@ const ContributionDashboard = () => {
                       disabled={currentPage === 1}
                       aria-label="Previous contribution page"
                     >
-                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                      <ChevronLeft className="motion-back h-4 w-4" aria-hidden="true" />
                       <span className="hidden sm:inline">Previous</span>
                     </Button>
                     <span className="text-sm tabular-nums text-zinc-400">
@@ -792,7 +779,7 @@ const ContributionDashboard = () => {
                       aria-label="Next contribution page"
                     >
                       <span className="hidden sm:inline">Next</span>
-                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                      <ChevronRight className="motion-forward h-4 w-4" aria-hidden="true" />
                     </Button>
                   </nav>
                 ) : null}

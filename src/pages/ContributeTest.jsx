@@ -25,10 +25,11 @@ import {
 } from '../utils/contributionFlowData.js';
 import { draftHash } from '../features/contribution-editor/editor-model.js';
 import { preloadRoute } from '../utils/routeModules.js';
+import { isFsDataXml } from '../utils/contributionContracts.js';
 
 const StableXMLMap = memo(XMLMap);
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/prefer-tag-over-role react-doctor/no-set-state-after-await-in-effect -- Async lookups own cancellation guards; the cohesive test/upload workflow and composite drop zone preserve established behavior. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/rerender-state-only-in-handlers react-doctor/prefer-tag-over-role react-doctor/no-set-state-after-await-in-effect -- Async lookups own cancellation guards; the cohesive test/upload workflow and composite drop zone preserve established behavior. */
 const ContributeTest = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ const ContributeTest = () => {
   const [generationHash, setGenerationHash] = useState('');
   const [expectedDraftHash, setExpectedDraftHash] = useState(incomingDraftHash);
   const [showPolyLines, setShowPolyLines] = useState(false);
-  const [removalView, setRemovalView] = useState('off');
+  const [showRemoveAreas, setShowRemoveAreas] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [contributionPolicy, setContributionPolicy] = useState(cachedPolicy);
   const [policyChecked, setPolicyChecked] = useState(Boolean(cachedPolicy));
@@ -84,7 +85,6 @@ const ContributeTest = () => {
   const contributionsDisabled =
     contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
   const disabledContributionMessage = getContributionDisabledMessage(contributionPolicy);
-  const showRemoveAreas = removalView !== 'off';
 
   useEffect(() => {
     if (cachedPolicy) return undefined;
@@ -139,7 +139,7 @@ const ContributeTest = () => {
       setContributionToken('');
       setSupportsXmlData('');
       setSimulator(incomingSimulator ?? 'msfs2024');
-      setRemovalView('off');
+      setShowRemoveAreas(false);
       return;
     }
 
@@ -148,8 +148,8 @@ const ContributeTest = () => {
     const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
 
     if (!validExtensions.includes(fileExtension)) {
-      setErrorTitle('Unable to open draft');
-      setError('Choose a BARS contribution draft file.');
+      setErrorTitle('Unable to open XML');
+      setError('Choose a BARS contribution XML file.');
       setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
@@ -164,8 +164,8 @@ const ContributeTest = () => {
 
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      setErrorTitle('Unable to open draft');
-      setError('Choose a draft smaller than 5 MB.');
+      setErrorTitle('Unable to open XML');
+      setError('Choose an XML file smaller than 5 MB.');
       setShowErrorToast(true);
       setSelectedFile(null);
       setXmlData('');
@@ -191,12 +191,26 @@ const ContributeTest = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = String(e.target.result ?? '');
+      if (!isFsDataXml(content)) {
+        setErrorTitle('Unable to open XML');
+        setError(
+          /<BarsLights\b/i.test(content)
+            ? 'This is a published runtime map. Download the source XML from the contribution dashboard.'
+            : 'This file does not contain editable BARS FSData XML.'
+        );
+        setShowErrorToast(true);
+        setSelectedFile(null);
+        setXmlData('');
+        setOriginalXmlData('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
       setXmlData(content);
       setOriginalXmlData(content);
       setSimulator(incomingSimulator ?? detectDraftSimulator(content));
       // Reset visualization toggles when new file is loaded
       setShowPolyLines(false);
-      setRemovalView('off');
+      setShowRemoveAreas(false);
     };
     reader.readAsText(file);
   };
@@ -238,8 +252,8 @@ const ContributeTest = () => {
     }
 
     if (!xmlData) {
-      setErrorTitle('Draft required');
-      setError('Choose a contribution draft before preparing the test.');
+      setErrorTitle('XML required');
+      setError('Choose a contribution XML file before preparing the test.');
       setShowErrorToast(true);
       return;
     }
@@ -250,10 +264,13 @@ const ContributeTest = () => {
 
     try {
       const sourceXml = originalXmlData || xmlData;
+      if (!isFsDataXml(sourceXml)) {
+        throw new Error('This file does not contain editable BARS FSData XML.');
+      }
       const currentDraftHash = await draftHash(sourceXml);
       if (expectedDraftHash && currentDraftHash !== expectedDraftHash) {
         throw new Error(
-          'The draft changed after leaving the editor. Return to the editor and test the current version.'
+          'The XML changed after leaving the editor. Return to the editor and test the current version.'
         );
       }
       // Create FormData to match the format used in DebugGenerator
@@ -295,7 +312,7 @@ const ContributeTest = () => {
 
       if (!data.token || !data.generationHash) {
         throw new Error(
-          'Core did not return a complete tested-draft proof. Try again after the Core contribution update is deployed.'
+          'Core did not return complete test proof. Try again after the Core contribution update is deployed.'
         );
       }
       setContributionToken(data.token);
@@ -321,7 +338,7 @@ const ContributeTest = () => {
       setSelectedFile(null);
     } catch (err) {
       setErrorTitle('Error');
-      setError(err.message || 'Unable to prepare the test. Check the draft and try again.');
+      setError(err.message || 'Unable to prepare the test. Check the XML and try again.');
       setShowErrorToast(true);
       console.error('XML validation error:', err);
     } finally {
@@ -359,8 +376,7 @@ const ContributeTest = () => {
 
   const handleTogglePolyLines = () => {
     if (showRemoveAreas) {
-      // Can't show both, so turn off remove areas if it's on
-      setRemovalView('off');
+      setShowRemoveAreas(false);
     }
     setShowPolyLines(!showPolyLines);
   };
@@ -370,14 +386,7 @@ const ContributeTest = () => {
       // Can't show both, so turn off poly lines if it's on
       setShowPolyLines(false);
     }
-    setRemovalView((current) => (current === 'areas' ? 'off' : 'areas'));
-  };
-
-  const handleToggleRemovalOutlines = () => {
-    if (showPolyLines) {
-      setShowPolyLines(false);
-    }
-    setRemovalView((current) => (current === 'outlines' ? 'off' : 'outlines'));
+    setShowRemoveAreas((current) => !current);
   };
 
   const handleOpenPilotClientTest = () => {
@@ -447,13 +456,13 @@ const ContributeTest = () => {
                     height="500px"
                     showPolyLines={showPolyLines}
                     showRemoveAreas={showRemoveAreas}
-                    removeAreasStyle={removalView === 'outlines' ? 'outline' : 'fill'}
+                    removeAreasStyle="fill"
                   />
                 ) : (
                   <div className="h-125 flex items-center justify-center bg-zinc-800/30 rounded-lg">
                     <div className="text-center text-zinc-400">
                       <FileSearch className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>Choose a contribution draft to preview.</p>
+                      <p>Choose contribution XML to preview.</p>
                     </div>
                   </div>
                 )}
@@ -462,7 +471,7 @@ const ContributeTest = () => {
 
             <div className="space-y-6">
               <Card className="p-6" aria-busy={isValidating}>
-                <h2 className="text-xl font-medium mb-4">Contribution draft</h2>
+                <h2 className="text-xl font-medium mb-4">Contribution XML</h2>
                 <label
                   htmlFor="contribution-draft-file"
                   className={`block w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
@@ -504,7 +513,7 @@ const ContributeTest = () => {
                         <FileUp className="w-6 h-6 text-zinc-400" />
                       </div>
                       <p className="font-medium mb-1">
-                        {isDragActive ? 'Drop the draft here' : 'Choose a draft file'}
+                        {isDragActive ? 'Drop the XML here' : 'Choose an XML file'}
                       </p>
                       <p className="text-sm text-zinc-400">or drag one here · max 5 MB</p>
                     </div>
@@ -512,7 +521,7 @@ const ContributeTest = () => {
                   <input
                     id="contribution-draft-file"
                     type="file"
-                    aria-label="Choose contribution draft file"
+                    aria-label="Choose contribution XML file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     accept=".xml"
@@ -588,9 +597,9 @@ const ContributeTest = () => {
                         <button
                           type="button"
                           onClick={handleToggleRemoveAreas}
-                          aria-pressed={removalView === 'areas'}
+                          aria-pressed={showRemoveAreas}
                           className={`flex min-h-11 w-full items-center rounded-lg border px-3 transition-[background-color,border-color,color] ${
-                            removalView === 'areas'
+                            showRemoveAreas
                               ? 'border-blue-500/60 bg-blue-500/10'
                               : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
                           }`}
@@ -602,44 +611,11 @@ const ContributeTest = () => {
                           </span>
                           <span
                             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                              removalView === 'areas'
-                                ? 'border-blue-500 bg-blue-500'
-                                : 'border-zinc-600'
+                              showRemoveAreas ? 'border-blue-500 bg-blue-500' : 'border-zinc-600'
                             }`}
                             aria-hidden="true"
                           >
-                            {removalView === 'areas' && (
-                              <Check className="w-3.5 h-3.5 text-white" />
-                            )}
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleToggleRemovalOutlines}
-                          aria-pressed={removalView === 'outlines'}
-                          className={`flex min-h-11 w-full items-center rounded-lg border px-3 transition-[background-color,border-color,color] ${
-                            removalView === 'outlines'
-                              ? 'border-blue-500/60 bg-blue-500/10'
-                              : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
-                          }`}
-                          title="Show removal boundaries without filled areas"
-                        >
-                          <Spline className="h-4 w-4 text-zinc-400" aria-hidden="true" />
-                          <span className="ml-2.5 flex-1 text-left text-sm font-medium text-white">
-                            Removal outlines
-                          </span>
-                          <span
-                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                              removalView === 'outlines'
-                                ? 'border-blue-500 bg-blue-500'
-                                : 'border-zinc-600'
-                            }`}
-                            aria-hidden="true"
-                          >
-                            {removalView === 'outlines' && (
-                              <Check className="w-3.5 h-3.5 text-white" />
-                            )}
+                            {showRemoveAreas && <Check className="w-3.5 h-3.5 text-white" />}
                           </span>
                         </button>
                       </>
@@ -657,7 +633,7 @@ const ContributeTest = () => {
                 disabled={contributionsDisabled || !isXmlTested || !!error}
               >
                 <span>Continue to submit</span>
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                <ArrowRight className="motion-forward h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>

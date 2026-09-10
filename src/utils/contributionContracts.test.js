@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   contributionProofError,
+  contributionSourceFileName,
   contributionSubmissionError,
   contributionSubmissionProof,
+  isFsDataXml,
   publicationError,
   publishedBarsArtifactDescriptor,
   submittedArtifactDescriptor,
@@ -98,5 +100,21 @@ test('uses Core artifact descriptors without rebuilding a package slug', () => {
   assert.equal(
     submittedArtifactDescriptor({ id: 'abc', packageName: 'Foo/Bar' }).fileName,
     'contribution-abc.xml'
+  );
+});
+
+test('distinguishes editable FSData XML from published runtime maps', () => {
+  assert.equal(isFsDataXml('<?xml version="1.0"?><FSData version="9.0"></FSData>'), true);
+  assert.equal(isFsDataXml('<?xml version="1.0"?><BarsLights></BarsLights>'), false);
+});
+
+test('builds a clean editable contribution filename', () => {
+  assert.equal(
+    contributionSourceFileName({
+      airportIcao: 'yssy',
+      packageName: 'FlyTampa / Sydney',
+      simulator: 'MSFS2024',
+    }),
+    'YSSY-FlyTampa-Sydney-msfs2024.xml'
   );
 });
