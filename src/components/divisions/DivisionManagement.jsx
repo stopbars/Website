@@ -9,6 +9,7 @@ import { Dialog } from '../shared/Dialog';
 import { Dropdown } from '../shared/Dropdown';
 import { Toast } from '../shared/Toast';
 import { PageLoading } from '../shared/PageLoading';
+import { PointMarkerIcon } from '../shared/PointMarkerIcon';
 import PropTypes from 'prop-types';
 import {
   Plus,
@@ -153,202 +154,6 @@ const toLngLatPair = (coords) => {
     : null;
 };
 
-const getPointColor = (point) => {
-  switch (point.type) {
-    case 'lead_on':
-      return '#fbbf24';
-    case 'stopbar':
-      return '#ef4444';
-    case 'taxiway':
-      switch (point.color) {
-        case 'green-yellow':
-          return '#FFD700';
-        case 'green-blue':
-          return '#0000FF';
-        case 'green-orange':
-          return '#FFA500';
-        default:
-          return '#00FF00';
-      }
-    case 'stand':
-      return 'rgb(255, 141, 35)';
-    default:
-      return '#ef4444';
-  }
-};
-
-const PointMarkerIcon = ({ point }) => {
-  const color = getPointColor(point);
-
-  if (point.type === 'stopbar') {
-    return (
-      <div className="marker-container">
-        <div className={`marker-circle stopbar-marker ${point.orientation || 'left'}`}>
-          {point.directionality === 'uni-directional' &&
-            (point.orientation === 'left' ? (
-              <div className="marker-quarter marker-quarter-4"></div>
-            ) : (
-              <div className="marker-quarter marker-quarter-1"></div>
-            ))}
-        </div>
-      </div>
-    );
-  } else if (point.type === 'lead_on') {
-    return (
-      <div className="marker-container">
-        <div className="marker-circle lead-on-marker">
-          <div className="marker-quarter marker-quarter-1"></div>
-          <div className="marker-quarter marker-quarter-2"></div>
-          <div className="marker-quarter marker-quarter-3"></div>
-          <div className="marker-quarter marker-quarter-4"></div>
-        </div>
-      </div>
-    );
-  } else if (point.type === 'taxiway') {
-    if (point.directionality === 'bi-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker taxiway-green"></div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-blue-quarter-1"></div>
-              <div className="marker-quarter taxiway-blue-quarter-2"></div>
-              <div className="marker-quarter taxiway-blue-quarter-3"></div>
-              <div className="marker-quarter taxiway-blue-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-orange-quarter-1"></div>
-              <div className="marker-quarter taxiway-orange-quarter-2"></div>
-              <div className="marker-quarter taxiway-orange-quarter-3"></div>
-              <div className="marker-quarter taxiway-orange-quarter-4"></div>
-            </div>
-          </div>
-        );
-      }
-    } else if (point.directionality === 'uni-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle taxiway-green ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <div className="marker-quarter taxiway-quarter-L"></div>
-                ) : (
-                  <div className="marker-quarter taxiway-quarter-R"></div>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-blue-quarter-1"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-orange-quarter-1"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      }
-    }
-  }
-
-  return (
-    <div className="marker-container">
-      <div className="marker-circle" style={{ backgroundColor: color }}></div>
-    </div>
-  );
-};
-
-PointMarkerIcon.propTypes = {
-  point: PropTypes.shape({
-    id: PropTypes.string,
-    type: PropTypes.string.isRequired,
-    directionality: PropTypes.string,
-    color: PropTypes.string,
-    orientation: PropTypes.string,
-  }).isRequired,
-};
 
 const MapPreviewIcon = ({ className }) => <MapIcon className={`${className} relative top-px`} />;
 
@@ -505,7 +310,7 @@ const SATELLITE_STYLE = {
 
 // The page coordinates several independent dialogs and a map preview; combining that state or
 // splitting the component is a non-mechanical architecture change with substantial behavior risk.
-// oxlint-disable-next-line react-doctor/no-giant-component react-doctor/prefer-useReducer
+// oxlint-disable-next-line react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer -- Division CRUD, role assignments, dialogs, and the shared map preview depend on one route request lifecycle and coordinated refresh.
 const DivisionManagement = () => {
   const { id: divisionId } = useParams();
   const navigate = useNavigate();
@@ -1389,7 +1194,7 @@ const DivisionManagement = () => {
                                 updatingContributionAirportId === airport.id ||
                                 (!airport.contributions_enabled && !getDataSubmitted(airport))
                               }
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
                                 airport.contributions_enabled ? 'bg-emerald-500' : 'bg-zinc-700'
                               } ${
                                 !isDivisionMember ||
@@ -1400,7 +1205,7 @@ const DivisionManagement = () => {
                               }`}
                             >
                               <span
-                                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
                                   airport.contributions_enabled ? 'translate-x-5' : 'translate-x-1'
                                 }`}
                               />

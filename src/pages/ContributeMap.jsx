@@ -6,6 +6,8 @@ import { Card } from '../components/shared/Card';
 import { PageLoading } from '../components/shared/PageLoading';
 import { RouteLink } from '../components/shared/RouteLink.jsx';
 import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
+import { IconSwap } from '../components/shared/IconSwap';
+import { PointMarkerIcon } from '../components/shared/PointMarkerIcon';
 import { AlertCircle, ArrowRight, CopyIcon, Info, Check, Layers } from 'lucide-react';
 import Map, {
   Source,
@@ -211,11 +213,10 @@ const PointPopupContent = React.memo(({ point }) => {
             <span
               className={`shrink-0 transition-colors ${copiedId === point.id ? 'text-green-400' : 'text-zinc-500 group-hover:text-zinc-300'}`}
             >
-              {copiedId === point.id ? (
-                <Check className="w-3.5 h-3.5" />
-              ) : (
-                <CopyIcon className="w-3.5 h-3.5" />
-              )}
+              <IconSwap active={copiedId === point.id}>
+                <CopyIcon className="h-3.5 w-3.5" />
+                <Check className="h-3.5 w-3.5" />
+              </IconSwap>
             </span>
           </button>
         </div>
@@ -269,196 +270,6 @@ PointPopupContent.propTypes = {
   }).isRequired,
 };
 
-const getPointColor = (point) => {
-  switch (point.type) {
-    case 'lead_on':
-      return '#fbbf24';
-    case 'stopbar':
-      return '#ef4444';
-    case 'taxiway':
-      switch (point.color) {
-        case 'green-yellow':
-          return '#FFD700'; // Green-Yellow
-        case 'green-blue':
-          return '#0000FF'; // Green-Blue
-        case 'green-orange':
-          return '#FFA500'; // Green-Orange
-        default:
-          return '#00FF00'; // Normal green
-      }
-    case 'stand':
-      return 'rgb(255, 141, 35)';
-    default:
-      return '#ef4444';
-  }
-};
-
-const PointMarkerIcon = ({ point }) => {
-  const color = getPointColor(point);
-
-  if (point.type === 'stopbar') {
-    return (
-      <div className="marker-container">
-        <div className={`marker-circle stopbar-marker ${point.orientation || 'left'}`}>
-          {point.directionality === 'uni-directional' &&
-            (point.orientation === 'left' ? (
-              <div className="marker-quarter marker-quarter-4"></div>
-            ) : (
-              <div className="marker-quarter marker-quarter-1"></div>
-            ))}
-        </div>
-      </div>
-    );
-  } else if (point.type === 'lead_on') {
-    return (
-      <div className="marker-container">
-        <div className="marker-circle lead-on-marker">
-          <div className="marker-quarter marker-quarter-1"></div>
-          <div className="marker-quarter marker-quarter-2"></div>
-          <div className="marker-quarter marker-quarter-3"></div>
-          <div className="marker-quarter marker-quarter-4"></div>
-        </div>
-      </div>
-    );
-  } else if (point.type === 'taxiway') {
-    if (point.directionality === 'bi-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker taxiway-green"></div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-blue-quarter-1"></div>
-              <div className="marker-quarter taxiway-blue-quarter-2"></div>
-              <div className="marker-quarter taxiway-blue-quarter-3"></div>
-              <div className="marker-quarter taxiway-blue-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-orange-quarter-1"></div>
-              <div className="marker-quarter taxiway-orange-quarter-2"></div>
-              <div className="marker-quarter taxiway-orange-quarter-3"></div>
-              <div className="marker-quarter taxiway-orange-quarter-4"></div>
-            </div>
-          </div>
-        );
-      }
-    } else if (point.directionality === 'uni-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle taxiway-green ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <div className="marker-quarter taxiway-quarter-L"></div>
-                ) : (
-                  <div className="marker-quarter taxiway-quarter-R"></div>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-blue-quarter-1"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-orange-quarter-1"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      }
-    }
-  }
-
-  return (
-    <div className="marker-container">
-      <div className="marker-circle" style={{ backgroundColor: color }}></div>
-    </div>
-  );
-};
-
-PointMarkerIcon.propTypes = {
-  point: PropTypes.object.isRequired,
-};
 
 const style = document.createElement('style');
 style.textContent = `
@@ -698,7 +509,7 @@ const INTERACTIVE_LAYER_IDS = [
 const CLICK_RADIUS_PX = 10;
 const TOUCH_RADIUS_PX = 14;
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally -- Map state, viewport, selection, and draft navigation share one MapLibre lifecycle; the request is guarded, and its loading flag is reset inside finally after the cancellation check. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally -- Map state, viewport, selection, and draft navigation share one MapLibre lifecycle; the request is guarded, and its loading flag is reset inside finally after the cancellation check. */
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
@@ -1215,7 +1026,7 @@ const ContributeMap = () => {
                       <p className="text-sm text-amber-300">{disabledContributionMessage}</p>
                       {import.meta.env.DEV ? (
                         <p className="mt-1 text-xs text-amber-300/80">
-                          The draft generator remains available in local development.
+                          The XML generator remains available in local development.
                         </p>
                       ) : null}
                     </div>
@@ -1232,7 +1043,7 @@ const ContributeMap = () => {
                   <div className="flex items-start gap-3" role="status">
                     <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-400" />
                     <p className="text-sm text-zinc-300">
-                      Review the current BARS layout, then create a draft for your scenery package.
+                      Review the current BARS layout, then create XML for your scenery package.
                     </p>
                   </div>
                 )}
@@ -1250,17 +1061,25 @@ const ContributeMap = () => {
                       : 'border-transparent bg-white text-zinc-950 hover:bg-zinc-100 active:scale-[0.96]'
                   }`}
                 >
-                  Create contribution draft
+                  Create contribution XML
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </RouteLink>
 
                 {points.length > 0 && !contributionsDisabled ? (
-                  <RouteLink
-                    to={`/contribute/test/${icao}`}
-                    className="mx-auto mt-3 flex min-h-10 w-fit items-center justify-center rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-                  >
-                    Skip to test
-                  </RouteLink>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                    <RouteLink
+                      to={`/contribute/editor/${icao}`}
+                      className="flex min-h-10 items-center justify-center rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    >
+                      Skip to editor
+                    </RouteLink>
+                    <RouteLink
+                      to={`/contribute/test/${icao}`}
+                      className="flex min-h-10 items-center justify-center rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    >
+                      Skip to test
+                    </RouteLink>
+                  </div>
                 ) : null}
               </Card>
             </aside>
