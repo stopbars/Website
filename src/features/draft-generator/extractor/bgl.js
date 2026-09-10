@@ -34,6 +34,7 @@ const AIRPORT_LIGHT_ROW_MIN_RECORD_SIZE = AIRPORT_LIGHT_ROW_HEADER_SIZE + 2 * 8;
 const AIRPORT_LIGHT_ROW_MAX_RECORD_SIZE = 64 * 1024;
 const AIRPORT_LIGHT_ROW_MAX_PRECEDING_NAME_BYTES = 128;
 const AIRPORT_LIGHT_ROW_VERSION_MARKERS = new Set([0x01000000, 0x05000000, 0x09000000, 0x0d000000]);
+const AIRPORT_LIGHT_ROW_SNAP_TO_VERTICES_FLAG = 0x04;
 const TAXIWAY_POINT_RECORD_SIZE = 12;
 const TAXI_NAME_RECORD_SIZE = 8;
 const TAXIWAY_PARKING_RECORD_SIZE = 56;
@@ -211,10 +212,7 @@ export async function extractBglData(bglFiles) {
     const taxiwayGraph = extractTaxiwayGraph(buffer, sourceFile);
     const airportReferences = extractAirportReferenceFeatures(buffer, sourceFile);
     const taxiwayReferences = buildTaxiwayReferenceFeatures(taxiwayGraph.graphs, sourceFile);
-    const taxiwaySurfaces = buildTaxiwaySurfaceReferenceFeatures(
-      taxiwayGraph.graphs,
-      sourceFile
-    );
+    const taxiwaySurfaces = buildTaxiwaySurfaceReferenceFeatures(taxiwayGraph.graphs, sourceFile);
     const taxiwayBridgeRows = buildTaxiwayPathBridgeRows(
       sourceFile,
       taxiwayGraph.graphs,
@@ -222,6 +220,7 @@ export async function extractBglData(bglFiles) {
     );
     lightRows.push(...airportLightRows);
     lightRows.push(...taxiwayGraph.lightRows);
+    lightRows.push(...buildTaxiwayGeometryRows(sourceFile, taxiwayGraph.graphs));
     lightRows.push(...taxiwayBridgeRows);
     runways.push(...runwayResult.runways);
     runwayLightZones.push(...runwayResult.zones);
@@ -541,20 +540,25 @@ export function buildTaxiwaySurfaceReferenceFeatures(graphs, sourceFile) {
         if (ring.length === 0) return [];
         return [
           airportReferenceFeature({
-          sourceFile,
-          offset: path.sourceRecordOffset,
-          sourceType: 'msfs-bgl-taxiway-surface',
-          title: path.taxiName ? `Taxiway ${path.taxiName} pavement` : 'Taxiway pavement',
-          semanticType: 'taxiway-surface',
-          snapCategory: 'pavement-edges',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [ring],
-          },
-          properties: {
-            widthMeters: path.widthMeters,
-            surface: path.surface,
-          },
+            sourceFile,
+            offset: path.sourceRecordOffset,
+            sourceType: 'msfs-bgl-taxiway-surface',
+            title: path.taxiName ? `Taxiway ${path.taxiName} pavement` : 'Taxiway pavement',
+            semanticType: 'taxiway-surface',
+            snapCategory: 'pavement-edges',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [ring],
+            },
+            properties: {
+              widthMeters: path.widthMeters,
+              surface: path.surface,
+              lengthMeters: path.lengthMeters,
+              pathType: path.pathType,
+              pathTypeRaw: path.pathTypeRaw,
+              drawSurface: (path.pathTypeRaw & 0x20) !== 0,
+              drawDetail: (path.pathTypeRaw & 0x40) !== 0,
+            },
           }),
         ];
       })
@@ -710,8 +714,7 @@ function referencePointInRing(point, ring) {
 
 function taxiwayPathSurfaceRing(start, end, widthMeters) {
   const meanLatitude = (start.lat + end.lat) / 2;
-  const longitudeScale =
-    111_320 * Math.max(Math.cos((meanLatitude * Math.PI) / 180), 0.000001);
+  const longitudeScale = 111_320 * Math.max(Math.cos((meanLatitude * Math.PI) / 180), 0.000001);
   const east = (end.lon - start.lon) * longitudeScale;
   const north = (end.lat - start.lat) * 111_320;
   const length = Math.hypot(east, north);
@@ -773,6 +776,7 @@ function parseNamedAirportLightRowHeaderAt(buffer, sourceFile, headerOffset) {
 
   const recordSize = buffer.readUInt16LE(headerOffset + 0x02);
   const versionMarker = buffer.readUInt32LE(headerOffset + 0x04);
+  const lightRowFlags = buffer.readUInt8(headerOffset + 0x07);
   const vertexCount = buffer.readUInt16LE(headerOffset + 0x08);
   const rowSubtype = buffer.readUInt16LE(headerOffset + 0x0a);
   const spacing = buffer.readFloatLE(headerOffset + 0x14);
@@ -806,6 +810,8 @@ function parseNamedAirportLightRowHeaderAt(buffer, sourceFile, headerOffset) {
   }
 
   const classification = classifyAirportLightRowPreset(preset);
+  const hasUsableSpacing = Number.isFinite(spacing) && spacing > 0 && spacing < 100;
+  const compiledSnapToVertices = (lightRowFlags & AIRPORT_LIGHT_ROW_SNAP_TO_VERTICES_FLAG) !== 0;
 
   return {
     id: stableId('bgl-airport-light-row', sourceFile, headerOffset, preset, vertexCount),
@@ -816,7 +822,15 @@ function parseNamedAirportLightRowHeaderAt(buffer, sourceFile, headerOffset) {
     rawTag: 'BGL Airport Light Row',
     preset,
     rowSubtype,
-    ...(Number.isFinite(spacing) && spacing > 0 && spacing < 100 ? { spacing } : {}),
+    ...(hasUsableSpacing ? { spacing } : {}),
+    compiledLightPlacement: compiledSnapToVertices ? 'vertices' : 'spacing',
+    removalTargetSampling: compiledSnapToVertices ? 'vertices' : 'spacing',
+    ...(compiledSnapToVertices
+      ? {}
+      : {
+          removalDistanceModel: 'wgs84-local-tangent',
+          removalIncludesTerminalVertex: false,
+        }),
     snapToVertices: true,
     vertices,
     classification: classification.classification,
@@ -1542,7 +1556,7 @@ function findTaxiwayPointTables(buffer) {
       continue;
     }
 
-    const recordSize = buffer.readUInt16LE(offset + 0x02);
+    const recordSize = buffer.readUInt32LE(offset + 0x02);
     const pointCount = buffer.readUInt16LE(offset + 0x06);
     if (
       pointCount < 2 ||
@@ -1850,6 +1864,34 @@ function buildTaxiwayPathLightRow(sourceFile, graph, pathRecord) {
       'TaxiwayPath type is TAXI',
     ],
   };
+}
+
+export function buildTaxiwayGeometryRows(sourceFile, graphs) {
+  return graphs.flatMap((graph) => {
+    // Use navigation paths to complete a native lighted graph. Packages whose
+    // lights come from custom rows keep those rows as their matching evidence.
+    if (!graph.paths.some(shouldReconstructTaxiwayPath)) return [];
+    return graph.paths
+      .filter(
+        (pathRecord) =>
+          !pathRecord.centerLineLighted &&
+          pathRecord.pathType === TAXIWAY_PATH_TYPE_TAXI &&
+          pathRecord.lengthMeters >= MIN_TAXIWAY_PATH_LENGTH_METERS &&
+          pathRecord.lengthMeters <= MAX_TAXIWAY_PATH_LENGTH_METERS
+      )
+      .map((pathRecord) => ({
+        ...buildTaxiwayPathLightRow(sourceFile, graph, pathRecord),
+        centerLineLighted: false,
+        removalEligible: false,
+        evidencePriority: 101,
+        confidence: 0.75,
+        classificationReasons: [
+          'decoded compiled TaxiwayPoint and TaxiwayPath records',
+          'native TAXI path supplies geometry without centreline-light evidence',
+          'placement geometry only; simulator light removal is disabled',
+        ],
+      }));
+  });
 }
 
 function buildTaxiwayPathEdgeLightRows(sourceFile, graph, pathRecord) {

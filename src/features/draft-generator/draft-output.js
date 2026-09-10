@@ -1,12 +1,19 @@
+import { dsfSelector, xplaneSelectorXml } from '../contribution-editor/xplane-removal-contract.js';
 /* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Draft geometry keeps validation and projection stages separate so release output remains auditable. */
 
-import { generateRemovalGeometry } from './extractor/extract.js';
+import {
+  generateRemovalGeometry,
+  removalModeForRow,
+  targetLightPointsForRow,
+} from './extractor/extract.js';
 import {
   haversineDistanceMeters,
   pointInPolygon,
   pointToPolylineDistanceMeters,
   polylineToPolylineDistanceMeters,
 } from './extractor/geo.js';
+import { assignAdjacentColors } from '../../utils/adjacent-colors.js';
+import { suppressCoveredReplacements } from './replacement-overlap.js';
 
 const DEFAULT_SIZES = {
   library: 3,
@@ -23,22 +30,34 @@ const CROSSING_SAMPLE_INTERVAL_METERS = 0.5;
 const MAXIMUM_SAFETY_PASSES = 12;
 const REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS = 0.1;
 const MAXIMUM_REMOVAL_STOPBAR_BOUNDARY_ROW_DISTANCE_METERS = 1;
-const DEBUG_ID_NEIGHBOR_COUNT = 8;
-const DEBUG_ID_COLORS = [
-  '#0067ff',
-  '#ff7a00',
-  '#00a651',
-  '#ff2da0',
-  '#00cde8',
-  '#ffd400',
-  '#7a3cff',
-  '#e31a1c',
-  '#7fd000',
-];
+const COMPILED_TARGET_SECTION_TOLERANCE_METERS = 0.2;
+const MERGED_COMPILED_TARGET_SECTION_TOLERANCE_METERS = 0.8;
+const MAXIMUM_COMPILED_TARGET_ENDPOINT_TOLERANCE_METERS = 2;
+const COMPILED_TARGET_ENDPOINT_MIDPOINT_MARGIN_METERS = 0.01;
+const MAXIMUM_COMPILED_TARGET_END_CAP_METERS = 1;
+const COMPILED_TARGET_END_CAP_SPACING_RATIO = 0.25;
+const SELECTIVE_TARGET_KEEP_CLEARANCE_METERS = 0.25;
+const COMPILED_TARGET_IDENTITY_TOLERANCE_METERS = 0.01;
 
 export function buildDraftOutput(data, matching, options) {
   const isXPlane = data.meta?.simulator === 'xplane';
-  const replacements = replacementMatches(matching.matches);
+  const { replacements, suppressed: suppressedReplacements } = suppressCoveredReplacements(
+    replacementMatches(matching.matches)
+  );
+  const replacementIds = new Set(replacements.map((match) => String(match.division.id)));
+  const coveredDivisions = new Map(
+    matching.matches
+      .filter((match) => !replacementIds.has(String(match.division.id)))
+      .map((match) => [String(match.division.id), match.division])
+  );
+  const unmatched = [
+    ...matching.unmatched,
+    ...[...coveredDivisions.values()].map((division) => ({
+      division,
+      reason:
+        'The matched geometry is fully covered by other generated lines. Review this object manually.',
+    })),
+  ];
   const removalConstrainedMatches = constrainRemovalMatchesAtReplacementBoundaries(
     matching.matches,
     replacements,
@@ -52,41 +71,33 @@ export function buildDraftOutput(data, matching, options) {
   );
   const selective = isXPlane
     ? {
-        approved: removalMatches,
-        rejected: [],
+        approved: removalMatches.filter(
+          (match) => buildXPlaneSelectors(data.lightRows ?? [], [match]).length > 0
+        ),
+        rejected: removalMatches
+          .filter((match) => buildXPlaneSelectors(data.lightRows ?? [], [match]).length === 0)
+          .map((match) => ({
+            ...match,
+            safetyReason:
+              'No executable removal for this source selection. DSF strings require a complete source string.',
+          })),
         geometry: emptyRemovalGeometry(),
       }
     : buildSafeSelectiveRemovals(data, removalMatches, options.onProgress);
-  const removalWarnings = uniqueDivisionItems(
-    selective.rejected.map((match) => ({
-      division: match.division,
-      reason:
-        'Simulator geometry matched and the BARS object was added, but its automatic removal area needs manual review.',
-    }))
-  );
+  const removals = [
+    ...selective.geometry.removalPolygons,
+    ...selective.geometry.exclusionCandidates,
+  ];
   const guidanceStopbarCrossingAudit = auditGeneratedGuidanceStopbarCrossings(replacements);
-  const safeReplacements = replacementMatches([...selective.approved, ...placementOnlyMatches]);
-  const safetyDivisionIds = new Set(removalWarnings.map((item) => String(item.division?.id ?? '')));
-  const unsafeReplacements = replacements.filter((match) =>
-    safetyDivisionIds.has(String(match.division.id))
-  );
-  const safeVisualReplacements = safeReplacements.filter(
-    (match) => !safetyDivisionIds.has(String(match.division.id))
-  );
   const xml = generateDraftXml({
     icao: options.icao,
     altitude: options.altitude,
     matches: replacements,
-    removalPolygons: selective.geometry.removalPolygons,
+    removalPolygons: removals,
     simulator: data.meta?.simulator,
     xplaneSelectors: isXPlane ? buildXPlaneSelectors(data.lightRows ?? [], removalMatches) : [],
   });
-  const geojson = buildDraftGeoJson(
-    safeVisualReplacements,
-    matching.unmatched,
-    selective.geometry.removalPolygons,
-    unsafeReplacements
-  );
+  const geojson = buildDraftGeoJson(replacements, unmatched, removals, [], selective.approved);
   const simulatorGeojson = buildSimulatorDebugGeoJson(
     data.lightRows ?? [],
     matching.mergedSimulatorRows ?? []
@@ -96,13 +107,14 @@ export function buildDraftOutput(data, matching, options) {
     xml,
     geojson,
     simulatorGeojson,
-    matched: matching.matches,
+    matched: matching.matches.filter((match) => replacementIds.has(String(match.division.id))),
     removalApproved: selective.approved,
     placementOnlyMatches,
     replacements,
-    unmatched: matching.unmatched,
-    removalWarnings,
-    removals: selective.geometry.removalPolygons,
+    unmatched,
+    suppressedReplacements,
+    removalWarnings: [],
+    removals,
     safetyRejections: selective.rejected.map((match) => ({
       divisionId: String(match.division.id),
       rowId: match.row.id,
@@ -198,10 +210,7 @@ function constrainRemovalMatchesAtReplacementBoundaries(matches, replacements, i
             sourceRangeEndMeters: Math.min(sourceRangeEnd, sourceRangeStart + boundaryProgress),
           }
         : {
-            sourceRangeStartMeters: Math.max(
-              sourceRangeStart,
-              sourceRangeStart + boundaryProgress
-            ),
+            sourceRangeStartMeters: Math.max(sourceRangeStart, sourceRangeStart + boundaryProgress),
             sourceRangeEndMeters: sourceRangeEnd,
           }
       : {};
@@ -294,6 +303,15 @@ function buildXPlaneSelectors(sourceRows, matches) {
                 matchedRow.sourceParentLengthMeters || rowLengthMeters(sourceRow),
             }
           : sourceRow;
+      const dsf = dsfSelector(row.dsfRemoval);
+      if (dsf) {
+        const total = Number(row.sourceParentLengthMeters) || rowLengthMeters(sourceRow);
+        const start = Number(row.sourceRangeStartMeters) || 0;
+        const end = Number(row.sourceRangeEndMeters) || total;
+        if (start <= 0.001 && end >= total - 0.001)
+          grouped.set(JSON.stringify(dsf), { ...dsf, ranges: [[0, 1]] });
+        continue;
+      }
       if (
         row.sourceType !== 'xplane-apt-light-string' ||
         !/^[a-f0-9]{16}$/i.test(row.sourceFeatureId ?? '') ||
@@ -325,7 +343,9 @@ function buildXPlaneSelectors(sourceRows, matches) {
     }))
     .sort(
       (left, right) =>
-        left.feature.localeCompare(right.feature) || left.code - right.code || left.run - right.run
+        String(left.feature ?? left.source).localeCompare(String(right.feature ?? right.source)) ||
+        left.code - right.code ||
+        left.run - right.run
     );
 }
 
@@ -373,12 +393,7 @@ function replacementMatches(matches) {
       ...match,
       row: extendReplacementToSourceEndpoints(replacementRow, group, match.division),
     };
-    const isCovered = replacements.some(
-      (existing) =>
-        String(existing.division.id) === String(replacement.division.id) &&
-        rowFollowsRow(replacement.row, existing.row)
-    );
-    if (!isCovered) replacements.push(replacement);
+    replacements.push(replacement);
   }
   return trimLeadOnReplacementsAtMatchedStopbars(
     joinLogicalGuidanceReplacementGaps(replacements),
@@ -407,7 +422,14 @@ function trimLeadOnReplacementsAtMatchedStopbars(replacements, sourceMatches) {
     const crossing = crossings[0];
     if (!crossing) return match;
 
-    const retained = match.row.vertices.slice(crossing.leadSegmentIndex + 1);
+    const retainBeforeStopbar = leadOnBeforeStopbarFollowsDivision(
+      match.row.vertices,
+      crossing,
+      match.division.coordinates
+    );
+    const retained = retainBeforeStopbar
+      ? match.row.vertices.slice(0, crossing.leadSegmentIndex + 1)
+      : match.row.vertices.slice(crossing.leadSegmentIndex + 1);
     if (retained.length === 0) return match;
     const exactSourceVertices = sourceMatches
       .filter((source) => String(source.division.id) === String(match.division.id))
@@ -415,16 +437,18 @@ function trimLeadOnReplacementsAtMatchedStopbars(replacements, sourceMatches) {
     const exactBoundaryVertex = nearestSourceVertexBeyondStopbar(
       exactSourceVertices,
       crossing.stopbarVertices,
-      retained.at(-1)
+      retainBeforeStopbar ? retained[0] : retained.at(-1)
     );
     const useExactBoundary =
       exactBoundaryVertex &&
       retained.every((vertex) => haversineDistanceMeters(vertex, exactBoundaryVertex) > 0.05);
     const boundaryVertex = useExactBoundary ? exactBoundaryVertex : crossing.intersection;
-    const vertices = [
-      boundaryVertex,
-      ...retained.filter((vertex) => haversineDistanceMeters(vertex, boundaryVertex) > 0.05),
-    ];
+    const retainedAwayFromBoundary = retained.filter(
+      (vertex) => haversineDistanceMeters(vertex, boundaryVertex) > 0.05
+    );
+    const vertices = retainBeforeStopbar
+      ? [...retainedAwayFromBoundary, boundaryVertex]
+      : [boundaryVertex, ...retainedAwayFromBoundary];
     if (vertices.length < 2) return match;
 
     return {
@@ -448,6 +472,29 @@ function trimLeadOnReplacementsAtMatchedStopbars(replacements, sourceMatches) {
       },
     };
   });
+}
+
+function leadOnBeforeStopbarFollowsDivision(guidanceVertices, crossing, divisionCoordinates = []) {
+  if (divisionCoordinates.length < 2) return false;
+  const before = [
+    ...guidanceVertices.slice(0, crossing.leadSegmentIndex + 1),
+    crossing.intersection,
+  ];
+  const after = [crossing.intersection, ...guidanceVertices.slice(crossing.leadSegmentIndex + 1)];
+  const meanDivisionDistance = (vertices) =>
+    divisionCoordinates.reduce(
+      (sum, coordinate) =>
+        sum +
+        pointToPolylineDistanceMeters(
+          {
+            lat: Number(coordinate.lat),
+            lon: Number(coordinate.lon ?? coordinate.lng),
+          },
+          vertices
+        ),
+      0
+    ) / divisionCoordinates.length;
+  return meanDivisionDistance(before) < meanDivisionDistance(after);
 }
 
 function guidanceStopbarCrossings(guidanceVertices, stopbarVertices) {
@@ -559,7 +606,10 @@ function extendReplacementToSourceEndpoints(replacementRow, matches, division) {
 
   let vertices = orientVerticesAlongDivision(replacementRow.vertices, divisionCoordinates);
   for (const match of matches) {
-    const sourceVertices = orientVerticesAlongDivision(match.row.vertices ?? [], divisionCoordinates);
+    const sourceVertices = orientVerticesAlongDivision(
+      match.row.vertices ?? [],
+      divisionCoordinates
+    );
     if (sourceVertices.length < 2) continue;
 
     const currentStart = coordinateProgressAlongDivision(vertices[0], divisionCoordinates);
@@ -575,8 +625,7 @@ function extendReplacementToSourceEndpoints(replacementRow, matches, division) {
     }
     if (sourceEnd > currentEnd + 0.1) {
       const suffix = sourceVertices.filter(
-        (vertex) =>
-          coordinateProgressAlongDivision(vertex, divisionCoordinates) > currentEnd + 0.01
+        (vertex) => coordinateProgressAlongDivision(vertex, divisionCoordinates) > currentEnd + 0.01
       );
       vertices = [...vertices, ...suffix];
     }
@@ -699,18 +748,6 @@ function joinRowsAtClosestEndpoints(left, right) {
   return options.sort((leftOption, rightOption) => leftOption.gapMeters - rightOption.gapMeters)[0];
 }
 
-function rowFollowsRow(candidate, reference) {
-  const candidateVertices = candidate.vertices ?? [];
-  const referenceVertices = reference.vertices ?? [];
-  return (
-    candidateVertices.length >= 2 &&
-    referenceVertices.length >= 2 &&
-    candidateVertices.every(
-      (vertex) => pointToPolylineDistanceMeters(vertex, referenceVertices) <= 2
-    )
-  );
-}
-
 function rowLengthMeters(row) {
   let length = 0;
   for (let index = 1; index < (row.vertices?.length ?? 0); index += 1) {
@@ -721,6 +758,8 @@ function rowLengthMeters(row) {
 
 function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
   const startedAt = performance.now();
+  // Cache source-corridor calculations only; each pass still checks its current protection zones.
+  const mergeCache = new Map();
   let approved = [...initialMatches];
   const originalSelectedRows = approved.map((match) => match.row);
   const rejected = [];
@@ -744,7 +783,7 @@ function buildSafeSelectiveRemovals(data, initialMatches, onProgress) {
       remaining: approved.length,
     });
     const generationStartedAt = performance.now();
-    geometry = generateRemovalGeometryForMatches(data, approved, originalSelectedRows);
+    geometry = generateRemovalGeometryForMatches(data, approved, originalSelectedRows, mergeCache);
     const generationMilliseconds = performance.now() - generationStartedAt;
 
     const auditStartedAt = performance.now();
@@ -880,15 +919,15 @@ function conflictIdsBySourceRow(conflicts, rows) {
 }
 
 function rowIsCoveredByRemovals(row, removalRings) {
-  const vertices = row.vertices ?? [];
-  if (vertices.length === 0) return false;
-  return vertices.every((vertex) =>
+  const coveragePoints =
+    removalModeForRow(row) === 'targets' ? targetLightPointsForRow(row) : (row.vertices ?? []);
+  if (coveragePoints.length === 0) return removalModeForRow(row) === 'targets';
+  return coveragePoints.every((point) =>
     removalRings.some(
       ({ ring, bounds }) =>
-        pointNearGeometryBounds(vertex, bounds, REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS) &&
-        (pointInPolygon(vertex, ring) ||
-          pointToPolylineDistanceMeters(vertex, ring) <=
-            REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS)
+        pointNearGeometryBounds(point, bounds, REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS) &&
+        (pointInPolygon(point, ring) ||
+          pointToPolylineDistanceMeters(point, ring) <= REMOVAL_COVERAGE_BOUNDARY_TOLERANCE_METERS)
     )
   );
 }
@@ -915,9 +954,7 @@ function rowsCoveringSelectiveProtectionZones(protectionZones, removalPolygons, 
     const protectedPointsInside = protectedPoints
       .filter(({ zone }) => !stopbarOnly || zone.classification === 'runway')
       .map(({ point }) => point)
-      .filter(
-        (point) => pointWithinGeometryBounds(point, bounds) && pointInPolygon(point, ring)
-      );
+      .filter((point) => pointWithinGeometryBounds(point, bounds) && pointInPolygon(point, ring));
     if (protectedPointsInside.length === 0) continue;
     const hasKnownSourceRow = knownSourceRows.length > 0;
     const localSourceRowIds = sourceRowIds.filter((rowId) => {
@@ -982,7 +1019,8 @@ function pointNearGeometryBounds(point, bounds, toleranceMeters) {
 export function generateRemovalGeometryForMatches(
   data,
   matches,
-  originalSelectedRows = matches.map((match) => match.row)
+  originalSelectedRows = matches.map((match) => match.row),
+  mergeCache
 ) {
   const preparationStartedAt = performance.now();
   const selectedRows = matches.map((match) => match.row);
@@ -998,7 +1036,7 @@ export function generateRemovalGeometryForMatches(
   const recordSelectiveXPlaneRemoval = isRecordSelectiveXPlaneRemoval(data, selectedRows);
   const selectiveZones = recordSelectiveXPlaneRemoval
     ? []
-    : selectiveTargetMustKeepZones(data, originalSelectedRows, originallySelectedSourceInstanceIds);
+    : selectiveTargetMustKeepZones(data, rows, originallySelectedSourceInstanceIds);
   const selectiveZonesBuiltAt = performance.now();
   const isolatedCrossingContext = buildIsolatedGuidanceCrossingContext(selectedRows);
   const selectiveProtectionZones = selectiveZones.filter(
@@ -1006,13 +1044,17 @@ export function generateRemovalGeometryForMatches(
   );
   const selectiveZonesFilteredAt = performance.now();
   const protectedSourceZones = (data.mustKeepZones ?? []).filter(
-    (zone) =>
-      !(recordSelectiveXPlaneRemoval && zone.sourceType === 'xplane-runway-light-zone') &&
-      !isConservativeRunwayEnvelopeSuperseded(zone, selectedRows)
+    (zone) => !(recordSelectiveXPlaneRemoval && zone.sourceType === 'xplane-runway-light-zone')
   );
   const sourceZonesFilteredAt = performance.now();
   const mustKeepZones = [...protectedSourceZones, ...selectiveProtectionZones];
-  const geometry = generateRemovalGeometry(sourceInstances, rows, DEFAULT_SIZES, mustKeepZones);
+  const geometry = generateRemovalGeometry(
+    sourceInstances,
+    rows,
+    DEFAULT_SIZES,
+    mustKeepZones,
+    mergeCache
+  );
   return {
     ...geometry,
     performance: {
@@ -1084,23 +1126,6 @@ function geometryBoundsWithinDistance(left, right, distanceMeters) {
   );
 }
 
-function isConservativeRunwayEnvelopeSuperseded(zone, selectedRows) {
-  if (
-    zone.lightType !== 'runway-centerline-continuous-envelope' ||
-    zone.geometryMode !== 'continuous-procedural-envelope' ||
-    zone.geometryType !== 'LineString' ||
-    !Array.isArray(zone.vertices) ||
-    zone.vertices.length < 2
-  ) {
-    return false;
-  }
-  return selectedRows.some(
-    (row) =>
-      TARGET_CLASSIFICATIONS.has(sourceClassification(row)) &&
-      polylineNearLength(row.vertices, zone.vertices) > MAXIMUM_ISOLATED_CROSSING_OVERLAP_METERS
-  );
-}
-
 function isIsolatedPolylineCrossing(left, right) {
   if (!Array.isArray(left) || left.length < 2 || !Array.isArray(right) || right.length < 2) {
     return false;
@@ -1147,7 +1172,9 @@ function consolidateRemovalRows(sourceRows, selectedRows) {
       !Number.isFinite(row.sourceRangeStartMeters) ||
       !Number.isFinite(row.sourceRangeEndMeters)
     ) {
-      rows.push(row);
+      rows.push(
+        compiledTargetSourceRows(row).length > 0 ? withCompiledParentTargets(row, row) : row
+      );
       continue;
     }
     const sections = sectionsByParent.get(row.sourceParentRowId) ?? [];
@@ -1162,7 +1189,13 @@ function consolidateRemovalRows(sourceRows, selectedRows) {
   for (const [parentId, sections] of sectionsByParent) {
     const parent = parentRows.get(parentId);
     if (!parent?.vertices?.length) {
-      rows.push(...sections.map((section) => section.member));
+      rows.push(
+        ...sections.map((section) =>
+          section.member.removalTargetSourceRows?.length
+            ? withCompiledParentTargets(section.member, section.member, [section.member.id])
+            : section.member
+        )
+      );
       continue;
     }
 
@@ -1182,33 +1215,139 @@ function consolidateRemovalRows(sourceRows, selectedRows) {
 
     for (const [index, group] of groups.entries()) {
       if (group.members.length === 1) {
-        rows.push({ ...group.members[0], sourceRowIds: [group.members[0].id] });
+        rows.push(withCompiledParentTargets(group.members[0], parent, [group.members[0].id]));
         continue;
       }
       const vertices = sliceVerticesByDistance(parent.vertices, distances, group.start, group.end);
       vertices[0] = group.members[0].vertices[0];
       vertices[vertices.length - 1] = group.members.at(-1).vertices.at(-1);
-      rows.push({
-        ...parent,
-        id: `${parent.id}:selected-sections:${index}`,
-        sourceRowIds: group.members.map((member) => member.id),
-        sourceParentRowId: parent.id,
-        sourceRangeStartMeters: group.start,
-        sourceRangeEndMeters: group.end,
-        sourceGeometryDerived: 'merged-source-row-subsections',
-        sourceInstanceIds: [
-          ...new Set(group.members.flatMap((member) => member.sourceInstanceIds ?? [])),
-        ],
-        vertices,
-      });
+      rows.push(
+        withCompiledParentTargets(
+          {
+            ...parent,
+            id: `${parent.id}:selected-sections:${index}`,
+            sourceRowIds: group.members.map((member) => member.id),
+            sourceParentRowId: parent.id,
+            sourceRangeStartMeters: group.start,
+            sourceRangeEndMeters: group.end,
+            sourceGeometryDerived: 'merged-source-row-subsections',
+            sourceInstanceIds: [
+              ...new Set(group.members.flatMap((member) => member.sourceInstanceIds ?? [])),
+            ],
+            vertices,
+          },
+          parent
+        )
+      );
     }
   }
 
   return rows;
 }
 
+function withCompiledParentTargets(row, parent, sourceRowIds = row.sourceRowIds) {
+  const targetSourceRows = compiledTargetSourceRows(parent);
+  if (targetSourceRows.length === 0) {
+    return { ...row, ...(sourceRowIds ? { sourceRowIds } : {}) };
+  }
+  const endpoints = [row.vertices[0], row.vertices.at(-1)];
+  const sectionToleranceMeters =
+    targetSourceRows.length > 1
+      ? MERGED_COMPILED_TARGET_SECTION_TOLERANCE_METERS
+      : COMPILED_TARGET_SECTION_TOLERANCE_METERS;
+  const endpointToleranceMeters = compiledTargetEndpointToleranceMeters(targetSourceRows);
+  const endpointCapMeters = compiledTargetEndpointCapMeters(targetSourceRows);
+  const removalTargetPointsOverride = targetSourceRows
+    .flatMap((sourceRow) => targetLightPointsForRow(sourceRow))
+    .filter(
+      (point) =>
+        pointToPolylineDistanceMeters(point, row.vertices) <= sectionToleranceMeters ||
+        endpoints.some(
+          (endpoint) => haversineDistanceMeters(point, endpoint) <= endpointToleranceMeters
+        )
+    );
+  return {
+    ...row,
+    ...(sourceRowIds ? { sourceRowIds } : {}),
+    removalEndpointTargetPoints: compiledSectionEndpointTargets(
+      row.vertices,
+      removalTargetPointsOverride,
+      endpointToleranceMeters
+    ),
+    removalEndpointCapMeters: endpointCapMeters,
+    removalTargetPointsOverride,
+  };
+}
+
+function compiledTargetSourceRows(row) {
+  const candidates = row?.removalTargetSourceRows?.length
+    ? row.removalTargetSourceRows
+    : row
+      ? [row]
+      : [];
+  return candidates.filter(
+    (sourceRow) =>
+      sourceRow?.sourceType === 'bgl-airport-light-row' &&
+      (sourceRow.compiledLightPlacement === 'spacing' ||
+        sourceRow.removalTargetSampling === 'spacing')
+  );
+}
+
+function compiledTargetEndpointToleranceMeters(targetSourceRows) {
+  const spacings = targetSourceRows
+    .map((row) => Number(row.spacing))
+    .filter((spacing) => Number.isFinite(spacing) && spacing > 0);
+  if (spacings.length === 0) return SECTION_PROTECTION_BOUNDARY_GAP_METERS;
+  return Math.min(
+    MAXIMUM_COMPILED_TARGET_ENDPOINT_TOLERANCE_METERS,
+    Math.max(0, Math.min(...spacings) / 2 - COMPILED_TARGET_ENDPOINT_MIDPOINT_MARGIN_METERS)
+  );
+}
+
+function compiledTargetEndpointCapMeters(targetSourceRows) {
+  const spacings = targetSourceRows
+    .map((row) => Number(row.spacing))
+    .filter((spacing) => Number.isFinite(spacing) && spacing > 0);
+  if (spacings.length === 0) return 0;
+  return Math.min(
+    MAXIMUM_COMPILED_TARGET_END_CAP_METERS,
+    Math.min(...spacings) * COMPILED_TARGET_END_CAP_SPACING_RATIO
+  );
+}
+
+function compiledSectionEndpointTargets(vertices, targetPoints, endpointToleranceMeters) {
+  if (vertices.length < 2 || targetPoints.length === 0) return [];
+  const start = vertices[0];
+  const end = vertices.at(-1);
+  const startTargets = targetPoints.filter(
+    (point) => haversineDistanceMeters(point, start) <= endpointToleranceMeters
+  );
+  const endTargets = targetPoints.filter(
+    (point) => haversineDistanceMeters(point, end) <= endpointToleranceMeters
+  );
+  const nearestStart = nearestEndpointTarget(start, startTargets);
+  const nearestEnd = nearestEndpointTarget(end, endTargets);
+  return [nearestStart, nearestEnd]
+    .filter((candidate) => candidate?.distanceMeters <= endpointToleranceMeters)
+    .map((candidate) => candidate.point);
+}
+
+function nearestEndpointTarget(endpoint, targetPoints) {
+  if (targetPoints.length === 0) return null;
+  return targetPoints.reduce(
+    (nearest, point) => {
+      const distanceMeters = haversineDistanceMeters(endpoint, point);
+      return distanceMeters < nearest.distanceMeters ? { point, distanceMeters } : nearest;
+    },
+    { point: null, distanceMeters: Number.POSITIVE_INFINITY }
+  );
+}
+
 function selectiveTargetMustKeepZones(data, selectedRows, selectedSourceInstanceIds) {
   const selectedRowIds = new Set(selectedRows.map((row) => row.id));
+  const selectedTargetPoints = selectedRows
+    .flatMap((row) => targetLightPointsForRow(row))
+    .sort((left, right) => left.lat - right.lat);
   const selectedSectionsByParent = new Map();
   for (const row of selectedRows) {
     if (
@@ -1241,7 +1380,7 @@ function selectiveTargetMustKeepZones(data, selectedRows, selectedSourceInstance
       classification: instance.classification,
       geometryType: 'Point',
       point: { lat: instance.lat, lon: instance.lon },
-      clearanceMeters: 0.25,
+      clearanceMeters: SELECTIVE_TARGET_KEEP_CLEARANCE_METERS,
       reason: 'target simulator light not selected by division matching',
     });
   }
@@ -1257,9 +1396,13 @@ function selectiveTargetMustKeepZones(data, selectedRows, selectedSourceInstance
       continue;
     }
     const selectedSections = selectedSectionsByParent.get(row.id);
-    const protectedSegments = selectedSections
-      ? unselectedRowSegments(row.vertices, selectedSections)
-      : [row.vertices];
+    const targetSourceRows = compiledTargetSourceRows(row);
+    const protectedSegments =
+      targetSourceRows.length > 0
+        ? []
+        : selectedSections
+          ? unselectedRowSegments(row.vertices, selectedSections)
+          : [row.vertices];
     for (const [index, vertices] of protectedSegments.entries()) {
       if (vertices.length === 0) continue;
       zones.push({
@@ -1270,26 +1413,80 @@ function selectiveTargetMustKeepZones(data, selectedRows, selectedSourceInstance
         classification: row.classification,
         geometryType: vertices.length === 1 ? 'Point' : 'LineString',
         ...(vertices.length === 1 ? { point: vertices[0] } : { vertices }),
-        clearanceMeters: 0.25,
+        clearanceMeters: SELECTIVE_TARGET_KEEP_CLEARANCE_METERS,
         reason: selectedSections
           ? 'source row section not selected by division matching'
           : 'target simulator row not selected by division matching',
       });
+    }
+    if (targetSourceRows.length > 0) {
+      const protectedTargetPointKeys = new Set();
+      const targetPoints = targetSourceRows.flatMap((sourceRow) =>
+        targetLightPointsForRow(sourceRow)
+      );
+      for (const point of targetPoints) {
+        const key = targetPointKey(point);
+        if (
+          hasSelectedCompiledTarget(selectedTargetPoints, point) ||
+          protectedTargetPointKeys.has(key)
+        )
+          continue;
+        protectedTargetPointKeys.add(key);
+        zones.push({
+          id: `selective-target:${row.id}:${key}`,
+          sourceId: row.id,
+          sourceFile: row.sourceFile,
+          sourceType: row.sourceType,
+          classification: row.classification,
+          geometryType: 'Point',
+          point,
+          clearanceMeters: SELECTIVE_TARGET_KEEP_CLEARANCE_METERS,
+          reason: 'compiled source-row light not selected by division matching',
+        });
+      }
     }
   }
 
   return zones;
 }
 
-function unselectedRowSegments(vertices, selectedSections) {
+function targetPointKey(point) {
+  return `${Number(point.lat).toFixed(10)}:${Number(point.lon).toFixed(10)}`;
+}
+
+function hasSelectedCompiledTarget(sortedPoints, point) {
+  // Overlapping compiled rows can calculate the same lamp a fraction of a millimetre apart.
+  const latitudeTolerance = COMPILED_TARGET_IDENTITY_TOLERANCE_METERS / 110_000;
+  let low = 0;
+  let high = sortedPoints.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (sortedPoints[middle].lat < point.lat - latitudeTolerance) low = middle + 1;
+    else high = middle;
+  }
+  for (let index = low; index < sortedPoints.length; index += 1) {
+    const candidate = sortedPoints[index];
+    if (candidate.lat > point.lat + latitudeTolerance) break;
+    if (haversineDistanceMeters(candidate, point) <= COMPILED_TARGET_IDENTITY_TOLERANCE_METERS) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function unselectedRowSegments(
+  vertices,
+  selectedSections,
+  boundaryGapMeters = SECTION_PROTECTION_BOUNDARY_GAP_METERS
+) {
   const distances = cumulativeVertexDistances(vertices);
   const totalLength = distances.at(-1) ?? 0;
   if (totalLength <= 0.05) return [vertices];
 
   const merged = [...selectedSections]
     .map((section) => ({
-      start: Math.max(0, section.start - SECTION_PROTECTION_BOUNDARY_GAP_METERS),
-      end: Math.min(totalLength, section.end + SECTION_PROTECTION_BOUNDARY_GAP_METERS),
+      start: Math.max(0, section.start - boundaryGapMeters),
+      end: Math.min(totalLength, section.end + boundaryGapMeters),
     }))
     .sort((left, right) => left.start - right.start)
     .reduce((result, section) => {
@@ -1373,6 +1570,7 @@ function generateDraftXml({
   xplaneSelectors = [],
 }) {
   const polygons = [];
+  const msfsRemovalPlan = [];
   let groupIndex = 1;
   const baseAltitude = Number.isFinite(altitude) ? altitude : 0;
 
@@ -1391,6 +1589,7 @@ function generateDraftXml({
     groupIndex += 1;
   }
 
+  let removalIndex = 0;
   for (const removal of removalPolygons) {
     if (!Array.isArray(removal.coordinates) || removal.coordinates.length < 4) continue;
     polygons.push(
@@ -1402,34 +1601,43 @@ function generateDraftXml({
         `${icao}:remove:${removal.id}`
       )
     );
+    msfsRemovalPlan.push(
+      `\t\t<Removal removalIndex="${removalIndex}"${removal.removalMode === 'polygon' ? ' mode="polygon"' : ''}/>`
+    );
+    for (const point of removal.targetLightPoints ?? []) {
+      if (!Number.isFinite(point?.lat) || !Number.isFinite(point?.lon)) continue;
+      const supportSizeMeters = Number(point.supportSizeMeters);
+      msfsRemovalPlan.push(
+        `\t\t<Target removalIndex="${removalIndex}" lat="${point.lat.toFixed(14)}" lon="${point.lon.toFixed(14)}" heading="${Number.isFinite(point.heading) ? point.heading.toFixed(6) : '0.000000'}"${Number.isFinite(supportSizeMeters) && supportSizeMeters > 0 ? ` supportSizeMeters="${supportSizeMeters.toFixed(3)}"` : ''}/>`
+      );
+    }
+    const flags = removal.exclusionFlags;
+    if (flags && Object.values(flags).some(Boolean)) {
+      msfsRemovalPlan.push(
+        `\t\t<Object removalIndex="${removalIndex}"${flags.excludeLibraryObjects ? ' excludeLibraryObjects="true"' : ''}${flags.excludeVFX ? ' excludeVFX="true"' : ''}${flags.excludeSimPropContainers ? ' excludeSimPropContainers="true"' : ''}/>`
+      );
+    }
+    removalIndex += 1;
     groupIndex += 1;
   }
 
   const rootAttributes =
     simulator === 'xplane'
-      ? 'version="9.0" simulator="xplane" xplaneRemovalVersion="1"'
+      ? 'version="9.0" simulator="xplane" xplaneRemovalVersion="2"'
       : 'version="9.0"';
   const selectorXml =
-    simulator === 'xplane' && xplaneSelectors.length > 0
-      ? `\n\t<XPlaneRemovals version="1">\n${xplaneSelectors
+    simulator === 'xplane'
+      ? `\n\t<XPlaneRemovals version="2">\n${xplaneSelectors
           .flatMap((selector) =>
-            selector.ranges.map(
-              ([start, end]) =>
-                `\t\t<Light feature="${selector.feature}" code="${selector.code}" run="${selector.run}" start="${start.toFixed(6)}" end="${end.toFixed(6)}"/>`
-            )
+            selector.ranges.map(([start, end]) => xplaneSelectorXml({ ...selector, start, end }))
           )
           .join('\n')}\n\t</XPlaneRemovals>`
       : '';
-  return `<?xml version="1.0"?>\n<FSData ${rootAttributes}>\n${polygons.join('\n')}${selectorXml}\n</FSData>`;
-}
-
-function uniqueDivisionItems(items) {
-  const byDivision = new Map();
-  for (const item of items) {
-    const key = String(item.division?.id ?? '');
-    if (!byDivision.has(key)) byDivision.set(key, item);
-  }
-  return [...byDivision.values()];
+  const msfsRemovalXml =
+    simulator !== 'xplane' && msfsRemovalPlan.length > 0
+      ? `\n\t<MSFSRemovals version="1">\n${msfsRemovalPlan.join('\n')}\n\t</MSFSRemovals>`
+      : '';
+  return `<?xml version="1.0"?>\n<FSData ${rootAttributes}>\n${polygons.join('\n')}${selectorXml}${msfsRemovalXml}\n</FSData>`;
 }
 
 function polygonXml(displayName, groupIndex, altitude, coordinates, guidSeed) {
@@ -1474,6 +1682,7 @@ function buildSimulatorDebugGeoJson(simulatorRows, mergedSimulatorRows) {
       geometry: { type: 'LineString', coordinates },
       properties: {
         featureType: 'simulator-source',
+        simulatorRowId: String(row.id || ''),
         title: String(row.id || 'Extracted simulator row'),
         simulatorType: row.classification || 'unknown',
         sourceType: row.sourceType || '',
@@ -1494,6 +1703,7 @@ function buildSimulatorDebugGeoJson(simulatorRows, mergedSimulatorRows) {
       geometry: { type: 'LineString', coordinates },
       properties: {
         featureType: 'simulator-merged',
+        simulatorRowId: String(row.id || ''),
         title: `Merged matcher geometry (${row.sourceRowCount} source rows)`,
         simulatorType: row.classification || 'unknown',
         sourceRowCount: row.sourceRowCount,
@@ -1505,7 +1715,13 @@ function buildSimulatorDebugGeoJson(simulatorRows, mergedSimulatorRows) {
   return { type: 'FeatureCollection', features };
 }
 
-function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = []) {
+function buildDraftGeoJson(
+  matches,
+  unmatched,
+  removalPolygons,
+  unsafeMatches = [],
+  removalMatches = []
+) {
   const features = [];
   const divisionColors = buildDivisionColorMap(matches, unmatched, unsafeMatches);
   const originalDivisions = new Map();
@@ -1537,9 +1753,19 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
       properties: {
         featureType: 'removal',
         title: 'Selective removal area',
-        sourceIds: removal.sourceRowIds ?? (removal.sourceRowId ? [removal.sourceRowId] : []),
+        sourceIds:
+          removal.sourceRowIds ??
+          (removal.sourceRowId
+            ? [removal.sourceRowId]
+            : removal.sourceId
+              ? [removal.sourceId]
+              : []),
         origin: 'msfs-source',
         mustKeepZoneIds: removal.mustKeepZoneIds ?? [],
+        sourceLines: removalSourceLines(removal, removalMatches),
+        targetLightPoints: removal.targetLightPoints ?? [],
+        exclusionFlags: removal.exclusionFlags ?? {},
+        removalMode: removal.removalMode ?? 'targets',
       },
     });
   }
@@ -1561,6 +1787,10 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
         matchPercent: Math.round(match.score * 100),
         sourceRowId: String(match.row.id ?? ''),
         sourceFeatureId: String(match.row.sourceFeatureId ?? ''),
+        dsfRemoval: dsfSelector(match.row.dsfRemoval),
+        lightCode: match.row.lightCode,
+        sourceRunIndex: match.row.sourceRunIndex,
+        sourceParentLengthMeters: match.row.sourceParentLengthMeters || rowLengthMeters(match.row),
         sourceType: String(match.row.sourceType ?? ''),
         sourceRangeStartMeters: Number.isFinite(match.row.sourceRangeStartMeters)
           ? match.row.sourceRangeStartMeters
@@ -1622,6 +1852,34 @@ function buildDraftGeoJson(matches, unmatched, removalPolygons, unsafeMatches = 
   return { type: 'FeatureCollection', features };
 }
 
+function removalSourceLines(removal, matches) {
+  const removalSourceIds = new Set(
+    (removal.sourceRowIds ?? (removal.sourceRowId ? [removal.sourceRowId] : []))
+      .map(String)
+      .filter(Boolean)
+  );
+  const lines = [];
+  const seen = new Set();
+  for (const match of matches ?? []) {
+    const row = match?.row;
+    const rowSourceIds = [row?.id, row?.sourceParentRowId, ...(row?.sourceRowIds ?? [])]
+      .map(String)
+      .filter(Boolean);
+    if (!rowSourceIds.some((sourceId) => removalSourceIds.has(sourceId))) continue;
+    const coordinates = (row?.vertices ?? [])
+      .filter((vertex) => Number.isFinite(vertex?.lat) && Number.isFinite(vertex?.lon))
+      .map((vertex) => [vertex.lon, vertex.lat]);
+    if (coordinates.length < 2) continue;
+    const sourceId =
+      rowSourceIds.find((candidate) => removalSourceIds.has(candidate)) ?? rowSourceIds[0];
+    const key = `${sourceId}:${JSON.stringify(coordinates)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push({ sourceId, coordinates });
+  }
+  return lines;
+}
+
 function buildDivisionColorMap(matches, unmatched, unsafeMatches) {
   const divisionsById = new Map();
   for (const item of [...matches, ...unsafeMatches, ...unmatched]) {
@@ -1631,102 +1889,21 @@ function buildDivisionColorMap(matches, unmatched, unsafeMatches) {
     if (!divisionsById.has(id)) divisionsById.set(id, division);
   }
 
-  const nodes = [...divisionsById].map(([id, division]) => ({
-    id,
-    position: divisionCenter(division.coordinates),
-    neighbors: new Set(),
-  }));
-  const positionedNodes = nodes.filter((node) => node.position);
-  for (const node of positionedNodes) {
-    // oxlint-disable-next-line react-doctor/js-combine-iterations -- The debug-only node set is small and staged operations keep the scoring pipeline readable.
-    const nearest = positionedNodes
-      .filter((candidate) => candidate !== node)
-      .map((candidate) => ({
-        candidate,
-        distance: haversineDistanceMeters(node.position, candidate.position),
-      }))
-      .sort(
-        (left, right) =>
-          left.distance - right.distance || left.candidate.id.localeCompare(right.candidate.id)
+  return assignAdjacentColors(
+    [...divisionsById].map(([id, division]) => ({
+      id,
+      coordinates: (Array.isArray(division.coordinates)
+        ? division.coordinates
+        : division.coordinates
+          ? [division.coordinates]
+          : []
       )
-      .slice(0, DEBUG_ID_NEIGHBOR_COUNT);
-    for (const { candidate } of nearest) {
-      node.neighbors.add(candidate.id);
-      candidate.neighbors.add(node.id);
-    }
-  }
-
-  const usage = new Map(DEBUG_ID_COLORS.map((color) => [color, 0]));
-  const colors = new Map();
-  // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
-  const orderedNodes = [...nodes].sort(
-    (left, right) => right.neighbors.size - left.neighbors.size || left.id.localeCompare(right.id)
+        .filter(
+          (coordinate) => Number.isFinite(coordinate?.lat) && Number.isFinite(coordinate?.lng)
+        )
+        .map((coordinate) => [coordinate.lng, coordinate.lat]),
+    }))
   );
-
-  for (const node of orderedNodes) {
-    // oxlint-disable-next-line react-doctor/js-flatmap-filter -- Each node has at most DEBUG_ID_NEIGHBOR_COUNT neighbors, making this a bounded tiny pass.
-    const neighborColors = [...node.neighbors].map((id) => colors.get(id)).filter(Boolean);
-    const startIndex = stableHash(node.id) % DEBUG_ID_COLORS.length;
-    // oxlint-disable-next-line react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted.
-    const color = [...DEBUG_ID_COLORS].sort((left, right) => {
-      const rightScore = debugColorScore(right, neighborColors, usage, startIndex);
-      const leftScore = debugColorScore(left, neighborColors, usage, startIndex);
-      return rightScore - leftScore;
-    })[0];
-    colors.set(node.id, color);
-    usage.set(color, usage.get(color) + 1);
-  }
-
-  return colors;
-}
-
-function divisionCenter(value) {
-  const coordinates = (Array.isArray(value) ? value : value ? [value] : []).filter(
-    (coordinate) => Number.isFinite(coordinate?.lat) && Number.isFinite(coordinate?.lng)
-  );
-  if (coordinates.length === 0) return null;
-  return {
-    lat: coordinates.reduce((sum, coordinate) => sum + coordinate.lat, 0) / coordinates.length,
-    lon: coordinates.reduce((sum, coordinate) => sum + coordinate.lng, 0) / coordinates.length,
-  };
-}
-
-function debugColorScore(color, neighborColors, usage, startIndex) {
-  const separation = neighborColors.length
-    ? Math.min(...neighborColors.map((neighborColor) => rgbDistance(color, neighborColor)))
-    : 0;
-  const duplicateNeighborPenalty = neighborColors.includes(color) ? 10_000 : 0;
-  const paletteIndex = DEBUG_ID_COLORS.indexOf(color);
-  const preference = (paletteIndex - startIndex + DEBUG_ID_COLORS.length) % DEBUG_ID_COLORS.length;
-  return separation * 10 - duplicateNeighborPenalty - usage.get(color) * 5 - preference * 0.01;
-}
-
-function rgbDistance(left, right) {
-  const leftRgb = hexToRgb(left);
-  const rightRgb = hexToRgb(right);
-  return Math.hypot(
-    leftRgb.red - rightRgb.red,
-    leftRgb.green - rightRgb.green,
-    leftRgb.blue - rightRgb.blue
-  );
-}
-
-function hexToRgb(color) {
-  return {
-    red: Number.parseInt(color.slice(1, 3), 16),
-    green: Number.parseInt(color.slice(3, 5), 16),
-    blue: Number.parseInt(color.slice(5, 7), 16),
-  };
-}
-
-function stableHash(value) {
-  const text = String(value ?? 'unassigned');
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
 }
 
 function simulatorRowCoordinates(row) {

@@ -13,7 +13,11 @@ export function deduplicateExactDivisionPoints(points) {
 
   for (const point of points ?? []) {
     const signature = JSON.stringify(
-      OPERATIONAL_FIELDS.map((field) => signatureValue(point?.[field]))
+      OPERATIONAL_FIELDS.map((field) =>
+        field === 'coordinates'
+          ? coordinateSignature(point?.coordinates, point?.directionality)
+          : signatureValue(point?.[field])
+      )
     );
     if (seen.has(signature)) continue;
     seen.add(signature);
@@ -21,6 +25,20 @@ export function deduplicateExactDivisionPoints(points) {
   }
 
   return deduplicated;
+}
+
+function coordinateSignature(coordinates, directionality) {
+  const forward = signatureValue(coordinates);
+  if (
+    !Array.isArray(coordinates) ||
+    coordinates.length < 2 ||
+    directionality === 'uni-directional'
+  ) {
+    return forward;
+  }
+
+  const reverse = signatureValue([...coordinates].reverse());
+  return JSON.stringify(forward) <= JSON.stringify(reverse) ? forward : reverse;
 }
 
 function signatureValue(value) {

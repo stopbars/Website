@@ -1,4 +1,6 @@
 const EARTH_RADIUS_METERS = 6371008.8;
+const WGS84_SEMI_MAJOR_AXIS_METERS = 6378137;
+const WGS84_ECCENTRICITY_SQUARED = 6.69437999014e-3;
 const METERS_PER_DEGREE_LAT = 111320;
 const CLEANED_VERTICES_CACHE = new WeakMap();
 
@@ -14,27 +16,43 @@ export function haversineDistanceMeters(a, b) {
 
   const sinLat = Math.sin(deltaLat / 2);
   const sinLon = Math.sin(deltaLon / 2);
-  const h =
-    sinLat * sinLat +
-    Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
 
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(h));
 }
 
+export function wgs84LocalDistanceMeters(a, b) {
+  const latitude = degreesToRadians((a.lat + b.lat) / 2);
+  const deltaLatitude = degreesToRadians(b.lat - a.lat);
+  const deltaLongitude = degreesToRadians(b.lon - a.lon);
+  const sinLatitude = Math.sin(latitude);
+  const denominator = Math.sqrt(
+    1 - WGS84_ECCENTRICITY_SQUARED * sinLatitude * sinLatitude
+  );
+  const primeVerticalRadius = WGS84_SEMI_MAJOR_AXIS_METERS / denominator;
+  const meridionalRadius =
+    (WGS84_SEMI_MAJOR_AXIS_METERS * (1 - WGS84_ECCENTRICITY_SQUARED)) /
+    denominator ** 3;
+  return Math.hypot(
+    deltaLongitude * primeVerticalRadius * Math.cos(latitude),
+    deltaLatitude * meridionalRadius
+  );
+}
+
 export function interpolatePoint(a, b, ratio) {
   const alt =
-    typeof a.alt === "number" && typeof b.alt === "number"
+    typeof a.alt === 'number' && typeof b.alt === 'number'
       ? a.alt + (b.alt - a.alt) * ratio
-      : a.alt ?? b.alt;
+      : (a.alt ?? b.alt);
 
   return {
     lat: a.lat + (b.lat - a.lat) * ratio,
     lon: a.lon + (b.lon - a.lon) * ratio,
-    ...(typeof alt === "number" ? { alt } : {})
+    ...(typeof alt === 'number' ? { alt } : {}),
   };
 }
 
-export function interpolatePolyline(vertices, spacingMeters) {
+export function interpolatePolyline(vertices, spacingMeters, options = {}) {
   if (vertices.length === 0) {
     return [];
   }
@@ -43,12 +61,13 @@ export function interpolatePolyline(vertices, spacingMeters) {
     return [...vertices];
   }
 
+  const distanceBetween = options.distanceBetween ?? haversineDistanceMeters;
   const segments = [];
   let totalLength = 0;
   for (let index = 0; index < vertices.length - 1; index += 1) {
     const start = vertices[index];
     const end = vertices[index + 1];
-    const length = haversineDistanceMeters(start, end);
+    const length = distanceBetween(start, end);
     segments.push({ start, end, length, startDistance: totalLength });
     totalLength += length;
   }
@@ -57,14 +76,34 @@ export function interpolatePolyline(vertices, spacingMeters) {
     return [vertices[0]];
   }
 
+  const startOffsetMeters = Number.isFinite(options.startOffsetMeters)
+    ? Math.max(0, options.startOffsetMeters)
+    : 0;
+  const spacingToleranceMeters = 0.05;
+  const firstParentDistance =
+    Math.ceil((startOffsetMeters - spacingToleranceMeters) / spacingMeters) * spacingMeters;
   const points = [];
-  for (let distance = 0; distance <= totalLength; distance += spacingMeters) {
-    points.push(pointAtDistance(segments, distance));
+  for (
+    let parentDistance = Math.max(0, firstParentDistance);
+    parentDistance <= startOffsetMeters + totalLength + spacingToleranceMeters;
+    parentDistance += spacingMeters
+  ) {
+    const localDistance = parentDistance - startOffsetMeters;
+    if (localDistance < -spacingToleranceMeters) continue;
+    points.push(pointAtDistance(segments, Math.max(0, Math.min(totalLength, localDistance))));
   }
 
   const lastPoint = points[points.length - 1];
   const lastVertex = vertices[vertices.length - 1];
-  if (!lastPoint || haversineDistanceMeters(lastPoint, lastVertex) > 0.05) {
+  const parentLengthMeters = Number(options.parentLengthMeters);
+  const reachesParentEnd =
+    !Number.isFinite(parentLengthMeters) ||
+    startOffsetMeters + totalLength >= parentLengthMeters - spacingToleranceMeters;
+  if (
+    options.includeFinalVertex !== false &&
+    reachesParentEnd &&
+    (!lastPoint || distanceBetween(lastPoint, lastVertex) > spacingToleranceMeters)
+  ) {
     points.push(lastVertex);
   }
 
@@ -86,9 +125,9 @@ function pointAtDistance(segments, distance) {
 }
 
 export function rectanglePolygonAround(point, widthMeters, heightMeters) {
-  const halfHeightDegrees = (heightMeters / 2) / METERS_PER_DEGREE_LAT;
+  const halfHeightDegrees = heightMeters / 2 / METERS_PER_DEGREE_LAT;
   const lonScale = Math.max(Math.cos(degreesToRadians(point.lat)), 0.000001);
-  const halfWidthDegrees = (widthMeters / 2) / (METERS_PER_DEGREE_LAT * lonScale);
+  const halfWidthDegrees = widthMeters / 2 / (METERS_PER_DEGREE_LAT * lonScale);
 
   const north = point.lat + halfHeightDegrees;
   const south = point.lat - halfHeightDegrees;
@@ -100,7 +139,7 @@ export function rectanglePolygonAround(point, widthMeters, heightMeters) {
     [east, south],
     [east, north],
     [west, north],
-    [west, south]
+    [west, south],
   ];
 }
 
@@ -133,7 +172,7 @@ export function polylineCorridorPolygon(vertices, widthMeters) {
       start,
       end,
       leftNormal: { x: -uy, y: ux },
-      rightNormal: { x: uy, y: -ux }
+      rightNormal: { x: uy, y: -ux },
     });
   }
 
@@ -150,15 +189,11 @@ export function polylineCorridorPolygon(vertices, widthMeters) {
     const previousSegment = segments[Math.max(0, index - 1)];
     const nextSegment = segments[Math.min(index, segments.length - 1)];
 
-    leftSide.push(offsetJoinPoint(point, previousSegment, nextSegment, halfWidth, "left"));
-    rightSide.push(offsetJoinPoint(point, previousSegment, nextSegment, halfWidth, "right"));
+    leftSide.push(offsetJoinPoint(point, previousSegment, nextSegment, halfWidth, 'left'));
+    rightSide.push(offsetJoinPoint(point, previousSegment, nextSegment, halfWidth, 'right'));
   }
 
-  const ring = [
-    ...leftSide,
-    ...rightSide.reverse(),
-    leftSide[0]
-  ];
+  const ring = [...leftSide, ...rightSide.reverse(), leftSide[0]];
 
   return ring.map((point) => fromLocalMeters(point, origin));
 }
@@ -192,13 +227,17 @@ export function nearestPointOnPolyline(point, vertices) {
   if (cleanedVertices.length === 1) {
     return {
       point: cleanedVertices[0],
-      distanceMeters: haversineDistanceMeters(point, cleanedVertices[0])
+      distanceMeters: haversineDistanceMeters(point, cleanedVertices[0]),
     };
   }
 
   let nearest = { point: undefined, distanceMeters: Number.POSITIVE_INFINITY };
   for (let index = 1; index < cleanedVertices.length; index += 1) {
-    const candidate = nearestPointOnSegment(point, cleanedVertices[index - 1], cleanedVertices[index]);
+    const candidate = nearestPointOnSegment(
+      point,
+      cleanedVertices[index - 1],
+      cleanedVertices[index]
+    );
     if (candidate.distanceMeters < nearest.distanceMeters) {
       nearest = candidate;
     }
@@ -224,17 +263,14 @@ export function pointInPolygon(point, vertices) {
     const dx = rightX - leftX;
     const dy = rightY - leftY;
     const lengthSquared = dx * dx + dy * dy;
-    const ratio = lengthSquared <= 0
-      ? 0
-      : Math.max(0, Math.min(1, (-leftX * dx - leftY * dy) / lengthSquared));
+    const ratio =
+      lengthSquared <= 0 ? 0 : Math.max(0, Math.min(1, (-leftX * dx - leftY * dy) / lengthSquared));
     const nearestX = leftX + dx * ratio;
     const nearestY = leftY + dy * ratio;
     if (nearestX * nearestX + nearestY * nearestY <= 0.001 * 0.001) {
       return true;
     }
-    const crosses =
-      (leftY > 0) !== (rightY > 0) &&
-      0 < (dx * -leftY) / dy + leftX;
+    const crosses = leftY > 0 !== rightY > 0 && 0 < (dx * -leftY) / dy + leftX;
     if (crosses) {
       inside = !inside;
     }
@@ -291,7 +327,7 @@ export function offsetPointMeters(point, eastMeters, northMeters) {
     METERS_PER_DEGREE_LAT * Math.max(Math.cos(degreesToRadians(point.lat)), 0.000001);
   return {
     lat: point.lat + northMeters / METERS_PER_DEGREE_LAT,
-    lon: point.lon + eastMeters / metersPerDegreeLon
+    lon: point.lon + eastMeters / metersPerDegreeLon,
   };
 }
 
@@ -332,17 +368,18 @@ function offsetJoinPoint(point, previousSegment, nextSegment, halfWidth, side) {
     return joined;
   }
 
-  const averageNormal = normalizeVector({
-    x: previousNormal.x + nextNormal.x,
-    y: previousNormal.y + nextNormal.y
-  }) ?? nextNormal;
+  const averageNormal =
+    normalizeVector({
+      x: previousNormal.x + nextNormal.x,
+      y: previousNormal.y + nextNormal.y,
+    }) ?? nextNormal;
   return offsetPoint(point, averageNormal, halfWidth);
 }
 
 function offsetPoint(point, normal, distanceMeters) {
   return {
     x: point.x + normal.x * distanceMeters,
-    y: point.y + normal.y * distanceMeters
+    y: point.y + normal.y * distanceMeters,
   };
 }
 
@@ -356,7 +393,7 @@ function lineIntersection(a, b, c, d) {
   const cCross = c.x * d.y - c.y * d.x;
   return {
     x: (aCross * (c.x - d.x) - (a.x - b.x) * cCross) / denominator,
-    y: (aCross * (c.y - d.y) - (a.y - b.y) * cCross) / denominator
+    y: (aCross * (c.y - d.y) - (a.y - b.y) * cCross) / denominator,
   };
 }
 
@@ -368,7 +405,7 @@ function normalizeVector(vector) {
 
   return {
     x: vector.x / length,
-    y: vector.y / length
+    y: vector.y / length,
   };
 }
 
@@ -383,7 +420,7 @@ function nearestPointOnSegment(point, segmentStart, segmentEnd) {
   if (lengthSquared <= 0) {
     return {
       point: segmentStart,
-      distanceMeters: haversineDistanceMeters(point, segmentStart)
+      distanceMeters: haversineDistanceMeters(point, segmentStart),
     };
   }
 
@@ -393,12 +430,12 @@ function nearestPointOnSegment(point, segmentStart, segmentEnd) {
   );
   const closest = {
     x: localEnd.x * ratio,
-    y: localEnd.y * ratio
+    y: localEnd.y * ratio,
   };
 
   return {
     point: fromLocalMetersObject(closest, segmentStart),
-    distanceMeters: distanceLocalMeters(localPoint, closest)
+    distanceMeters: distanceLocalMeters(localPoint, closest),
   };
 }
 
@@ -430,13 +467,12 @@ function pointToLocalSegmentDistance(point, start, end) {
   );
   return distanceLocalMeters(point, {
     x: start.x + dx * ratio,
-    y: start.y + dy * ratio
+    y: start.y + dy * ratio,
   });
 }
 
 function segmentsIntersectLocal(a, b, c, d) {
-  const orientation = (p, q, r) =>
-    Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  const orientation = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
   const o1 = orientation(a, b, c);
   const o2 = orientation(a, b, d);
   const o3 = orientation(c, d, a);
@@ -458,9 +494,7 @@ function closeVertices(vertices) {
   }
   const first = vertices[0];
   const last = vertices.at(-1);
-  return haversineDistanceMeters(first, last) <= 0.05
-    ? [...vertices]
-    : [...vertices, first];
+  return haversineDistanceMeters(first, last) <= 0.05 ? [...vertices] : [...vertices, first];
 }
 
 function distanceLocalMeters(left, right) {
@@ -475,7 +509,7 @@ function toLocalMeters(point, origin) {
 
   return {
     x: (point.lon - origin.lon) * metersPerDegreeLon,
-    y: (point.lat - origin.lat) * METERS_PER_DEGREE_LAT
+    y: (point.lat - origin.lat) * METERS_PER_DEGREE_LAT,
   };
 }
 
@@ -483,10 +517,7 @@ function fromLocalMeters(point, origin) {
   const metersPerDegreeLon =
     METERS_PER_DEGREE_LAT * Math.max(Math.cos(degreesToRadians(origin.lat)), 0.000001);
 
-  return [
-    origin.lon + point.x / metersPerDegreeLon,
-    origin.lat + point.y / METERS_PER_DEGREE_LAT
-  ];
+  return [origin.lon + point.x / metersPerDegreeLon, origin.lat + point.y / METERS_PER_DEGREE_LAT];
 }
 
 function fromLocalMetersObject(point, origin) {

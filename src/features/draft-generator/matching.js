@@ -1,24 +1,53 @@
 /* oxlint-disable react-doctor/js-combine-iterations react-doctor/js-flatmap-filter react-doctor/js-cache-property-access react-doctor/js-tosorted-immutable -- Matching keeps validation, projection, and scoring stages explicit for geometry auditability; the supported test runtime also lacks toSorted. */
 
+import { deduplicateExactDivisionPoints } from '../../utils/divisionPoints.js';
+import { connectedTaxiwayRows } from './connected-taxiway-rows.js';
+
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 const ROW_SECTION_PADDING_METERS = 0.75;
 const MINIMUM_PARTITION_CENTER_SEPARATION_METERS = 4;
 const MINIMUM_CONTESTED_ASSIGNMENT_SCORE = 0.65;
+const MINIMUM_SHARED_ENDPOINT_BRANCH_SCORE = 0.55;
+const MAXIMUM_SHARED_ENDPOINT_BRANCH_MEAN_DISTANCE_METERS = 9;
+const MAXIMUM_SHARED_ENDPOINT_BRANCH_DISTANCE_METERS = 10;
+const MAXIMUM_SHARED_ENDPOINT_BRANCH_ANGLE_DEGREES = 5;
+const MAXIMUM_BRANCH_ONSET_SEARCH_METERS = 40;
+const MAXIMUM_BRANCH_INCOMING_ANGLE_DEGREES = 3;
+const MINIMUM_BRANCH_ONSET_ANGLE_DEGREES = 5;
 const MAXIMUM_WEAK_SECONDARY_OWNERSHIP_SCORE = 0.7;
 const MINIMUM_PRIMARY_OWNERSHIP_SCORE = 0.78;
 const MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE = 0.12;
 const MINIMUM_WEAK_SECONDARY_ANGLE_DEGREES = 20;
 const MINIMUM_WEAK_SECONDARY_MAXIMUM_DISTANCE_METERS = 12;
+const MINIMUM_JUNCTION_BRANCH_OWNERSHIP_ADVANTAGE = 0.04;
+const MINIMUM_DIVERGENT_JUNCTION_BRANCH_ANGLE_DEGREES = 12;
+const MINIMUM_COMPLETE_ALTERNATIVE_OWNERSHIP_ADVANTAGE = 0.04;
+const MINIMUM_COMPLETE_ALTERNATIVE_ANGLE_IMPROVEMENT_DEGREES = 8;
+const MINIMUM_COMPLETE_ALTERNATIVE_DISTANCE_IMPROVEMENT_METERS = 3;
 const MAXIMUM_WEAK_SECONDARY_COMPOSITE_DIVISION_COVERAGE = 0.3;
 const MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO = 0.5;
 const MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE = 0.02;
+const MINIMUM_COMPARABLE_FULL_SHAPE_PARTITION_SCORE = 0.85;
 const MINIMUM_REGISTERED_OWNER_SUPPRESSION_SCORE = 0.9;
 const MINIMUM_REGISTERED_OWNER_SUPPRESSION_ADVANTAGE = 0.12;
 const MINIMUM_REGISTERED_OWNER_OVERLAP_RATIO = 0.8;
 const MINIMUM_ALLOCATED_LENGTH_RATIO = 0.4;
+const MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_METERS = 20;
+const MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_RATIO = 0.3;
+const MAXIMUM_JUNCTION_STOPBAR_CELL_SOURCE_DISTANCE_METERS = 5;
+const MINIMUM_REGISTERED_BRANCH_STOPBAR_CELL_LENGTH_METERS = 10;
+const MINIMUM_REGISTERED_BRANCH_STOPBAR_CELL_LENGTH_RATIO = 0.2;
 const MINIMUM_COMPOSITE_SOURCE_COVERAGE = 0.15;
 const MINIMUM_INFERRED_COMPOSITE_SOURCE_COVERAGE = 0.04;
 const MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS = 3;
+const MINIMUM_NATIVE_STOPBAR_SECTION_SOURCE_LENGTH_RATIO = 1.5;
+const MINIMUM_NATIVE_STOPBAR_SECTION_PROJECTION_COVERAGE = 0.75;
+const MAXIMUM_NATIVE_STOPBAR_SECTION_DISTANCE_METERS = 5;
+const MAXIMUM_NATIVE_STOPBAR_SECTION_ANGLE_DEGREES = 10;
+const MINIMUM_TIGHT_COMPACT_SOURCE_LENGTH_METERS = 3;
+const MAXIMUM_TIGHT_COMPACT_SOURCE_MEAN_DISTANCE_METERS = 2;
+const MAXIMUM_TIGHT_COMPACT_SOURCE_DISTANCE_METERS = 3;
+const MAXIMUM_TIGHT_COMPACT_SOURCE_ANGLE_DEGREES = 5;
 const MAXIMUM_COMPOSITE_SECTION_ANGLE_DEGREES = 90;
 const MAXIMUM_GUIDANCE_PARTITION_GAP_METERS = 40;
 const MAXIMUM_GUIDANCE_END_EXTENSION_METERS = 15;
@@ -26,6 +55,20 @@ const MAXIMUM_SINGLE_OWNER_LENGTH_RATIO = 1.5;
 const MAXIMUM_LOGICAL_TURN_SNAP_METERS = 8;
 const MINIMUM_LOGICAL_TURN_DEGREES = 75;
 const MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS = 15;
+const MAXIMUM_SHARED_DIVISION_BOUNDARY_SNAP_METERS = 6;
+const MAXIMUM_NATIVE_OWNERSHIP_VERTEX_SNAP_METERS = 1.5;
+const MAXIMUM_DOMINANT_FULL_SHAPE_VERTEX_SNAP_METERS = 2;
+const MAXIMUM_SUBORDINATE_DIVISION_TO_SOURCE_COVERAGE = 0.75;
+const CONSOLIDATED_SIMULATOR_ROWS = new WeakMap();
+const CROSSING_BOUNDS = new WeakMap();
+const SPATIAL_BOUNDS_TOLERANCE_METERS = 0.000001;
+const NATURAL_BOUNDARY_VERTEX_SNAP_TOLERANCE_METERS = 0.1;
+const MINIMUM_COMPACT_STOPBAR_APPROACH_LENGTH_RATIO = 0.75;
+const MAXIMUM_COMPACT_STOPBAR_APPROACH_SPACING_MULTIPLIER = 2;
+const MAXIMUM_COMPACT_STOPBAR_ANCHOR_DISTANCE_METERS = 1.5;
+const MINIMUM_SHIFTED_STOPBAR_VERTEX_DISTANCE_METERS = 1.5;
+const MAXIMUM_SHIFTED_STOPBAR_VERTEX_DISTANCE_METERS = 3;
+const MINIMUM_OPPOSITE_STOPBAR_VERTEX_DISTANCE_METERS = 0.2;
 const NATURAL_BOUNDARY_PROXIMITY_METERS = 12;
 const MAXIMUM_EQUIVALENT_STOPBAR_OFFSET_METERS = 25;
 const MINIMUM_STOPBAR_CROSSING_ANGLE_DEGREES = 35;
@@ -43,10 +86,16 @@ const MAXIMUM_CONNECTED_STOPBAR_LENGTH_METERS = 200;
 const MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS = 4;
 const MINIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS = 2;
 const MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS = 12;
+const MINIMUM_SUSTAINED_JOIN_SOURCE_VERTEX_COUNT = 4;
+const FULL_SHAPE_JOIN_SOURCE_DISTANCE_METERS = 3;
+const FULL_SHAPE_JOIN_VERTEX_INSET = 2;
+const MAXIMUM_STRAIGHT_JOIN_SEGMENT_TURN_DEGREES = 4;
+const MINIMUM_STRAIGHT_JOIN_RUN_LENGTH_METERS = 60;
 const MAXIMUM_LOGICAL_GUIDANCE_JUMP_TURN_DEGREES = 20;
 const MAXIMUM_LOGICAL_GUIDANCE_DIVISION_MEAN_DISTANCE_METERS = 3;
 const MAXIMUM_LOGICAL_GUIDANCE_DIVISION_DISTANCE_METERS = 6;
 const MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS = 0.65;
+const MAXIMUM_EDITOR_COLOCATED_GUIDANCE_DISTANCE_METERS = 0.8;
 const RECONSTRUCTED_STOPBAR_STRAIGHTNESS_TOLERANCE_METERS = 1.5;
 const MAXIMUM_STOPBAR_BOUNDARY_EXTENSION_METERS = 120;
 const MAXIMUM_STRAIGHT_FALLBACK_EXTENSION_METERS = 180;
@@ -59,6 +108,15 @@ const MINIMUM_STOPBAR_ANCHORED_OWNER_SOURCE_COVERAGE = 0.9;
 const MINIMUM_STOPBAR_CONTINUATION_LOCAL_TURN_DEGREES = 10;
 const MINIMUM_ALTERNATIVE_GUIDANCE_EVIDENCE_SCORE = 0.8;
 const MINIMUM_ALTERNATIVE_GUIDANCE_SOURCE_COVERAGE = 0.7;
+const MINIMUM_INSTANCE_SUPPORTED_ROW_STATIONS = 4;
+const MINIMUM_INSTANCE_SUPPORTED_EDGE_SCORE = 0.7;
+const MINIMUM_ENDPOINT_INSTANCE_SUPPORTED_EDGE_SCORE = 0.65;
+const MINIMUM_ENDPOINT_INSTANCE_SUPPORTED_COVERAGE = 0.4;
+const MINIMUM_ENDPOINT_INSTANCE_SUPPORTED_ROW_STATIONS = 6;
+const MAXIMUM_ENDPOINT_INSTANCE_SUPPORTED_MEAN_DISTANCE_METERS = 4;
+const MAXIMUM_ENDPOINT_INSTANCE_SUPPORTED_DISTANCE_METERS = 7;
+const MAXIMUM_INSTANCE_SUPPORTED_ROW_MEAN_DISTANCE_METERS = 5;
+const MAXIMUM_INSTANCE_SUPPORTED_ROW_DISTANCE_METERS = 9;
 const GUIDANCE_SOURCE_CLASSIFICATIONS = new Set(['lead-on', 'taxi-centerline']);
 const GUIDANCE_DIVISION_TYPES = new Set(['lead_on', 'taxiway', 'stand']);
 
@@ -189,17 +247,14 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
   const includeDiagnostics = (import.meta.env?.DEV ?? true) && options.includeDiagnostics === true;
   const rowCandidateEvaluations = includeDiagnostics ? createCandidateDiagnosticCollector() : null;
   const instanceCandidateEvaluations = includeDiagnostics ? [] : null;
-  const simulatorRows = lightRows ?? [];
-  const referenceLatitude = findReferenceLatitude(divisionPoints, simulatorRows, instances);
+  const connectedRows = connectedTaxiwayRows(lightRows);
+  const simulatorRows = connectedRows.length ? [...lightRows, ...connectedRows] : lightRows ?? [];
+  const uniqueDivisionPoints = deduplicateExactDivisionPoints(divisionPoints);
+  const referenceLatitude = findReferenceLatitude(uniqueDivisionPoints, simulatorRows, instances);
   const preparedRunways = prepareRunwayCenterlines(options.runways, referenceLatitude);
-  const preparedDivision = (divisionPoints ?? []).map((point, index) =>
+  const preparedDivision = uniqueDivisionPoints.map((point, index) =>
     prepareDivisionPoint(point, index, referenceLatitude)
   );
-  // oxlint-disable-next-line react-doctor/js-combine-iterations, react-doctor/js-flatmap-filter -- Eligibility, preparation, and validity are distinct matching stages.
-  const preparedRows = simulatorRows
-    .filter(isMatchableSimulatorRow)
-    .map((row, index) => prepareSimulatorRow(row, index, referenceLatitude))
-    .filter(Boolean);
   // oxlint-disable-next-line react-doctor/js-combine-iterations -- Eligibility filtering and projection are intentionally distinct preparation stages.
   const preparedInstances = (instances ?? [])
     .filter(
@@ -215,7 +270,7 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
     }));
 
   const divisionDeduplication = collapseDuplicateLeadOns(preparedDivision, 'division');
-  const rowDeduplication = mergeCoLocatedSimulatorRows(preparedRows, referenceLatitude);
+  const rowDeduplication = prepareAndMergeCoLocatedSimulatorRows(simulatorRows, referenceLatitude);
   const matchableDivision = divisionDeduplication.kept.filter((item) => item.valid);
   const baseCandidates = rowDeduplication.kept.filter((item) => item.valid);
   const connectedStopbarCandidates = buildConnectedStopbarCandidates(
@@ -223,6 +278,11 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
     referenceLatitude
   );
   const candidates = [...baseCandidates, ...connectedStopbarCandidates];
+  const allInstanceEdges = buildInstanceMatchEdges(
+    matchableDivision,
+    preparedInstances,
+    instanceCandidateEvaluations
+  );
   const edges = [];
 
   for (const division of matchableDivision) {
@@ -259,7 +319,7 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
         continue;
       }
 
-      const section = simulatorSectionForDivision(division, candidate, config, referenceLatitude);
+      let section = simulatorSectionForDivision(division, candidate, config, referenceLatitude);
       if (!section) {
         if (evaluation) {
           evaluation.outcome = 'rejected';
@@ -279,6 +339,22 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
         if (registration) {
           matchingDivision = registration.division;
           metrics = registration.metrics;
+        }
+      }
+      if (!metrics.valid) {
+        const instanceSupported = instanceSupportedRowSection(
+          division,
+          candidate,
+          section,
+          config,
+          allInstanceEdges,
+          referenceLatitude,
+          evaluation
+        );
+        if (instanceSupported) {
+          matchingDivision = division;
+          section = instanceSupported.section;
+          metrics = instanceSupported.metrics;
         }
       }
       const sectionLengthRatio = section.length / Math.max(division.length, 0.001);
@@ -310,7 +386,9 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
   const matchedDivisionIds = new Set();
   const matches = [];
   const allocationEvaluations = includeDiagnostics ? [] : null;
-  const dominantOwnershipEdges = suppressClearlySubordinateCompositeOwners(edges);
+  const dominantOwnershipEdges = suppressClearlySubordinateCompositeOwners(
+    preferNativeTaxiwayShapes(edges)
+  );
   const priorityEdges = preferHighestPriorityEvidence(
     dominantOwnershipEdges,
     candidates,
@@ -318,24 +396,19 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
   );
   const ownershipEdges = preferConnectedStopbarCompositeEdges(
     suppressRedundantRegisteredStopbars(
-        suppressSubordinateRegisteredGuidanceOwners(
-          suppressClearlySubordinateCompositeOwners(
-            suppressParallelInferredPlacementOwners(
-              suppressWeakSecondaryCandidateOwners(suppressRedundantCompositeEdges(priorityEdges))
-            )
+      suppressSubordinateRegisteredGuidanceOwners(
+        suppressClearlySubordinateCompositeOwners(
+          suppressParallelInferredPlacementOwners(
+            suppressWeakSecondaryCandidateOwners(suppressRedundantCompositeEdges(priorityEdges))
           )
         )
+      )
     )
   );
   const connectedOwnershipEdges = addConnectedGuidanceTrunkOwners(
     ownershipEdges,
     referenceLatitude,
     edges
-  );
-  const allInstanceEdges = buildInstanceMatchEdges(
-    matchableDivision,
-    preparedInstances,
-    instanceCandidateEvaluations
   );
   const allocatedEdges = allocateSimulatorGeometry(
     connectedOwnershipEdges,
@@ -461,6 +534,7 @@ export function matchDivisionObjects(divisionPoints, lightRows, instances = [], 
     duplicateDivisionLeadOns: divisionDeduplication.duplicateIds,
     duplicateSimulatorLeadOns: rowDeduplication.duplicateIds,
     mergedSimulatorRows: [
+      ...connectedRows,
       ...rowDeduplication.mergedRows,
       ...connectedStopbarCandidates.map((candidate) => candidate.raw),
     ],
@@ -618,6 +692,130 @@ function isExactPlacementRow(row) {
     row.sourceType === 'inferred-bgl-placement-row' &&
     row.reconstructMode === 'exact-bgl-placement-control-points'
   );
+}
+
+function isNativeTaxiwayGraphRow(row) {
+  return row?.sourceType === 'bgl-taxiway-path' && Number.isInteger(row.graphPointTableOffset);
+}
+
+function preferNativeTaxiwayShapes(edges) {
+  const byDivision = new Map();
+  for (const edge of edges) {
+    if (!isNativeTaxiwayGraphRow(edge.candidate.raw)) continue;
+    const id = stableIdentifier(edge.division);
+    if (!byDivision.has(id)) byDivision.set(id, []);
+    byDivision.get(id).push(edge);
+  }
+  const rejected = new Set();
+  for (const candidates of byDivision.values()) {
+    for (const edge of candidates) {
+      if (!edge.candidate.raw.connectedSourceRows) continue;
+      if (
+        edge.metrics.alignmentMode === 'full-shape' &&
+        edge.metrics.score >= 0.9 &&
+        edge.metrics.maximumDistance <= 5 &&
+        edge.metrics.lengthRatio >= 0.85 &&
+        edge.metrics.lengthRatio <= 1.2 &&
+        edge.metrics.divisionToSourceCoverage >= 0.95
+      )
+        continue;
+      const alternative = candidates.find(
+        (other) =>
+          other !== edge &&
+          !other.candidate.raw.connectedSourceRows &&
+          other.metrics.score >= edge.metrics.score - 0.03 &&
+          other.metrics.angleDifference + 5 < edge.metrics.angleDifference &&
+          nearestDistanceSummary(
+            edge.section.prepared.samples,
+            other.section.prepared.projected
+          ).covered(2) >= 0.9 &&
+          nearestDistanceSummary(
+            other.section.prepared.samples,
+            edge.section.prepared.projected
+          ).covered(2) >= 0.9
+      );
+      if (alternative) rejected.add(edge);
+    }
+    // Compare coverage along the division so junction branches cannot double back over its route.
+    const ranked = candidates
+      .filter((edge) => !rejected.has(edge))
+      .map((edge) => {
+        const stations = edge.section.prepared.projected.map(
+          (point) => projectPointToPolyline(point, edge.division.projected).along
+        );
+        const start = Math.min(...stations);
+        const end = Math.max(...stations);
+        return {
+          edge,
+          start,
+          end,
+          quality: (end - start) * (edge.metrics.score - edge.metrics.angleDifference / 180),
+        };
+      })
+      .sort((left, right) => right.quality - left.quality);
+    const anchor = ranked.find(
+      ({ edge, start, end }) =>
+        edge.metrics.alignmentMode === 'full-shape' &&
+        edge.metrics.score >= 0.9 &&
+        edge.metrics.sourceToDivisionMaximumDistance <= 2 &&
+        edge.metrics.angleDifference <= 8 &&
+        end - start >= edge.division.length * 0.65
+    );
+    if (!anchor) {
+      const complete = candidates
+        .filter(
+          ({ metrics }) =>
+            metrics.alignmentMode === 'full-shape' &&
+            metrics.score >= 0.9 &&
+            metrics.maximumDistance <= 5 &&
+            metrics.lengthRatio >= 0.85 &&
+            metrics.lengthRatio <= 1.2 &&
+            metrics.divisionToSourceCoverage >= 0.95
+        )
+        .sort((left, right) => right.metrics.score - left.metrics.score);
+      if (complete.length)
+        for (const edge of candidates) if (edge !== complete[0]) rejected.add(edge);
+      continue;
+    }
+    if (
+      anchor.edge.metrics.maximumDistance <= 5 &&
+      anchor.edge.metrics.lengthRatio >= 0.85 &&
+      anchor.edge.metrics.lengthRatio <= 1.2 &&
+      anchor.edge.metrics.divisionToSourceCoverage >= 0.95
+    ) {
+      for (const edge of candidates) if (edge !== anchor.edge) rejected.add(edge);
+      continue;
+    }
+    const kept = [anchor];
+    for (const item of ranked) {
+      if (item === anchor) continue;
+      if (item.end - item.start < 0.2) {
+        rejected.add(item.edge);
+        continue;
+      }
+      const overlap = kept.some(
+        (other) =>
+          Math.max(0, Math.min(item.end, other.end) - Math.max(item.start, other.start)) >=
+          Math.max(0.2, (item.end - item.start) * 0.35)
+      );
+      const points = item.edge.section.prepared.projected;
+      const connects = kept.some((other) => {
+        const otherPoints = other.edge.section.prepared.projected;
+        return [points[0], points.at(-1)].some((point) =>
+          [otherPoints[0], otherPoints.at(-1)].some(
+            (otherPoint) => distance(point, otherPoint) < 0.01
+          )
+        );
+      });
+      if (overlap || !connects) rejected.add(item.edge);
+      else kept.push(item);
+    }
+  }
+  return edges.filter((edge) => !rejected.has(edge));
+}
+
+function isNativeCompiledGuidanceRow(row) {
+  return row?.inferred !== true && row?.sourceType === 'bgl-airport-light-row';
 }
 
 function isLocallyRegisterableSimulatorRow(row) {
@@ -936,7 +1134,16 @@ function simulatorSectionForDivision(division, candidate, config, referenceLatit
   // Division lines are intentionally simplified display geometry. Score the projected
   // simulator subsection first even when both complete lines happen to have similar lengths;
   // whole-source ownership is restored later by allocateSimulatorGeometry.
-  const canSplit = division.raw.type !== 'stopbar' && candidate.length >= 5;
+  const canSplit =
+    candidate.length >= 5 &&
+    (division.raw.type !== 'stopbar' ||
+      canSplitNativeStopbarSection(
+        division,
+        candidate,
+        projections,
+        projectionStart,
+        projectionEnd
+      ));
   if (!canSplit) {
     return {
       prepared: candidate,
@@ -972,6 +1179,31 @@ function simulatorSectionForDivision(division, candidate, config, referenceLatit
   });
 }
 
+function canSplitNativeStopbarSection(
+  division,
+  candidate,
+  projections,
+  projectionStart,
+  projectionEnd
+) {
+  if (
+    division.raw.type !== 'stopbar' ||
+    candidate.raw.sourceType !== 'bgl-airport-light-row' ||
+    candidate.raw.inferred === true ||
+    candidate.length < division.length * MINIMUM_NATIVE_STOPBAR_SECTION_SOURCE_LENGTH_RATIO
+  ) {
+    return false;
+  }
+  const projectionSpan = projectionEnd - projectionStart;
+  const maximumDistance = Math.max(...projections.map((projection) => projection.distance));
+  return (
+    projectionSpan >= division.length * MINIMUM_NATIVE_STOPBAR_SECTION_PROJECTION_COVERAGE &&
+    maximumDistance <= MAXIMUM_NATIVE_STOPBAR_SECTION_DISTANCE_METERS &&
+    orientationDifference(division.orientation, candidate.orientation) <=
+      MAXIMUM_NATIVE_STOPBAR_SECTION_ANGLE_DEGREES
+  );
+}
+
 function bestAlignedProjectionRun(
   projections,
   maximumDistance,
@@ -992,11 +1224,7 @@ function bestAlignedProjectionRun(
       run.push(projection);
       continue;
     }
-    if (
-      run.length > 0 &&
-      projection.distance <= maximumBridgeDistance &&
-      projectionIsContinuous
-    ) {
+    if (run.length > 0 && projection.distance <= maximumBridgeDistance && projectionIsContinuous) {
       // Keep a small drift gap pending until strict alignment resumes. This joins
       // one continuous row without growing a run whose only evidence is at an end.
       bridge.push(projection);
@@ -1238,14 +1466,40 @@ function coordinateAtDistance(coordinates, distances, target) {
 
 function buildInstanceMatchEdges(divisions, instances, diagnosticEvaluations = null) {
   const edges = [];
+  const compatibleInstances = new Map();
 
   for (const division of divisions) {
     const config = TYPE_CONFIG[division.raw.type];
     if (!config) continue;
+    if (!compatibleInstances.has(config)) {
+      compatibleInstances.set(
+        config,
+        instances.filter((instance) =>
+          config.instanceClassifications.has(instance.raw.classification)
+        )
+      );
+    }
 
     // oxlint-disable-next-line react-doctor/js-combine-iterations -- Classification, projection, and distance acceptance are distinct matching stages.
-    const projectedInstances = instances
-      .filter((instance) => config.instanceClassifications.has(instance.raw.classification))
+    const projectedInstances = compatibleInstances
+      .get(config)
+      .filter(
+        ({ point }) =>
+          point.x >=
+            division.bounds.minX -
+              config.instanceSearchDistance -
+              SPATIAL_BOUNDS_TOLERANCE_METERS &&
+          point.x <=
+            division.bounds.maxX +
+              config.instanceSearchDistance +
+              SPATIAL_BOUNDS_TOLERANCE_METERS &&
+          point.y >=
+            division.bounds.minY -
+              config.instanceSearchDistance -
+              SPATIAL_BOUNDS_TOLERANCE_METERS &&
+          point.y <=
+            division.bounds.maxY + config.instanceSearchDistance + SPATIAL_BOUNDS_TOLERANCE_METERS
+      )
       .map((instance) => ({
         ...instance,
         projection: projectPointToPolyline(instance.point, division.projected),
@@ -1333,6 +1587,169 @@ function buildInstanceMatchEdges(divisions, instances, diagnosticEvaluations = n
       left.metrics.meanDistance - right.metrics.meanDistance ||
       stableIdentifier(left.division).localeCompare(stableIdentifier(right.division))
   );
+}
+
+function instanceSupportedRowSection(
+  division,
+  candidate,
+  proposedSection,
+  config,
+  instanceEdges,
+  referenceLatitude,
+  diagnostic
+) {
+  const reject = (reason, details = {}) => {
+    if (diagnostic) diagnostic.instanceSupport = { outcome: 'rejected', reason, ...details };
+    return null;
+  };
+  const sourceInstanceIds = candidate.raw.sourceInstanceIds ?? [];
+  if (
+    !isExactPlacementRow(candidate.raw) ||
+    !GUIDANCE_DIVISION_TYPES.has(division.raw.type) ||
+    !GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification) ||
+    sourceInstanceIds.length !== candidate.projected.length
+  ) {
+    return reject('unsupported-source-row');
+  }
+
+  const divisionInstanceEdges = instanceEdges.filter(
+    (edge) => stableIdentifier(edge.division) === stableIdentifier(division)
+  );
+  const instanceEdge =
+    divisionInstanceEdges.find(
+      (edge) => edge.metrics.score >= MINIMUM_INSTANCE_SUPPORTED_EDGE_SCORE
+    ) ?? divisionInstanceEdges.find((edge) => endpointSupportedInstanceEdge(edge, candidate));
+  if (!instanceEdge) return reject('no-strong-division-instance-edge');
+  const endpointOnlySupport = instanceEdge.metrics.score < MINIMUM_INSTANCE_SUPPORTED_EDGE_SCORE;
+
+  const supportedIds = new Set(
+    edgeSourceInstances(instanceEdge).map((instance) => String(instance.raw.id))
+  );
+  const supportedIndices = sourceInstanceIds
+    .map((id, index) => (supportedIds.has(String(id)) ? index : -1))
+    .filter((index) => index >= 0);
+  const runs = [];
+  let run = [];
+  for (const index of supportedIndices) {
+    if (run.length > 0 && index !== run.at(-1) + 1) {
+      runs.push(run);
+      run = [];
+    }
+    run.push(index);
+  }
+  if (run.length > 0) runs.push(run);
+  const strongestRun = runs.sort((left, right) => right.length - left.length)[0];
+  if (!strongestRun || strongestRun.length < MINIMUM_INSTANCE_SUPPORTED_ROW_STATIONS) {
+    return reject('insufficient-shared-source-stations', {
+      sharedSourceStationCount: strongestRun?.length ?? 0,
+    });
+  }
+
+  const distances = cumulativePolylineDistances(candidate.projected);
+  const start = distances[strongestRun[0]];
+  const end = distances[strongestRun.at(-1)];
+  const proposedSectionHasInstanceSupport =
+    proposedSection?.start >= start - ROW_SECTION_PADDING_METERS &&
+    proposedSection?.end <= end + ROW_SECTION_PADDING_METERS;
+  const section =
+    proposedSectionHasInstanceSupport && !endpointOnlySupport
+      ? proposedSection
+      : simulatorSectionForRange(candidate, division, start, end, referenceLatitude);
+  const lengthRatio = section?.length / Math.max(division.length, 0.001);
+  if (
+    !section ||
+    lengthRatio < (config.minimumProjectedSectionLengthRatio ?? MINIMUM_ALLOCATED_LENGTH_RATIO)
+  ) {
+    return reject('shared-source-section-too-short', {
+      sectionLengthRatio: round(lengthRatio || 0, 3),
+    });
+  }
+
+  const sourceToDivision = nearestDistanceSummary(section.prepared.samples, division.projected);
+  const sourceCoverage = sourceToDivision.covered(config.coverageDistance);
+  if (
+    sourceToDivision.mean > MAXIMUM_INSTANCE_SUPPORTED_ROW_MEAN_DISTANCE_METERS ||
+    sourceToDivision.maximum > MAXIMUM_INSTANCE_SUPPORTED_ROW_DISTANCE_METERS ||
+    sourceCoverage < 0.9
+  ) {
+    return reject('shared-source-section-too-distant', {
+      sourceMeanDistanceMeters: round(sourceToDivision.mean, 2),
+      sourceMaximumDistanceMeters: round(sourceToDivision.maximum, 2),
+      sourceCoverage: round(sourceCoverage, 3),
+    });
+  }
+
+  const score = instanceEdge.metrics.score;
+  if (diagnostic) {
+    diagnostic.instanceSupport = {
+      outcome: 'eligible',
+      reason: endpointOnlySupport
+        ? 'shared-exact-placement-endpoint-instances'
+        : 'shared-exact-placement-instances',
+      sharedSourceStationCount: strongestRun.length,
+    };
+  }
+  return {
+    section,
+    metrics: {
+      valid: true,
+      alignmentMode: 'source-instance-section',
+      score,
+      balancedScore: score,
+      containmentScore: score,
+      alignmentDistance: round(sourceToDivision.mean, 2),
+      meanDistance: round(sourceToDivision.mean, 2),
+      maximumDistance: round(sourceToDivision.maximum, 2),
+      coverage: round(sourceCoverage, 3),
+      divisionToSourceMeanDistance: instanceEdge.metrics.meanDistance,
+      divisionToSourceMaximumDistance: instanceEdge.metrics.maximumDistance,
+      divisionToSourceCoverage: instanceEdge.metrics.coverage,
+      sourceToDivisionMeanDistance: round(sourceToDivision.mean, 2),
+      sourceToDivisionMaximumDistance: round(sourceToDivision.maximum, 2),
+      sourceToDivisionCoverage: round(sourceCoverage, 3),
+      centerDistance: round(sourceToDivision.mean, 2),
+      angleDifference: round(
+        orientationDifference(division.orientation, section.prepared.orientation),
+        1
+      ),
+      lengthRatio: round(lengthRatio, 3),
+      compositeDivisionCoverage: round(lengthRatio, 3),
+      compositeSourceCoverage: round(section.length / Math.max(candidate.length, 0.001), 3),
+      sourceConnectionBasis: endpointOnlySupport
+        ? 'shared-exact-placement-endpoint-instances'
+        : 'shared-exact-placement-instances',
+      sourceStationCount: strongestRun.length,
+    },
+  };
+}
+
+function endpointSupportedInstanceEdge(edge, candidate) {
+  const metrics = edge.metrics;
+  if (
+    metrics.valid !== true ||
+    metrics.score < MINIMUM_ENDPOINT_INSTANCE_SUPPORTED_EDGE_SCORE ||
+    metrics.coverage < MINIMUM_ENDPOINT_INSTANCE_SUPPORTED_COVERAGE ||
+    metrics.sourceStationCount < MINIMUM_ENDPOINT_INSTANCE_SUPPORTED_ROW_STATIONS ||
+    metrics.meanDistance > MAXIMUM_ENDPOINT_INSTANCE_SUPPORTED_MEAN_DISTANCE_METERS ||
+    metrics.maximumDistance > MAXIMUM_ENDPOINT_INSTANCE_SUPPORTED_DISTANCE_METERS
+  ) {
+    return false;
+  }
+
+  const sourceInstanceIds = candidate.raw.sourceInstanceIds ?? [];
+  const supportedIds = new Set(
+    edgeSourceInstances(edge).map((instance) => String(instance.raw.id))
+  );
+  const supportedIndices = sourceInstanceIds
+    .map((id, index) => (supportedIds.has(String(id)) ? index : -1))
+    .filter((index) => index >= 0);
+  const touchesCandidateEndpoint =
+    supportedIndices[0] === 0 || supportedIndices.at(-1) === sourceInstanceIds.length - 1;
+  const stations = edge.instances.map((instance) => instance.projection.along);
+  const touchesDivisionEndpoint =
+    Math.min(...stations) <= ROW_SECTION_PADDING_METERS ||
+    Math.max(...stations) >= edge.division.length - ROW_SECTION_PADDING_METERS;
+  return touchesCandidateEndpoint && touchesDivisionEndpoint;
 }
 
 function instanceBackedRow(edge) {
@@ -1564,6 +1981,10 @@ function matchingConfigurationDiagnostic() {
         MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO,
       maximumCompleteOwnerScoreDisadvantage: MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE,
       minimumAllocatedLengthRatio: MINIMUM_ALLOCATED_LENGTH_RATIO,
+      minimumJunctionStopbarCellLengthMeters: MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_METERS,
+      minimumJunctionStopbarCellLengthRatio: MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_RATIO,
+      maximumJunctionStopbarCellSourceDistanceMeters:
+        MAXIMUM_JUNCTION_STOPBAR_CELL_SOURCE_DISTANCE_METERS,
       minimumCompositeSourceCoverage: MINIMUM_COMPOSITE_SOURCE_COVERAGE,
       minimumInferredCompositeSourceCoverage: MINIMUM_INFERRED_COMPOSITE_SOURCE_COVERAGE,
       maximumCompositeSectionAngleDegrees: MAXIMUM_COMPOSITE_SECTION_ANGLE_DEGREES,
@@ -1684,13 +2105,13 @@ function suppressRedundantCompositeEdges(edges) {
 }
 
 function suppressWeakSecondaryCandidateOwners(edges) {
-  const completeCandidatesByDivision = new Map();
+  const completeEdgesByDivision = new Map();
   for (const edge of edges) {
     if (!isCompleteDivisionMatch(edge)) continue;
     const divisionKey = stableIdentifier(edge.division);
-    const candidates = completeCandidatesByDivision.get(divisionKey) ?? new Map();
-    candidates.set(stableIdentifier(edge.candidate), evidencePriority(edge.candidate.raw));
-    completeCandidatesByDivision.set(divisionKey, candidates);
+    const completeEdges = completeEdgesByDivision.get(divisionKey) ?? [];
+    completeEdges.push(edge);
+    completeEdgesByDivision.set(divisionKey, completeEdges);
   }
 
   const edgesByCandidate = new Map();
@@ -1709,19 +2130,35 @@ function suppressWeakSecondaryCandidateOwners(edges) {
 
     for (const edge of candidateEdges) {
       const divisionKey = stableIdentifier(edge.division);
-      const completeElsewhere = [
-        ...(completeCandidatesByDivision.get(divisionKey)?.entries() ?? []),
-      ].some(
-        ([completeCandidateKey, completePriority]) =>
-          completeCandidateKey !== candidateKey &&
-          completePriority <= evidencePriority(edge.candidate.raw)
+      const completeElsewhere = (completeEdgesByDivision.get(divisionKey) ?? []).filter(
+        (completeEdge) =>
+          stableIdentifier(completeEdge.candidate) !== candidateKey &&
+          evidencePriority(completeEdge.candidate.raw) <= evidencePriority(edge.candidate.raw)
+      );
+      const inferiorToCompleteAlternative = completeElsewhere.some(
+        (completeEdge) =>
+          edge.metrics.alignmentMode === 'full-shape' &&
+          completeEdge.metrics.score - edge.metrics.score >=
+            MINIMUM_COMPLETE_ALTERNATIVE_OWNERSHIP_ADVANTAGE &&
+          (edge.metrics.angleDifference - completeEdge.metrics.angleDifference >=
+            MINIMUM_COMPLETE_ALTERNATIVE_ANGLE_IMPROVEMENT_DEGREES ||
+            edge.metrics.divisionToSourceMaximumDistance -
+              completeEdge.metrics.divisionToSourceMaximumDistance >=
+              MINIMUM_COMPLETE_ALTERNATIVE_DISTANCE_IMPROVEMENT_METERS)
       );
       const adjacentPrimaryContinuation = isAdjacentPrimaryContinuation(edge, candidateEdges);
       const redundantCompositeAgainstCompleteOwner =
-        completeElsewhere && isRedundantCompositeAgainstCompleteOwner(edge, candidateEdges);
+        completeElsewhere.length > 0 &&
+        isRedundantCompositeAgainstCompleteOwner(edge, candidateEdges);
+      const redundantFullShapeAgainstCompleteOwner =
+        completeElsewhere.length > 0 &&
+        isRedundantFullShapeAgainstCompleteOwner(edge, candidateEdges);
       if (
-        (!completeElsewhere ||
-          (!isWeakSecondaryOwnership(edge) && !redundantCompositeAgainstCompleteOwner)) &&
+        (completeElsewhere.length === 0 ||
+          (!isWeakSecondaryOwnership(edge) &&
+            !inferiorToCompleteAlternative &&
+            !redundantCompositeAgainstCompleteOwner &&
+            !redundantFullShapeAgainstCompleteOwner)) &&
         !adjacentPrimaryContinuation
       ) {
         continue;
@@ -1732,16 +2169,86 @@ function suppressWeakSecondaryCandidateOwners(edges) {
           stableIdentifier(other.division) !== divisionKey &&
           other.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_SCORE &&
           (other.metrics.score - edge.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE ||
-            (edge.metrics.alignmentMode === 'composite-section' &&
-              other.metrics.alignmentMode === 'full-shape' &&
+            (inferiorToCompleteAlternative &&
+              other.metrics.score - edge.metrics.score >=
+                MINIMUM_COMPLETE_ALTERNATIVE_OWNERSHIP_ADVANTAGE) ||
+            isDivergentEndpointBranchLeakage(edge, other, edges) ||
+            (redundantCompositeAgainstCompleteOwner && isCompleteCandidateOwner(other)) ||
+            (redundantFullShapeAgainstCompleteOwner &&
+              isCompleteDivisionMatch(other) &&
               other.metrics.score >=
-                edge.metrics.score - MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE))
+                edge.metrics.score - MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE &&
+              sectionOverlapRatio(edge.section, other.section) >=
+                MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO))
       );
       if (clearPrimaryOwner) suppressed.add(edge);
     }
   }
 
   return edges.filter((edge) => !suppressed.has(edge));
+}
+
+function isDivergentEndpointBranchLeakage(edge, primaryOwner, allEdges) {
+  if (
+    edge.metrics.alignmentMode !== 'full-shape' ||
+    !isCompleteDivisionMatch(primaryOwner) ||
+    primaryOwner.metrics.score - edge.metrics.score < MINIMUM_JUNCTION_BRANCH_OWNERSHIP_ADVANTAGE ||
+    !isNativeCompiledGuidanceRow(edge.candidate.raw) ||
+    (edge.section.start > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
+      edge.candidate.length - edge.section.end > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS)
+  ) {
+    return false;
+  }
+
+  return allEdges.some((alternative) => {
+    if (
+      stableIdentifier(alternative.division) !== stableIdentifier(edge.division) ||
+      stableIdentifier(alternative.candidate) === stableIdentifier(edge.candidate) ||
+      !isCompleteDivisionMatch(alternative) ||
+      alternative.metrics.score - edge.metrics.score <
+        MINIMUM_JUNCTION_BRANCH_OWNERSHIP_ADVANTAGE ||
+      !isNativeCompiledGuidanceRow(alternative.candidate.raw) ||
+      (edge.candidate.raw.sourceFile &&
+        alternative.candidate.raw.sourceFile &&
+        edge.candidate.raw.sourceFile !== alternative.candidate.raw.sourceFile)
+    ) {
+      return false;
+    }
+
+    return candidateEndpointConnections(edge, alternative).some(
+      ({ branchOrientation, alternativeOrientation }) =>
+        orientationDifference(branchOrientation, alternativeOrientation) >=
+        MINIMUM_DIVERGENT_JUNCTION_BRANCH_ANGLE_DEGREES
+    );
+  });
+}
+
+function candidateEndpointConnections(edge, alternative) {
+  const branchEndpoints = [];
+  if (edge.section.start <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS) {
+    branchEndpoints.push({
+      point: edge.candidate.projected[0],
+      inward: edge.candidate.projected[1],
+    });
+  }
+  if (edge.candidate.length - edge.section.end <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS) {
+    branchEndpoints.push({
+      point: edge.candidate.projected.at(-1),
+      inward: edge.candidate.projected.at(-2),
+    });
+  }
+  return branchEndpoints.flatMap((branch) => {
+    const projection = projectPointToPolyline(branch.point, alternative.candidate.projected);
+    if (projection.distance > MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS) return [];
+    const segmentStart = alternative.candidate.projected[projection.segmentIndex - 1];
+    const segmentEnd = alternative.candidate.projected[projection.segmentIndex];
+    return [
+      {
+        branchOrientation: segmentOrientation(branch.point, branch.inward),
+        alternativeOrientation: segmentOrientation(segmentStart, segmentEnd),
+      },
+    ];
+  });
 }
 
 function suppressClearlySubordinateCompositeOwners(edges) {
@@ -1787,9 +2294,12 @@ function suppressRedundantRegisteredStopbars(edges) {
 
 function suppressSubordinateRegisteredGuidanceOwners(edges) {
   return edges.filter((edge) => {
+    const isXPlaneCandidate = edge.candidate.raw.sourceType?.startsWith('xplane-');
+    const isWeakExactPlacementCandidate =
+      isExactPlacementRow(edge.candidate.raw) && isWeakSecondaryOwnership(edge);
     if (
       edge.metrics.alignmentMode !== 'local-registration' ||
-      !edge.candidate.raw.sourceType?.startsWith('xplane-') ||
+      (!isXPlaneCandidate && !isWeakExactPlacementCandidate) ||
       !GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type) ||
       !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification)
     ) {
@@ -1801,7 +2311,10 @@ function suppressSubordinateRegisteredGuidanceOwners(edges) {
         stableIdentifier(other.candidate) === stableIdentifier(edge.candidate) &&
         stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
         other.metrics.alignmentMode === 'full-shape' &&
-        other.metrics.score >= MINIMUM_REGISTERED_OWNER_SUPPRESSION_SCORE &&
+        other.metrics.score >=
+          (isXPlaneCandidate
+            ? MINIMUM_REGISTERED_OWNER_SUPPRESSION_SCORE
+            : MINIMUM_PRIMARY_OWNERSHIP_SCORE) &&
         other.metrics.score - edge.metrics.score >=
           MINIMUM_REGISTERED_OWNER_SUPPRESSION_ADVANTAGE &&
         sectionOverlapRatio(edge.section, other.section) >= MINIMUM_REGISTERED_OWNER_OVERLAP_RATIO
@@ -2007,8 +2520,20 @@ function isRedundantCompositeAgainstCompleteOwner(edge, candidateEdges) {
   return candidateEdges.some(
     (other) =>
       stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
-      isCompleteDivisionMatch(other) &&
+      isCompleteCandidateOwner(other) &&
       evidencePriority(other.candidate.raw) <= evidencePriority(edge.candidate.raw) &&
+      other.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_SCORE &&
+      sectionOverlapRatio(edge.section, other.section) >=
+        MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO
+  );
+}
+
+function isRedundantFullShapeAgainstCompleteOwner(edge, candidateEdges) {
+  if (edge.metrics.alignmentMode !== 'full-shape') return false;
+  return candidateEdges.some(
+    (other) =>
+      stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
+      isCompleteDivisionMatch(other) &&
       other.metrics.score >= edge.metrics.score - MAXIMUM_COMPLETE_OWNER_SCORE_DISADVANTAGE &&
       sectionOverlapRatio(edge.section, other.section) >=
         MINIMUM_REDUNDANT_COMPOSITE_SECTION_OVERLAP_RATIO
@@ -2050,11 +2575,25 @@ function isCompleteDivisionMatch(edge) {
   );
 }
 
+function isCompleteCandidateOwner(edge) {
+  return (
+    isCompleteDivisionMatch(edge) ||
+    (edge.metrics.alignmentMode === 'source-contained' &&
+      edge.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_SCORE &&
+      edge.metrics.sourceToDivisionCoverage >= 0.9 &&
+      edge.section.length >= edge.candidate.length * 0.9)
+  );
+}
+
 function isWeakSecondaryOwnership(edge) {
   return (
     (edge.metrics.alignmentMode === 'composite-section' &&
       edge.metrics.compositeDivisionCoverage <
         MAXIMUM_WEAK_SECONDARY_COMPOSITE_DIVISION_COVERAGE) ||
+    (edge.metrics.alignmentMode === 'source-contained' &&
+      (edge.metrics.divisionToSourceMaximumDistance >=
+        MINIMUM_WEAK_SECONDARY_MAXIMUM_DISTANCE_METERS ||
+        edge.metrics.divisionToSourceCoverage <= 0.8)) ||
     (edge.metrics.alignmentMode === 'local-registration' &&
       (edge.metrics.angleDifference >= MINIMUM_WEAK_SECONDARY_ANGLE_DEGREES ||
         edge.metrics.divisionToSourceMaximumDistance >=
@@ -2170,6 +2709,24 @@ function allocateSimulatorGeometry(
   diagnosticEvaluations = null,
   runways = []
 ) {
+  const nativeEndpointOwners = new Map();
+  const nativeSourceIds = (edge) => edge.candidate.raw.sourceRowIds ?? [edge.candidate.raw.id];
+  for (const edge of edges) {
+    if (
+      !isNativeTaxiwayGraphRow(edge.candidate.raw) ||
+      edge.division.raw.type !== 'taxiway' ||
+      edge.division.projected.length !== 2 ||
+      edge.metrics.alignmentMode !== 'full-shape' ||
+      edge.metrics.score < 0.95 ||
+      edge.metrics.angleDifference > 1
+    )
+      continue;
+    for (const point of edge.division.projected) {
+      const key = `${point.x},${point.y}`;
+      if (!nativeEndpointOwners.has(key)) nativeEndpointOwners.set(key, []);
+      nativeEndpointOwners.get(key).push(edge);
+    }
+  }
   const edgesByCandidate = new Map();
   for (const edge of edges) {
     const key = stableIdentifier(edge.candidate);
@@ -2235,10 +2792,24 @@ function allocateSimulatorGeometry(
       const extendsReconstructedLeadOn =
         reconstructedGuidanceCandidate &&
         (left.division.raw.type === 'lead_on' || right.division.raw.type === 'lead_on');
-      const partition = partitionBoundary(left, right, candidate, naturalBoundaries, runways);
+      const partition = partitionBoundary(
+        left,
+        right,
+        candidate,
+        naturalBoundaries,
+        runways,
+        edges
+      );
+      const sharesGuidanceTrunk = divisionsShareGuidanceTrunk(left.division, right.division);
+      const partitionsSharedNativeTaxiway =
+        isNativeCompiledGuidanceRow(candidate.raw) &&
+        candidate.raw.classification === 'taxi-centerline' &&
+        left.division.raw.type === 'taxiway' &&
+        right.division.raw.type === 'taxiway';
       partitionLinks.push({
         ...partition,
-        sharesGuidanceTrunk: divisionsShareGuidanceTrunk(left.division, right.division),
+        sharesGuidanceTrunk,
+        separatesGuidanceOwners: !sharesGuidanceTrunk || partitionsSharedNativeTaxiway,
         connectsGuidance:
           partitionGuidance &&
           (nativeLeadOnCandidate ||
@@ -2290,19 +2861,35 @@ function allocateSimulatorGeometry(
       const matchedStopbarCell = stopbarCellForMatchedSection(edge.section, naturalBoundaries);
       const startAnchoredByStopbar = extendReconstructedLeadOn && Boolean(matchedStopbarCell.upper);
       const endAnchoredByStopbar = extendReconstructedLeadOn && Boolean(matchedStopbarCell.lower);
-      const startPartitioned =
-        Boolean(partitionLinks[index - 1]?.connectsGuidance) &&
-        !partitionLinks[index - 1].sharesGuidanceTrunk;
-      const endPartitioned =
-        Boolean(partitionLinks[index]?.connectsGuidance) &&
-        !partitionLinks[index].sharesGuidanceTrunk;
+      const separatingStartLink =
+        partitionLinks[index - 1]?.connectsGuidance &&
+        partitionLinks[index - 1].separatesGuidanceOwners
+          ? partitionLinks[index - 1]
+          : null;
+      const separatingEndLink =
+        partitionLinks[index]?.connectsGuidance && partitionLinks[index].separatesGuidanceOwners
+          ? partitionLinks[index]
+          : null;
+      const collapsedPartitionCell =
+        separatingStartLink &&
+        separatingEndLink &&
+        separatingEndLink.boundary - separatingStartLink.boundary <
+          edge.division.length * MINIMUM_ALLOCATED_LENGTH_RATIO;
+      const startPartitioned = Boolean(separatingStartLink) && !collapsedPartitionCell;
+      const endPartitioned = Boolean(separatingEndLink) && !collapsedPartitionCell;
+      const startAnchoredByFullShapeJoin =
+        separatingStartLink?.basis === 'exact-placement-full-shape-join';
+      const endAnchoredByFullShapeJoin =
+        separatingEndLink?.basis === 'exact-placement-full-shape-join';
       const startExtensionLimit =
         startAnchoredByStopbar ||
+        startAnchoredByFullShapeJoin ||
         (extendReconstructedLeadOn && hasNaturalBoundaryAnchor(sectionEnd, naturalBoundaries))
           ? Infinity
           : reconstructedExtensionLimit;
       const endExtensionLimit =
         endAnchoredByStopbar ||
+        endAnchoredByFullShapeJoin ||
         (extendReconstructedLeadOn && hasNaturalBoundaryAnchor(sectionStart, naturalBoundaries))
           ? Infinity
           : reconstructedExtensionLimit;
@@ -2320,11 +2907,8 @@ function allocateSimulatorGeometry(
             singleOwnerSupportsWholeCandidate)
         ) {
           start = 0;
-        } else if (
-          partitionLinks[index - 1]?.connectsGuidance &&
-          !partitionLinks[index - 1].sharesGuidanceTrunk
-        ) {
-          start = partitionLinks[index - 1].boundary;
+        } else if (startPartitioned) {
+          start = separatingStartLink.boundary;
         }
         if (
           index === ordered.length - 1 &&
@@ -2333,11 +2917,8 @@ function allocateSimulatorGeometry(
             singleOwnerSupportsWholeCandidate)
         ) {
           end = candidate.length;
-        } else if (
-          partitionLinks[index]?.connectsGuidance &&
-          !partitionLinks[index].sharesGuidanceTrunk
-        ) {
-          end = partitionLinks[index].boundary;
+        } else if (endPartitioned) {
+          end = separatingEndLink.boundary;
         }
       } else {
         if (index > 0 && start < partitionLinks[index - 1].boundary) {
@@ -2383,6 +2964,69 @@ function allocateSimulatorGeometry(
         endAnchoredByStopbar || endPartitioned
       );
       ({ start, end } = clampAllocationToStopbarCell(start, end, edge.section, naturalBoundaries));
+      if (separatingStartLink?.basis === 'simulator-vertex-stopbar') {
+        start = separatingStartLink.boundary;
+      }
+      if (separatingEndLink?.basis === 'simulator-vertex-stopbar') {
+        end = separatingEndLink.boundary;
+      }
+      if (
+        isNativeCompiledGuidanceRow(candidate.raw) &&
+        candidate.raw.snapToVertices === true &&
+        edge.division.raw.type === 'taxiway'
+      ) {
+        ({ start, end } = snapAllocationInwardToSourceVertices(
+          candidate,
+          start,
+          end,
+          naturalBoundaries
+        ));
+      }
+      if (isNativeTaxiwayGraphRow(candidate.raw)) {
+        // Native graph connectivity does not authorize extending beyond the shape we scored.
+        start = Math.max(start, sectionStart);
+        end = Math.min(end, sectionEnd);
+        // Raw and connected aliases must partition the same source at a shared division endpoint.
+        const endpoints = [edge.division.projected[0], edge.division.projected.at(-1)];
+        const shared = endpoints.map((point) => {
+          const owners = nativeEndpointOwners.get(`${point.x},${point.y}`) ?? [];
+          return (
+            owners.includes(edge) &&
+            owners.some(
+              (other) =>
+                stableIdentifier(other.division) !== stableIdentifier(edge.division) &&
+                nativeSourceIds(other).some((id) => nativeSourceIds(edge).includes(id))
+            )
+          );
+        });
+        if (shared.some(Boolean)) {
+          const projected = endpoints
+            .map((point, index) => ({
+              ...projectPointToPolyline(point, candidate.projected),
+              shared: shared[index],
+            }))
+            .sort((left, right) => left.along - right.along);
+          if (projected.every((point) => point.distance <= 5)) {
+            if (projected[0].shared) start = Math.max(start, projected[0].along);
+            else if (projected[0].along <= 5 && start <= 5) start = 0;
+            if (projected[1].shared) end = Math.min(end, projected[1].along);
+            else if (candidate.length - projected[1].along <= 5 && candidate.length - end <= 5)
+              end = candidate.length;
+          }
+        }
+        // A nearly complete, exclusively owned short row can retain its authored endpoints.
+        if (
+          ordered.length === 1 &&
+          !candidate.raw.connectedSourceRows &&
+          candidate.length <= 10 &&
+          sectionEnd - sectionStart >= candidate.length * 0.8 &&
+          orientationDifference(edge.division.orientation, candidate.orientation) <= 5 &&
+          nearestDistanceSummary(candidate.samples, edge.division.projected).maximum <= 2
+        ) {
+          start = 0;
+          end = candidate.length;
+        }
+      }
       if (evaluation) {
         evaluation.clampedRange = {
           startMeters: round(start, 3),
@@ -2397,14 +3041,53 @@ function allocateSimulatorGeometry(
         referenceLatitude,
         edge.section
       );
+      const sourceBackedJunctionStopbarCell =
+        section?.prepared?.valid &&
+        isSourceBackedJunctionStopbarCell(
+          edge,
+          candidate,
+          start,
+          end,
+          section.length,
+          naturalBoundaries
+        );
+      const registeredBranchStopbarCell =
+        section?.prepared?.valid &&
+        isRegisteredBranchStopbarCell(
+          edge,
+          start,
+          end,
+          section.length,
+          naturalBoundaries,
+          separatingStartLink,
+          separatingEndLink
+        );
       const meetsAllocationMinimum =
-        section?.prepared?.valid && sectionMeetsAllocationMinimum(edge, section.length);
+        section?.prepared?.valid &&
+        (sectionMeetsAllocationMinimum(edge, section.length) ||
+          sourceBackedJunctionStopbarCell ||
+          registeredBranchStopbarCell);
       if (evaluation) {
         evaluation.allocatedLengthMeters = round(section?.length ?? 0, 3);
         evaluation.minimumLengthMeters = round(
-          edge.division.length * MINIMUM_ALLOCATED_LENGTH_RATIO,
+          sourceBackedJunctionStopbarCell
+            ? Math.max(
+                MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_METERS,
+                edge.division.length * MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_RATIO
+              )
+            : registeredBranchStopbarCell
+              ? Math.max(
+                  MINIMUM_REGISTERED_BRANCH_STOPBAR_CELL_LENGTH_METERS,
+                  edge.division.length * MINIMUM_REGISTERED_BRANCH_STOPBAR_CELL_LENGTH_RATIO
+                )
+              : edge.division.length * MINIMUM_ALLOCATED_LENGTH_RATIO,
           3
         );
+        evaluation.minimumBasis = sourceBackedJunctionStopbarCell
+          ? 'source-backed-junction-stopbar-cell'
+          : registeredBranchStopbarCell
+            ? 'registered-branch-stopbar-cell'
+            : 'standard-allocation-minimum';
         evaluation.outcome = meetsAllocationMinimum ? 'allocated' : 'rejected-after-boundary-clamp';
         diagnosticEvaluations.push(evaluation);
       }
@@ -2481,9 +3164,16 @@ function reclaimRejectedGuidanceEndpointPartitions({
   candidateAllocatedEdges.sort(
     (left, right) => left.allocatedEdge.section.start - right.allocatedEdge.section.start
   );
-  const endpointTolerance = 0.1;
+  const endpointTolerance =
+    isNativeCompiledGuidanceRow(candidate.raw) && candidate.raw.snapToVertices === true
+      ? MAXIMUM_NATIVE_OWNERSHIP_VERTEX_SNAP_METERS + 0.1
+      : 0.1;
   const reclaim = (record, start, end, side) => {
-    if (record.allocatedEdge.division.raw.type !== 'lead_on') return;
+    const canReclaimNativeTaxiway =
+      record.allocatedEdge.division.raw.type === 'taxiway' &&
+      isNativeCompiledGuidanceRow(candidate.raw) &&
+      GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification);
+    if (record.allocatedEdge.division.raw.type !== 'lead_on' && !canReclaimNativeTaxiway) return;
     ({ start, end } = clampAllocationToStopbarCell(
       start,
       end,
@@ -2706,6 +3396,7 @@ function completeAllocatedGuidanceRows(
 
   for (const evidenceEdge of preferredEvidenceOwners.values()) {
     const candidate = evidenceEdge.candidate;
+    if (isNativeTaxiwayGraphRow(candidate.raw)) continue;
     const completionEvidenceOwner = dominantCompletionEvidenceOwner(evidenceEdge, eligibleEdges);
     const divisionKey = stableIdentifier(evidenceEdge.division);
     const ownerIsAllocated = allocatedEdges.some(
@@ -2845,7 +3536,8 @@ function completeAllocatedGuidanceRows(
   for (const edge of allocatedEdges) {
     if (
       !GUIDANCE_DIVISION_TYPES.has(edge.division.raw.type) ||
-      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification)
+      !GUIDANCE_SOURCE_CLASSIFICATIONS.has(edge.candidate.raw.classification) ||
+      isNativeTaxiwayGraphRow(edge.candidate.raw)
     ) {
       continue;
     }
@@ -3385,7 +4077,86 @@ function sectionMeetsAllocationMinimum(edge, sectionLength) {
       edge.metrics,
       sectionLength / Math.max(edge.division.length, 0.001),
       configFor(edge.division)
-    )
+    ) ||
+    isTightCompactSourceMatch(edge, sectionLength)
+  );
+}
+
+function isRegisteredBranchStopbarCell(
+  edge,
+  start,
+  end,
+  sectionLength,
+  naturalBoundaries,
+  startPartition,
+  endPartition
+) {
+  const metrics = edge.metrics;
+  if (
+    !isExactPlacementRow(edge.candidate.raw) ||
+    edge.division.raw.type !== 'lead_on' ||
+    metrics.alignmentMode !== 'local-registration' ||
+    metrics.score < MINIMUM_CONTESTED_ASSIGNMENT_SCORE ||
+    metrics.divisionToSourceCoverage < 0.9 ||
+    metrics.sourceToDivisionCoverage < 0.9 ||
+    sectionLength < MINIMUM_REGISTERED_BRANCH_STOPBAR_CELL_LENGTH_METERS ||
+    sectionLength / Math.max(edge.division.length, 0.001) <
+      MINIMUM_REGISTERED_BRANCH_STOPBAR_CELL_LENGTH_RATIO
+  ) {
+    return false;
+  }
+
+  const stopbarAt = (station) =>
+    naturalBoundaries.some(
+      (boundary) =>
+        boundary.kind === 'stopbar' &&
+        Math.abs(boundary.along - station) <= NATURAL_BOUNDARY_VERTEX_SNAP_TOLERANCE_METERS
+    );
+  return (
+    (endPartition?.basis === 'exact-placement-registered-branch' && stopbarAt(start)) ||
+    (startPartition?.basis === 'exact-placement-registered-branch' && stopbarAt(end))
+  );
+}
+
+export function isSourceBackedJunctionStopbarCell(
+  edge,
+  candidate,
+  start,
+  end,
+  sectionLength,
+  naturalBoundaries
+) {
+  const metrics = edge.metrics;
+  if (
+    edge.division.raw.type !== 'lead_on' ||
+    metrics.valid !== true ||
+    metrics.alignmentMode !== 'source-contained' ||
+    !isNativeCompiledGuidanceRow(candidate.raw) ||
+    candidate.raw.snapToVertices !== true ||
+    sectionLength < MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_METERS ||
+    sectionLength / Math.max(edge.division.length, 0.001) <
+      MINIMUM_JUNCTION_STOPBAR_CELL_LENGTH_RATIO ||
+    metrics.sourceToDivisionCoverage < 0.95 ||
+    metrics.sourceToDivisionMeanDistance > MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS ||
+    metrics.sourceToDivisionMaximumDistance > MAXIMUM_JUNCTION_STOPBAR_CELL_SOURCE_DISTANCE_METERS
+  ) {
+    return false;
+  }
+
+  const boundaryKindsAt = (station) =>
+    new Set(
+      naturalBoundaries
+        .filter(
+          (boundary) =>
+            Math.abs(boundary.along - station) <= NATURAL_BOUNDARY_VERTEX_SNAP_TOLERANCE_METERS
+        )
+        .map((boundary) => boundary.kind)
+    );
+  const startKinds = boundaryKindsAt(start);
+  const endKinds = boundaryKindsAt(end);
+  return (
+    (startKinds.has('junction') && endKinds.has('stopbar')) ||
+    (startKinds.has('stopbar') && endKinds.has('junction'))
   );
 }
 
@@ -3400,10 +4171,33 @@ function isTightPartialMatch(metrics, lengthRatio, config) {
   );
 }
 
+function isTightCompactSourceMatch(edge, sectionLength) {
+  const config = configFor(edge.division);
+  const metrics = edge.metrics;
+  const row = edge.section.prepared.raw;
+  return (
+    metrics.valid &&
+    metrics.alignmentMode === 'full-shape' &&
+    row.sourceType === 'bgl-airport-light-row' &&
+    row.inferred !== true &&
+    sectionLength >= MINIMUM_TIGHT_COMPACT_SOURCE_LENGTH_METERS &&
+    sectionLength / Math.max(edge.division.length, 0.001) >= config.minimumLengthRatio &&
+    metrics.sourceToDivisionMeanDistance <= MAXIMUM_TIGHT_COMPACT_SOURCE_MEAN_DISTANCE_METERS &&
+    metrics.sourceToDivisionMaximumDistance <= MAXIMUM_TIGHT_COMPACT_SOURCE_DISTANCE_METERS &&
+    metrics.sourceToDivisionCoverage >= 0.95 &&
+    metrics.angleDifference <= MAXIMUM_TIGHT_COMPACT_SOURCE_ANGLE_DEGREES
+  );
+}
+
 function chooseDistinctCandidateAssignments(edges) {
   const contested = new Set(edges.map((edge) => stableIdentifier(edge.division))).size > 1;
   const preferred = edges
-    .filter((edge) => !contested || edge.metrics.score >= MINIMUM_CONTESTED_ASSIGNMENT_SCORE)
+    .filter(
+      (edge) =>
+        !contested ||
+        edge.metrics.score >= MINIMUM_CONTESTED_ASSIGNMENT_SCORE ||
+        isSharedEndpointBranchOwner(edge, edges)
+    )
     .sort(
       (left, right) =>
         right.metrics.score - left.metrics.score ||
@@ -3423,7 +4217,43 @@ function chooseDistinctCandidateAssignments(edges) {
   return chosen;
 }
 
-function partitionBoundary(left, right, candidate, naturalBoundaries = [], runways = []) {
+function isSharedEndpointBranchOwner(edge, edges) {
+  const metrics = edge.metrics;
+  if (
+    !isExactPlacementRow(edge.candidate.raw) ||
+    edge.candidate.raw.snapToVertices !== true ||
+    edge.division.raw.type !== 'lead_on' ||
+    metrics.alignmentMode !== 'full-shape' ||
+    metrics.score < MINIMUM_SHARED_ENDPOINT_BRANCH_SCORE ||
+    metrics.divisionToSourceCoverage < 0.95 ||
+    metrics.sourceToDivisionCoverage < 0.95 ||
+    metrics.meanDistance > MAXIMUM_SHARED_ENDPOINT_BRANCH_MEAN_DISTANCE_METERS ||
+    metrics.maximumDistance > MAXIMUM_SHARED_ENDPOINT_BRANCH_DISTANCE_METERS ||
+    metrics.angleDifference > MAXIMUM_SHARED_ENDPOINT_BRANCH_ANGLE_DEGREES
+  ) {
+    return false;
+  }
+
+  return edges.some(
+    (other) =>
+      other !== edge &&
+      other.division.raw.type === 'lead_on' &&
+      other.metrics.alignmentMode === 'local-registration' &&
+      other.metrics.score >= MINIMUM_CONTESTED_ASSIGNMENT_SCORE &&
+      other.metrics.registrationAngleDifference >=
+        MINIMUM_DIVERGENT_JUNCTION_BRANCH_ANGLE_DEGREES &&
+      sharedOriginalDivisionEndpoint(edge.division, other.division)
+  );
+}
+
+function partitionBoundary(
+  left,
+  right,
+  candidate,
+  naturalBoundaries = [],
+  runways = [],
+  ownershipEdges = []
+) {
   const gapStart = left.section.projectionEnd;
   const gapEnd = right.section.projectionStart;
   const runwayTransition = runwayAwarePartitionBoundary(
@@ -3443,21 +4273,615 @@ function partitionBoundary(left, right, candidate, naturalBoundaries = [], runwa
       runwayId: runwayTransition.runwayId,
     };
   }
+  const exactPlacementBranchBoundary = exactPlacementBranchPartitionBoundary(
+    left,
+    right,
+    candidate
+  );
+  const exactPlacementRegisteredBranchBoundary = exactPlacementRegisteredBranchPartitionBoundary(
+    left,
+    right,
+    candidate
+  );
+  const instanceSupportedJunctionBoundary = instanceSupportedJunctionPartitionBoundary(
+    left,
+    right,
+    candidate,
+    naturalBoundaries
+  );
+  const instanceSupportedEndpointBoundary = instanceSupportedEndpointPartitionBoundary(
+    left,
+    right,
+    candidate
+  );
+  const exactPlacementFullShapeJoin = exactPlacementFullShapeJoinPartition(left, right, candidate);
+  const exactPlacementFullShapeStart = exactPlacementFullShapeStartPartition(
+    left,
+    right,
+    candidate
+  );
+  const dominantFullShapeBoundary = dominantFullShapePartitionBoundary(left, right, candidate);
   const sharedBoundary = sharedDivisionBoundary(left, right, candidate, (gapStart + gapEnd) / 2);
+  const separatelyOwnedDivisionBranch = hasSeparatelyOwnedDivisionBranch(
+    left,
+    right,
+    candidate,
+    sharedBoundary,
+    ownershipEdges
+  );
   // The facing projection endpoints describe the actual hand-off, including when
   // simplified BARS shapes overlap slightly. Using full section centres in that
   // case gives the shorter object ownership of most of the simulator row.
-  const boundary = Math.max(
+  let boundary = Math.max(
     0,
-    Math.min(sharedBoundary ?? (gapStart + gapEnd) / 2, candidate.length)
+    Math.min(
+      exactPlacementBranchBoundary ??
+        exactPlacementRegisteredBranchBoundary ??
+        instanceSupportedJunctionBoundary ??
+        instanceSupportedEndpointBoundary ??
+        exactPlacementFullShapeJoin?.boundary ??
+        exactPlacementFullShapeStart ??
+        dominantFullShapeBoundary ??
+        sharedBoundary ??
+        (gapStart + gapEnd) / 2,
+      candidate.length
+    )
   );
+  const simulatorVertexStopbarBoundary = shiftedSimulatorVertexStopbarBoundary(
+    candidate,
+    naturalBoundaries,
+    boundary
+  );
+  if (simulatorVertexStopbarBoundary !== undefined) boundary = simulatorVertexStopbarBoundary;
+  const compactStopbarBoundary = compactStopbarApproachPartitionBoundary(
+    left,
+    right,
+    candidate,
+    naturalBoundaries,
+    boundary
+  );
+  if (compactStopbarBoundary !== undefined) boundary = compactStopbarBoundary;
+  const snappedBoundary =
+    simulatorVertexStopbarBoundary !== undefined && compactStopbarBoundary === undefined
+      ? boundary
+      : exactPlacementRegisteredBranchBoundary !== undefined && compactStopbarBoundary === undefined
+        ? boundary
+        : exactPlacementFullShapeStart !== undefined && compactStopbarBoundary === undefined
+          ? boundary
+          : separatelyOwnedDivisionBranch && compactStopbarBoundary === undefined
+            ? boundary
+            : snapBoundaryToNaturalFeature(
+                snapBoundaryToLogicalTurn(candidate, boundary),
+                naturalBoundaries,
+                sharedBoundary === undefined
+                  ? MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
+                  : MAXIMUM_SHARED_DIVISION_BOUNDARY_SNAP_METERS
+              );
+  // A nearby stopbar or junction must not consume a short, independently matched owner.
+  if (
+    sharedBoundary !== undefined &&
+    isNativeCompiledGuidanceRow(candidate.raw) &&
+    left.division.raw.type === 'taxiway' &&
+    right.division.raw.type === 'taxiway' &&
+    sharedOriginalDivisionEndpoint(left.division, right.division) &&
+    (snappedBoundary <
+      left.section.projectionStart + left.division.length * MINIMUM_ALLOCATED_LENGTH_RATIO ||
+      snappedBoundary >
+        right.section.projectionEnd - right.division.length * MINIMUM_ALLOCATED_LENGTH_RATIO)
+  ) {
+    return { boundary: sharedBoundary, basis: 'shared-division-owner-preservation' };
+  }
   return {
-    boundary: snapBoundaryToNaturalFeature(
-      snapBoundaryToLogicalTurn(candidate, boundary),
-      naturalBoundaries
-    ),
-    basis: sharedBoundary === undefined ? 'projection-midpoint' : 'shared-division-geometry',
+    boundary: snappedBoundary,
+    basis:
+      compactStopbarBoundary !== undefined
+        ? 'compact-stopbar-approach'
+        : simulatorVertexStopbarBoundary !== undefined
+          ? 'simulator-vertex-stopbar'
+          : exactPlacementBranchBoundary !== undefined
+            ? 'exact-placement-branch-source-vertex'
+            : exactPlacementRegisteredBranchBoundary !== undefined
+              ? 'exact-placement-registered-branch'
+              : instanceSupportedJunctionBoundary !== undefined
+                ? 'source-instance-junction'
+                : instanceSupportedEndpointBoundary !== undefined
+                  ? 'source-instance-endpoint'
+                  : exactPlacementFullShapeJoin !== undefined
+                    ? 'exact-placement-full-shape-join'
+                    : exactPlacementFullShapeStart !== undefined
+                      ? 'exact-placement-full-shape-start'
+                      : dominantFullShapeBoundary !== undefined
+                        ? 'dominant-full-shape-source-vertex'
+                        : sharedBoundary === undefined
+                          ? 'projection-midpoint'
+                          : 'shared-division-geometry',
   };
+}
+
+function hasSeparatelyOwnedDivisionBranch(left, right, candidate, sharedBoundary, ownershipEdges) {
+  if (
+    sharedBoundary === undefined ||
+    !isNativeCompiledGuidanceRow(candidate.raw) ||
+    !isCompleteDivisionMatch(left) ||
+    !isCompleteDivisionMatch(right) ||
+    !sharedOriginalDivisionEndpoint(left.division, right.division)
+  ) {
+    return false;
+  }
+
+  return ownershipEdges.some((edge) => {
+    if (
+      stableIdentifier(edge.candidate) === stableIdentifier(candidate) ||
+      stableIdentifier(edge.division) === stableIdentifier(left.division) ||
+      stableIdentifier(edge.division) === stableIdentifier(right.division) ||
+      !isCompleteDivisionMatch(edge) ||
+      !sharedOriginalDivisionEndpoint(left.division, edge.division) ||
+      !sharedOriginalDivisionEndpoint(right.division, edge.division)
+    ) {
+      return false;
+    }
+
+    return [edge.candidate.projected[0], edge.candidate.projected.at(-1)].some((endpoint) => {
+      const projection = projectPointToPolyline(endpoint, candidate.projected);
+      return (
+        projection.distance <= MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS &&
+        Math.abs(projection.along - sharedBoundary) <= MAXIMUM_SHARED_DIVISION_BOUNDARY_SNAP_METERS
+      );
+    });
+  });
+}
+
+function exactPlacementRegisteredBranchPartitionBoundary(left, right, candidate) {
+  if (!isExactPlacementRow(candidate.raw) || candidate.raw.snapToVertices !== true) {
+    return undefined;
+  }
+
+  const registered =
+    left.metrics.alignmentMode === 'local-registration' &&
+    right.metrics.alignmentMode === 'full-shape'
+      ? left
+      : right.metrics.alignmentMode === 'local-registration' &&
+          left.metrics.alignmentMode === 'full-shape'
+        ? right
+        : undefined;
+  if (!registered) return undefined;
+  const fullShape = registered === left ? right : left;
+  if (!isSharedEndpointBranchOwner(fullShape, [left, right])) return undefined;
+
+  const shared = sharedOriginalDivisionEndpoint(fullShape.division, registered.division);
+  if (!shared) return undefined;
+  const sharedPoint =
+    shared.leftIndex === 0 ? fullShape.division.projected[0] : fullShape.division.projected.at(-1);
+  const sharedProjection = projectPointToPolyline(sharedPoint, candidate.projected);
+  const stations = cumulativePolylineDistances(candidate.projected);
+  const movesForward = registered === left;
+  const startIndex = movesForward
+    ? stations.findIndex((station) => station >= sharedProjection.along)
+    : stations.findLastIndex((station) => station <= sharedProjection.along);
+  if (startIndex < 1 || startIndex >= candidate.projected.length - 1) return undefined;
+
+  const step = movesForward ? 1 : -1;
+  for (let index = startIndex; index > 0 && index < candidate.projected.length - 1; index += step) {
+    if (Math.abs(stations[index] - sharedProjection.along) > MAXIMUM_BRANCH_ONSET_SEARCH_METERS) {
+      break;
+    }
+    const before = movesForward
+      ? segmentOrientation(candidate.projected[index - 1], candidate.projected[index])
+      : segmentOrientation(candidate.projected[index + 1], candidate.projected[index]);
+    const after = movesForward
+      ? segmentOrientation(candidate.projected[index], candidate.projected[index + 1])
+      : segmentOrientation(candidate.projected[index], candidate.projected[index - 1]);
+    if (
+      orientationDifference(before, registered.division.orientation) <=
+        MAXIMUM_BRANCH_INCOMING_ANGLE_DEGREES &&
+      orientationDifference(after, registered.division.orientation) >=
+        MINIMUM_BRANCH_ONSET_ANGLE_DEGREES &&
+      orientationDifference(after, fullShape.division.orientation) <
+        orientationDifference(before, fullShape.division.orientation)
+    ) {
+      return stations[index];
+    }
+  }
+  return undefined;
+}
+
+export function instanceSupportedJunctionPartitionBoundary(
+  left,
+  right,
+  candidate,
+  naturalBoundaries = []
+) {
+  if (!isExactPlacementRow(candidate.raw)) return undefined;
+  const leftIsInstanceSupported = left.metrics.alignmentMode === 'source-instance-section';
+  const rightIsInstanceSupported = right.metrics.alignmentMode === 'source-instance-section';
+  if (leftIsInstanceSupported === rightIsInstanceSupported) return undefined;
+  if (
+    !GUIDANCE_DIVISION_TYPES.has(left.division.raw.type) ||
+    !GUIDANCE_DIVISION_TYPES.has(right.division.raw.type)
+  ) {
+    return undefined;
+  }
+
+  const instanceEdge = leftIsInstanceSupported ? left : right;
+  const facingProjection = leftIsInstanceSupported
+    ? instanceEdge.section.projectionEnd
+    : instanceEdge.section.projectionStart;
+  const gapStart = Math.min(left.section.projectionEnd, right.section.projectionStart);
+  const gapEnd = Math.max(left.section.projectionEnd, right.section.projectionStart);
+  return naturalBoundaries
+    .filter(
+      (boundary) =>
+        boundary.kind === 'junction' &&
+        boundary.along >= gapStart &&
+        boundary.along <= gapEnd &&
+        Math.abs(boundary.along - facingProjection) <= MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
+    )
+    .sort(
+      (first, second) =>
+        Math.abs(first.along - facingProjection) - Math.abs(second.along - facingProjection)
+    )[0]?.along;
+}
+
+function instanceSupportedEndpointPartitionBoundary(left, right, candidate) {
+  if (!isExactPlacementRow(candidate.raw)) return undefined;
+  const leftOwnsEndpoint =
+    left.metrics.sourceConnectionBasis === 'shared-exact-placement-endpoint-instances';
+  const rightOwnsEndpoint =
+    right.metrics.sourceConnectionBasis === 'shared-exact-placement-endpoint-instances';
+  if (leftOwnsEndpoint === rightOwnsEndpoint) return undefined;
+
+  const endpointEdge = leftOwnsEndpoint ? left : right;
+  const otherEdge = leftOwnsEndpoint ? right : left;
+  const boundary = leftOwnsEndpoint
+    ? endpointEdge.section.projectionEnd
+    : endpointEdge.section.projectionStart;
+  const touchesCandidateEndpoint = leftOwnsEndpoint
+    ? endpointEdge.section.start <= ROW_SECTION_PADDING_METERS
+    : endpointEdge.section.end >= candidate.length - ROW_SECTION_PADDING_METERS;
+  const facesOtherOwner = leftOwnsEndpoint
+    ? boundary >= otherEdge.section.projectionStart - MAXIMUM_GUIDANCE_PARTITION_GAP_METERS
+    : boundary <= otherEdge.section.projectionEnd + MAXIMUM_GUIDANCE_PARTITION_GAP_METERS;
+  return touchesCandidateEndpoint && facesOtherOwner ? boundary : undefined;
+}
+
+function exactPlacementFullShapeStartPartition(left, right, candidate) {
+  if (
+    !isExactPlacementRow(candidate.raw) ||
+    candidate.raw.snapToVertices !== true ||
+    left.division.raw.type !== 'lead_on' ||
+    right.division.raw.type !== 'lead_on' ||
+    left.metrics.alignmentMode !== 'full-shape' ||
+    right.metrics.alignmentMode !== 'full-shape' ||
+    left.metrics.score < MINIMUM_COMPARABLE_FULL_SHAPE_PARTITION_SCORE ||
+    right.metrics.score < MINIMUM_COMPARABLE_FULL_SHAPE_PARTITION_SCORE ||
+    left.metrics.divisionToSourceCoverage < 0.95 ||
+    left.metrics.sourceToDivisionCoverage < 0.95 ||
+    right.metrics.divisionToSourceCoverage < 0.95 ||
+    right.metrics.sourceToDivisionCoverage < 0.95 ||
+    left.metrics.meanDistance > MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS ||
+    right.metrics.meanDistance > MAXIMUM_TIGHT_COMPOSITE_MEAN_DISTANCE_METERS ||
+    left.metrics.angleDifference > MAXIMUM_TIGHT_COMPACT_SOURCE_ANGLE_DEGREES ||
+    right.metrics.angleDifference > MAXIMUM_TIGHT_COMPACT_SOURCE_ANGLE_DEGREES ||
+    right.section.projectionStart > left.section.projectionEnd
+  ) {
+    return undefined;
+  }
+
+  const lowerCenter = Math.min(left.section.projectionCenter, right.section.projectionCenter);
+  const upperCenter = Math.max(left.section.projectionCenter, right.section.projectionCenter);
+  const target = right.section.projectionStart;
+  return cumulativePolylineDistances(candidate.projected)
+    .filter((station) => station >= lowerCenter && station <= upperCenter)
+    .sort(
+      (leftStation, rightStation) =>
+        Math.abs(leftStation - target) - Math.abs(rightStation - target)
+    )
+    .find(
+      (station) => Math.abs(station - target) <= MAXIMUM_DOMINANT_FULL_SHAPE_VERTEX_SNAP_METERS
+    );
+}
+
+export function exactPlacementFullShapeJoinPartition(left, right, candidate) {
+  if (
+    !isExactPlacementRow(candidate.raw) ||
+    candidate.raw.snapToVertices !== true ||
+    left.division.raw.type !== 'lead_on' ||
+    right.division.raw.type !== 'lead_on' ||
+    left.metrics.alignmentMode !== 'full-shape' ||
+    right.metrics.alignmentMode !== 'full-shape'
+  ) {
+    return undefined;
+  }
+
+  const leftDominates = fullShapeOwnershipDominates(left, right);
+  const rightDominates = fullShapeOwnershipDominates(right, left);
+  if (!leftDominates && !rightDominates) return undefined;
+
+  const straightMidpoint = exactPlacementStraightJoinMidpoint(
+    leftDominates ? left : right,
+    leftDominates ? right : left,
+    candidate,
+    leftDominates
+  );
+  if (straightMidpoint !== undefined) {
+    return { boundary: straightMidpoint };
+  }
+
+  const weaker = leftDominates ? right : left;
+  const stations = cumulativePolylineDistances(candidate.projected);
+  const distances = candidate.projected.map(
+    (point) => projectPointToPolyline(point, weaker.division.projected).distance
+  );
+  let centerIndex = stations.reduce(
+    (bestIndex, station, index) =>
+      Math.abs(station - weaker.section.projectionCenter) <
+      Math.abs(stations[bestIndex] - weaker.section.projectionCenter)
+        ? index
+        : bestIndex,
+    0
+  );
+  if (distances[centerIndex] > FULL_SHAPE_JOIN_SOURCE_DISTANCE_METERS) return undefined;
+
+  let runStart = centerIndex;
+  let runEnd = centerIndex;
+  while (runStart > 0 && distances[runStart - 1] <= FULL_SHAPE_JOIN_SOURCE_DISTANCE_METERS) {
+    runStart -= 1;
+  }
+  while (
+    runEnd < distances.length - 1 &&
+    distances[runEnd + 1] <= FULL_SHAPE_JOIN_SOURCE_DISTANCE_METERS
+  ) {
+    runEnd += 1;
+  }
+  if (runEnd - runStart + 1 < MINIMUM_SUSTAINED_JOIN_SOURCE_VERTEX_COUNT) {
+    return undefined;
+  }
+
+  centerIndex = leftDominates
+    ? runStart + FULL_SHAPE_JOIN_VERTEX_INSET
+    : runEnd - FULL_SHAPE_JOIN_VERTEX_INSET;
+  if (centerIndex <= 0 || centerIndex >= stations.length - 1) return undefined;
+  const lowerCenter = Math.min(left.section.projectionCenter, right.section.projectionCenter);
+  const upperCenter = Math.max(left.section.projectionCenter, right.section.projectionCenter);
+  const boundary = stations[centerIndex];
+  const rightBoundary = stations[centerIndex - 1];
+  const leftBoundary = stations[centerIndex + 1];
+  if (
+    boundary < lowerCenter ||
+    boundary > upperCenter ||
+    boundary - rightBoundary > MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS ||
+    leftBoundary - boundary > MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS
+  ) {
+    return undefined;
+  }
+  return { boundary };
+}
+
+function exactPlacementStraightJoinMidpoint(dominant, weaker, candidate, dominantIsLeft) {
+  const stations = cumulativePolylineDistances(candidate.projected);
+  const facingProjection = dominantIsLeft
+    ? dominant.section.projectionEnd
+    : dominant.section.projectionStart;
+  const facingSegment = stations.findIndex(
+    (station, index) =>
+      index < stations.length - 1 &&
+      facingProjection >= station &&
+      facingProjection <= stations[index + 1]
+  );
+  if (facingSegment < 0) return undefined;
+
+  const orientations = candidate.projected
+    .slice(0, -1)
+    .map((point, index) => segmentOrientation(point, candidate.projected[index + 1]));
+  let runStartSegment = facingSegment;
+  let runEndSegment = facingSegment;
+  while (
+    runStartSegment > 0 &&
+    orientationDifference(orientations[runStartSegment - 1], orientations[runStartSegment]) <=
+      MAXIMUM_STRAIGHT_JOIN_SEGMENT_TURN_DEGREES
+  ) {
+    runStartSegment -= 1;
+  }
+  while (
+    runEndSegment < orientations.length - 1 &&
+    orientationDifference(orientations[runEndSegment], orientations[runEndSegment + 1]) <=
+      MAXIMUM_STRAIGHT_JOIN_SEGMENT_TURN_DEGREES
+  ) {
+    runEndSegment += 1;
+  }
+
+  const runStart = stations[runStartSegment];
+  const runEnd = stations[runEndSegment + 1];
+  if (runEnd - runStart < MINIMUM_STRAIGHT_JOIN_RUN_LENGTH_METERS) return undefined;
+
+  const weakerFacingProjection = dominantIsLeft
+    ? weaker.section.projectionStart
+    : weaker.section.projectionEnd;
+  const weakerFollowsRun = dominantIsLeft
+    ? weakerFacingProjection >= runEnd &&
+      weakerFacingProjection - runEnd <= MAXIMUM_GUIDANCE_PARTITION_GAP_METERS
+    : weakerFacingProjection <= runStart &&
+      runStart - weakerFacingProjection <= MAXIMUM_GUIDANCE_PARTITION_GAP_METERS;
+  if (!weakerFollowsRun) return undefined;
+
+  const midpoint = (runStart + runEnd) / 2;
+  const midpointCompletesDominant = dominantIsLeft
+    ? midpoint >= facingProjection &&
+      midpoint - facingProjection <= MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS
+    : midpoint <= facingProjection &&
+      facingProjection - midpoint <= MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS;
+  if (!midpointCompletesDominant) return undefined;
+
+  return stations
+    .filter((station) => station >= runStart && station <= runEnd)
+    .sort((leftStation, rightStation) => {
+      const distanceDifference =
+        Math.abs(leftStation - midpoint) - Math.abs(rightStation - midpoint);
+      return distanceDifference || leftStation - rightStation;
+    })[0];
+}
+
+function fullShapeOwnershipDominates(primary, secondary) {
+  return (
+    primary.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_SCORE &&
+    primary.metrics.score - secondary.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE &&
+    primary.metrics.divisionToSourceCoverage >= 0.9 &&
+    primary.metrics.sourceToDivisionCoverage >= 0.9 &&
+    secondary.metrics.divisionToSourceCoverage >= 0.9 &&
+    secondary.metrics.sourceToDivisionCoverage >= 0.9
+  );
+}
+
+export function exactPlacementBranchPartitionBoundary(left, right, candidate) {
+  if (!isExactPlacementRow(candidate.raw) || candidate.raw.snapToVertices !== true) {
+    return undefined;
+  }
+
+  const rightDominates = exactPlacementFullShapeDominatesBranch(right, left);
+  const leftDominates = exactPlacementFullShapeDominatesBranch(left, right);
+  if (!rightDominates && !leftDominates) return undefined;
+
+  const target = rightDominates ? left.section.projectionStart : right.section.projectionEnd;
+  const stations = cumulativePolylineDistances(candidate.projected);
+  const sourceVertex = rightDominates
+    ? [...stations].reverse().find((station) => station <= target)
+    : stations.find((station) => station >= target);
+  return sourceVertex !== undefined &&
+    Math.abs(sourceVertex - target) <= MAXIMUM_LOGICAL_GUIDANCE_JUMP_METERS
+    ? sourceVertex
+    : undefined;
+}
+
+function exactPlacementFullShapeDominatesBranch(fullShape, branch) {
+  return (
+    fullShape.metrics.alignmentMode === 'full-shape' &&
+    branch.metrics.alignmentMode === 'composite-section' &&
+    fullShape.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_SCORE &&
+    fullShape.metrics.score - branch.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE &&
+    fullShape.metrics.divisionToSourceCoverage >= 0.9 &&
+    fullShape.metrics.sourceToDivisionCoverage >= 0.9 &&
+    fullShape.metrics.angleDifference <= MAXIMUM_TIGHT_COMPACT_SOURCE_ANGLE_DEGREES &&
+    branch.metrics.angleDifference >= MINIMUM_DIVERGENT_JUNCTION_BRANCH_ANGLE_DEGREES
+  );
+}
+
+export function dominantFullShapePartitionBoundary(left, right, candidate) {
+  if (
+    candidate.raw.snapToVertices !== true ||
+    (!isNativeCompiledGuidanceRow(candidate.raw) &&
+      candidate.raw.sourceType !== 'merged-simulator-rows')
+  ) {
+    return undefined;
+  }
+
+  const rightDominates =
+    right.metrics.alignmentMode === 'full-shape' &&
+    left.metrics.alignmentMode === 'source-contained' &&
+    right.metrics.score - left.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE &&
+    left.metrics.divisionToSourceCoverage <= MAXIMUM_SUBORDINATE_DIVISION_TO_SOURCE_COVERAGE;
+  const leftDominates =
+    left.metrics.alignmentMode === 'full-shape' &&
+    right.metrics.alignmentMode === 'source-contained' &&
+    left.metrics.score - right.metrics.score >= MINIMUM_PRIMARY_OWNERSHIP_ADVANTAGE &&
+    right.metrics.divisionToSourceCoverage <= MAXIMUM_SUBORDINATE_DIVISION_TO_SOURCE_COVERAGE;
+  if (!rightDominates && !leftDominates) return undefined;
+
+  const target = rightDominates ? right.section.projectionStart : left.section.projectionEnd;
+  const lowerCenter = Math.min(left.section.projectionCenter, right.section.projectionCenter);
+  const upperCenter = Math.max(left.section.projectionCenter, right.section.projectionCenter);
+  return cumulativePolylineDistances(candidate.projected)
+    .filter((station) => station >= lowerCenter && station <= upperCenter)
+    .sort(
+      (leftStation, rightStation) =>
+        Math.abs(leftStation - target) - Math.abs(rightStation - target)
+    )
+    .find(
+      (station) => Math.abs(station - target) <= MAXIMUM_DOMINANT_FULL_SHAPE_VERTEX_SNAP_METERS
+    );
+}
+
+function compactStopbarApproachPartitionBoundary(
+  left,
+  right,
+  candidate,
+  naturalBoundaries,
+  boundary
+) {
+  const spacing = Number(candidate.raw.spacing);
+  if (
+    !isNativeCompiledGuidanceRow(candidate.raw) ||
+    candidate.raw.classification !== 'taxi-centerline' ||
+    candidate.raw.snapToVertices !== true ||
+    !Number.isFinite(spacing) ||
+    spacing <= 0
+  ) {
+    return undefined;
+  }
+
+  const stopbars = naturalBoundaries.filter(
+    (naturalBoundary) => naturalBoundary.kind === 'stopbar'
+  );
+  const compactCaptureLength = (edge) =>
+    Math.max(spacing, edge.division.length * MINIMUM_COMPACT_STOPBAR_APPROACH_LENGTH_RATIO);
+  const isCompactTaxiway = (edge) =>
+    edge.division.raw.type === 'taxiway' &&
+    edge.division.length <= spacing * MAXIMUM_COMPACT_STOPBAR_APPROACH_SPACING_MULTIPLIER;
+
+  if (isCompactTaxiway(right)) {
+    const upperStopbar = stopbars.find(
+      (stopbar) =>
+        Math.abs(stopbar.along - right.section.projectionEnd) <=
+        MAXIMUM_COMPACT_STOPBAR_ANCHOR_DISTANCE_METERS
+    );
+    if (upperStopbar) {
+      const shiftedStopbar = shiftedSimulatorVertexStopbarStation(candidate, upperStopbar);
+      const captureLength =
+        shiftedStopbar === undefined ? compactCaptureLength(right) : right.division.length;
+      const adjusted = (shiftedStopbar ?? upperStopbar.along) - captureLength;
+      if (adjusted > boundary && adjusted < right.section.projectionCenter) return adjusted;
+    }
+  }
+
+  if (isCompactTaxiway(left)) {
+    const lowerStopbar = stopbars.find(
+      (stopbar) =>
+        Math.abs(stopbar.along - left.section.projectionStart) <=
+        MAXIMUM_COMPACT_STOPBAR_ANCHOR_DISTANCE_METERS
+    );
+    if (lowerStopbar) {
+      const adjusted = lowerStopbar.along + compactCaptureLength(left);
+      if (adjusted < boundary && adjusted > left.section.projectionCenter) return adjusted;
+    }
+  }
+
+  return undefined;
+}
+
+function shiftedSimulatorVertexStopbarBoundary(candidate, naturalBoundaries, boundary) {
+  const stopbar = naturalBoundaries.find(
+    (naturalBoundary) =>
+      naturalBoundary.kind === 'stopbar' &&
+      naturalBoundary.source === 'division' &&
+      Math.abs(naturalBoundary.along - boundary) <= MAXIMUM_COMPACT_STOPBAR_ANCHOR_DISTANCE_METERS
+  );
+  return stopbar ? shiftedSimulatorVertexStopbarStation(candidate, stopbar) : undefined;
+}
+
+function shiftedSimulatorVertexStopbarStation(candidate, stopbar) {
+  if (!isNativeCompiledGuidanceRow(candidate.raw) || candidate.raw.snapToVertices !== true) {
+    return undefined;
+  }
+  const stations = cumulativePolylineDistances(candidate.projected);
+  const before = [...stations].reverse().find((station) => station <= stopbar.along);
+  const after = stations.find((station) => station > stopbar.along);
+  if (before === undefined || after === undefined) return undefined;
+  const beforeDistance = stopbar.along - before;
+  const afterDistance = after - stopbar.along;
+  return beforeDistance >= MINIMUM_OPPOSITE_STOPBAR_VERTEX_DISTANCE_METERS &&
+    afterDistance >= MINIMUM_SHIFTED_STOPBAR_VERTEX_DISTANCE_METERS &&
+    afterDistance <= MAXIMUM_SHIFTED_STOPBAR_VERTEX_DISTANCE_METERS
+    ? after
+    : undefined;
 }
 
 function runwayAwarePartitionBoundary(left, right, candidate, runways, naturalBoundaries) {
@@ -3530,15 +4954,19 @@ function naturalBoundaryStations(candidate, allCandidates, allDivisions = []) {
   if (!GUIDANCE_SOURCE_CLASSIFICATIONS.has(candidate.raw.classification)) {
     return [];
   }
+  const nativeCompiledCandidate = isNativeCompiledGuidanceRow(candidate.raw);
   const includeJunctions =
-    isExactPlacementRow(candidate.raw) || candidate.raw.sourceType?.startsWith('xplane-');
+    nativeCompiledCandidate ||
+    isExactPlacementRow(candidate.raw) ||
+    candidate.raw.sourceType?.startsWith('xplane-');
   const junctionDistance = isExactPlacementRow(candidate.raw)
     ? NATURAL_BOUNDARY_PROXIMITY_METERS
     : MAXIMUM_GUIDANCE_CONNECTION_GAP_METERS;
   const stations = [];
   for (const other of allCandidates) {
     if (stableIdentifier(other) === stableIdentifier(candidate)) continue;
-    if (!isLocallyRegisterableSimulatorRow(other.raw)) continue;
+    const nativeCompiledOther = isNativeCompiledGuidanceRow(other.raw);
+    if (!isLocallyRegisterableSimulatorRow(other.raw) && !nativeCompiledOther) continue;
     if (other.raw.classification === 'stopbar') {
       for (const along of polylineCrossingStations(candidate, other)) {
         stations.push({ along, kind: 'stopbar', source: 'simulator' });
@@ -3546,6 +4974,15 @@ function naturalBoundaryStations(candidate, allCandidates, allDivisions = []) {
       continue;
     }
     if (!includeJunctions || !GUIDANCE_SOURCE_CLASSIFICATIONS.has(other.raw.classification)) {
+      continue;
+    }
+    if (
+      nativeCompiledCandidate &&
+      nativeCompiledOther &&
+      candidate.raw.sourceFile &&
+      other.raw.sourceFile &&
+      candidate.raw.sourceFile !== other.raw.sourceFile
+    ) {
       continue;
     }
     for (const endpoint of [other.projected[0], other.projected.at(-1)]) {
@@ -3589,7 +5026,21 @@ function naturalBoundaryStations(candidate, allCandidates, allDivisions = []) {
   return deduplicated;
 }
 
+function crossingBounds(projected) {
+  let bounds = CROSSING_BOUNDS.get(projected);
+  if (!bounds) {
+    bounds = pointBounds(projected);
+    CROSSING_BOUNDS.set(projected, bounds);
+  }
+  return bounds;
+}
+
 function polylineCrossingStations(candidate, crossing) {
+  if (
+    boundsDistance(crossingBounds(candidate.projected), crossingBounds(crossing.projected)) >
+    NATURAL_BOUNDARY_PROXIMITY_METERS + SPATIAL_BOUNDS_TOLERANCE_METERS
+  )
+    return [];
   const candidateDistances = cumulativePolylineDistances(candidate.projected);
   const stations = [];
   for (let candidateIndex = 1; candidateIndex < candidate.projected.length; candidateIndex += 1) {
@@ -3641,6 +5092,30 @@ function segmentOrientationDifference(leftStart, leftEnd, rightStart, rightEnd) 
   );
 }
 
+function sharedOriginalDivisionEndpoint(left, right) {
+  const endpointPairs = [
+    { leftIndex: 0, rightIndex: 0 },
+    { leftIndex: 0, rightIndex: right.coordinates.length - 1 },
+    { leftIndex: left.coordinates.length - 1, rightIndex: 0 },
+    {
+      leftIndex: left.coordinates.length - 1,
+      rightIndex: right.coordinates.length - 1,
+    },
+  ];
+  return endpointPairs.find(({ leftIndex, rightIndex }) => {
+    const leftPoint = left.coordinates[leftIndex];
+    const rightPoint = right.coordinates[rightIndex];
+    if (!leftPoint || !rightPoint) return false;
+    const referenceLatitude = (leftPoint.lat + rightPoint.lat) / 2;
+    return (
+      distance(
+        projectCoordinate(leftPoint, referenceLatitude),
+        projectCoordinate(rightPoint, referenceLatitude)
+      ) <= MAXIMUM_SHARED_GUIDANCE_ENDPOINT_DISTANCE_METERS
+    );
+  });
+}
+
 function divisionsShareGuidanceTrunk(left, right) {
   if (!GUIDANCE_DIVISION_TYPES.has(left.raw.type) || !GUIDANCE_DIVISION_TYPES.has(right.raw.type)) {
     return false;
@@ -3682,18 +5157,49 @@ function crossProduct(left, right) {
   return left.x * right.y - left.y * right.x;
 }
 
-function snapBoundaryToNaturalFeature(boundary, stations) {
+function snapBoundaryToNaturalFeature(
+  boundary,
+  stations,
+  maximumDistance = MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
+) {
   return (
     [...stations]
-      .filter(
-        (station) => Math.abs(station.along - boundary) <= MAXIMUM_NATURAL_BOUNDARY_SNAP_METERS
-      )
+      .filter((station) => Math.abs(station.along - boundary) <= maximumDistance)
       .sort(
         (left, right) =>
           Math.abs(left.along - boundary) - Math.abs(right.along - boundary) ||
           Number(right.kind === 'stopbar') - Number(left.kind === 'stopbar')
       )[0]?.along ?? boundary
   );
+}
+
+function snapAllocationInwardToSourceVertices(candidate, start, end, naturalBoundaries = []) {
+  const stations = cumulativePolylineDistances(candidate.projected);
+  const startIsNaturalBoundary = naturalBoundaries.some(
+    (boundary) => Math.abs(boundary.along - start) <= NATURAL_BOUNDARY_VERTEX_SNAP_TOLERANCE_METERS
+  );
+  const endIsNaturalBoundary = naturalBoundaries.some(
+    (boundary) => Math.abs(boundary.along - end) <= NATURAL_BOUNDARY_VERTEX_SNAP_TOLERANCE_METERS
+  );
+  const inwardStart = startIsNaturalBoundary
+    ? start
+    : stations.find(
+        (station) =>
+          station >= start && station - start <= MAXIMUM_NATIVE_OWNERSHIP_VERTEX_SNAP_METERS
+      );
+  const inwardEnd = endIsNaturalBoundary
+    ? end
+    : [...stations]
+        .reverse()
+        .find(
+          (station) =>
+            station <= end && end - station <= MAXIMUM_NATIVE_OWNERSHIP_VERTEX_SNAP_METERS
+        );
+  const snappedStart = inwardStart ?? start;
+  const snappedEnd = inwardEnd ?? end;
+  return snappedEnd - snappedStart >= 0.2
+    ? { start: snappedStart, end: snappedEnd }
+    : { start, end };
 }
 
 function clampOutwardExtensionAtNaturalBoundary(
@@ -4052,6 +5558,27 @@ function preferConnectedStopbarCompositeEdges(edges) {
 }
 
 function sourceSectionsForMergedCandidate(edge, referenceLatitude) {
+  if (edge.candidate.raw.connectedSourceRows) {
+    let station = 0;
+    return edge.candidate.raw.connectedSourceRows.flatMap((row, index) => {
+      const candidate = prepareSimulatorRow(row, index, referenceLatitude);
+      const start = Math.max(0, edge.section.start - station);
+      const end = Math.min(candidate.length, edge.section.end - station);
+      station += candidate.length;
+      if (end - start < 0.2) return [];
+      const forward =
+        row.vertices[0].lat === edge.candidate.coordinates[index].lat &&
+        row.vertices[0].lon === edge.candidate.coordinates[index].lon;
+      const section = simulatorSectionForRange(
+        candidate,
+        edge.division,
+        forward ? start : candidate.length - end,
+        forward ? end : candidate.length - start,
+        referenceLatitude
+      );
+      return section?.prepared?.valid ? [{ candidate, section }] : [];
+    });
+  }
   if (edge.candidate.compositeMembers) {
     // oxlint-disable-next-line react-doctor/js-combine-iterations -- Flattening, section construction, and validity filtering are distinct geometry stages.
     return edge.candidate.compositeMembers
@@ -4073,10 +5600,7 @@ function sourceSectionsForMergedCandidate(edge, referenceLatitude) {
   return members
     .map((candidate) => {
       const directionMatches = polylineDirectionMatches(edge.candidate, candidate);
-      const sectionStart = projectedPointAtDistance(
-        edge.candidate.projected,
-        edge.section.start
-      );
+      const sectionStart = projectedPointAtDistance(edge.candidate.projected, edge.section.start);
       const sectionEnd = projectedPointAtDistance(edge.candidate.projected, edge.section.end);
       const projectedStart = projectPointToPolyline(sectionStart, candidate.projected).along;
       const projectedEnd = projectPointToPolyline(sectionEnd, candidate.projected).along;
@@ -4108,29 +5632,99 @@ function polylineDirectionMatches(anchor, member) {
   return forward <= reverse;
 }
 
-function mergeCoLocatedSimulatorRows(items, referenceLatitude) {
+export function consolidateCoLocatedSimulatorRows(lightRows) {
+  const rows = lightRows ?? [];
+  if (Array.isArray(lightRows) && CONSOLIDATED_SIMULATOR_ROWS.has(lightRows)) {
+    return CONSOLIDATED_SIMULATOR_ROWS.get(lightRows);
+  }
+  const referenceLatitude = findReferenceLatitude([], rows, []);
+  const merged = prepareAndMergeCoLocatedSimulatorRows(rows, referenceLatitude, {
+    maximumDistanceMeters: MAXIMUM_EDITOR_COLOCATED_GUIDANCE_DISTANCE_METERS,
+    requireEqualEvidencePriority: false,
+    requireSharedSourceFile: false,
+  });
+  const unmatchable = rows.filter((row) => !isMatchableSimulatorRow(row));
+  const result = [
+    ...merged.kept.map((item) => {
+      const row = item.raw;
+      if ((row.sourceRowIds?.length ?? 0) < 2) return row;
+      const sourceRowIds = [...row.sourceRowIds].map(String).sort();
+      return {
+        ...row,
+        id: `editor-merged-simulator-row:${sourceRowIds.join('|')}`,
+        sourceRowIds,
+      };
+    }),
+    ...unmatchable,
+  ];
+  if (Array.isArray(lightRows)) CONSOLIDATED_SIMULATOR_ROWS.set(lightRows, result);
+  return result;
+}
+
+function prepareAndMergeCoLocatedSimulatorRows(rows, referenceLatitude, options) {
+  // oxlint-disable-next-line react-doctor/js-combine-iterations, react-doctor/js-flatmap-filter -- Eligibility, preparation, and validity are distinct matching stages.
+  const prepared = (rows ?? [])
+    .filter(isMatchableSimulatorRow)
+    .map((row, index) => prepareSimulatorRow(row, index, referenceLatitude))
+    .filter(Boolean);
+  return mergeCoLocatedSimulatorRows(prepared, referenceLatitude, options);
+}
+
+function mergeCoLocatedSimulatorRows(items, referenceLatitude, options = {}) {
+  const maximumDistanceMeters =
+    options.maximumDistanceMeters ?? MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS;
+  const requireEqualEvidencePriority = options.requireEqualEvidencePriority !== false;
+  const requireSharedSourceFile = options.requireSharedSourceFile !== false;
   const valid = items
     .filter((item) => item.valid)
     .sort((left, right) => stableIdentifier(left).localeCompare(stableIdentifier(right)));
   const invalid = items.filter((item) => !item.valid);
   const groups = [];
+  const byMinimumX = [...valid].sort((left, right) => left.bounds.minX - right.bounds.minX);
+  const groupsByMember = new Map();
+  const groupOrder = new Map();
+  const padding = Math.max(0.6, maximumDistanceMeters) + SPATIAL_BOUNDS_TOLERANCE_METERS;
+  const nearbyGroups = (item) => {
+    const nearby = new Set();
+    const bounds = item.bounds;
+    for (const member of byMinimumX) {
+      if (member.bounds.minX > bounds.maxX + padding) break;
+      if (
+        member.bounds.maxX < bounds.minX - padding ||
+        member.bounds.minY > bounds.maxY + padding ||
+        member.bounds.maxY < bounds.minY - padding
+      )
+        continue;
+      const group = groupsByMember.get(member);
+      if (group) nearby.add(group);
+    }
+    return [...nearby].sort((left, right) => groupOrder.get(left) - groupOrder.get(right));
+  };
 
   for (const item of valid) {
     const family = simulatorMergeFamily(item.raw?.classification);
     const group = family
-      ? groups.find(
+      ? nearbyGroups(item).find(
           (candidate) =>
             candidate.family === family &&
-            evidencePriority(candidate.members[0].raw) === evidencePriority(item.raw) &&
+            (!requireEqualEvidencePriority ||
+              evidencePriority(candidate.members[0].raw) === evidencePriority(item.raw)) &&
             candidate.members.some(
               (member) =>
-                simulatorRowsShareSourceFile(item.raw, member.raw) &&
-                areCoLocatedSimulatorPolylines(item, member)
+                (!requireSharedSourceFile || simulatorRowsShareSourceFile(item.raw, member.raw)) &&
+                areCoLocatedSimulatorPolylines(item, member, maximumDistanceMeters)
             )
         )
       : undefined;
-    if (group) group.members.push(item);
-    else groups.push({ family, members: [item] });
+    if (group) {
+      group.members.push(item);
+      groupsByMember.set(item, group);
+    } else {
+      const created = { family, members: [item] };
+      groupOrder.set(created, groups.length);
+      groups.push(created);
+      groupsByMember.set(item, created);
+    }
   }
 
   const duplicateIds = [];
@@ -4166,14 +5760,19 @@ function simulatorMergeFamily(classification) {
 function mergedSimulatorRow(members, index) {
   const anchor = members[0];
   const sourceRowIds = members.map((member) => String(member.raw.id));
+  const removalTargetSourceRows = compiledRemovalTargetSourceRows(members);
   return {
     ...anchor.raw,
     id: `merged-simulator-row:${index}:${sourceRowIds.join('|')}`,
     sourceType: 'merged-simulator-rows',
+    removalSourceType: anchor.raw.sourceType,
+    removalEligible: members.every((member) => member.raw.removalEligible !== false),
     sourceGeometryDerived: 'co-located-source-row-merge',
     sourceRowIds,
     sourceRowCount: sourceRowIds.length,
     sourceClassifications: [...new Set(members.map((member) => member.raw.classification))],
+    sourceInstanceIds: [...new Set(members.flatMap((member) => member.raw.sourceInstanceIds ?? []))],
+    ...(removalTargetSourceRows.length > 0 ? { removalTargetSourceRows } : {}),
     // Preserve exact decoded geometry. Merging is provenance-only and must not
     // smooth corners, average offsets, or remove vertices from the source row.
     vertices: anchor.coordinates.map((coordinate) => ({
@@ -4183,9 +5782,45 @@ function mergedSimulatorRow(members, index) {
   };
 }
 
-function areCoLocatedSimulatorPolylines(left, right) {
+function compiledRemovalTargetSourceRows(members) {
+  const byId = new Map();
+  for (const member of members) {
+    const candidates = member.raw.removalTargetSourceRows ?? [member.raw];
+    for (const row of candidates) {
+      if (
+        row?.sourceType !== 'bgl-airport-light-row' ||
+        (row.compiledLightPlacement !== 'spacing' && row.removalTargetSampling !== 'spacing')
+      ) {
+        continue;
+      }
+      const id = String(row.id ?? '');
+      if (!id || byId.has(id)) continue;
+      byId.set(id, {
+        id,
+        sourceType: row.sourceType,
+        classification: row.classification,
+        vertices: row.vertices,
+        spacing: row.spacing,
+        snapToVertices: row.snapToVertices,
+        compiledLightPlacement: row.compiledLightPlacement,
+        removalTargetSampling: row.removalTargetSampling,
+      });
+    }
+  }
+  return [...byId.values()];
+}
+
+function areCoLocatedSimulatorPolylines(
+  left,
+  right,
+  maximumDistanceMeters = MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS
+) {
   if (!left.valid || !right.valid) return false;
   const ratio = left.length / right.length;
+  if (ratio < 0.6 || ratio > 1 / 0.6) return false;
+  if (boundsDistance(left.bounds, right.bounds) > Math.max(0.6, maximumDistanceMeters)) {
+    return false;
+  }
   const forward = nearestDistanceSummary(left.samples, right.projected);
   const reverse = nearestDistanceSummary(right.samples, left.projected);
   const sameCompleteGeometry =
@@ -4198,8 +5833,8 @@ function areCoLocatedSimulatorPolylines(left, right) {
 
   const minimumOverlapRatio = 0.65;
   const strongOverlapRatio = 0.9;
-  const forwardOverlap = forward.covered(MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS);
-  const reverseOverlap = reverse.covered(MAXIMUM_COLOCATED_GUIDANCE_DISTANCE_METERS);
+  const forwardOverlap = forward.covered(maximumDistanceMeters);
+  const reverseOverlap = reverse.covered(maximumDistanceMeters);
   return (
     ratio >= 0.6 &&
     ratio <= 1 / 0.6 &&

@@ -20,6 +20,7 @@ import {
   polylineCorridorPolygon,
   polylineToPolylineDistanceMeters,
   rectanglePolygonAround,
+  wgs84LocalDistanceMeters,
 } from './geo.js';
 import { findDescendants, localName, parseXml, walkNodes } from './xml.js';
 
@@ -41,6 +42,7 @@ const SOURCE_BACKED_LIGHT_ROW_TYPES = new Set([
   'xplane-dsf-light-string',
 ]);
 const INFERRED_REMOVAL_LIGHT_ROW_TYPES = new Set(['inferred-bgl-placement-row']);
+const POLYGON_FALLBACK_LIGHT_ROW_TYPES = new Set(['bgl-taxiway-path', 'bgl-taxiway-path-bridge']);
 const METERS_PER_DEGREE_LAT = 111320;
 const ROW_ENDPOINT_MERGE_TOLERANCE_METERS = 0.5;
 const ROW_LINE_MERGE_TOLERANCE_METERS = 0.05;
@@ -56,6 +58,7 @@ const PROTECTION_GEOMETRY_TOLERANCE_METERS = 0.005;
 const PROTECTION_BEND_MARGIN_METERS = 0.02;
 const PROTECTION_SAMPLE_SPACING_METERS = 0.25;
 const REMOVAL_SIMPLIFICATION_TOLERANCES_METERS = [0.05, 0.02, 0.01, 0.005];
+const COMPILED_ENDPOINT_TARGET_SUPPORT_SIZE_METERS = 0.75;
 
 function roundNumber(value) {
   return Math.round(value * 1_000) / 1_000;
@@ -789,7 +792,13 @@ function geometryForVertexRun(vertices, sourceVertexStartIndex) {
       };
 }
 
-export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZones) {
+export function generateRemovalGeometry(
+  instances,
+  lightRows,
+  sizes,
+  mustKeepZones,
+  mergeCache = new Map()
+) {
   const groupingStartedAt = performance.now();
   const removalPolygons = [];
   const protectionConflicts = [];
@@ -808,11 +817,11 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
     targetRows.flatMap((row) => row.sourceInstanceIds ?? [])
   );
 
-  const removalGroups = buildRemovalGroups(targetRows, sizes.lightrow);
+  const removalGroups = buildRemovalGroups(targetRows, sizes.lightrow, mergeCache);
   const groupingMilliseconds = performance.now() - groupingStartedAt;
   const polygonBuildStartedAt = performance.now();
   for (const group of removalGroups) {
-    const protectionZones = protectionZonesForTarget(group.classification, mustKeepZones);
+    const protectionZones = protectionZonesForTarget(group, mustKeepZones);
     const protectedGeometry = buildProtectedRemovalPolygons(
       group,
       protectionZones,
@@ -841,13 +850,12 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
         protectionApplied: protectedPolygon.protectionApplied,
         mustKeepZoneIds: protectedPolygon.mustKeepZoneIds,
         protectionMode: protectedPolygon.protectionMode,
-        targetLightPointCount: protectedPolygon.targetLightPointCount,
+        removalMode: group.removalMode,
+        targetLightPointCount:
+          group.removalMode === 'polygon' ? 0 : protectedPolygon.targetLightPointCount,
+        targetLightPoints:
+          group.removalMode === 'polygon' ? [] : protectedPolygon.targetLightPoints,
         sourceClassifications: group.sourceClassifications ?? [group.classification],
-        exclusionFlags: {
-          excludeLibraryObjects: true,
-          excludeVFX: true,
-          excludeSimPropContainers: true,
-        },
         ...(group.inferred ? { inferred: true } : {}),
         ...(group.inference ? { inference: group.inference } : {}),
         ...(group.sourceInstanceIds ? { sourceInstanceIds: group.sourceInstanceIds } : {}),
@@ -856,16 +864,23 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
     }
   }
   const polygonBuildMilliseconds = performance.now() - polygonBuildStartedAt;
+  const deduplicatedRemovalPolygons = deduplicateRemovalPolygons(removalPolygons);
 
   const exclusionCandidates = [];
   const instanceBuildStartedAt = performance.now();
+  const instanceProtectionZoneIds = new Set(
+    protectionZonesForTarget({ removalMode: 'targets' }, mustKeepZones).map((zone) => zone.id)
+  );
 
   for (const instance of instances) {
     if (!isTargetLightClassification(instance.classification)) {
       continue;
     }
 
-    if (isCoveredByTargetRow(instance, targetRows, sizes.lightrow, targetRowSourceInstanceIds)) {
+    if (
+      isCoveredByTargetRow(instance, targetRows, sizes.lightrow, targetRowSourceInstanceIds) &&
+      !targetRowSourceInstanceIds.has(instance.id)
+    ) {
       continue;
     }
 
@@ -874,10 +889,24 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
       continue;
     }
 
+    const maximumProtectionDistance =
+      (config.size / 2) * Math.SQRT2 +
+      mustKeepSpatialIndex.maximumClearanceMeters +
+      PROTECTION_GEOMETRY_TOLERANCE_METERS;
+    const nearbyProtectionZones = mustKeepSpatialIndex
+      .queryPoint(instance, maximumProtectionDistance)
+      .filter(
+        (zone) =>
+          instanceProtectionZoneIds.has(zone.id) &&
+          (instance.classification !== 'stopbar' ||
+            zone.explicitEditorKeep === true ||
+            isRunwayMustKeepZone(zone))
+      );
+
     const protectedSquare = buildSafePointRemoval(
       instance,
       config.size,
-      protectionZonesForTarget(instance.classification, mustKeepZones),
+      nearbyProtectionZones,
       stableId('instance-removal', instance.id)
     );
     if (!protectedSquare.polygon) {
@@ -903,7 +932,7 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
   const instanceBuildMilliseconds = performance.now() - instanceBuildStartedAt;
 
   const conflictFilterStartedAt = performance.now();
-  const removalRings = removalPolygons.map((polygon) => {
+  const removalRings = deduplicatedRemovalPolygons.map((polygon) => {
     const ring = coordinateRingPoints(polygon.coordinates);
     return { ring, bounds: pointBounds(ring) };
   });
@@ -918,7 +947,7 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
   const conflictFilterMilliseconds = performance.now() - conflictFilterStartedAt;
   return {
     exclusionCandidates,
-    removalPolygons,
+    removalPolygons: deduplicatedRemovalPolygons,
     protectionConflicts: unresolvedProtectionConflicts,
     performance: {
       groupingMilliseconds,
@@ -929,9 +958,98 @@ export function generateRemovalGeometry(instances, lightRows, sizes, mustKeepZon
   };
 }
 
-function protectionZonesForTarget(classification, zones) {
-  if (classification !== 'stopbar') return zones;
-  return zones.filter(isRunwayMustKeepZone);
+function deduplicateRemovalPolygons(polygons) {
+  const byGeometry = new Map();
+  for (const polygon of polygons) {
+    const key = `${polygon.removalMode ?? 'targets'}:${coordinateRingSignature(polygon.coordinates)}`;
+    const existing = byGeometry.get(key);
+    if (!existing) {
+      byGeometry.set(key, polygon);
+      continue;
+    }
+    existing.sourceRowIds = [
+      ...new Set(
+        [
+          ...(existing.sourceRowIds ?? [existing.sourceRowId]),
+          ...(polygon.sourceRowIds ?? [polygon.sourceRowId]),
+        ].filter(Boolean)
+      ),
+    ];
+    existing.mustKeepZoneIds = [
+      ...new Set([...(existing.mustKeepZoneIds ?? []), ...(polygon.mustKeepZoneIds ?? [])]),
+    ];
+    existing.targetLightPoints = uniquePoints([
+      ...(existing.targetLightPoints ?? []),
+      ...(polygon.targetLightPoints ?? []),
+    ]);
+    existing.targetLightPointCount = existing.targetLightPoints.length;
+    if (polygon.sourceInstanceIds) {
+      existing.sourceInstanceIds = [
+        ...new Set([...(existing.sourceInstanceIds ?? []), ...polygon.sourceInstanceIds]),
+      ];
+    }
+  }
+  return [...byGeometry.values()];
+}
+
+function coordinateRingSignature(coordinates) {
+  if (!Array.isArray(coordinates)) return '';
+  const points = coordinates.map(
+    ([lon, lat]) => `${Number(lon).toFixed(10)},${Number(lat).toFixed(10)}`
+  );
+  if (points.length > 1 && points[0] === points.at(-1)) points.pop();
+  if (points.length === 0) return '';
+  const forward = points.join('|');
+  const reverse = [...points].reverse().join('|');
+  return forward <= reverse ? forward : reverse;
+}
+
+function protectionZonesForTarget(group, zones) {
+  if (group.classification === 'stopbar') {
+    return zones.filter((zone) => zone.explicitEditorKeep === true || isRunwayMustKeepZone(zone));
+  }
+  if (group.removalMode !== 'targets') return zones;
+
+  const runwayRecordsWithDiscreteCenterlineLights = new Set(
+    zones.flatMap((zone) => {
+      const recordKey = runwayProtectionRecordKey(zone);
+      return recordKey && isDiscreteRunwayCenterlineLight(zone) ? [recordKey] : [];
+    })
+  );
+  if (runwayRecordsWithDiscreteCenterlineLights.size === 0) return zones;
+
+  return zones.filter((zone) => {
+    if (!isContinuousRunwayCenterlineEnvelope(zone)) return true;
+    const recordKey = runwayProtectionRecordKey(zone);
+    return !recordKey || !runwayRecordsWithDiscreteCenterlineLights.has(recordKey);
+  });
+}
+
+function runwayProtectionRecordKey(zone) {
+  const runwayId = String(zone?.runwayId ?? '').trim();
+  const sourceFile = String(zone?.sourceFile ?? '').trim();
+  const sourceRecordOffset = Number(zone?.sourceRecordOffset);
+  return runwayId && sourceFile && Number.isFinite(sourceRecordOffset)
+    ? `${sourceFile}|${sourceRecordOffset}|${runwayId}`
+    : null;
+}
+
+function isDiscreteRunwayCenterlineLight(zone) {
+  return (
+    zone?.sourceBasis === 'bgl-runway-record' &&
+    zone?.geometryMode === 'source-runway-procedural-grid' &&
+    zone?.geometryType === 'Point' &&
+    String(zone?.lightType ?? '').startsWith('runway-centerline-')
+  );
+}
+
+function isContinuousRunwayCenterlineEnvelope(zone) {
+  return (
+    zone?.sourceBasis === 'bgl-runway-record' &&
+    zone?.geometryMode === 'continuous-procedural-envelope' &&
+    zone?.geometryType === 'LineString' &&
+    zone?.lightType === 'runway-centerline-continuous-envelope'
+  );
 }
 
 function isRunwayMustKeepZone(zone) {
@@ -948,17 +1066,23 @@ function buildProtectedRemovalPolygons(group, mustKeepZones, mustKeepBounds, mus
     return { polygons: [], conflicts: [] };
   }
 
-  const groupBounds = group._bounds ?? pointBounds(group.vertices);
+  const endpointTargetPoints = group.endpointTargetPoints ?? [];
+  const groupBounds = pointBounds([...group.vertices, ...endpointTargetPoints]);
   const nearbyZones = mustKeepZones.filter((zone) => {
     const maximumDistance =
       group.widthMeters / 2 + (zone.clearanceMeters ?? 0) + PROTECTION_GEOMETRY_TOLERANCE_METERS;
     return (
       boundsOverlapWithPaddingMeters(groupBounds, mustKeepBounds.get(zone.id), maximumDistance) &&
-      distanceFromZoneToPolyline(zone, group.vertices) <= maximumDistance
+      Math.min(
+        distanceFromZoneToPolyline(zone, group.vertices),
+        ...endpointTargetPoints.map((point) => nearestZonePoint(point, zone).distanceMeters)
+      ) <= maximumDistance
     );
   });
   if (nearbyZones.length === 0) {
+    const endpointCaps = buildCompiledEndpointCaps(group, []);
     const polygons = [
+      ...endpointCaps.polygons,
       {
         coordinates: defaultRing,
         widthMeters: group.widthMeters,
@@ -993,49 +1117,121 @@ function buildProtectedRemovalPolygons(group, mustKeepZones, mustKeepBounds, mus
         });
       }
     }
+    addCompiledBoundaryCaps(group, polygons, mustKeepZones);
     const uncoveredPoints = assignTargetPointCounts(polygons, group.targetPoints);
     return {
       polygons,
-      conflicts: uncoveredPoints.map((point) => targetCoverageConflict(group, point, [])),
+      conflicts: [
+        ...endpointCaps.conflicts,
+        ...uncoveredPoints.map((point) => targetCoverageConflict(group, point, [])),
+      ],
     };
   }
 
   const adaptive = buildAdaptiveCorridorSegments(group, nearbyZones, mustKeepSpatialIndex);
-  const polygons = adaptive.segments.map((segment) => {
-    const protectionApplied = segment.mustKeepZoneIds.length > 0;
-    return {
-      coordinates: segment.coordinates,
-      widthMeters: group.widthMeters,
-      protectionApplied,
-      protectionMode: protectionApplied
-        ? adaptive.segments.length === 1
-          ? 'asymmetric-bent-corridor'
-          : 'protected-continuous-corridor-segment'
-        : 'continuous-corridor-segment',
-      mustKeepZoneIds: segment.mustKeepZoneIds,
-      reason: protectionApplied
-        ? `${group.reason}; continuous corridor bent around ${segment.mustKeepZoneIds.length} must-keep light zones`
-        : `${group.reason}; continuous corridor split only at a must-keep light zone`,
-    };
-  });
+  const endpointCaps = buildCompiledEndpointCaps(group, nearbyZones);
+  const polygons = [
+    ...endpointCaps.polygons,
+    ...adaptive.segments.map((segment) => {
+      const protectionApplied = segment.mustKeepZoneIds.length > 0;
+      return {
+        coordinates: segment.coordinates,
+        widthMeters: group.widthMeters,
+        protectionApplied,
+        protectionMode: protectionApplied
+          ? adaptive.segments.length === 1
+            ? 'asymmetric-bent-corridor'
+            : 'protected-continuous-corridor-segment'
+          : 'continuous-corridor-segment',
+        mustKeepZoneIds: segment.mustKeepZoneIds,
+        reason: protectionApplied
+          ? `${group.reason}; continuous corridor bent around ${segment.mustKeepZoneIds.length} must-keep light zones`
+          : `${group.reason}; continuous corridor split only at a must-keep light zone`,
+      };
+    }),
+  ];
+  addCompiledBoundaryCaps(group, polygons, mustKeepZones);
   const uncoveredPoints = assignTargetPointCounts(polygons, group.targetPoints);
-  const conflicts = uncoveredPoints.map((point) => {
-    // oxlint-disable-next-line react-doctor/js-combine-iterations -- Proximity filtering and ID projection are distinct safety-audit stages.
-    const blockingZoneIds = nearbyZones
-      .filter((zone) => {
-        const proximity = nearestZonePoint(point, zone);
-        return (
-          proximity.inside ||
-          proximity.distanceMeters <=
-            (zone.clearanceMeters ?? 0) +
-              MIN_SAFE_REMOVAL_HALF_WIDTH_METERS +
-              PROTECTION_BEND_MARGIN_METERS
-        );
-      })
-      .map((zone) => zone.id);
-    return targetCoverageConflict(group, point, blockingZoneIds);
-  });
+  const conflicts = [
+    ...endpointCaps.conflicts,
+    ...uncoveredPoints.map((point) => {
+      // oxlint-disable-next-line react-doctor/js-combine-iterations -- Proximity filtering and ID projection are distinct safety-audit stages.
+      const blockingZoneIds = nearbyZones
+        .filter((zone) => {
+          const proximity = nearestZonePoint(point, zone);
+          return (
+            proximity.inside ||
+            proximity.distanceMeters <=
+              (zone.clearanceMeters ?? 0) +
+                MIN_SAFE_REMOVAL_HALF_WIDTH_METERS +
+                PROTECTION_BEND_MARGIN_METERS
+          );
+        })
+        .map((zone) => zone.id);
+      return targetCoverageConflict(group, point, blockingZoneIds);
+    }),
+  ];
 
+  return { polygons, conflicts };
+}
+
+function addCompiledBoundaryCaps(group, polygons, zones) {
+  if (!(group.endpointCapMeters > 0) || group.removalMode !== 'targets') return;
+  const clearanceMeters =
+    COMPILED_ENDPOINT_TARGET_SUPPORT_SIZE_METERS / Math.SQRT2 +
+    PROTECTION_GEOMETRY_TOLERANCE_METERS;
+  const rings = polygons.map((polygon) => coordinateRingPoints(polygon.coordinates));
+  const caps = [];
+  for (const point of group.targetPoints) {
+    if (
+      rings.some(
+        (ring) =>
+          pointInPolygon(point, ring) &&
+          pointToPolylineDistanceMeters(point, ring) >= clearanceMeters
+      )
+    ) continue;
+    const cap = buildSafePointRemoval(
+      point,
+      group.endpointCapMeters * 2,
+      zones,
+      stableId(group.id, 'compiled-boundary-cap', point.lat, point.lon)
+    );
+    if (!cap.polygon) continue;
+    caps.push({
+      ...cap.polygon,
+      protectionMode: 'compiled-boundary-cap',
+      targetSupportSizeMeters: COMPILED_ENDPOINT_TARGET_SUPPORT_SIZE_METERS,
+      reason: `${group.reason}; centred support retained at a clipped or joined corridor boundary`,
+    });
+  }
+  polygons.unshift(...caps);
+}
+
+function buildCompiledEndpointCaps(group, zones) {
+  const capWidthMeters = Number(group.endpointCapMeters) * 2;
+  if (!(capWidthMeters > 0) || !group.endpointTargetPoints?.length) {
+    return { polygons: [], conflicts: [] };
+  }
+  const polygons = [];
+  const conflicts = [];
+  for (const point of uniquePoints(group.endpointTargetPoints)) {
+    const cap = buildSafePointRemoval(
+      point,
+      capWidthMeters,
+      zones,
+      stableId(group.id, 'compiled-endpoint-cap', point.lat, point.lon)
+    );
+    if (!cap.polygon) {
+      conflicts.push(cap.conflict);
+      continue;
+    }
+    polygons.push({
+      ...cap.polygon,
+      protectionMode: 'compiled-endpoint-cap',
+      targetSupportSizeMeters: COMPILED_ENDPOINT_TARGET_SUPPORT_SIZE_METERS,
+      reason: `${group.reason}; exact compiled endpoint lamp covered by a centred end cap`,
+    });
+  }
   return { polygons, conflicts };
 }
 
@@ -1298,9 +1494,7 @@ function adaptiveSegmentIsSafe(segment, samples, zones) {
     }
   }
 
-  const appliedZoneIds = new Set(segment.mustKeepZoneIds);
-  const relevantZones = zones.filter((zone) => appliedZoneIds.has(zone.id));
-  return isRemovalPointRingSafe(ring, relevantZones);
+  return isRemovalPointRingSafe(ring, zones);
 }
 
 function assignTargetPointCounts(polygons, targetPoints) {
@@ -1308,15 +1502,20 @@ function assignTargetPointCounts(polygons, targetPoints) {
   const polygonRings = polygons.map((polygon) => coordinateRingPoints(polygon.coordinates));
   for (const [polygonIndex, polygon] of polygons.entries()) {
     const ring = polygonRings[polygonIndex];
-    let targetLightPointCount = 0;
+    const assignedTargetLightPoints = [];
     for (const point of targetPoints) {
       const signature = normalizedVertexSignature(point);
       if (!assigned.has(signature) && pointInPolygon(point, ring)) {
         assigned.add(signature);
-        targetLightPointCount += 1;
+        assignedTargetLightPoints.push(
+          Number.isFinite(polygon.targetSupportSizeMeters)
+            ? { ...point, supportSizeMeters: polygon.targetSupportSizeMeters }
+            : point
+        );
       }
     }
-    polygon.targetLightPointCount = targetLightPointCount;
+    polygon.targetLightPointCount = assignedTargetLightPoints.length;
+    polygon.targetLightPoints = assignedTargetLightPoints;
   }
   return targetPoints.filter((point) => !assigned.has(normalizedVertexSignature(point)));
 }
@@ -1369,9 +1568,7 @@ function buildSafePointRemoval(point, requestedWidthMeters, zones, ownerId) {
 
   const widthMeters = halfWidth * 2;
   const coordinates = rectanglePolygonAround(point, widthMeters, widthMeters);
-  // oxlint-disable-next-line react-doctor/js-set-map-lookups -- A point overlaps only a tiny number of zones, so constructing a Set would add overhead.
-  const relevantZones = zones.filter((zone) => appliedZoneIds.includes(zone.id));
-  if (!isRemovalRingSafe(coordinates, relevantZones)) {
+  if (!isRemovalRingSafe(coordinates, zones)) {
     return {
       conflict: {
         id: stableId('must-keep-conflict', ownerId, point.lat, point.lon, 'validation'),
@@ -1469,7 +1666,8 @@ function isRemovalPointRingSafe(ring, zones) {
 }
 
 function pointInCoordinateRing(point, coordinates) {
-  return pointInPolygon(point, coordinateRingPoints(coordinates));
+  const ring = coordinateRingPoints(coordinates);
+  return pointInPolygon(point, ring) || pointToPolylineDistanceMeters(point, ring) <= 0.01;
 }
 
 function coordinateRingPoints(coordinates) {
@@ -1503,7 +1701,7 @@ function densifyVertices(vertices, spacingMeters) {
   return points;
 }
 
-function buildRemovalGroups(targetRows, widthMeters) {
+function buildRemovalGroups(targetRows, widthMeters, mergeCache) {
   const groups = [];
   const duplicateGroups = new Map();
   const groupTokens = new WeakMap();
@@ -1547,7 +1745,8 @@ function buildRemovalGroups(targetRows, widthMeters) {
       rejectedPairs.add(pairKey);
       return undefined;
     }
-    const merged = tryAbsorbCoveredGroup(left, right) ?? tryMergeRemovalGroups(left, right);
+    const merged =
+      tryAbsorbCoveredGroup(left, right) ?? tryMergeRemovalGroups(left, right, mergeCache);
     if (!merged) rejectedPairs.add(pairKey);
     return merged;
   };
@@ -1695,6 +1894,9 @@ function groupFromRow(row, widthMeters) {
     reason: `light row classified as ${row.classification}`,
     vertices: row.vertices,
     targetPoints: targetLightPointsForRow(row),
+    endpointTargetPoints: row.removalEndpointTargetPoints ?? [],
+    endpointCapMeters: row.removalEndpointCapMeters,
+    removalMode: removalModeForRow(row),
     sourceRows: [row],
     _bounds: pointBounds(row.vertices),
     geometrySignature: geometrySignatureForVertices(row.vertices),
@@ -1713,8 +1915,8 @@ function removalGroupsMayInteract(left, right) {
   );
 }
 
-function tryMergeRemovalGroups(left, right) {
-  const partialOverlap = mergePartiallyOverlappingRows(left, right);
+function tryMergeRemovalGroups(left, right, mergeCache) {
+  const partialOverlap = mergePartiallyOverlappingRows(left, right, mergeCache);
   if (partialOverlap) {
     return partialOverlap;
   }
@@ -1725,7 +1927,34 @@ function tryMergeRemovalGroups(left, right) {
   return mergeOverlappingSegments(left, right) ?? mergeContiguousRows(left, right);
 }
 
-function mergePartiallyOverlappingRows(left, right) {
+function mergePartiallyOverlappingRows(left, right, mergeCache) {
+  if (
+    left.sourceFile !== right.sourceFile ||
+    left.sourceType !== right.sourceType ||
+    left.widthMeters !== right.widthMeters
+  )
+    return undefined;
+  const key =
+    'partial:' +
+    JSON.stringify([
+      left.widthMeters,
+      left.vertices,
+      left.targetPoints,
+      right.vertices,
+      right.targetPoints,
+    ]);
+  if (!mergeCache.has(key)) {
+    mergeCache.set(key, findPartialOverlapVertices(left, right, mergeCache));
+  }
+  const vertices = mergeCache.get(key);
+  if (!vertices) return undefined;
+  const merged = mergedGroup(left, right, vertices);
+  merged.partialOverlapCombined = true;
+  merged.reason = `source-backed target light rows combined from ${merged.sourceRowIds.length} partially overlapping corridors without expanding removal area`;
+  return merged;
+}
+
+function findPartialOverlapVertices(left, right, mergeCache) {
   const maximumJoinDistanceMeters = Math.min(
     PARTIAL_OVERLAP_JOIN_MAX_METERS,
     left.widthMeters * 0.75
@@ -1797,16 +2026,13 @@ function mergePartiallyOverlappingRows(left, right) {
       leftCandidate.joinDistanceMeters - rightCandidate.joinDistanceMeters
   );
   const best = candidates.find((candidate) =>
-    removalBoundaryWithinExistingUnion(candidate.coordinates, originalRings)
+    cachedRemovalBoundaryWithinExistingUnion(candidate.coordinates, originalRings, mergeCache)
   );
   if (!best) {
     return undefined;
   }
 
-  const merged = mergedGroup(left, right, best.vertices);
-  merged.partialOverlapCombined = true;
-  merged.reason = `source-backed target light rows combined from ${merged.sourceRowIds.length} partially overlapping corridors without expanding removal area`;
-  return merged;
+  return best.vertices;
 }
 
 function paddedBoundsOverlap(leftVertices, rightVertices, paddingMeters) {
@@ -1942,16 +2168,32 @@ function pointWithinBounds(point, bounds) {
   );
 }
 
+function cachedRemovalBoundaryWithinExistingUnion(coordinates, originalRings, cache) {
+  const key = JSON.stringify([coordinates, originalRings]);
+  if (cache.has(key)) return cache.get(key);
+  const covered = removalBoundaryWithinExistingUnion(coordinates, originalRings);
+  cache.set(key, covered);
+  return covered;
+}
+
 function removalBoundaryWithinExistingUnion(coordinates, originalRings) {
   const boundary = coordinateRingPoints(coordinates);
-  const samples = densifyVertices(boundary, PARTIAL_OVERLAP_BOUNDARY_SAMPLE_METERS);
   const indexedRings = originalRings.map((ring) => ({ ring, bounds: pointBounds(ring) }));
-  return samples.every((point) =>
+  const covered = (point) =>
     indexedRings.some(
       ({ ring, bounds }) =>
         pointWithinPaddedBounds(point, bounds, 0.002) && pointInPolygon(point, ring)
-    )
-  );
+    );
+  for (let index = 1; index < boundary.length; index += 1) {
+    const start = boundary[index - 1];
+    const end = boundary[index];
+    const length = haversineDistanceMeters(start, end);
+    const steps = Math.max(1, Math.ceil(length / PARTIAL_OVERLAP_BOUNDARY_SAMPLE_METERS));
+    for (let step = 0; step < steps; step += 1) {
+      if (!covered(interpolatePoint(start, end, step / steps))) return false;
+    }
+  }
+  return boundary.length === 0 || covered(boundary.at(-1));
 }
 
 function pointWithinPaddedBounds(point, bounds, paddingMeters) {
@@ -2133,6 +2375,14 @@ function mergeGroupMetadata(target, source) {
     ...(target.targetPoints ?? []),
     ...(source.targetPoints ?? []),
   ]);
+  target.endpointTargetPoints = uniquePoints([
+    ...(target.endpointTargetPoints ?? []),
+    ...(source.endpointTargetPoints ?? []),
+  ]);
+  const endpointCapMeters = [target.endpointCapMeters, source.endpointCapMeters]
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  target.endpointCapMeters = endpointCapMeters.length > 0 ? Math.min(...endpointCapMeters) : 0;
   target.sourceRows = [...(target.sourceRows ?? []), ...(source.sourceRows ?? [])].filter(
     (row, index, rows) => rows.findIndex((candidate) => candidate.id === row.id) === index
   );
@@ -2150,13 +2400,68 @@ function mergeGroupMetadata(target, source) {
       ...new Set([...(target.sourceInstanceIds ?? []), ...source.sourceInstanceIds]),
     ];
   }
+  if (source.removalMode === 'polygon') {
+    target.removalMode = 'polygon';
+  }
 }
 
-function targetLightPointsForRow(row) {
-  if (row.snapToVertices === false && Number.isFinite(row.spacing) && row.spacing > 0) {
-    return interpolatePolyline(row.vertices, row.spacing);
+export function targetLightPointsForRow(row) {
+  const compiledSpacingRow = isCompiledSpacingLightRow(row);
+  if (
+    !Array.isArray(row.removalTargetPointsOverride) &&
+    Array.isArray(row.removalTargetSourceRows) &&
+    row.removalTargetSourceRows.length > 0 &&
+    !row.sourceParentRowId
+  ) {
+    return uniquePoints(
+      row.removalTargetSourceRows.flatMap((sourceRow) => targetLightPointsForRow(sourceRow))
+    );
   }
-  return uniquePoints(row.vertices);
+  // Compiled rows store geodetic vertices plus a metre spacing. Using the generic mean-earth
+  // distance accumulates enough phase error to miss lights on long taxiway rows.
+  const points = Array.isArray(row.removalTargetPointsOverride)
+    ? uniquePoints(row.removalTargetPointsOverride)
+    : shouldSampleRemovalTargetsBySpacing(row)
+      ? interpolatePolyline(row.vertices, row.spacing, {
+          startOffsetMeters: row.sourceRangeStartMeters,
+          parentLengthMeters: row.sourceParentLengthMeters,
+          ...(compiledSpacingRow
+            ? {
+                distanceBetween: wgs84LocalDistanceMeters,
+                includeFinalVertex: false,
+              }
+            : {}),
+        })
+      : uniquePoints(row.vertices);
+  return points.map((point, index) => {
+    const previous = points[Math.max(0, index - 1)];
+    const next = points[Math.min(points.length - 1, index + 1)];
+    const vector = localVector(previous, next, point);
+    const heading =
+      vectorLength(vector) > 0.001
+        ? ((Math.atan2(vector.x, vector.y) * 180) / Math.PI + 360) % 360
+        : 0;
+    return { ...point, heading };
+  });
+}
+
+function isCompiledSpacingLightRow(row) {
+  return (
+    row.sourceType === 'bgl-airport-light-row' &&
+    (row.compiledLightPlacement === 'spacing' || row.removalTargetSampling === 'spacing')
+  );
+}
+
+function shouldSampleRemovalTargetsBySpacing(row) {
+  return (
+    (row.snapToVertices === false || row.removalTargetSampling === 'spacing') &&
+    Number.isFinite(row.spacing) &&
+    row.spacing > 0
+  );
+}
+
+export function removalModeForRow(row) {
+  return POLYGON_FALLBACK_LIGHT_ROW_TYPES.has(row.sourceType) ? 'polygon' : 'targets';
 }
 
 function uniquePoints(points) {
