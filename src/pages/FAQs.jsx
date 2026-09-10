@@ -1,16 +1,52 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ChevronLeft, ChevronRight, HelpCircle, Plus, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, HelpCircle, Plus, Search, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Button } from '../components/shared/Button';
+import { LoadErrorCard } from '../components/shared/LoadErrorCard';
 import { Card } from '../components/shared/Card';
 import { PageLoading } from '../components/shared/PageLoading';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import useSearchQuery from '../hooks/useSearchQuery';
 
 const ITEMS_PER_PAGE = 5;
+const URL_PATTERN =
+  /\b(?:https?:\/\/|www\.)?(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s]*)?/gi;
+const TRAILING_URL_PUNCTUATION = /[),.!?;:]+$/;
 
-/* oxlint-disable react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally -- The route owns one abortable request; identity guards protect the finally reset and Retry reuses it. */
+const renderAnswerWithLinks = (answer) => {
+  const text = String(answer ?? '');
+  const parts = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const matchedUrl = match[0];
+    const trailingPunctuation = matchedUrl.match(TRAILING_URL_PUNCTUATION)?.[0] ?? '';
+    const url = trailingPunctuation ? matchedUrl.slice(0, -trailingPunctuation.length) : matchedUrl;
+    const matchIndex = match.index ?? 0;
+
+    if (matchIndex > cursor) parts.push(text.slice(cursor, matchIndex));
+
+    const href = /^(?:https?:\/\/)/i.test(url) ? url : `https://${url}`;
+    parts.push(
+      <a
+        key={`${matchIndex}-${url}`}
+        href={href}
+        className="font-medium text-blue-400 underline decoration-blue-400/45 underline-offset-3 transition-colors duration-[var(--duration-quick)] hover:text-blue-300 focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+      >
+        {url}
+      </a>
+    );
+
+    if (trailingPunctuation) parts.push(trailingPunctuation);
+    cursor = matchIndex + matchedUrl.length;
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts.length > 0 ? parts : text;
+};
+
+/* oxlint-disable react-doctor/no-high-complexity-react-function react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally -- Search, pagination, disclosure state, and the abortable request form one route workflow; identity guards protect the finally reset and Retry reuses it. */
 const FAQPage = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -160,21 +196,7 @@ const FAQPage = () => {
 
           <div ref={resultsRef} className="scroll-mt-28">
             {error ? (
-              <Card className="border-red-500/20 bg-red-500/5 p-6 sm:p-8" role="alert">
-                <div className="flex items-start gap-4">
-                  <AlertCircle
-                    className="mt-0.5 h-5 w-5 shrink-0 text-red-400"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <h2 className="font-semibold text-white">Unable to load FAQs</h2>
-                    <p className="mt-2 text-sm leading-6 text-zinc-400">{error}</p>
-                    <Button variant="outline" className="mt-5 px-4 py-2.5" onClick={loadFaqs}>
-                      Retry
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+              <LoadErrorCard title="Unable to load FAQs" message={error} onRetry={loadFaqs} />
             ) : filteredFaqs.length === 0 ? (
               <Card className="p-8 text-center sm:p-10">
                 <HelpCircle className="mx-auto h-8 w-8 text-zinc-500" aria-hidden="true" />
@@ -216,31 +238,33 @@ const FAQPage = () => {
                   {currentFaqs.map((faq) => {
                     const isOpen = openFaqId === faq.id;
                     return (
-                    <div key={faq.id}>
-                      <button
-                        type="button"
-                        aria-expanded={isOpen}
-                        aria-controls={`faq-answer-${faq.id}`}
-                        onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
-                        className="flex min-h-16 w-full cursor-pointer items-center justify-between gap-6 px-5 py-4 text-left transition-colors duration-[var(--duration-quick)] hover:bg-zinc-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45 sm:px-6"
-                      >
-                        <span className="font-medium leading-6 text-zinc-100">{faq.question}</span>
-                        <Plus
-                          className={`h-5 w-5 shrink-0 text-zinc-500 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${isOpen ? 'rotate-45' : 'rotate-0'}`}
-                          aria-hidden="true"
-                        />
-                      </button>
-                      <div
-                        id={`faq-answer-${faq.id}`}
-                        className={`grid transition-[grid-template-rows,opacity] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
-                      >
-                        <div className="min-h-0 overflow-hidden">
-                          <div className="border-t border-zinc-800/80 px-5 py-5 text-sm leading-7 whitespace-pre-line text-zinc-400 sm:px-6">
-                            {faq.answer}
+                      <div key={faq.id}>
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          aria-controls={`faq-answer-${faq.id}`}
+                          onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
+                          className="flex min-h-16 w-full cursor-pointer items-center justify-between gap-6 px-5 py-4 text-left transition-colors duration-[var(--duration-quick)] hover:bg-zinc-800/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45 sm:px-6"
+                        >
+                          <span className="font-medium leading-6 text-zinc-100">
+                            {faq.question}
+                          </span>
+                          <Plus
+                            className={`h-5 w-5 shrink-0 text-zinc-500 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${isOpen ? 'rotate-45' : 'rotate-0'}`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                        <div
+                          id={`faq-answer-${faq.id}`}
+                          className={`grid transition-[grid-template-rows,opacity] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+                        >
+                          <div className="min-h-0 overflow-hidden">
+                            <div className="border-t border-zinc-800/80 px-5 py-5 text-sm leading-7 whitespace-pre-line text-zinc-400 sm:px-6">
+                              {renderAnswerWithLinks(faq.answer)}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
                     );
                   })}
                 </div>
@@ -257,7 +281,7 @@ const FAQPage = () => {
                       disabled={currentPage === 1}
                       aria-label="Previous FAQ page"
                     >
-                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                      <ChevronLeft className="motion-back h-4 w-4" aria-hidden="true" />
                       <span className="hidden sm:inline">Previous</span>
                     </Button>
                     <span className="text-sm tabular-nums text-zinc-400">
@@ -271,7 +295,7 @@ const FAQPage = () => {
                       aria-label="Next FAQ page"
                     >
                       <span className="hidden sm:inline">Next</span>
-                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                      <ChevronRight className="motion-forward h-4 w-4" aria-hidden="true" />
                     </Button>
                   </nav>
                 ) : null}
