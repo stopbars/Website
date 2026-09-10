@@ -4,6 +4,7 @@ import { DonationBanner } from '../components/home/DonationBanner';
 import { Features } from '../components/home/Features';
 import { Documentation } from '../components/home/Documentation';
 import { Airports } from '../components/home/Airports';
+import { DivisionData } from '../components/home/DivisionData';
 import { FAQ } from '../components/home/FAQ';
 import { Support } from '../components/home/Support';
 import { useEffect } from 'react';
@@ -24,6 +25,7 @@ const Home = () => {
       <Hero />
       <Features />
       <Airports />
+      <DivisionData />
       <Documentation />
       <FAQ />
       <DonationBanner />
