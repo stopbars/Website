@@ -3,7 +3,7 @@ import { Button } from '../shared/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../shared/Card';
 import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { Upload, Package, Check, X, Info, FileArchive, RefreshCw } from 'lucide-react';
+import { Upload, Package, Check, X, Info, FileArchive, RefreshCw, ChevronDown } from 'lucide-react';
 
 /** Staff-only tool to upload packages consumed by the Installer. */
 // Maximum allowed upload size (frontend enforcement). Backend may still allow larger,
@@ -341,7 +341,10 @@ const PackagesManagement = () => {
           </div>
 
           {success && (
-            <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 relative">
+            <div
+              className="t-acc mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 relative"
+              data-open={showMeta}
+            >
               <div className="flex items-start gap-3">
                 <Check className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="flex-1">
@@ -364,49 +367,62 @@ const PackagesManagement = () => {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              {showMeta && (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-emerald-300/90">
-                  <div>
-                    <span className="text-emerald-400/60">Key:</span> {success.key}
-                  </div>
-                  <div>
-                    <span className="text-emerald-400/60">Size:</span> {readableSize(success.size)}
-                  </div>
-                  {success.version && (
-                    <div>
-                      <span className="text-emerald-400/60">Version:</span> {success.version}
-                    </div>
-                  )}
-                  <div className="col-span-1 sm:col-span-2 break-all">
-                    <span className="text-emerald-400/60">SHA256:</span> {success.sha256}
-                  </div>
-                  {success.etag && (
-                    <div>
-                      <span className="text-emerald-400/60">ETag:</span> {success.etag}
-                    </div>
-                  )}
-                  {success.url && (
-                    <div className="col-span-1 sm:col-span-2 truncate">
-                      <span className="text-emerald-400/60">URL:</span>{' '}
-                      <a
-                        href={success.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline hover:text-emerald-200"
-                      >
-                        {success.url}
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
               <button
                 type="button"
                 onClick={() => setShowMeta(!showMeta)}
-                className="mt-3 text-xs underline decoration-dotted text-emerald-300/80 hover:text-emerald-200"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs text-emerald-300/80 underline decoration-dotted transition-colors hover:text-emerald-200"
+                aria-expanded={showMeta}
+                aria-controls="package-upload-details"
               >
                 {showMeta ? 'Hide details' : 'Show details'}
+                <span className="t-acc-chevron">
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
               </button>
+              <div className="t-acc-panel">
+                <div
+                  id="package-upload-details"
+                  className="t-acc-panel-inner"
+                  aria-hidden={!showMeta}
+                  inert={!showMeta}
+                >
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-emerald-300/90">
+                    <div>
+                      <span className="text-emerald-400/60">Key:</span> {success.key}
+                    </div>
+                    <div>
+                      <span className="text-emerald-400/60">Size:</span>{' '}
+                      {readableSize(success.size)}
+                    </div>
+                    {success.version && (
+                      <div>
+                        <span className="text-emerald-400/60">Version:</span> {success.version}
+                      </div>
+                    )}
+                    <div className="col-span-1 sm:col-span-2 break-all">
+                      <span className="text-emerald-400/60">SHA256:</span> {success.sha256}
+                    </div>
+                    {success.etag && (
+                      <div>
+                        <span className="text-emerald-400/60">ETag:</span> {success.etag}
+                      </div>
+                    )}
+                    {success.url && (
+                      <div className="col-span-1 sm:col-span-2 truncate">
+                        <span className="text-emerald-400/60">URL:</span>{' '}
+                        <a
+                          href={success.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline hover:text-emerald-200"
+                        >
+                          {success.url}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

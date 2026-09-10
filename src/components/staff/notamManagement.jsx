@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Toast } from '../shared/Toast';
 import { PageLoading } from '../shared/PageLoading';
+import { IconSwap } from '../shared/IconSwap';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import DOMPurify from 'dompurify';
 
@@ -91,7 +92,7 @@ const getNotamTypeStyles = (type) => {
 
 const getNotamTypes = () => ['warning', 'info', 'discord', 'success', 'error'];
 
-// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The single NOTAM editor intentionally keeps independent request, draft, copy, and dialog state local.
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/no-high-complexity-react-function, react-doctor/prefer-useReducer -- The single NOTAM editor intentionally keeps independent request, draft, copy, and dialog state local.
 const NotamManagement = () => {
   const [notamData, setNotamData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -316,7 +317,9 @@ const NotamManagement = () => {
             <div
               className={`w-3 h-3 rounded-full transition-colors duration-[var(--duration-quick)] ${getNotamTypeStyles(currentType).circle}`}
             ></div>
-            <span className="capitalize transition-colors duration-[var(--duration-quick)]">{currentType}</span>
+            <span className="capitalize transition-colors duration-[var(--duration-quick)]">
+              {currentType}
+            </span>
           </div>
           <ChevronDown
             className={`h-4 w-4 shrink-0 transition-transform duration-[var(--duration-quick)] ease-[var(--ease-out)] ${isOpen ? 'rotate-180' : ''}`}
@@ -342,7 +345,9 @@ const NotamManagement = () => {
                 <div
                   className={`h-3 w-3 rounded-full transition-colors duration-[var(--duration-quick)] ${getNotamTypeStyles(type).circle}`}
                 ></div>
-                <span className="capitalize transition-colors duration-[var(--duration-quick)]">{type}</span>
+                <span className="capitalize transition-colors duration-[var(--duration-quick)]">
+                  {type}
+                </span>
               </button>
             ))}
           </div>
@@ -579,11 +584,10 @@ const NotamManagement = () => {
                 className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors"
                 title="Copy NOTAM to clipboard"
               >
-                {copied ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
+                <IconSwap active={copied}>
+                  <Copy className="h-4 w-4" />
+                  <Check className="h-4 w-4 text-emerald-400" />
+                </IconSwap>
               </button>
               <div
                 className={`${getNotamTypeStyles(notamData.type).text} text-sm font-medium pr-10`}

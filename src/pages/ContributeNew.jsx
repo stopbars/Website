@@ -9,7 +9,7 @@ import { AlertCircle, ArrowRight, BookOpen, Search } from 'lucide-react';
 
 const AIRPORT_SUGGESTIONS = ['YSSY', 'EGLL', 'KJFK', 'WSSS', 'OMDB', 'KLAX', 'RJTT'];
 const SUGGESTION_INTERVAL_MS = 2000;
-const SUGGESTION_TRANSITION_MS = 220;
+const SUGGESTION_TRANSITION_MS = 150;
 const CONTRIBUTION_GUIDE_URL = 'https://docs.stopbars.com/contributions';
 
 const ContributeNew = () => {
@@ -186,7 +186,7 @@ function AirportSearchForm() {
 
       <Button type="submit" className="w-full">
         Review airport
-        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        <ArrowRight className="motion-forward h-4 w-4" aria-hidden="true" />
       </Button>
 
       <a

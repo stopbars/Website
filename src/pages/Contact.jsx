@@ -4,15 +4,8 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Dropdown } from '../components/shared/Dropdown';
 import { Toast } from '../components/shared/Toast';
-import {
-  Mail,
-  AlertTriangle,
-  Check,
-  Loader,
-  MessagesSquare,
-  Copy,
-  ArrowRight,
-} from 'lucide-react';
+import { IconSwap } from '../components/shared/IconSwap';
+import { Mail, AlertTriangle, Check, Loader, MessagesSquare, Copy, ArrowRight } from 'lucide-react';
 
 const topicOptions = [
   'Technical Support',
@@ -59,7 +52,7 @@ const SupportOptions = memo(function SupportOptions() {
             </h3>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-zinc-400">Get instant help from our community</span>
-              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors duration-[var(--duration-quick)] group-hover:text-blue-400" />
+              <ArrowRight className="motion-forward h-4 w-4 text-zinc-500 transition-colors duration-[var(--duration-quick)] group-hover:text-blue-400" />
             </div>
           </div>
         </div>
@@ -77,11 +70,10 @@ const SupportOptions = memo(function SupportOptions() {
             </h3>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-zinc-400">support@stopbars.com</span>
-              {copiedEmail === 'support@stopbars.com' ? (
-                <Check className="w-4 h-4 text-emerald-400" />
-              ) : (
-                <Copy className="w-4 h-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
-              )}
+              <IconSwap active={copiedEmail === 'support@stopbars.com'}>
+                <Copy className="h-4 w-4 text-zinc-500 transition-colors group-hover:text-emerald-400" />
+                <Check className="h-4 w-4 text-emerald-400" />
+              </IconSwap>
             </div>
           </div>
         </div>

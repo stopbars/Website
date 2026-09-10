@@ -213,10 +213,7 @@ export const Airports = () => {
             className="group inline-flex min-h-11 items-center gap-1.5 self-start rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 font-medium text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] hover:border-zinc-600 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:self-auto"
           >
             View all airport activity
-            <ChevronRight
-              className="h-4 w-4 transition-transform duration-[var(--duration-quick)] group-hover:translate-x-0.5"
-              aria-hidden="true"
-            />
+            <ChevronRight className="motion-forward h-4 w-4" aria-hidden="true" />
           </RouteLink>
         </div>
 

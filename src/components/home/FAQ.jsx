@@ -89,7 +89,7 @@ export const FAQ = () => {
               <div className="text-center">
                 <Button variant="secondary" onClick={() => navigate('/faq')} className="group">
                   View all FAQs
-                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                  <ArrowRight className="motion-forward ml-2 h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
             </>

@@ -1,5 +1,15 @@
 import { useEffect } from 'react';
 
+const REVEAL_DELAYS = [
+  '0ms',
+  'var(--duration-stagger)',
+  'var(--duration-micro)',
+  'calc(var(--duration-micro) + var(--duration-stagger))',
+  'calc(var(--duration-micro) + var(--duration-micro))',
+  'calc(var(--duration-micro) + var(--duration-micro) + var(--duration-stagger))',
+  'calc(var(--duration-micro) + var(--duration-micro) + var(--duration-micro))',
+];
+
 export const useRevealGroup = (containerRef) => {
   useEffect(() => {
     const container = containerRef.current;
@@ -24,7 +34,7 @@ export const useRevealGroup = (containerRef) => {
       elements.forEach((element, index) => {
         const alreadyVisible = element.getBoundingClientRect().top < window.innerHeight * 0.9;
         if (alreadyVisible) return;
-        element.style.setProperty('--reveal-delay', `${Math.min(index, 6) * 40}ms`);
+        element.style.setProperty('--reveal-delay', REVEAL_DELAYS[Math.min(index, 6)]);
         element.classList.add('reveal-pending');
         observer.observe(element);
       });

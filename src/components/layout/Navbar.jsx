@@ -1,6 +1,7 @@
 import { useScroll } from '../../hooks/useScroll';
 import { UserCircle, LogOut, ChevronRight, Menu, X } from 'lucide-react';
 import { Button } from '../shared/Button';
+import { IconSwap } from '../shared/IconSwap';
 import { RouteLink } from '../shared/RouteLink';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect } from 'react';
@@ -71,7 +72,7 @@ const sanitizeNotamLinks = (content) => {
 };
 
 // Navigation, account controls, mobile menu, and the NOTAM banner share responsive layout state.
-// oxlint-disable react-doctor/no-giant-component
+// oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function -- Desktop and mobile navigation share authentication, scroll, focus, and menu-close state; splitting those owners would duplicate synchronization effects.
 export const Navbar = () => {
   const scrolled = useScroll();
   const { user, logout, loading, initiateVatsimAuth } = useAuth();
@@ -302,11 +303,10 @@ export const Navbar = () => {
                   className="flex items-center space-x-2 px-4"
                 >
                   <span>{authLoading || loading ? 'Loading...' : 'Login with VATSIM'}</span>
-                  {authLoading || loading ? (
-                    <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin ml-2"></div>
-                  ) : (
-                    <ChevronRight className="w-5 h-5" />
-                  )}
+                  <IconSwap active={authLoading || loading}>
+                    <ChevronRight className="h-5 w-5" />
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  </IconSwap>
                 </Button>
               )}
             </div>
@@ -320,12 +320,13 @@ export const Navbar = () => {
                 aria-controls="mobile-menu"
                 aria-expanded={mobileMenuOpen}
               >
-                <span className="sr-only">Open main menu</span>
-                {mobileMenuOpen ? (
-                  <X className="block h-6 w-6" aria-hidden="true" />
-                ) : (
-                  <Menu className="block h-6 w-6" aria-hidden="true" />
-                )}
+                <span className="sr-only">
+                  {mobileMenuOpen ? 'Close main menu' : 'Open main menu'}
+                </span>
+                <IconSwap active={mobileMenuOpen}>
+                  <Menu className="block h-6 w-6" />
+                  <X className="block h-6 w-6" />
+                </IconSwap>
               </button>
             </div>
           </div>

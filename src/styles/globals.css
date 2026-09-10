@@ -46,6 +46,8 @@
   --duration-medium: 350ms;
   --duration-slow: 400ms;
   --duration-very-slow: 500ms;
+  --default-transition-duration: var(--duration-quick);
+  --default-transition-timing-function: var(--ease-out);
   --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: ease-in-out;
   --ease-out: ease-out;
@@ -64,6 +66,109 @@
   --blur-small: 2px;
   --blur-medium: 3px;
   --blur-large: 8px;
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  --acc-expand: 250ms;
+  --acc-collapse: 250ms;
+  --acc-chevron: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--icon-swap-dur) var(--icon-swap-ease),
+    filter var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+
+.t-icon-swap[data-state='a'] .t-icon[data-icon='a'],
+.t-icon-swap[data-state='b'] .t-icon[data-icon='b'] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+
+.t-icon-swap[data-state='a'] .t-icon[data-icon='b'],
+.t-icon-swap[data-state='b'] .t-icon[data-icon='a'] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+.t-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+
+.t-acc[data-open='true'] .t-acc-panel {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+
+.t-acc-panel-inner {
+  overflow: hidden;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+
+.t-acc[data-open='true'] .t-acc-panel-inner {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+
+.t-acc-chevron {
+  display: inline-flex;
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform var(--acc-chevron) var(--acc-ease);
+}
+
+.t-acc-chevron path {
+  vector-effect: non-scaling-stroke;
+}
+
+.t-acc[data-open='true'] .t-acc-chevron {
+  transform: scaleY(-1);
+}
+
+.motion-forward,
+.motion-back {
+  transition: transform var(--duration-quick) var(--ease-smooth-out);
+}
+
+:is(a, button):not(:disabled):hover .motion-forward {
+  transform: translateX(var(--distance-micro));
+}
+
+:is(a, button):not(:disabled):hover .motion-back {
+  transform: translateX(calc(var(--distance-micro) * -1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-icon-swap .t-icon,
+  .t-acc-panel,
+  .t-acc-panel-inner,
+  .t-acc-chevron,
+  .motion-forward,
+  .motion-back {
+    transition: none !important;
+  }
 }
 
 html {
@@ -274,14 +379,13 @@ h1[tabindex='-1']:focus {
   }
 }
 
-@keyframes loading-skeleton-breathe {
-  0%,
-  100% {
-    background-color: oklch(0.274 0.006 286.033 / 0.58);
+@keyframes loading-skeleton-shimmer {
+  from {
+    transform: translateX(-140%);
   }
 
-  50% {
-    background-color: oklch(0.37 0.013 285.805 / 0.72);
+  to {
+    transform: translateX(140%);
   }
 }
 
@@ -290,9 +394,23 @@ h1[tabindex='-1']:focus {
 }
 
 .loading-skeleton-block {
+  position: relative;
+  overflow: hidden;
   border-radius: 0.5rem;
   background-color: oklch(0.274 0.006 286.033 / 0.58);
-  animation: loading-skeleton-breathe 1.8s var(--ease-linear) infinite;
+}
+
+.loading-skeleton-block::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    oklch(0.87 0.006 286.286 / 0.055) 50%,
+    transparent 65%
+  );
+  content: '';
+  animation: loading-skeleton-shimmer 2.6s var(--ease-linear) infinite;
 }
 
 [data-reveal] {
@@ -393,12 +511,24 @@ h1[tabindex='-1']:focus {
   }
 }
 
-.feature-media-grid {
-  background-image:
-    linear-gradient(oklch(1 0 0 / 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(1 0 0 / 0.035) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: linear-gradient(to bottom, black, transparent 92%);
+.home-coming-soon-media {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(
+    145deg,
+    var(--color-zinc-900),
+    oklch(0.274 0.006 286.033 / 0.72) 52%,
+    var(--color-zinc-900)
+  );
+}
+
+.home-coming-soon-label {
+  color: var(--color-zinc-400);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.25rem;
 }
 
 .feature-title-halo::before {
@@ -470,7 +600,8 @@ button:disabled {
   }
 
   .loading-skeleton-enter,
-  .loading-skeleton-block {
+  .loading-skeleton-block,
+  .loading-skeleton-block::after {
     animation: none;
   }
 }
@@ -616,6 +747,55 @@ button:disabled {
 
 .editor-division-popup .maplibregl-popup-tip {
   border-top-color: oklch(0.21 0.006 285.885 / 0.96);
+}
+
+.editor-original-division-popup .maplibregl-popup-content {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.editor-original-division-popup .maplibregl-popup-close-button {
+  right: 0.2rem;
+  top: 0.2rem;
+  z-index: 1;
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 0.375rem;
+  color: var(--color-zinc-400);
+  font-size: 1rem;
+}
+
+.editor-original-division-popup .maplibregl-popup-close-button:hover {
+  background: var(--color-zinc-800);
+  color: var(--color-zinc-100);
+}
+
+.editor-original-division-popup .maplibregl-popup-close-button:focus-visible {
+  outline: 2px solid var(--color-cyan-400);
+  outline-offset: 1px;
+}
+
+.editor-original-division-popup .maplibregl-popup-tip {
+  display: none;
+}
+
+.contribution-editor-map .maplibregl-canvas:focus {
+  outline: none;
+}
+
+.contribution-editor-map .maplibregl-canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--color-cyan-400);
+}
+
+@media (forced-colors: active) {
+  .contribution-editor-map .maplibregl-canvas:focus-visible {
+    box-shadow: inset 0 0 0 2px CanvasText;
+  }
 }
 
 .leaflet-div-icon {

@@ -4,6 +4,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Dialog } from '../components/shared/Dialog';
+import { IconSwap } from '../components/shared/IconSwap';
 import {
   User,
   LogOut,
@@ -28,7 +29,7 @@ import { PageLoading } from '../components/shared/PageLoading';
 import { useNavigate } from 'react-router-dom';
 import { preloadRoute } from '../utils/routeModules';
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/exhaustive-deps react-doctor/no-set-state-after-await-in-effect -- Account hydration and request lifecycles are cohesive; guarded authenticated requests preserve the established workflow. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/exhaustive-deps react-doctor/no-set-state-after-await-in-effect -- Account hydration and request lifecycles are cohesive; guarded authenticated requests preserve the established workflow. */
 const Account = () => {
   const navigate = useNavigate();
   const { user, loading, logout, setUser, refreshUserData } = useAuth();
@@ -522,15 +523,11 @@ const Account = () => {
                         onClick={() => setShowApiKey(!showApiKey)}
                         className="min-w-22.5 shrink-0 hover:bg-zinc-800"
                       >
-                        {showApiKey ? (
-                          <>
-                            <EyeOff className="w-4 h-4 mr-2" /> Hide
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-4 h-4 mr-2" /> Show
-                          </>
-                        )}
+                        <IconSwap active={showApiKey} className="mr-2">
+                          <Eye className="h-4 w-4" />
+                          <EyeOff className="h-4 w-4" />
+                        </IconSwap>
+                        {showApiKey ? 'Hide' : 'Show'}
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-3 mt-3">
@@ -540,15 +537,11 @@ const Account = () => {
                         onClick={handleCopyApiKey}
                         className={`min-w-25 ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
                       >
-                        {copySuccess ? (
-                          <>
-                            <Check className="w-4 h-4 mr-2 text-green-400" /> Copied{' '}
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4 mr-2" /> Copy
-                          </>
-                        )}
+                        <IconSwap active={copySuccess} className="mr-2">
+                          <Copy className="h-4 w-4" />
+                          <Check className="h-4 w-4 text-green-400" />
+                        </IconSwap>
+                        {copySuccess ? 'Copied' : 'Copy'}
                       </Button>
                       <Button
                         variant="outline"

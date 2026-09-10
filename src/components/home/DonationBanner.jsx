@@ -25,7 +25,7 @@ export const DonationBanner = () => {
             aria-label="Donate to BARS on Open Collective"
           >
             Donate
-            <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+            <ArrowRight className="motion-forward h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </a>
         </div>
       </div>
