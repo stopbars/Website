@@ -1,6 +1,6 @@
 /* oxlint-disable react-doctor/no-set-state-after-await-in-effect -- The one-shot review generation is guarded by isGeneratingRef and belongs to the mounted review modal. */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { Card } from '../shared/Card';
 import { Button } from '../shared/Button';
@@ -18,6 +18,8 @@ import {
   FileText,
   SquarePen,
   Copy,
+  Search,
+  X,
 } from 'lucide-react';
 import XMLMap from '../shared/XMLMap';
 import { Toast } from '../shared/Toast';
@@ -25,8 +27,28 @@ import { SimulatorBadge } from '../shared/SimulatorBadge';
 import { PageLoading } from '../shared/PageLoading';
 import ReviewModal from './ContributionReviewWorkspace';
 import { getVatsimToken } from '../../utils/cookieUtils';
+import {
+  CONTRIBUTION_STATUS_FILTERS,
+  countContributionStatuses,
+  filterContributionHistory,
+} from '../../utils/contributionHistory.js';
 
-const CONTRIBUTIONS_PER_PAGE = 5;
+const CONTRIBUTIONS_PER_PAGE = 8;
+
+const STATUS_LABELS = {
+  all: 'All',
+  pending: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  outdated: 'Outdated',
+};
+
+const STATUS_BADGE_STYLES = {
+  pending: 'bg-yellow-500/20 text-yellow-400',
+  approved: 'bg-green-500/20 text-green-400',
+  rejected: 'bg-red-500/20 text-red-400',
+  outdated: 'bg-gray-500/20 text-gray-400',
+};
 
 const UploadContribution = ({ onClose, onUpload }) => {
   const [file, setFile] = useState(null);
@@ -154,7 +176,7 @@ UploadContribution.propTypes = {
   onUpload: PropTypes.func.isRequired,
 };
 
-// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The review form is one cohesive modal; its validation and upload states are intentionally independent.
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/no-high-complexity-react-function, react-doctor/prefer-useReducer -- The review form is one cohesive modal; its validation and upload states are intentionally independent.
 export const LegacyContributionReviewModal = ({
   contribution,
   onClose,
@@ -698,13 +720,232 @@ LegacyContributionReviewModal.propTypes = {
   onError: PropTypes.func.isRequired,
 };
 
+const StatusBadge = ({ status }) => {
+  return (
+    <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_BADGE_STYLES[status]}`}>
+      {STATUS_LABELS[status]}
+    </span>
+  );
+};
+
+StatusBadge.propTypes = {
+  status: PropTypes.oneOf(['pending', 'approved', 'rejected', 'outdated']).isRequired,
+};
+
+const ContributionHistoryFilters = ({
+  searchTerm,
+  statusFilter,
+  statusCounts,
+  resultCount,
+  totalCount,
+  onSearchChange,
+  onStatusChange,
+  onClear,
+}) => {
+  const hasActiveFilters = searchTerm.trim() || statusFilter !== 'all';
+
+  return (
+    <section
+      aria-label="Contribution history filters"
+      className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
+    >
+      <label htmlFor="contribution-history-search" className="text-sm font-medium text-zinc-200">
+        Find a contribution
+      </label>
+      <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500"
+            aria-hidden="true"
+          />
+          <input
+            id="contribution-history-search"
+            type="search"
+            value={searchTerm}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search ID, airport, package, username, or VATSIM CID"
+            className="min-h-11 w-full rounded-lg border border-zinc-700 bg-zinc-950 py-2 pl-10 pr-10 text-sm text-white placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 inline-flex min-h-8 min-w-8 -translate-y-1/2 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          onClick={onClear}
+          disabled={!hasActiveFilters}
+          aria-hidden={!hasActiveFilters}
+          className={`min-h-11 px-4 ${hasActiveFilters ? '' : 'invisible'}`}
+        >
+          Clear filters
+        </Button>
+      </div>
+
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Filter by status">
+        {CONTRIBUTION_STATUS_FILTERS.map((status) => (
+          <button
+            key={status}
+            type="button"
+            aria-pressed={statusFilter === status}
+            onClick={() => onStatusChange(status)}
+            className={`inline-flex min-h-10 w-28 shrink-0 items-center justify-between gap-2 rounded-lg px-3 text-sm font-medium transition-[background-color,border-color,color,transform] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
+              statusFilter === status
+                ? 'border border-blue-500/40 bg-blue-500/15 text-blue-200'
+                : 'border border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+            }`}
+          >
+            {STATUS_LABELS[status]}
+            <span
+              className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs tabular-nums ${
+                statusFilter === status
+                  ? 'bg-blue-500/20 text-blue-100'
+                  : 'bg-zinc-800 text-zinc-500'
+              }`}
+            >
+              {statusCounts[status]}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p role="status" className="mt-3 text-xs text-zinc-500">
+        {resultCount === totalCount && !hasActiveFilters
+          ? `${totalCount} contribution${totalCount === 1 ? '' : 's'} available`
+          : `${resultCount} of ${totalCount} contributions shown`}
+      </p>
+    </section>
+  );
+};
+
+ContributionHistoryFilters.propTypes = {
+  searchTerm: PropTypes.string.isRequired,
+  statusFilter: PropTypes.oneOf(CONTRIBUTION_STATUS_FILTERS).isRequired,
+  statusCounts: PropTypes.objectOf(PropTypes.number).isRequired,
+  resultCount: PropTypes.number.isRequired,
+  totalCount: PropTypes.number.isRequired,
+  onSearchChange: PropTypes.func.isRequired,
+  onStatusChange: PropTypes.func.isRequired,
+  onClear: PropTypes.func.isRequired,
+};
+
+const ContributionHistoryCard = ({ contribution, isSelected, isLoading, onOpen }) => (
+  <Card
+    className={`rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] ${
+      isSelected ? 'border-blue-500' : ''
+    }`}
+  >
+    <div className="flex flex-col justify-between gap-4 sm:flex-row">
+      <div className="min-w-0 flex-1">
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="text-lg font-semibold">{contribution.airportIcao}</h3>
+          <StatusBadge status={contribution.status} />
+        </div>
+        <p className="mb-3 break-words text-base text-zinc-400">
+          Package: <span className="text-zinc-300">{contribution.packageName}</span>
+          {contribution.simulator && (
+            <SimulatorBadge simulator={contribution.simulator} className="ml-2" />
+          )}
+        </p>
+        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          <p className="text-zinc-400">
+            Submitted by:{' '}
+            <span className="text-zinc-300">
+              {contribution.userDisplayName || contribution.userId}
+            </span>
+          </p>
+          {contribution.userDisplayName && (
+            <p className="text-zinc-400">
+              VATSIM CID: <span className="font-mono text-zinc-300">{contribution.userId}</span>
+            </p>
+          )}
+          <p className="text-zinc-400">
+            Submitted:{' '}
+            <span className="text-zinc-300">
+              {new Date(contribution.submissionDate).toLocaleDateString()}
+            </span>
+          </p>
+          {contribution.status !== 'pending' && contribution.decisionDate && (
+            <p className="text-zinc-400">
+              Decided:{' '}
+              <span className="text-zinc-300">
+                {new Date(contribution.decisionDate).toLocaleDateString()}
+              </span>
+            </p>
+          )}
+        </div>
+        <div className="mt-3 flex min-w-0 items-center gap-2 text-xs text-zinc-500">
+          <span className="shrink-0">Contribution ID</span>
+          <code className="min-w-0 truncate rounded bg-black/30 px-1.5 py-1 text-zinc-400">
+            {contribution.id}
+          </code>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(contribution.id)}
+            aria-label={`Copy contribution ID ${contribution.id}`}
+            className="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+          >
+            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center">
+        <Button
+          onClick={onOpen}
+          disabled={isLoading}
+          variant={contribution.status === 'pending' ? 'primary' : 'outline'}
+        >
+          {isLoading ? (
+            <Loader className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Eye className="mr-2 h-4 w-4" aria-hidden="true" />
+          )}
+          {isLoading ? 'Loading' : contribution.status === 'pending' ? 'Review' : 'View'}
+        </Button>
+      </div>
+    </div>
+    {contribution.status === 'rejected' && (
+      <div className="mt-3 border-t border-zinc-800 pt-3">
+        <p className="mb-1 text-xs text-red-400">Rejection reason:</p>
+        <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-300">
+          {contribution.rejectionReason || 'No rejection reason was recorded.'}
+        </p>
+      </div>
+    )}
+  </Card>
+);
+
+ContributionHistoryCard.propTypes = {
+  contribution: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    airportIcao: PropTypes.string.isRequired,
+    packageName: PropTypes.string.isRequired,
+    userId: PropTypes.string.isRequired,
+    userDisplayName: PropTypes.string,
+    simulator: PropTypes.string,
+    submissionDate: PropTypes.string.isRequired,
+    status: PropTypes.oneOf(['pending', 'approved', 'rejected', 'outdated']).isRequired,
+    rejectionReason: PropTypes.string,
+    decisionDate: PropTypes.string,
+  }).isRequired,
+  isSelected: PropTypes.bool.isRequired,
+  isLoading: PropTypes.bool.isRequired,
+  onOpen: PropTypes.func.isRequired,
+};
+
 // Main Component
 // oxlint-disable-next-line react-doctor/prefer-useReducer -- List filters, selection, and request status are independent state slices.
 const ContributionManagement = () => {
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedContribution, setSelectedContribution] = useState(null);
   const [reviewLoadingId, setReviewLoadingId] = useState(null);
   const [toast, setToast] = useState({
@@ -718,7 +959,7 @@ const ContributionManagement = () => {
     try {
       const token = getVatsimToken();
       const response = await fetch(
-        'https://v2.stopbars.com/contributions?status=pending&projection=metadata',
+        'https://v2.stopbars.com/contributions?status=all&projection=metadata',
         {
           headers: {
             'X-Vatsim-Token': token,
@@ -732,7 +973,6 @@ const ContributionManagement = () => {
 
       const data = await response.json();
       setContributions(data.contributions);
-      setTotalPages(Math.max(1, Math.ceil(data.total / CONTRIBUTIONS_PER_PAGE)));
       setLoading(false);
     } catch (err) {
       setToast({
@@ -807,52 +1047,50 @@ const ContributionManagement = () => {
     });
   };
 
-  const renderStatusBadge = useCallback((status) => {
-    switch (status) {
-      case 'pending':
-        return (
-          <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-500/20 text-yellow-400">
-            Pending
-          </span>
-        );
-      case 'approved':
-        return (
-          <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-500/20 text-green-400">
-            Approved
-          </span>
-        );
-      case 'rejected':
-        return (
-          <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-500/20 text-red-400">
-            Rejected
-          </span>
-        );
-      case 'outdated':
-        return (
-          <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-500/20 text-gray-400">
-            Outdated
-          </span>
-        );
-      default:
-        return null;
-    }
-  }, []);
+  const statusCounts = useMemo(() => countContributionStatuses(contributions), [contributions]);
+  const filteredContributions = useMemo(
+    () => filterContributionHistory(contributions, searchTerm, statusFilter),
+    [contributions, searchTerm, statusFilter]
+  );
+  const totalPages = Math.max(1, Math.ceil(filteredContributions.length / CONTRIBUTIONS_PER_PAGE));
+  const visiblePage = Math.min(currentPage, totalPages);
+  const pageStart = (visiblePage - 1) * CONTRIBUTIONS_PER_PAGE;
+  const paginatedContributions = filteredContributions.slice(
+    pageStart,
+    pageStart + CONTRIBUTIONS_PER_PAGE
+  );
 
-  // Filter contributions based on search term if needed
-  const pageStart = (currentPage - 1) * CONTRIBUTIONS_PER_PAGE;
-  const paginatedContributions = contributions.slice(pageStart, pageStart + CONTRIBUTIONS_PER_PAGE);
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
+  const handleStatusChange = (status) => {
+    setStatusFilter(status);
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = searchTerm.trim() || statusFilter !== 'all';
 
   return (
     <div className="staff-tool space-y-6">
       <div className="staff-tool-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Contribution Management</h2>
-          <p className="text-sm text-zinc-400 mt-1">Review and manage user contributions</p>
+          <p className="text-sm text-zinc-400 mt-1">
+            Review new submissions and look up previous decisions
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-300">
             <FileText className="w-4 h-4 mr-2 text-zinc-400" />
-            {contributions.length} pending contribution{contributions.length !== 1 ? 's' : ''}
+            {statusCounts.pending} awaiting review
           </span>
         </div>
       </div>
@@ -866,95 +1104,45 @@ const ContributionManagement = () => {
         onClose={() => setToast({ ...toast, show: false })}
       />
 
+      <ContributionHistoryFilters
+        searchTerm={searchTerm}
+        statusFilter={statusFilter}
+        statusCounts={statusCounts}
+        resultCount={filteredContributions.length}
+        totalCount={contributions.length}
+        onSearchChange={handleSearchChange}
+        onStatusChange={handleStatusChange}
+        onClear={clearFilters}
+      />
+
       <div className="grid grid-cols-1 gap-6">
         {/* Contributions list */}
-        <div className="space-y-4">
+        <div className="min-h-[36rem] space-y-4">
           {loading && !selectedContribution ? (
             <PageLoading label="Loading contributions…" variant="tool-stack" />
           ) : paginatedContributions.length === 0 ? (
             <Card className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-8 text-center">
               <Upload className="w-12 h-12 text-zinc-500 mx-auto mb-3" />
-              <p className="text-zinc-400">No pending contributions found.</p>
+              <p className="font-medium text-zinc-300">No contributions match these filters.</p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Try another ID, airport, contributor, or status.
+              </p>
+              {hasActiveFilters && (
+                <Button variant="outline" onClick={clearFilters} className="mt-4">
+                  Show all contributions
+                </Button>
+              )}
             </Card>
           ) : (
             <>
               {paginatedContributions.map((contribution) => (
-                <Card
+                <ContributionHistoryCard
                   key={contribution.id}
-                  className={`bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] cursor-pointer ${
-                    selectedContribution?.id === contribution.id ? 'border-blue-500' : ''
-                  }`}
-                  onClick={() => handleReview(contribution)}
-                >
-                  <div className="flex flex-col sm:flex-row justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-semibold">{contribution.airportIcao}</h3>
-                        {renderStatusBadge(contribution.status)}
-                      </div>
-
-                      <p className="text-base text-zinc-400 mb-3">
-                        Package: <span className="text-zinc-300">{contribution.packageName}</span>
-                        {contribution.simulator && (
-                          <SimulatorBadge simulator={contribution.simulator} className="ml-2" />
-                        )}
-                      </p>
-
-                      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                        <p className="text-zinc-400">
-                          Submitted by:{' '}
-                          <span className="text-zinc-300">
-                            {contribution.userDisplayName || contribution.userId}
-                          </span>
-                        </p>
-
-                        <p className="text-zinc-400">
-                          Date:{' '}
-                          <span className="text-zinc-300">
-                            {new Date(contribution.submissionDate).toLocaleDateString()}
-                          </span>
-                        </p>
-
-                        {contribution.status !== 'pending' && contribution.decisionDate && (
-                          <p className="text-zinc-400">
-                            Decision:{' '}
-                            <span className="text-zinc-300">
-                              {new Date(contribution.decisionDate).toLocaleDateString()}
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center">
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleReview(contribution);
-                        }}
-                        disabled={loading || reviewLoadingId === contribution.id}
-                        variant={contribution.status === 'pending' ? 'primary' : 'outline'}
-                      >
-                        {reviewLoadingId === contribution.id ? (
-                          <Loader className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Eye className="w-4 h-4 mr-2" />
-                        )}
-                        {reviewLoadingId === contribution.id
-                          ? 'Loading'
-                          : contribution.status === 'pending'
-                            ? 'Review'
-                            : 'View'}
-                      </Button>
-                    </div>
-                  </div>
-                  {contribution.status === 'rejected' && contribution.rejectionReason && (
-                    <div className="mt-3 pt-3 border-t border-zinc-800">
-                      <p className="text-xs text-red-400 mb-1">Rejection reason:</p>
-                      <p className="text-sm text-zinc-300">{contribution.rejectionReason}</p>
-                    </div>
-                  )}
-                </Card>
+                  contribution={contribution}
+                  isSelected={selectedContribution?.id === contribution.id}
+                  isLoading={loading || reviewLoadingId === contribution.id}
+                  onOpen={() => handleReview(contribution)}
+                />
               ))}
 
               {totalPages > 1 && (
@@ -962,18 +1150,18 @@ const ContributionManagement = () => {
                   <Button
                     variant="outline"
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
+                    disabled={visiblePage === 1}
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
                     Previous
                   </Button>
                   <span className="text-sm text-zinc-400">
-                    Page {currentPage} of {totalPages}
+                    Page {visiblePage} of {totalPages}
                   </span>
                   <Button
                     variant="outline"
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
+                    disabled={visiblePage === totalPages}
                   >
                     Next
                     <ChevronRight className="w-4 h-4 ml-2" />
