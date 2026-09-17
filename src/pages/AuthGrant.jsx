@@ -6,43 +6,7 @@ import { getVatsimToken } from '../utils/cookieUtils';
 import { Layout } from '../components/layout/Layout';
 import { Button } from '../components/shared/Button';
 import { Card } from '../components/shared/Card';
-
-const AUTH_GRANT_CLIENTS = new Map([
-  [
-    'ZGlzY29yZC5zdG9wYmFycy5jb20=',
-    { name: 'BARS Linker', redirectUrl: 'https://discord.stopbars.com/bars/redirect' },
-  ],
-  [
-    'ZXVyb3Njb3BlLnN0b3BiYXJzLmNvbQ==',
-    { name: 'Euroscope Editor', redirectUrl: 'https://euroscope.stopbars.com/bars/redirect' },
-  ],
-  [
-    'd2ViLnN0b3BiYXJzLmNvbQ==',
-    { name: 'Web Client', redirectUrl: 'https://web.stopbars.com/bars/redirect' },
-  ],
-]);
-
-const getClientRequest = (clientKey) => {
-  const client = AUTH_GRANT_CLIENTS.get(clientKey || '');
-
-  if (!client) {
-    return { error: 'Redirect not allowed.' };
-  }
-
-  try {
-    const url = new URL(client.redirectUrl);
-    url.hash = '';
-    return { client, url };
-  } catch {
-    return { error: 'Redirect not allowed.' };
-  }
-};
-
-const buildCallbackRedirect = (redirectUrl, values) => {
-  const destination = new URL(redirectUrl.toString());
-  destination.hash = new URLSearchParams(values).toString();
-  return destination.toString();
-};
+import { buildCallbackRedirect, getClientRequest } from '../utils/authGrant';
 
 export default function AuthGrant() {
   const navigate = useNavigate();
@@ -56,6 +20,7 @@ export default function AuthGrant() {
       appName: clientRequest.client?.name || 'Unknown client',
       redirectUrl: clientRequest.url,
       redirectError: clientRequest.error,
+      state: params.get('state'),
     };
   }, []);
 
@@ -73,19 +38,27 @@ export default function AuthGrant() {
   const handleGrant = () => {
     if (!canGrant) return;
 
-    const destination = buildCallbackRedirect(request.redirectUrl, {
-      bars_api_token: apiToken,
-    });
+    const destination = buildCallbackRedirect(
+      request.redirectUrl,
+      {
+        bars_api_token: apiToken,
+      },
+      request.state
+    );
 
     window.location.assign(destination);
   };
 
   const handleDeny = () => {
     if (request.redirectUrl) {
-      const destination = buildCallbackRedirect(request.redirectUrl, {
-        error: 'access_denied',
-        error_description: 'The user denied access to their BARS API token.',
-      });
+      const destination = buildCallbackRedirect(
+        request.redirectUrl,
+        {
+          error: 'access_denied',
+          error_description: 'The user denied access to their BARS API token.',
+        },
+        request.state
+      );
       window.location.assign(destination);
       return;
     }
