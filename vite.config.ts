@@ -3,6 +3,7 @@ import { defineConfig, UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { optimizedImages } from './scripts/optimized-images.mjs';
+import { siteSeo } from './scripts/seo.mjs';
 
 const draftGeneratorShim = (name: string) =>
   fileURLToPath(new URL(`./src/features/draft-generator/shims/${name}`, import.meta.url));
@@ -27,7 +28,7 @@ function leafletPluginGlobals() {
 
 export default defineConfig((): UserConfig => {
   return {
-    plugins: [optimizedImages(), leafletPluginGlobals(), react()],
+    plugins: [optimizedImages(), leafletPluginGlobals(), react(), siteSeo()],
 
     resolve: {
       alias: [

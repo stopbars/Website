@@ -16,22 +16,11 @@ import { useLocation } from 'react-router-dom';
 import { ConsentBanner } from '../shared/ConsentBanner';
 import { PageLoading } from '../shared/PageLoading';
 import { CONSENT_KEY } from '../../utils/posthogLoader';
+import { updatePageMetadata } from '../../utils/pageMetadata';
 
 const StableNavbar = memo(Navbar);
 const StableFooter = memo(Footer);
 const LayoutContext = createContext(false);
-const SITE_NAME = 'BARS';
-
-const getPageTitle = (pathname) => {
-  if (/^\/contribute\/editor\/[^/]+\/?$/.test(pathname)) return 'Contribution editor';
-  if (/^\/contribute\/generator\/[^/]+\/?$/.test(pathname)) return 'XML generator';
-  if (/^\/contribute\/test\/[^/]+\/?$/.test(pathname)) return 'Test contribution';
-  if (/^\/contribute\/details\/[^/]+\/?$/.test(pathname)) return 'Submit contribution';
-  if (/^\/contribute\/map\/[^/]+\/?$/.test(pathname)) return 'Review airport';
-  if (pathname === '/contribute/new') return 'Start contribution';
-  if (pathname.startsWith('/contribute')) return 'Contributions';
-  return SITE_NAME;
-};
 
 const ConsentLayer = memo(function ConsentLayer() {
   const [show, setShow] = useState(() => {
@@ -132,8 +121,7 @@ const LayoutFrame = ({ children }) => {
   useLayoutEffect(() => {
     const routeChanged = previousPathRef.current !== pathname;
     previousPathRef.current = pathname;
-    const pageTitle = getPageTitle(pathname);
-    document.title = pageTitle === SITE_NAME ? SITE_NAME : `${pageTitle} · ${SITE_NAME}`;
+    updatePageMetadata(pathname);
     window.scrollTo(0, 0);
 
     // Always restore text when navigating between pages
