@@ -16,6 +16,7 @@ import {
   createGeomanFeatureSyncState,
   createGeomanReferenceSnapTargets,
   discardCompletedGeomanDraw,
+  guardGeomanSourceUpdates,
   limitGeomanFeatureQueries,
   planGeomanFeatureSync,
 } from './geoman-editor.js';
@@ -906,6 +907,7 @@ const EditorMap = memo(function EditorMap({
       },
     })
       .then((instance) => {
+        guardGeomanSourceUpdates(instance);
         if (cancelled) {
           instance.destroy({ removeSources: true });
           return;

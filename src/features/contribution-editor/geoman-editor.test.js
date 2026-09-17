@@ -7,9 +7,21 @@ import {
   createGeomanFeatureSyncState,
   createGeomanReferenceSnapTargets,
   discardCompletedGeomanDraw,
+  guardGeomanSourceUpdates,
   limitGeomanFeatureQueries,
   planGeomanFeatureSync,
 } from './geoman-editor.js';
+
+test('destroyed Geoman instances stop queued source retries', () => {
+  let calls = 0;
+  const manager = { updateSourceActual(name) { assert.equal(this, manager); calls += 1; return name; } };
+  const geoman = { destroyed: false, features: { updateManager: manager } };
+  guardGeomanSourceUpdates(geoman);
+  assert.equal(manager.updateSourceActual('temporary'), 'temporary');
+  geoman.destroyed = true;
+  assert.equal(manager.updateSourceActual('temporary'), undefined);
+  assert.equal(calls, 1);
+});
 
 const objects = [
   {

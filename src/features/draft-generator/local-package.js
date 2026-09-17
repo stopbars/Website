@@ -186,6 +186,7 @@ async function readAllLegacyEntries(reader) {
 function entryForFile(path, file) {
   const readable =
     READABLE_EXTENSIONS.has(fileExtension(path)) ||
+    /(^|\/)apt\.dat\.bars-removals\.json$/i.test(normalizePath(path)) ||
     /(^|\/)library\.txt$/i.test(normalizePath(path));
   return {
     path,

@@ -7,7 +7,7 @@ import {
   parseXml,
   walkNodes,
 } from '../draft-generator/extractor/xml.js';
-import { nearestPointOnGeometry } from './editor-geometry.js';
+import { distanceMeters, nearestPointOnGeometry } from './editor-geometry.js';
 import { deduplicateExactDivisionPoints } from '../../utils/divisionPoints.js';
 
 export const EDITOR_DOCUMENT_VERSION = 1;
@@ -546,6 +546,7 @@ export function barsIdSuggestions(originalDivisions, query, limit = 6, options =
     .trim()
     .toUpperCase();
   const coordinate = Array.isArray(options.coordinate) ? options.coordinate : null;
+  const samples = sampleSuggestionLine(options.coordinates ?? (coordinate ? [coordinate] : []));
   const excludedIds = new Set(
     [...(options.excludeIds ?? [])].map((id) => String(id).trim().toUpperCase()).filter(Boolean)
   );
@@ -568,8 +569,11 @@ export function barsIdSuggestions(originalDivisions, query, limit = 6, options =
       else if (normalizedName.includes(normalizedQuery)) score = 3;
       else continue;
     }
-    const proximity = coordinate
-      ? (nearestPointOnGeometry(coordinate, division.geometry)?.distanceMeters ?? Infinity)
+    const distances = samples.map(
+      (point) => nearestPointOnGeometry(point, division.geometry)?.distanceMeters ?? Infinity
+    );
+    const proximity = distances.length
+      ? Math.sqrt(distances.reduce((sum, distance) => sum + distance ** 2, 0) / distances.length)
       : Infinity;
     ranked.push({ id, name, score, proximity });
   }
@@ -582,6 +586,32 @@ export function barsIdSuggestions(originalDivisions, query, limit = 6, options =
     )
     .slice(0, Math.max(0, limit))
     .map(({ id, name }) => ({ id, name }));
+}
+
+function sampleSuggestionLine(coordinates) {
+  const points = (Array.isArray(coordinates) ? coordinates : []).filter(
+    (point) => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1])
+  );
+  if (points.length < 2) return points;
+  const cumulative = [0];
+  for (let index = 1; index < points.length; index += 1) {
+    cumulative.push(cumulative[index - 1] + distanceMeters(points[index - 1], points[index]));
+  }
+  const length = cumulative.at(-1);
+  if (!length) return [points[0]];
+  // Equal spacing keeps densely drawn corners from outweighing the rest of the line.
+  const samples = [];
+  let segment = 1;
+  for (let index = 0; index <= 32; index += 1) {
+    const along = length * index / 32;
+    while (segment < points.length - 1 && cumulative[segment] <= along) segment += 1;
+    const segmentLength = cumulative[segment] - cumulative[segment - 1];
+    const fraction = segmentLength ? (along - cumulative[segment - 1]) / segmentLength : 0;
+    samples.push(points[segment - 1].map(
+      (value, axis) => value + (points[segment][axis] - value) * fraction
+    ));
+  }
+  return samples;
 }
 
 export function colorForObjectId(value) {

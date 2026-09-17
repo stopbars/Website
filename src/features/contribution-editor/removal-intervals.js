@@ -75,7 +75,8 @@ export function editableMsfsRemovalGroup(
   document,
   requestedSourceId,
   availableSourceIds = [],
-  seedRemovalIds = []
+  seedRemovalIds = [],
+  preserveAutomatic = false
 ) {
   const available = sourceAliasMap(availableSourceIds);
   const availableValues = new Set(available.values());
@@ -83,7 +84,8 @@ export function editableMsfsRemovalGroup(
     const canonical = canonicalSourceId(value);
     return available.get(canonical) ?? canonical;
   };
-  const requested = resolveSourceId(requestedSourceId);
+  const requestedSources = (Array.isArray(requestedSourceId) ? requestedSourceId : [requestedSourceId]).map(resolveSourceId).filter(Boolean);
+  const requested = requestedSources[0];
   if (!requested) {
     return {
       selections: [],
@@ -95,9 +97,11 @@ export function editableMsfsRemovalGroup(
   }
 
   const editableRemovals = (document?.removals ?? []).filter((removal) =>
-    ['msfs-source', 'msfs-auto', 'msfs-manual'].includes(removal.origin)
+    preserveAutomatic
+      ? removal.origin === 'msfs-manual'
+      : ['msfs-source', 'msfs-auto', 'msfs-manual'].includes(removal.origin)
   );
-  const affectedCanonicals = new Set([requested]);
+  const affectedCanonicals = new Set(requestedSources);
   const affectedRemovals = new Map();
   const requestedRemovalIds = new Set((seedRemovalIds ?? []).map(String));
   for (const removal of editableRemovals) {
@@ -125,10 +129,11 @@ export function editableMsfsRemovalGroup(
 
   if (affectedRemovals.size === 0) {
     return {
+      ...(preserveAutomatic ? { preserveAutomatic: true } : {}),
       selections: [],
       keepSelections: [],
       removalIds: [],
-      sourceIds: [requested],
+      sourceIds: [...affectedCanonicals],
       targetSourceId: requested,
     };
   }
@@ -159,7 +164,7 @@ export function editableMsfsRemovalGroup(
       }
     }
   }
-  for (const object of document?.objects ?? []) {
+  for (const object of preserveAutomatic ? [] : document?.objects ?? []) {
     for (const binding of object.sourceBindings ?? []) {
       const sourceId = resolveSourceId(binding?.sourceId);
       if (!affectedCanonicals.has(sourceId) || manuallyEditedSourceIds.has(sourceId)) continue;
@@ -183,6 +188,7 @@ export function editableMsfsRemovalGroup(
   }
 
   return {
+    ...(preserveAutomatic ? { preserveAutomatic: true } : {}),
     selections: deduplicateMsfsSelections(selections),
     keepSelections: deduplicateMsfsSelections(keepSelections),
     removalIds: [...affectedRemovals.keys()],
@@ -196,6 +202,7 @@ export function previewMsfsRemovalEdit(document, editableGroup, selections, keep
   const affectedSourceIds = new Set(compactMap(editableGroup?.sourceIds ?? [], canonicalSourceId));
   const affectedRemovalIds = new Set((editableGroup?.removalIds ?? []).map(String));
   const retainedRemovals = (document.removals ?? []).filter((removal) => {
+    if (editableGroup?.preserveAutomatic && removal.origin !== 'msfs-manual') return true;
     if (!['msfs-source', 'msfs-auto', 'msfs-manual'].includes(removal.origin)) return true;
     if (affectedRemovalIds.has(String(removal.id))) return false;
     return !removalSourceIds(removal).some((sourceId) =>

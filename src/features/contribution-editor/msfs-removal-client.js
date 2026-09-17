@@ -5,33 +5,54 @@ import { mergeIntervals } from './removal-intervals.js';
 import { distanceMeters, nearestPointOnLine } from './editor-geometry.js';
 import { pointInPolygon } from '../draft-generator/extractor/geo.js';
 
-export function createMsfsRemovalWorkerClient(context) {
-  const worker = new Worker(new URL('./msfs-removal.worker.js', import.meta.url), {
-    type: 'module',
-  });
+export function createMsfsRemovalWorkerClient(context, { timeoutMs = 120_000 } = {}) {
+  let worker = null;
   const pending = new Map();
   let nextId = 0;
   let terminated = false;
 
-  worker.onmessage = (event) => {
-    const entry = pending.get(event.data?.id);
+  const settle = (id, error, result) => {
+    const entry = pending.get(id);
     if (!entry) return;
-    pending.delete(event.data.id);
+    pending.delete(id);
+    clearTimeout(entry.timer);
     entry.signal?.removeEventListener('abort', entry.handleAbort);
-    if (event.data.type === 'complete') entry.resolve(event.data.result);
-    else entry.reject(new Error(event.data.error));
+    if (error) entry.reject(error);
+    else entry.resolve(result);
   };
-  worker.onerror = (event) => {
-    const error = new Error(event.message || 'MSFS removal geometry could not be built.');
-    for (const entry of pending.values()) {
-      entry.signal?.removeEventListener('abort', entry.handleAbort);
-      entry.reject(error);
-    }
-    pending.clear();
+  const stopWorker = () => {
+    worker?.terminate();
+    worker = null;
   };
-  worker.postMessage({ type: 'initialize', context });
+  const startWorker = () => {
+    worker = new Worker(new URL('./msfs-removal.worker.js', import.meta.url), { type: 'module' });
+    const currentWorker = worker;
+    worker.onmessage = (event) => {
+      if (worker !== currentWorker) return;
+      if (event.data?.type === 'progress') {
+        pending.get(event.data.id)?.onProgress?.(event.data.progress);
+        return;
+      }
+      settle(
+        event.data?.id,
+        event.data?.type === 'complete' ? null : new Error(event.data?.error),
+        event.data?.result
+      );
+    };
+    worker.onerror = (event) => {
+      if (worker !== currentWorker) return;
+      const error = new Error(event.message || 'MSFS removal geometry could not be built.');
+      stopWorker();
+      for (const id of pending.keys()) settle(id, error);
+    };
+    worker.onmessageerror = () => currentWorker.onerror({
+      message: 'MSFS removal worker returned unreadable data.',
+    });
+    worker.postMessage({ type: 'initialize', context });
+    for (const entry of pending.values()) worker.postMessage(entry.message);
+  };
 
-  const request = (type, payload, signal) =>
+  const request = (type, payload, signal, onProgress) =>
     new Promise((resolve, reject) => {
       if (terminated || signal?.aborted) {
         reject(new DOMException('Removal generation was cancelled.', 'AbortError'));
@@ -39,32 +60,57 @@ export function createMsfsRemovalWorkerClient(context) {
       }
       const id = ++nextId;
       const handleAbort = () => {
-        pending.delete(id);
-        reject(new DOMException('Removal generation was cancelled.', 'AbortError'));
+        settle(id, new DOMException('Removal generation was cancelled.', 'AbortError'));
+        // Synchronous geometry work cannot receive a cancellation message while running.
+        stopWorker();
+        if (pending.size) {
+          try {
+            startWorker();
+          } catch (error) {
+            stopWorker();
+            for (const pendingId of pending.keys()) settle(pendingId, error);
+          }
+        }
       };
-      pending.set(id, { resolve, reject, signal, handleAbort });
+      const message = { type, id, ...payload };
+      const timer = setTimeout(() => {
+        stopWorker();
+        const error = new Error('Updating removals took longer than two minutes. Reconnect the scenery to retry.');
+        for (const pendingId of pending.keys()) settle(pendingId, error);
+      }, timeoutMs);
+      pending.set(id, { resolve, reject, signal, handleAbort, message, timer, onProgress });
       signal?.addEventListener('abort', handleAbort, { once: true });
-      worker.postMessage({ type, id, ...payload });
+      try {
+        if (worker) worker.postMessage(message);
+        else startWorker();
+      } catch (error) {
+        stopWorker();
+        for (const pendingId of pending.keys()) settle(pendingId, error);
+      }
     });
 
   return {
-    build(selections, { signal, keepSelections = [] } = {}) {
-      return request('build', { selections, keepSelections }, signal);
+    build(selections, { signal, keepSelections = [], automatic = false, excludedSourceIds = [] } = {}) {
+      return request('build', { selections, keepSelections, automatic, excludedSourceIds }, signal);
     },
-    migrateImported(objects, removals, { signal } = {}) {
-      return request('migrate-imported', { objects, removals }, signal);
+    refreshAutomatic(objects, removals, { signal, onProgress } = {}) {
+      return request('refresh-automatic', { objects, removals }, signal, onProgress);
     },
     terminate() {
       if (terminated) return;
       terminated = true;
-      worker.terminate();
-      for (const entry of pending.values()) {
-        entry.signal?.removeEventListener('abort', entry.handleAbort);
-        entry.reject(new DOMException('Removal generation was cancelled.', 'AbortError'));
-      }
-      pending.clear();
+      stopWorker();
+      for (const id of pending.keys()) settle(id, new DOMException('Removal generation was cancelled.', 'AbortError'));
     },
   };
+}
+
+export function isManualMsfsRemoval(removal) {
+  return (
+    removal.origin === 'msfs-manual' ||
+    removal.importedOrigin === 'msfs-manual' ||
+    (removal.keepSelections?.length ?? 0) > 0
+  );
 }
 
 export function removalSelectionFromBinding(binding) {
@@ -309,6 +355,32 @@ export function automaticRemovalSelections(matchOrMatches, retainedBindings = []
     (selection) => !currentSourceIds.has(selection.sourceId)
   );
   return [...currentSelections, ...retainedSelections];
+}
+
+export function retainSharedAutomaticRemovalSelections(selections, removals) {
+  const editedIds = new Set(selections.map((selection) => canonicalMsfsRemovalSourceId(selection.sourceId)));
+  const affectedIds = new Set(editedIds);
+  const retained = [];
+  const visited = new Set();
+  // A generated polygon can cover several source rows. Rebuild all of them together.
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const removal of removals ?? []) {
+      if (visited.has(removal) || !['msfs-source', 'msfs-auto'].includes(removal.origin)) continue;
+      if (!(removal.sourceIds ?? []).some((id) => affectedIds.has(canonicalMsfsRemovalSourceId(id)))) continue;
+      visited.add(removal);
+      for (const selection of removal.selections ?? []) {
+        const id = canonicalMsfsRemovalSourceId(selection.sourceId);
+        if (!editedIds.has(id)) retained.push(selection);
+        if (!affectedIds.has(id)) {
+          affectedIds.add(id);
+          expanded = true;
+        }
+      }
+    }
+  }
+  return removalSelectionsFromMatches({ bindings: [...selections, ...retained] });
 }
 
 export function manualMsfsRemovalSourceIds(removals) {

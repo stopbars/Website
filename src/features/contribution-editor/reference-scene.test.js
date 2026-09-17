@@ -9,6 +9,65 @@ import {
   referenceSurfaceStyle,
   referenceTexturePattern,
 } from './reference-scene.js';
+import { resolveMsfsRemovalTarget } from './msfs-removal-client.js';
+
+test('compiled lights remain selectable over a placement-only taxiway path', () => {
+  const vertices = [{ lat: 51.4659, lon: -0.44055 }, { lat: 51.4651, lon: -0.44055 }];
+  const scene = buildReferenceScene({ lightRows: [
+    { id: 'green', sourceType: 'bgl-airport-light-row', preset: 'GREEN', classification: 'taxi-centerline', vertices },
+    { id: 'orange', sourceType: 'bgl-airport-light-row', preset: 'ORANGE', classification: 'lead-on', vertices },
+    { id: 'path', sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline', removalEligible: false, vertices },
+  ] }, 'msfs');
+  const lights = scene.features.find(feature => feature.properties.msfsRemovalTarget);
+  const path = scene.features.find(feature => feature.properties.sourceId === 'path');
+  assert.deepEqual(lights.properties.sourceRowIds, ['green', 'orange']);
+  assert.equal(path.properties.msfsRemovalTarget, false);
+  assert.equal(resolveMsfsRemovalTarget(scene.features, path, [-0.44055, 51.4655]), lights);
+});
+
+test('cached unknown colour rows request source refresh instead of remaining unselectable', () => {
+  const cached = { version: 3, simulator: 'msfs', features: [{
+    id: 'green', geometry: { type: 'LineString', coordinates: [[0, 0], [0, 1]] },
+    properties: { sourceId: 'green', sourceType: 'bgl-airport-light-row', title: 'GREEN',
+      semanticType: 'unknown-light', snapCategory: 'light-rows', msfsRemovalTarget: false },
+  }] };
+  const refreshed = normalizeReferenceScene(cached);
+  assert.equal(refreshed.features[0].properties.msfsRemovalTarget, true);
+  assert.equal(refreshed.features[0].properties.requiresSourceRefresh, true);
+  assert.equal(normalizeReferenceScene(refreshed), refreshed);
+});
+
+test('native taxiway lights are visible and selectable in removal mode', () => {
+  const lightRow = {
+    id: 'native-lighted',
+    sourceType: 'bgl-taxiway-path',
+    classification: 'taxi-centerline',
+    centerLineLighted: true,
+    vertices: [{ lat: 51.473, lon: -0.4375 }, { lat: 51.474, lon: -0.4375 }],
+  };
+  const scene = buildReferenceScene({ lightRows: [lightRow] }, 'msfs');
+  const feature = scene.features[0];
+  const coordinate = [-0.4375, 51.4735];
+  assert.equal(feature.properties.snapCategory, 'light-rows');
+  assert.equal(referenceFeatureIsVisible(feature, new Set(['light-rows'])), true);
+  assert.equal(resolveMsfsRemovalTarget(scene.features, feature, coordinate), feature);
+  assert.deepEqual(feature.geometry.coordinates, lightRow.vertices.map(({ lon, lat }) => [lon, lat]));
+
+  const unlighted = buildReferenceScene({ lightRows: [{
+    ...lightRow, centerLineLighted: false, removalEligible: false,
+  }] }, 'msfs').features[0];
+  assert.equal(unlighted.properties.snapCategory, 'taxiway-centrelines');
+  assert.equal(unlighted.properties.msfsRemovalTarget, false);
+  assert.equal(resolveMsfsRemovalTarget([unlighted], unlighted, coordinate), null);
+
+  const cached = { ...scene, features: [{
+    ...feature, properties: { ...feature.properties, snapCategory: 'taxiway-centrelines' },
+  }, unlighted] };
+  const migrated = normalizeReferenceScene(cached);
+  assert.equal(migrated.features[0].properties.snapCategory, 'light-rows');
+  assert.equal(migrated.features[1], unlighted);
+  assert.equal(normalizeReferenceScene(migrated), migrated);
+});
 
 test('merges co-located MSFS light layers into one editable reference row', () => {
   const lightRow = (id, latitude) => ({

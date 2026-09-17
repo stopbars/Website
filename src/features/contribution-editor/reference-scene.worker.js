@@ -1,5 +1,6 @@
 /* oxlint-disable react-doctor/js-combine-iterations -- Worker normalization and projection remain separate for deterministic source diagnostics. */
 
+import { buildXPlaneSourceValidation } from './xplane-source-validation.js';
 import { extractXPlaneAirportData } from '../draft-generator/extractor/xplane-apt.js';
 import { detectScenerySimulator } from '../draft-generator/local-package.js';
 import { buildReferenceScene } from './reference-scene.js';
@@ -105,6 +106,7 @@ async function extractReferenceScene(message) {
     scene,
     renderBundle: data.renderBundle || null,
     removalContext: simulator === 'msfs' ? buildMsfsRemovalContext(data) : null,
+    xplaneSourceValidation: simulator === 'xplane' ? buildXPlaneSourceValidation(data) : null,
     sourceSummary: {
       filesScanned: message.entries.length,
       features: scene.features.length,

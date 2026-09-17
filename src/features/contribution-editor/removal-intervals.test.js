@@ -7,6 +7,42 @@ import {
   previewMsfsRemovalEdit,
 } from './removal-intervals.js';
 
+test('a routed removal edit gathers every selected row and shared polygon in one group', () => {
+  const document = { objects: [], removals: [
+    { id: 'a-shared', origin: 'msfs-auto', sourceIds: ['a', 'sibling'], selections: [{ sourceId: 'a' }, { sourceId: 'sibling' }] },
+    { id: 'c-manual', origin: 'msfs-manual', sourceIds: ['c'], selections: [{ sourceId: 'c', rangeStartMeters: 2, rangeEndMeters: 8 }] },
+    { id: 'unrelated', origin: 'msfs-auto', sourceIds: ['other'], selections: [{ sourceId: 'other' }] },
+  ] };
+  const group = editableMsfsRemovalGroup(document, ['a', 'b', 'c'], ['a', 'b', 'c', 'sibling', 'other']);
+  assert.deepEqual(new Set(group.sourceIds), new Set(['a', 'b', 'c', 'sibling']));
+  assert.deepEqual(new Set(group.removalIds), new Set(['a-shared', 'c-manual']));
+  let selections = group.selections;
+  let keepSelections = group.keepSelections;
+  for (const sourceId of ['a', 'b', 'c']) {
+    const selection = { sourceId, rangeStartMeters: 0, rangeEndMeters: 10 };
+    selections = applyMsfsSelectionEdit(selections, selection, 'erase', 10);
+    keepSelections = applyMsfsSelectionEdit(keepSelections, selection, 'add', 10);
+  }
+  assert.deepEqual(selections, [{ sourceId: 'sibling' }]);
+  assert.deepEqual(keepSelections, [{ sourceId: 'a' }, { sourceId: 'b' }, { sourceId: 'c' }]);
+});
+
+test('adding manual removal preserves automatic geometry and does not inherit its selection', () => {
+  const automatic = { id: 'auto', origin: 'msfs-auto', sourceIds: ['a'], selections: [{ sourceId: 'a' }], coordinates: [[0, 0]] };
+  const manual = { id: 'manual', origin: 'msfs-manual', sourceIds: ['a'], selections: [{ sourceId: 'a', rangeStartMeters: 2, rangeEndMeters: 4 }] };
+  const document = { objects: [{ sourceBindings: [{ sourceId: 'a', rangeStartMeters: 0, rangeEndMeters: 100 }] }], removals: [automatic, manual] };
+  for (const removals of [[automatic], [automatic, manual]]) {
+    const current = { ...document, removals };
+    const group = editableMsfsRemovalGroup(current, 'a', ['a'], [], true);
+    assert.deepEqual(group.removalIds, removals.includes(manual) ? ['manual'] : []);
+    assert.deepEqual(group.selections, removals.includes(manual) ? manual.selections : []);
+    const next = applyMsfsSelectionEdit(group.selections, { sourceId: 'a', rangeStartMeters: 10, rangeEndMeters: 20 }, 'add', 100);
+    const preview = previewMsfsRemovalEdit(current, group, next);
+    assert.equal(preview.removals[0], automatic);
+    assert.equal(preview.removals.length, 2);
+  }
+});
+
 test('MSFS removal previews replace stale geometry and expose the new selection immediately', () => {
   const unrelated = {
     id: 'unrelated',

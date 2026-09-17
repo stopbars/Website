@@ -4,6 +4,17 @@ const DRAW_PREVIEW_ID = '__editor-draw-preview__';
 const REFERENCE_SNAP_PREFIX = '__reference-snap__:';
 const LIGHT_ROW_SNAP_GEOMETRIES = new Set(['Point', 'LineString', 'MultiLineString']);
 
+export function guardGeomanSourceUpdates(geoman) {
+  const manager = geoman.features?.updateManager;
+  if (!manager?.updateSourceActual) return;
+  const updateSourceActual = manager.updateSourceActual;
+  // Geoman's retry timers survive destroy and otherwise poll removed sources forever.
+  manager.updateSourceActual = function (...args) {
+    if (geoman.destroyed) return;
+    return updateSourceActual.apply(this, args);
+  };
+}
+
 export function createGeomanEditorFeatures(objects, selectedId) {
   if (!selectedId) return [];
   return objects

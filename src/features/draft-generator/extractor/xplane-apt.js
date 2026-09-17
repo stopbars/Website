@@ -1,5 +1,6 @@
 /* oxlint-disable react-doctor/js-combine-iterations -- apt.dat parsing keeps validation and projection stages visible for source-backed geometry diagnostics. */
 
+import { assertUnpatchedAptSource } from './xplane-source-status.js';
 import { stableId } from './classify.js';
 import { buildMustKeepZones } from './extract.js';
 import { haversineDistanceMeters, offsetPointMeters } from './geo.js';
@@ -120,6 +121,7 @@ export async function extractXPlaneAirportData({
       });
     });
     if (airportLines) {
+      await assertUnpatchedAptSource(entries, sourceFile, normalizedIcao);
       selected = parseAirportLines(airportLines, {
         icao: normalizedIcao,
         sourceFile,

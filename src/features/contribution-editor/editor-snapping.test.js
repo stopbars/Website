@@ -6,7 +6,45 @@ import {
   nearbyRemovalBindingFromExtendedReference,
   removalBindingFromExtendedReference,
   selectorKey,
+  xplaneRemovalSectionSelectors,
 } from './editor-snapping.js';
+import { nearestPointOnLine } from './editor-geometry.js';
+
+test('X-Plane removal gestures include only close overlapping source sections', () => {
+  const row = (run, coordinates, properties = {}) => ({
+    ...lightFeature,
+    geometry: { type: 'LineString', coordinates },
+    properties: { ...lightFeature.properties, sourceRunIndex: run, ...properties },
+  });
+  const source = lightFeature.geometry.coordinates;
+  const first = nearestPointOnLine([151.10005, -33.9], source);
+  const last = nearestPointOnLine([151.10015, -33.9], source);
+  const close = row(3, [
+    [151.1001, -33.89999],
+    [151.1003, -33.89999],
+  ]);
+  const distant = row(
+    4,
+    source.map(([lon, lat]) => [lon, lat + 0.00003])
+  );
+  const crossing = row(5, [
+    [151.1001, -33.9001],
+    [151.1001, -33.8999],
+  ]);
+  const protectedRow = row(6, source, { removable: false });
+  const derived = row(7, source, { exactness: 'derived' });
+  const candidates = [lightFeature, close, distant, crossing, protectedRow, derived];
+  const selectors = xplaneRemovalSectionSelectors(lightFeature, first, last, candidates);
+  assert.deepEqual(
+    selectors.map(({ run }) => run),
+    [2, 3]
+  );
+  assert.ok(Math.abs(selectors[0].start - 0.25) < 0.001);
+  assert.ok(Math.abs(selectors[0].end - 0.75) < 0.001);
+  assert.equal(selectors[1].start, 0);
+  assert.ok(Math.abs(selectors[1].end - 0.25) < 0.001);
+  assert.deepEqual(xplaneRemovalSectionSelectors(lightFeature, last, first, candidates), selectors);
+});
 
 const lightFeature = {
   id: 'row-one',
@@ -58,12 +96,9 @@ test('can bind an edited MSFS object to an exact-placement derived light row', (
     properties: { ...lightFeature.properties, exactness: 'derived' },
   };
 
-  const match = matchSnappedReference(
-    lightFeature.geometry.coordinates,
-    [derived],
-    1,
-    { allowDerived: true }
-  );
+  const match = matchSnappedReference(lightFeature.geometry.coordinates, [derived], 1, {
+    allowDerived: true,
+  });
 
   assert.equal(match.binding.sourceId, 'row-one');
 });
@@ -83,10 +118,7 @@ test('removes every exact source row directly covered by one edited object', () 
       sourceRunIndex: 3,
     },
   };
-  const match = matchSnappedReference(lightFeature.geometry.coordinates, [
-    lightFeature,
-    coLocated,
-  ]);
+  const match = matchSnappedReference(lightFeature.geometry.coordinates, [lightFeature, coLocated]);
 
   assert.equal(match.bindings.length, 2);
   assert.deepEqual(
@@ -166,8 +198,5 @@ test('removal discovery rejects a simulator row that is merely crossed', () => {
     [151.1001, -33.89998],
   ];
 
-  assert.equal(
-    nearbyRemovalBindingFromExtendedReference(crossing, lightFeature, 3),
-    null
-  );
+  assert.equal(nearbyRemovalBindingFromExtendedReference(crossing, lightFeature, 3), null);
 });

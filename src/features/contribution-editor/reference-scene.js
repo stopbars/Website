@@ -1,6 +1,6 @@
 /* oxlint-disable react-doctor/js-cache-property-access react-doctor/js-combine-iterations react-doctor/js-flatmap-filter -- Reference-scene construction keeps source normalization, validation, and projection stages separate for diagnostics. */
 
-import { stableId } from '../draft-generator/extractor/classify.js';
+import { msfsColorPresetClassification, normalizeMsfsLightRowClassifications, stableId } from '../draft-generator/extractor/classify.js';
 import { consolidateCoLocatedSimulatorRows } from '../draft-generator/matching.js';
 import { markingPatternName, withAptMarkingFallbackProperties } from './marking-patterns.js';
 import { xPlaneLinePhysicalWidth } from './scenery-texture.js';
@@ -45,6 +45,7 @@ export const SNAP_CATEGORIES = Object.freeze([
 ]);
 
 export function buildReferenceScene(data, simulator) {
+  if (simulator === 'msfs') data = normalizeMsfsLightRowClassifications(data);
   const features = [];
   const seen = new Set();
   const renderedDsfLines = new Set();
@@ -278,6 +279,42 @@ function consolidateCachedMsfsLightRows(features) {
 function normalizeMsfsReferenceCategories(scene) {
   let changed = false;
   const features = scene.features.map((feature) => {
+    const properties = feature.properties ?? {};
+    if (properties.sourceType === 'merged-simulator-rows' &&
+      properties.removable === false && properties.sourceRowIds?.length > 1 &&
+      ['stopbar', 'lead-on', 'taxi-centerline'].includes(properties.semanticType) &&
+      msfsColorPresetClassification(properties.preset || properties.title) &&
+      !properties.requiresSourceRefresh) {
+      changed = true;
+      return { ...feature, properties: {
+        ...properties, msfsRemovalTarget: true, requiresSourceRefresh: true,
+      } };
+    }
+    const recoveredClassification = properties.sourceType === 'bgl-airport-light-row' &&
+      properties.semanticType === 'unknown-light' &&
+      msfsColorPresetClassification(properties.preset ?? properties.title);
+    if (recoveredClassification) {
+      changed = true;
+      return {
+        ...feature,
+        properties: {
+          ...properties,
+          semanticType: recoveredClassification,
+          snapCategory: 'light-rows',
+          msfsRemovalTarget: true,
+          requiresSourceRefresh: true,
+        },
+      };
+    }
+    if (
+      feature.properties?.sourceType === 'bgl-taxiway-path' &&
+      feature.properties?.snapCategory === 'taxiway-centrelines' &&
+      feature.properties?.msfsRemovalTarget === true &&
+      feature.properties?.removable !== false
+    ) {
+      changed = true;
+      return { ...feature, properties: { ...feature.properties, snapCategory: 'light-rows' } };
+    }
     if (feature.properties?.snapCategory) return feature;
     const snapCategory = msfsReferenceCategory(feature.properties?.sourceType);
     if (!snapCategory) return feature;
@@ -435,7 +472,9 @@ function referenceFromRow(row, simulator) {
   const painted = /painted|marking|\.lin$/i.test(
     `${row.sourceType ?? ''} ${row.sourceDefinition ?? ''}`
   );
-  const taxiwayPath = /taxiway-path|bridge/i.test(row.sourceType ?? '');
+  const taxiwayPath =
+    /taxiway-path|bridge/i.test(row.sourceType ?? '') &&
+    !(row.centerLineLighted === true && row.removalEligible !== false);
   const texturePattern = row.textureAssetPath
     ? `xplane-${stableId(
         'texture',
@@ -458,6 +497,7 @@ function referenceFromRow(row, simulator) {
       removalCapability: row.removalCapability ?? 'range',
       sourceType: row.sourceType || 'light-row',
       sourceFile: row.sourceFile || '',
+      preset: row.preset || '',
       sourceDefinition: row.sourceDefinition || '',
       sourceAssetPath: row.sourceAssetPath || '',
       title:

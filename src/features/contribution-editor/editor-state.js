@@ -7,8 +7,10 @@ import {
 } from './editor-model.js';
 import { distanceMeters, lineLengthMeters } from './editor-geometry.js';
 import { bindingSelectorKey, selectorFromBinding, selectorKey } from './editor-snapping.js';
+import { reconcileXPlaneSource } from './xplane-source-validation.js';
 import { applyXPlaneSelectorEdit } from './removal-intervals.js';
 import { traceEditorSpan } from './editor-performance.js';
+import { isManualMsfsRemoval } from './msfs-removal-client.js';
 
 const MAX_HISTORY_LENGTH = 100;
 const ENDPOINT_GAP_METERS = 2;
@@ -110,7 +112,7 @@ export function editorReducer(state, action) {
         )
       );
     case 'update-source':
-      return commit(state, (document) => ({ ...document, source: action.source }));
+      return commit(state, (document) => reconcileXPlaneSource({ ...document, source: action.source }, action.xplaneSourceValidation));
     case 'add-object': {
       const next = commit(state, (document) => ({
         ...document,
@@ -186,6 +188,7 @@ export function editorReducer(state, action) {
               ...document,
               removals: [
                 ...document.removals.filter((removal) => {
+                  if (action.preserveAutomatic && removal.origin !== 'msfs-manual') return true;
                   if (affectedRemovalIds.has(String(removal.id))) return false;
                   if (!['msfs-source', 'msfs-auto', 'msfs-manual'].includes(removal.origin)) {
                     return true;
@@ -196,6 +199,7 @@ export function editorReducer(state, action) {
                 }),
                 ...(action.removals ?? []).map((removal) => ({
                   ...removal,
+                  ...(action.preserveAutomatic ? { id: `msfs-manual:${removal.id}` } : {}),
                   origin: 'msfs-manual',
                 })),
               ],
@@ -207,6 +211,7 @@ export function editorReducer(state, action) {
           affectedSourceCount: action.sourceIds?.length ?? 0,
         }
       );
+    case 'refresh-automatic-msfs-removals':
     case 'migrate-imported-msfs-removals':
       return commit(state, (document) => {
         const bindingsByPartId = new Map(
@@ -225,7 +230,11 @@ export function editorReducer(state, action) {
           ),
           removals: [
             ...document.removals.filter((removal) => {
-              if (removal.origin === 'imported' && replacedRemovalIds.has(String(removal.id))) {
+              if (isManualMsfsRemoval(removal)) return true;
+              if (
+                replacedRemovalIds.has(String(removal.id)) &&
+                ['imported', 'msfs-source', 'msfs-auto'].includes(removal.origin)
+              ) {
                 return false;
               }
               const overlaps = (removal.sourceIds ?? []).some((sourceId) =>

@@ -591,6 +591,40 @@ test('blank BARS ID suggestions prioritize nearby unrepresented divisions', () =
   );
 });
 
+test('BARS ID selection compares the line beyond a shared starting junction', () => {
+  const drawn = [[115, -32], [115.001, -32], [115.001, -31.999]];
+  const divisions = [
+    { id: 'BARS_A_WRONG', geometry: { type: 'LineString', coordinates: [drawn[0], [115, -31.999]] } },
+    { id: 'BARS_Z_RIGHT', geometry: { type: 'LineString', coordinates: drawn.map(([x, y]) => [x + 0.00001, y]) } },
+  ];
+  for (const coordinates of [drawn, [...drawn].reverse()]) {
+    assert.equal(barsIdSuggestions(divisions, '', 1, { coordinates })[0].id, 'BARS_Z_RIGHT');
+  }
+  assert.equal(barsIdSuggestions(divisions, '', 1, {
+    coordinates: drawn, excludeIds: ['bars_z_right'],
+  })[0].id, 'BARS_A_WRONG');
+});
+
+test('BARS ID selection checks segment interiors even when endpoints match', () => {
+  const coordinates = [[115, -32], [115.002, -32]];
+  const divisions = [
+    { id: 'BARS_A_DETOUR', geometry: { type: 'LineString', coordinates: [coordinates[0], [115.001, -31.999], coordinates[1]] } },
+    { id: 'BARS_Z_STRAIGHT', geometry: { type: 'LineString', coordinates: [[114.999, -31.99999], [115.003, -31.99999]] } },
+  ];
+  assert.equal(barsIdSuggestions(divisions, '', 1, { coordinates })[0].id, 'BARS_Z_STRAIGHT');
+  const dense = Array.from({ length: 101 }, (_, index) => [115 + index * 0.00002, -32]);
+  assert.equal(barsIdSuggestions(divisions, '', 1, { coordinates: dense })[0].id, 'BARS_Z_STRAIGHT');
+});
+
+test('BARS ID selection handles repeated points and missing geometry', () => {
+  const point = [115, -32];
+  const divisions = [
+    { id: 'BARS_A_EMPTY' },
+    { id: 'BARS_Z_POINT', geometry: { type: 'Point', coordinates: point } },
+  ];
+  assert.equal(barsIdSuggestions(divisions, '', 1, { coordinates: [point, point] })[0].id, 'BARS_Z_POINT');
+});
+
 test('derives a stable unique colour from the current BARS ID', () => {
   assert.equal(colorForObjectId('BARS_ALPHA'), colorForObjectId('BARS_ALPHA'));
   assert.notEqual(colorForObjectId('BARS_ALPHA'), colorForObjectId('BARS_BRAVO'));

@@ -51,6 +51,32 @@ export function matchSnappedReference(
   };
 }
 
+export function xplaneRemovalSectionSelectors(feature, first, last, referenceFeatures) {
+  const selected = referenceMatchFromProjections(feature, first, last).selector;
+  if (!selected) return [];
+  const selectors = new Map([[selectorKey(selected), selected]]);
+  const coordinates = sliceLineBetween(feature.geometry.coordinates, first, last);
+  for (const candidate of referenceFeatures ?? []) {
+    const properties = candidate.properties ?? {};
+    if (
+      candidate.geometry?.type !== 'LineString' ||
+      properties.sourceType !== 'xplane-apt-light-string' ||
+      properties.removable === false ||
+      properties.exactness === 'derived'
+    )
+      continue;
+    const source = candidate.geometry.coordinates;
+    const start = nearestPointOnLine(coordinates[0], source);
+    const end = nearestPointOnLine(coordinates.at(-1), source);
+    if (!start || !end) continue;
+    const slice = sliceLineBetween(source, start, end);
+    if (!containedLineMatch(slice, lineLengthMeters(slice), coordinates, 1.5)) continue;
+    const selector = referenceMatchFromProjections(candidate, start, end).selector;
+    if (selector) selectors.set(selectorKey(selector), selector);
+  }
+  return [...selectors.values()];
+}
+
 export function referenceMatchFromProjections(feature, first, last) {
   const properties = feature?.properties ?? {};
   const totalLength = lineLengthMeters(feature?.geometry?.coordinates);
@@ -143,20 +169,15 @@ export function nearbyRemovalBindingFromExtendedReference(
   const totalLength = lineLengthMeters(sourceCoordinates);
   let best = null;
   for (const run of runs) {
-    const rangeStartMeters = clamp(
-      Math.min(...run.map(({ projection }) => projection.alongMeters)),
-      0,
-      totalLength
-    );
-    const rangeEndMeters = clamp(
-      Math.max(...run.map(({ projection }) => projection.alongMeters)),
-      0,
-      totalLength
-    );
+    const runStartMeters = Math.min(...run.map(({ projection }) => projection.alongMeters));
+    const runEndMeters = Math.max(...run.map(({ projection }) => projection.alongMeters));
+    const rangeStartMeters = clamp(runStartMeters, 0, totalLength);
+    const rangeEndMeters = clamp(runEndMeters, 0, totalLength);
     const projectedLength = rangeEndMeters - rangeStartMeters;
     if (projectedLength < MIN_MATCHED_LENGTH_METERS) continue;
     const objectLength = lineLengthMeters(run.map(({ coordinate }) => coordinate));
-    if (Math.abs(objectLength / projectedLength - 1) > 0.25) continue;
+    // Compare the same run before clipping it to this source row's endpoints.
+    if (Math.abs(objectLength / (runEndMeters - runStartMeters) - 1) > 0.25) continue;
     if (!best || projectedLength > best.projectedLength) {
       best = { rangeStartMeters, rangeEndMeters, projectedLength };
     }

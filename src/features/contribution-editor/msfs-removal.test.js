@@ -1,17 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { normalizeMsfsLightRowClassifications } from '../draft-generator/extractor/classify.js';
 import {
   pointInPolygon,
+  preparePointInPolygon,
   wgs84LocalDistanceMeters,
 } from '../draft-generator/extractor/geo.js';
 import {
   buildImportedMsfsRemovalMigration,
+  buildAutomaticMsfsRemovalRefresh,
+  buildAutomaticMsfsRemovals,
   buildMsfsRemovalContext,
   buildSelectedMsfsRemovals,
   normalizeMsfsRemovalContext,
 } from './msfs-removal.js';
 import {
   automaticRemovalSelections,
+  createMsfsRemovalWorkerClient,
+  retainSharedAutomaticRemovalSelections,
   importedRemovalIdsToRetire,
   coveredAutomaticRemovalIds,
   importedRemovalReplacementPlan,
@@ -23,6 +29,80 @@ import {
   resolveMsfsRemovalTarget,
   resolveXPlaneRemovalTarget,
 } from './msfs-removal-client.js';
+import { buildReferenceScene } from './reference-scene.js';
+import { selectedRemovalGeojson } from './removal-selection-display.js';
+import { createRemovalMatchCandidateSearch } from './removal-match-candidates.js';
+
+test('prepared polygon checks retain duplicate-vertex and boundary handling', () => {
+  const ring = [{ lat: 0, lon: 0 }, { lat: 0, lon: 0.001 }, { lat: 0.001, lon: 0.001 }, { lat: 0.001, lon: 0 }, { lat: 0, lon: 0 }];
+  const contains = preparePointInPolygon(ring);
+  for (const [point, expected] of [
+    [{ lat: 0.0005, lon: 0.0005 }, true],
+    [{ lat: 0, lon: 0.0005 }, true],
+    [{ lat: 0, lon: 0 }, true],
+    [{ lat: 0.002, lon: 0.0005 }, false],
+  ]) {
+    assert.equal(contains(point), expected);
+    assert.equal(contains(point), pointInPolygon(point, ring));
+  }
+});
+
+test('removal candidate filtering retains endpoint rays and excludes distant parallel rows', () => {
+  const point = (x, y) => [x / (111_320 * Math.cos(51 * Math.PI / 180)), 51 + y / 111_320];
+  const line = (id, y) => ({ id, geometry: { type: 'LineString', coordinates: [point(0, y), point(10, y)] } });
+  const features = [line('near', 0), line('within-tolerance', 1.4), line('far', 50)];
+  const candidatesFor = createRemovalMatchCandidateSearch(features);
+  for (const coordinates of [[point(20, 0), point(30, 0)], [point(-30, 0), point(-20, 0)], [point(5, 0), point(15, 0)]]) {
+    assert.deepEqual(candidatesFor(coordinates).map(feature => feature.id), ['near', 'within-tolerance']);
+  }
+  const vertical = { id: 'vertical', geometry: { type: 'LineString', coordinates: [point(0, 0), point(0, 10)] } };
+  assert.deepEqual(createRemovalMatchCandidateSearch([vertical])([point(0, 20), point(0, 30)]), [vertical]);
+  assert.deepEqual(candidatesFor([]), []);
+});
+
+test('removal worker stops cancelled work and recovers after failures and timeouts', async (t) => {
+  const workers = [];
+  class FakeWorker {
+    messages = [];
+    terminated = false;
+    constructor() { workers.push(this); }
+    postMessage(message) { this.messages.push(message); }
+    terminate() { this.terminated = true; }
+    complete(result) {
+      this.onmessage({ data: { type: 'complete', id: this.messages.at(-1).id, result } });
+    }
+  }
+  const originalWorker = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+  Object.defineProperty(globalThis, 'Worker', { configurable: true, writable: true, value: FakeWorker });
+  t.after(() => {
+    if (originalWorker) Object.defineProperty(globalThis, 'Worker', originalWorker);
+    else delete globalThis.Worker;
+  });
+  const client = createMsfsRemovalWorkerClient({}, { timeoutMs: 50 });
+  t.after(() => client.terminate());
+  const controller = new AbortController();
+  const progress = [];
+  const cancelled = client.refreshAutomatic([], [], { signal: controller.signal, onProgress: value => progress.push(value) });
+  workers[0].onmessage({ data: { type: 'progress', id: workers[0].messages.at(-1).id, progress: { phase: 'matching', completed: 1, total: 2 } } });
+  assert.deepEqual(progress, [{ phase: 'matching', completed: 1, total: 2 }]);
+  const cancelledCheck = assert.rejects(cancelled, { name: 'AbortError' });
+  const retained = client.build([]);
+  controller.abort();
+  await cancelledCheck;
+  assert.equal(workers[0].terminated, true);
+  workers[0].complete('stale');
+  workers[1].complete('retained');
+  assert.equal(await retained, 'retained');
+  const failed = client.build([]);
+  workers[1].onerror({ message: 'worker failed' });
+  await assert.rejects(failed, /worker failed/);
+  assert.equal(workers[1].terminated, true);
+  await assert.rejects(client.build([]), /Reconnect the scenery/);
+  assert.equal(workers[2].terminated, true);
+  const recovered = client.build([]);
+  workers[3].complete('recovered');
+  assert.equal(await recovered, 'recovered');
+});
 
 const row = (id, latitude) => ({
   id,
@@ -35,6 +115,204 @@ const row = (id, latitude) => ({
     { lat: latitude, lon: 151 },
     { lat: latitude, lon: 151.0001 },
   ],
+});
+
+test('BARS_3NKTA automatically marks both overlapping native light paths for removal', () => {
+  const rows = [
+    { id: 'd895ce539511089a', vertices: [
+      { lat: 51.4718209952116, lon: -0.43755993247032166 },
+      { lat: 51.47347256541252, lon: -0.4375724494457245 },
+    ] },
+    { id: 'caf387f5f3102fa3', vertices: [
+      { lat: 51.47347256541252, lon: -0.4375724494457245 },
+      { lat: 51.473941281437874, lon: -0.4375778138637543 },
+    ] },
+  ].map(source => ({ ...source, sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline', centerLineLighted: true, spacing: 15 }));
+  const object = { partId: 'BARS_3NKTA', coordinates: [
+    [-0.43757669943303, 51.47384390805297],
+    [-0.43757244944572, 51.47347256541252],
+    [-0.43756423079436, 51.47238814371682],
+  ] };
+  const context = buildMsfsRemovalContext({ lightRows: rows });
+  const result = buildAutomaticMsfsRemovalRefresh(context, [object], []);
+  assert.deepEqual(result.acceptedSourceIds.slice().sort(), rows.map(source => source.id).sort());
+  const bindings = result.bindingsByPartId[0].bindings;
+  const first = bindings.find(binding => binding.sourceId === rows[0].id);
+  const second = bindings.find(binding => binding.sourceId === rows[1].id);
+  assert.ok(Math.abs(first.rangeStartMeters - 63.1357) < 0.01);
+  assert.ok(Math.abs(first.rangeEndMeters - 183.8548) < 0.01);
+  assert.equal(second.rangeStartMeters, 0);
+  assert.ok(Math.abs(second.rangeEndMeters - 41.3389) < 0.01);
+  const displayed = selectedRemovalGeojson(
+    { type: 'FeatureCollection', features: buildReferenceScene({ lightRows: rows }, 'msfs').features },
+    { simulator: 'msfs', objects: [object], removals: result.removals.map(removal => ({ ...removal, origin: 'msfs-auto' })) }
+  );
+  assert.deepEqual(displayed.features.map(feature => feature.properties.sourceId).sort(), rows.map(source => source.id).sort());
+});
+
+test('automatic removal includes partial end paths alongside a complete middle path', () => {
+  const point = x => ({ lat: 0, lon: x / 111_320 });
+  const rows = [[0, 50], [50, 70], [70, 120]].map(([start, end], index) => ({
+    id: `path-${index}`, sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline',
+    centerLineLighted: true, spacing: 15, vertices: [point(start), point(end)],
+  }));
+  const context = buildMsfsRemovalContext({ lightRows: [
+    ...rows,
+    { ...rows[0], id: 'unlighted', centerLineLighted: false, removalEligible: false, vertices: [point(-50), point(200)] },
+  ] });
+  const result = buildAutomaticMsfsRemovalRefresh(context,
+    [{ partId: 'spanning', coordinates: [[25 / 111_320, 0], [100 / 111_320, 0]] }], []
+  );
+  assert.deepEqual(result.acceptedSourceIds.slice().sort(), rows.map(source => source.id).sort());
+  const byId = new Map(result.bindingsByPartId[0].bindings.map(binding => [binding.sourceId, binding]));
+  assert.ok(Math.abs(byId.get('path-0').rangeStartMeters - 25) < 0.01);
+  assert.ok(Math.abs(byId.get('path-2').rangeEndMeters - 30) < 0.01);
+});
+
+test('automatic removals complete small end slivers and interior gaps on the same source row', () => {
+  const source = {
+    id: 'native', sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline',
+    centerLineLighted: true, vertices: [{ lat: 0, lon: 0 }, { lat: 0, lon: 100 / 111_320 }],
+  };
+  const context = buildMsfsRemovalContext({ lightRows: [source] });
+  const selections = [
+    { sourceId: source.id, rangeStartMeters: 4, rangeEndMeters: 40 },
+    { sourceId: source.id, rangeStartMeters: 44, rangeEndMeters: 96 },
+  ];
+  const automatic = buildAutomaticMsfsRemovals(context, selections);
+  assert.ok(automatic.removals.length > 0);
+  assert.ok(automatic.removals.every(removal => removal.selections.every(selection =>
+    selection.sourceId === source.id && selection.rangeStartMeters === undefined
+  )));
+  const manual = buildSelectedMsfsRemovals(context, selections);
+  assert.ok(manual.removals.every(removal => removal.selections.every(selection =>
+    selection.rangeStartMeters >= 4 && selection.rangeEndMeters <= 96
+  )));
+  const keep = [{ sourceId: source.id, rangeStartMeters: 41, rangeEndMeters: 43 }];
+  assert.deepEqual(buildAutomaticMsfsRemovals(context, selections, keep),
+    buildSelectedMsfsRemovals(context, selections, keep));
+});
+
+test('automatic cleanup leaves large gaps and isolated short selections unchanged', () => {
+  const source = {
+    id: 'native', sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline',
+    centerLineLighted: true, vertices: [{ lat: 0, lon: 0 }, { lat: 0, lon: 100 / 111_320 }],
+  };
+  const context = buildMsfsRemovalContext({ lightRows: [source] });
+  for (const selections of [
+    [{ sourceId: source.id, rangeStartMeters: 6, rangeEndMeters: 40 },
+      { sourceId: source.id, rangeStartMeters: 46, rangeEndMeters: 94 }],
+    [{ sourceId: source.id, rangeStartMeters: 1, rangeEndMeters: 2 }],
+  ]) {
+    assert.deepEqual(buildAutomaticMsfsRemovals(context, selections), buildSelectedMsfsRemovals(context, selections));
+  }
+});
+
+test('automatic cleanup fills a five metre interior gap between short selected sections', () => {
+  const source = {
+    id: 'native', sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline',
+    centerLineLighted: true, vertices: [{ lat: 0, lon: 0 }, { lat: 0, lon: 100 / 111_320 }],
+  };
+  const result = buildAutomaticMsfsRemovals(buildMsfsRemovalContext({ lightRows: [source] }), [
+    { sourceId: 'native', rangeStartMeters: 20, rangeEndMeters: 22 },
+    { sourceId: 'native', rangeStartMeters: 27, rangeEndMeters: 29 },
+  ]);
+  assert.ok(result.removals.length > 0);
+  assert.ok(result.removals.every(removal => removal.selections.every(selection =>
+    selection.rangeStartMeters === 20 && selection.rangeEndMeters === 29
+  )));
+});
+
+test('automatic junction cleanup follows short source connections between selected rows', () => {
+  const source = (id, start, end) => ({
+    id, sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline', centerLineLighted: true,
+    vertices: [start, end].map(([x, y]) => ({ lon: x / 111_320, lat: y / 111_320 })),
+  });
+  const rows = [source('left', [0, 0], [20, 0]), source('connector', [20, 0], [23, 0]),
+    source('right', [23, 0], [43, 0]), source('open-branch', [20, 0], [20, 4])];
+  const context = buildMsfsRemovalContext({ lightRows: rows });
+  const selections = [{ sourceId: 'left', rangeStartMeters: 0, rangeEndMeters: 14 }, { sourceId: 'right' }];
+  const result = buildAutomaticMsfsRemovals(context, selections);
+  const completed = result.removals.flatMap(removal => removal.selections);
+  for (const id of ['left', 'connector', 'right']) {
+    assert.ok(completed.some(selection => selection.sourceId === id && selection.rangeStartMeters === undefined), id);
+  }
+  assert.ok(!completed.some(selection => selection.sourceId === 'open-branch'));
+
+  const kept = buildAutomaticMsfsRemovals(context, selections, [{ sourceId: 'connector' }]);
+  assert.ok(!kept.removals.flatMap(removal => removal.selections).some(s => s.sourceId === 'connector'));
+  const longGap = buildAutomaticMsfsRemovals(context, [{ ...selections[0], rangeEndMeters: 12 }, selections[1]]);
+  assert.ok(!longGap.removals.flatMap(removal => removal.selections).some(s => s.sourceId === 'connector'));
+  const stopbar = buildAutomaticMsfsRemovals(buildMsfsRemovalContext({
+    lightRows: rows.map(row => row.id === 'connector' ? { ...row, classification: 'stopbar' } : row),
+  }), selections);
+  assert.ok(!stopbar.removals.flatMap(removal => removal.selections).some(s => s.sourceId === 'connector'));
+});
+
+test('editing one row retains other rows in shared automatic polygons transitively', () => {
+  const selections = [{ sourceId: 'a', rangeStartMeters: 10, rangeEndMeters: 20 }];
+  const removals = [
+    { origin: 'msfs-auto', sourceIds: ['b', 'c'], selections: [{ sourceId: 'b' }, { sourceId: 'c' }] },
+    { origin: 'msfs-auto', sourceIds: ['a', 'b'], selections: [{ sourceId: 'a' }, { sourceId: 'b' }] },
+    { origin: 'msfs-manual', sourceIds: ['a', 'd'], selections: [{ sourceId: 'd' }] },
+  ];
+  assert.deepEqual(retainSharedAutomaticRemovalSelections(selections, removals), [
+    ...selections, { sourceId: 'b' }, { sourceId: 'c' },
+  ]);
+  assert.deepEqual(retainSharedAutomaticRemovalSelections([], removals), []);
+});
+
+test('scenery refresh generates automatic removals without imported polygons', () => {
+  const source = row('newly-recognized', -33.9);
+  const context = buildMsfsRemovalContext({ lightRows: [source] });
+  const objects = [{
+    partId: 'object',
+    coordinates: source.vertices.map(({ lon, lat }) => [lon, lat]),
+  }];
+  const first = buildAutomaticMsfsRemovalRefresh(context, objects, []);
+  assert.deepEqual(first.acceptedSourceIds, [source.id]);
+  assert.ok(first.removals.length > 0);
+  const second = buildAutomaticMsfsRemovalRefresh(context, objects,
+    first.removals.map(removal => ({ ...removal, origin: 'msfs-auto' }))
+  );
+  assert.deepEqual(second.removals, first.removals);
+  assert.deepEqual(second.removalIds, first.removals.map(removal => removal.id));
+});
+
+test('scenery refresh preserves manual remove and keep choices through source aliases', () => {
+  const automatic = row('automatic', -33.9);
+  const removed = { ...row('merged-removed', -33.91), sourceRowIds: ['raw-removed'] };
+  const kept = { ...row('merged-kept', -33.92), sourceRowIds: ['raw-kept'] };
+  const rows = [automatic, removed, kept];
+  const context = { version: 4, lightRows: rows, instances: [], mustKeepZones: [] };
+  const objects = rows.map(source => ({
+    partId: source.id,
+    coordinates: source.vertices.map(({ lon, lat }) => [lon, lat]),
+  }));
+  const manual = [{
+    id: 'manual-remove', origin: 'msfs-manual',
+    selections: [{ sourceId: 'raw-removed:division-section:owner' }],
+  }, {
+    id: 'manual-keep', origin: 'imported', importedOrigin: 'msfs-manual',
+    keepSelections: [{ sourceId: 'raw-kept' }], coordinates: [],
+  }];
+  const original = structuredClone(manual);
+  const result = buildAutomaticMsfsRemovalRefresh(context, objects, manual);
+  assert.deepEqual(result.acceptedSourceIds, [automatic.id]);
+  assert.deepEqual(result.bindingsByPartId.map(entry => entry.partId), [automatic.id]);
+  assert.deepEqual(result.removalIds, []);
+  assert.deepEqual(manual, original);
+});
+
+test('scenery refresh retires stale automatic polygons and clears unmatched bindings', () => {
+  const result = buildAutomaticMsfsRemovalRefresh(
+    { version: 4, lightRows: [], instances: [] },
+    [{ partId: 'unmatched', coordinates: [[151, -33.9], [151.001, -33.9]], sourceBindings: [{ sourceId: 'old' }] }],
+    [{ id: 'old-auto', origin: 'msfs-auto', sourceIds: ['old'] }]
+  );
+  assert.deepEqual(result.removals, []);
+  assert.deepEqual(result.removalIds, ['old-auto']);
+  assert.deepEqual(result.bindingsByPartId, [{ partId: 'unmatched', bindings: [] }]);
 });
 
 test('import refresh preserves saved manual removals and metadata-only keep selections', () => {
@@ -368,7 +646,7 @@ test('MSFS removal context consolidates co-located source light rows like draft 
   assert.ok(result.removals.every((removal) => removal.sourceIds.includes('layer-b')));
 });
 
-test('merged compiled rows remove every alternating source-light phase', () => {
+test('merged custom compiled rows remove every alternating source-light phase', () => {
   const startLatitude = 51.47;
   const rowLengthMeters = 160;
   const phaseOffsetMeters = 8;
@@ -385,8 +663,8 @@ test('merged compiled rows remove every alternating source-light phase', () => {
       { lat: startLatitude + (offsetMeters + rowLengthMeters) / 111_320, lon: -0.47 },
     ],
   });
-  const green = compiledRow('green-phase', 0, 'green');
-  const yellow = compiledRow('yellow-phase', phaseOffsetMeters, 'yellow');
+  const green = compiledRow('green-phase', 0, 'custom-green');
+  const yellow = compiledRow('yellow-phase', phaseOffsetMeters, 'custom-yellow');
   const context = buildMsfsRemovalContext({
     lightRows: [green, yellow],
     instances: [],
@@ -405,6 +683,60 @@ test('merged compiled rows remove every alternating source-light phase', () => {
       (target) => Math.abs(wgs84LocalDistanceMeters(green.vertices[0], target) - 8) < 0.01
     )
   );
+});
+
+test('merged vertex rows retain staggered light positions in full and partial selections', () => {
+  const vertex = (meters, offset = 0) => ({ lat: -37.67 + offset / 111_320, lon: 144.84 + meters / 88_120 });
+  const sources = [
+    { ...row('green-vertices', -37.67), classification: 'taxi-centerline',
+      compiledLightPlacement: 'vertices', spacing: 60.96,
+      vertices: [0, 10, 20, 30, 40].map(m => vertex(m)) },
+    { ...row('yellow-vertices', -37.67), classification: 'taxi-centerline',
+      compiledLightPlacement: 'vertices', spacing: 60.96,
+      vertices: [0.3, 10.3, 20.3, 30.3, 40.3].map(m => vertex(m, 0.3)) },
+  ];
+  const context = buildMsfsRemovalContext({ lightRows: sources, instances: [], mustKeepZones: [] });
+  assert.equal(context.lightRows.length, 1);
+  const selected = buildSelectedMsfsRemovals(context, [context.lightRows[0].id]);
+  assert.deepEqual(selected.conflicts, []);
+  const fullTargets = selected.removals.flatMap(r => r.targetLightPoints);
+  for (const point of sources.flatMap(r => r.vertices)) {
+    assert.ok(fullTargets.some(t => Math.abs(t.lat - point.lat) < 1e-10 && Math.abs(t.lon - point.lon) < 1e-10));
+  }
+  const partial = buildSelectedMsfsRemovals(context, [{
+    sourceId: context.lightRows[0].id, rangeStartMeters: 5, rangeEndMeters: 25,
+  }]);
+  assert.deepEqual(partial.conflicts, []);
+  const partialTargets = partial.removals.flatMap(r => r.targetLightPoints);
+  assert.equal(partialTargets.length, 4);
+  assert.ok(partialTargets.every(t => fullTargets.some(p => p.lat === t.lat && p.lon === t.lon)));
+
+  const protectedPoint = sources[1].vertices.at(-1);
+  const protectedResult = buildSelectedMsfsRemovals({
+    ...context,
+    mustKeepZones: [{ id: 'protected-end', geometryType: 'Point', point: protectedPoint,
+      clearanceMeters: 0.2, classification: 'runway-edge' }],
+  }, [context.lightRows[0].id]);
+  assert.ok(protectedResult.removals.every(removal =>
+    !pointInPolygon(protectedPoint, removal.coordinates.map(([lon, lat]) => ({ lon, lat })))
+  ));
+  assert.ok(!protectedResult.removals.flatMap(r => r.targetLightPoints).some(t =>
+    t.lat === protectedPoint.lat && t.lon === protectedPoint.lon
+  ));
+});
+
+test('cached merged vertex targets require refresh but complete spacing contexts survive', () => {
+  const sources = ['a', 'b'].map(id => ({ ...row(id, -37.67), compiledLightPlacement: 'vertices' }));
+  const merged = { ...sources[0], sourceRowIds: ['a', 'b'] };
+  assert.equal(normalizeMsfsRemovalContext({ version: 4, lightRows: [merged] }), null);
+  assert.equal(normalizeMsfsRemovalContext({ version: 4, lightRows: [{
+    ...merged, removalTargetSourceRows: [sources[0]],
+  }] }), null);
+  const complete = { version: 4, lightRows: [{ ...merged, compiledLightPlacement: 'spacing',
+    removalTargetSourceRows: sources.map(source => ({ ...source, compiledLightPlacement: 'spacing' })),
+  }] };
+  assert.equal(normalizeMsfsRemovalContext(complete).version, 5);
+  assert.equal(normalizeMsfsRemovalContext(complete).lightRows, complete.lightRows);
 });
 
 test('stale merged compiled removal contexts require a scenery refresh', () => {
@@ -1439,4 +1771,33 @@ test('source placement exclusions cross runway envelopes but preserve discrete a
   assert.ok(exclusions.some(r => r.sourceIds.includes('fixture-1')));
   const fallback = buildSelectedMsfsRemovals({...context, mustKeepZones: [envelope]}, [sourceRow.id]);
   assert.equal(fallback.removals.filter(r => r.exclusionFlags?.excludeLibraryObjects).length, 0);
+});
+
+
+test('legacy colour rows recover without enabling an overlapping unlighted path', () => {
+  const vertices = [{ lat: 51.4659, lon: -0.44055 }, { lat: 51.4651, lon: -0.44055 }];
+  const green = { id: 'green', sourceType: 'bgl-airport-light-row', preset: 'GREEN', classification: 'unknown-light',
+    spacing: 15, compiledLightPlacement: 'spacing', removalTargetSampling: 'spacing', vertices };
+  const unknown = { ...green, id: 'unknown', preset: 'UNRECOGNISED' };
+  const oldZone = { id: 'legacy-keep', sourceId: 'green', sourceType: green.sourceType, preset: 'GREEN',
+    classification: 'unknown-light', lightType: 'source-light-row', geometryType: 'LineString', vertices, clearanceMeters: 0.2 };
+  const data = { lightRows: [green, { id: 'path', sourceType: 'bgl-taxiway-path', classification: 'taxi-centerline',
+    removalEligible: false, vertices }], mustKeepZones: [oldZone], instances: [] };
+  const context = buildMsfsRemovalContext(data);
+  assert.ok(context.lightRows.find(row => row.id === 'green').removalEligible !== false);
+  assert.equal(context.lightRows.find(row => row.id === 'path').removalEligible, false);
+  const result = buildSelectedMsfsRemovals(context, ['green']);
+  assert.equal(result.rejectedSourceIds.length, 0);
+  assert.ok(result.removals.some(removal => removal.removalMode === 'polygon'));
+  assert.ok(result.removals.some(removal => removal.targetLightPoints.length > 0));
+  assert.equal(result.conflicts.length, 0);
+  const explicit = { ...oldZone, id: 'explicit-keep', explicitEditorKeep: true };
+  const normalized = normalizeMsfsLightRowClassifications({ ...data, lightRows: [green, unknown], mustKeepZones: [oldZone, explicit] });
+  assert.deepEqual(normalized.mustKeepZones, [explicit]);
+  assert.equal(normalized.lightRows[1], unknown);
+  assert.equal(green.classification, 'unknown-light');
+  assert.equal(normalizeMsfsRemovalContext({ version: 5, lightRows: [], mustKeepZones: [oldZone] }), null);
+  assert.equal(normalizeMsfsRemovalContext({ version: 5, lightRows: [{
+    id: 'stale-merged', removalEligible: false, removalTargetSourceRows: [green],
+  }] }), null);
 });

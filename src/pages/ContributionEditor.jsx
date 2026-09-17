@@ -59,6 +59,7 @@ import {
 } from '../features/contribution-editor/editor-model.js';
 import {
   distanceMeters,
+  lineLengthMeters,
   joinLines,
   nearestPointOnLine,
   sliceLineBetween,
@@ -95,8 +96,10 @@ import {
   matchSnappedReference,
   nearbyRemovalBindingFromExtendedReference,
   referenceMatchFromProjections,
+  xplaneRemovalSectionSelectors,
   removalBindingFromExtendedReference,
 } from '../features/contribution-editor/editor-snapping.js';
+import { routeDrawCoordinates, routeReferenceLines } from '../features/contribution-editor/reference-routing.js';
 import {
   createTextureEntryIndex,
   findTextureEntry,
@@ -111,6 +114,7 @@ import {
 import { preloadRoute } from '../utils/routeModules.js';
 import {
   automaticRemovalSelections,
+  retainSharedAutomaticRemovalSelections,
   importedRemovalIdsToRetire,
   canonicalMsfsRemovalSourceId,
   coveredAutomaticRemovalIds,
@@ -118,6 +122,7 @@ import {
   importedRemovalReplacementPlan,
   manualMsfsRemovalSourceIds,
   removalBindingsFromMatch,
+  isManualMsfsRemoval,
   removalSelectionFeature,
   removalSelectionFromBinding,
   removalBindingsWithSharedRows,
@@ -366,10 +371,11 @@ export default function ContributionEditor() {
   const [importedRemovalMigrationPending, setImportedRemovalMigrationPending] = useState(() =>
     Boolean(
       initialSession?.removalContext &&
-      initialSession?.document?.removals?.some((removal) => removal.origin === 'imported')
+      initialSession?.document?.simulator === 'msfs'
     )
   );
   const [removalBusy, setRemovalBusy] = useState(false);
+  const [removalProgress, setRemovalProgress] = useState(null);
   const [removalPreview, setRemovalPreview] = useState(null);
   const [sourceMismatch, setSourceMismatch] = useState(false);
   const [dragTarget, setDragTarget] = useState('');
@@ -421,18 +427,26 @@ export default function ContributionEditor() {
   const document = state?.present;
   const importedMsfsRemovalsPresent = Boolean(
     document?.simulator === 'msfs' &&
-    document.removals.some((removal) => removal.origin === 'imported')
+    document.removals.some((removal) => removal.origin === 'imported' && !isManualMsfsRemoval(removal))
   );
   const importedRemovalRefreshPending = Boolean(
-    importedMsfsRemovalsPresent &&
+    document?.simulator === 'msfs' &&
     (sourceProgress || importedRemovalMigrationPending || removalBusy)
   );
+  const removalProgressLabel = removalProgress?.phase === 'matching'
+    ? `Matching ${Math.round((removalProgress.completed / Math.max(1, removalProgress.total)) * 100)}%`
+    : removalProgress?.phase === 'building'
+      ? 'Building…'
+      : 'Updating…';
   const mapDocument = useMemo(
     () =>
       importedRemovalMigrationPending
         ? {
             ...document,
-            removals: document.removals.filter((removal) => removal.origin !== 'imported'),
+            removals: document.removals.filter((removal) =>
+              isManualMsfsRemoval(removal) ||
+              !['imported', 'msfs-source', 'msfs-auto'].includes(removal.origin)
+            ),
           }
         : document,
     [document, importedRemovalMigrationPending]
@@ -571,7 +585,7 @@ export default function ContributionEditor() {
   const idSuggestions = useMemo(
     () =>
       barsIdSuggestions(document?.originalDivisions, selectedObject?.id, 6, {
-        coordinate: selectedObject?.coordinates?.[0],
+        coordinates: selectedObject?.coordinates,
         excludeIds: (document?.objects ?? [])
           .filter((object) => object.partId !== selectedObject?.partId)
           .map((object) => object.id),
@@ -842,10 +856,9 @@ export default function ContributionEditor() {
 
   useEffect(() => {
     if (document?.simulator !== 'msfs' || !removalContext) return undefined;
-    const importedRemovals = document.removals.filter((removal) => removal.origin === 'imported');
     const workerClient = removalWorkerClientRef.current;
     const migratedContexts = migratedRemovalContextsRef.current;
-    if (importedRemovals.length === 0 || !workerClient || migratedContexts.has(removalContext)) {
+    if (!workerClient || migratedContexts.has(removalContext)) {
       return undefined;
     }
 
@@ -855,16 +868,20 @@ export default function ContributionEditor() {
     importedRemovalAbortRef.current = abortController;
     let completed = false;
     setImportedRemovalMigrationPending(true);
+    setRemovalProgress(null);
     startTransition(() => setRemovalBusy(true));
     workerClient
-      .migrateImported(document.objects, importedRemovals, {
+      .refreshAutomatic(document.objects, document.removals, {
         signal: abortController.signal,
+        onProgress: (progress) => {
+          if (!abortController.signal.aborted) setRemovalProgress(progress);
+        },
       })
       .then((result) => {
         if (abortController.signal.aborted) return;
         completed = true;
         dispatch({
-          type: 'migrate-imported-msfs-removals',
+          type: 'refresh-automatic-msfs-removals',
           bindingsByPartId: result.bindingsByPartId,
           sourceIds: result.generatedSourceIds,
           removalIds: result.removalIds,
@@ -881,6 +898,7 @@ export default function ContributionEditor() {
         if (importedRemovalAbortRef.current !== abortController) return;
         importedRemovalAbortRef.current = null;
         setImportedRemovalMigrationPending(false);
+        setRemovalProgress(null);
         startTransition(() => setRemovalBusy(false));
       });
 
@@ -987,30 +1005,29 @@ export default function ContributionEditor() {
     async (matchOrMatches, retainedBindings = [], replacedRemovalIds = []) => {
       if (document?.simulator !== 'msfs' || !removalContext) return;
       const manualSourceIds = manualMsfsRemovalSourceIds(document.removals);
-      const selections = automaticRemovalSelections(matchOrMatches, retainedBindings).filter(
+      const selections = retainSharedAutomaticRemovalSelections(
+        automaticRemovalSelections(matchOrMatches, retainedBindings), document.removals
+      ).filter(
         (selection) => !manualSourceIds.has(canonicalMsfsRemovalSourceId(selection.sourceId))
       );
+      removalAbortRef.current?.abort();
+      const requestId = ++removalRequestRef.current;
       if (selections.length === 0) {
-        if (replacedRemovalIds.length > 0) {
-          dispatch({
-            type: 'upsert-msfs-auto-removals',
-            sourceIds: [],
-            removalIds: replacedRemovalIds,
-            removals: [],
-          });
-        }
+        removalAbortRef.current = null;
+        setRemovalBusy(false);
         return;
       }
-      removalAbortRef.current?.abort();
       const abortController = new AbortController();
       removalAbortRef.current = abortController;
       const workerClient = removalWorkerClientRef.current;
       if (!workerClient) return;
-      const requestId = ++removalRequestRef.current;
       setRemovalBusy(true);
       try {
         const result = await workerClient.build(selections, {
           signal: abortController.signal,
+          automatic: true,
+          excludedSourceIds: [...manualSourceIds],
+          keepSelections: document.removals.flatMap((removal) => removal.keepSelections ?? []),
         });
         if (requestId !== removalRequestRef.current) return;
         const acceptedSourceIds = new Set((result.acceptedSourceIds ?? []).map(String));
@@ -1023,11 +1040,15 @@ export default function ContributionEditor() {
         const affectedSourceIds = new Set();
         for (const selection of acceptedSelections) affectedSourceIds.add(selection.sourceId);
         for (const sourceId of result.generatedSourceIds ?? []) affectedSourceIds.add(sourceId);
-        if (affectedSourceIds.size > 0) {
+        if (affectedSourceIds.size > 0 && rejectedSelections.length === 0) {
           dispatch({
             type: 'upsert-msfs-auto-removals',
             sourceIds: [...affectedSourceIds],
-            removalIds: replacedRemovalIds,
+            removalIds: replacedRemovalIds.filter((id) =>
+              document.removals.some((removal) =>
+                String(removal.id) === String(id) && removal.origin === 'imported'
+              )
+            ),
             removals: result.removals,
           });
         }
@@ -1220,6 +1241,10 @@ export default function ContributionEditor() {
   const handleCreate = useCallback(
     (coordinates, options = {}) => {
       if (!document || coordinates.length < 2) return;
+      const route = document.simulator === 'msfs' && snapEnabled && !options.divisionId
+        ? routeDrawCoordinates(coordinates, referenceScene.features)
+        : null;
+      if (route) coordinates = route.coordinates;
       const requestedDivisionId = String(options.divisionId ?? '').trim();
       const requestedDivision = requestedDivisionId
         ? document.originalDivisions.find(
@@ -1233,13 +1258,13 @@ export default function ContributionEditor() {
       ) {
         return;
       }
-      const match = matchSnappedReference(coordinates, referenceScene.features, 1.5, {
+      const match = route ? { bindings: route.bindings } : matchSnappedReference(coordinates, referenceScene.features, 1.5, {
         allowDerived: document.simulator === 'msfs',
       });
       const suggestion = requestedDivision
         ? { id: requestedDivision.id, name: requestedDivision.name }
         : barsIdSuggestions(document.originalDivisions, '', 1, {
-            coordinate: coordinates[0],
+            coordinates,
             excludeIds: document.objects.map((object) => object.id),
           })[0];
       const suggestedDivision =
@@ -1271,7 +1296,7 @@ export default function ContributionEditor() {
       setRightPanel('object');
       void syncAutomaticMsfsRemoval(match);
     },
-    [document, referenceScene.features, syncAutomaticMsfsRemoval]
+    [document, referenceScene.features, snapEnabled, syncAutomaticMsfsRemoval]
   );
 
   const handleGeometryChange = useCallback(
@@ -1358,10 +1383,7 @@ export default function ContributionEditor() {
       if (tool === 'remove-light') {
         if (removalBusy) return;
         if (document?.simulator === 'msfs') {
-          const removalFeature = removalSelectionFeature(
-            removalSectionStart,
-            resolveMsfsRemovalTarget(nearbyRemovalReferenceFeatures, feature, coordinate)
-          );
+          const removalFeature = resolveMsfsRemovalTarget(nearbyRemovalReferenceFeatures, feature, coordinate);
           const removalProperties = removalFeature?.properties ?? {};
           const sourceId = canonicalMsfsRemovalSourceId(
             removalProperties.sourceId ?? removalFeature?.id
@@ -1374,7 +1396,7 @@ export default function ContributionEditor() {
             showError('Select a source-backed light row.');
             return;
           }
-          if (!removalContext) {
+          if (!removalContext || removalProperties.requiresSourceRefresh) {
             showError('Reconnect the scenery package before changing MSFS removals.');
             return;
           }
@@ -1384,6 +1406,19 @@ export default function ContributionEditor() {
             setRemovalSectionStart({ sourceId, feature: removalFeature, projection });
             return;
           }
+          const route = routeReferenceLines(
+            nearbyRemovalReferenceFeatures, removalSectionStart.feature,
+            removalSectionStart.projection, removalFeature, projection
+          );
+          if (!route) {
+            showError('Those points are not joined by a source light row. Choose another end point.');
+            return;
+          }
+          if (lineLengthMeters(route.coordinates) < 1) {
+            showError('Select an end point at least 1 metre from the start.');
+            return;
+          }
+          const routeSourceIds = route.bindings.map(binding => binding.sourceId);
           const finishPerformanceTrace = beginEditorInteraction('msfs-removal-section-edit', {
             sourceId,
             removalCount: document.removals.length,
@@ -1392,39 +1427,16 @@ export default function ContributionEditor() {
           });
           let editableGroup = traceEditorSpan(
             'removal:editable-group',
-            () => editableMsfsRemovalGroup(document, sourceId, removalContext.lightRows),
+            () => editableMsfsRemovalGroup(
+              document, routeSourceIds, removalContext.lightRows, [], removalEditMode === 'add'
+            ),
             { sourceId }
           );
-          const editSourceId = editableGroup.targetSourceId || sourceId;
           let nextSelections = [...editableGroup.selections];
           let nextKeepSelections = [...(editableGroup.keepSelections ?? [])];
           let retiredImportedRemovalIds = [];
-          const section = traceEditorSpan(
-            'removal:project-section',
-            () =>
-              referenceMatchFromProjections(
-                removalFeature,
-                removalSectionStart.projection,
-                projection
-              ),
-            { sourceId: editSourceId }
-          );
-          const selection = removalSelectionFromBinding(section?.binding);
-          if (!selection) {
-            finishPerformanceTrace({ outcome: 'selection-unresolved' });
-            return;
-          }
-          if (selection.rangeEndMeters - selection.rangeStartMeters < 1) {
-            showError('Select an end point at least 1 metre from the start.');
-            finishPerformanceTrace({ outcome: 'selection-too-short' });
-            return;
-          }
           if (removalEditMode === 'erase') {
-            const selectedCoordinates = sliceLineBetween(
-              removalFeature.geometry.coordinates,
-              removalSectionStart.projection,
-              projection
-            );
+            const selectedCoordinates = route.coordinates;
             const overlappingRemovalIds = traceEditorSpan(
               'removal:overlapping-keep-polygons',
               () => removalIdsCoveringLineSection(document.removals, selectedCoordinates),
@@ -1442,7 +1454,7 @@ export default function ContributionEditor() {
                 () =>
                   editableMsfsRemovalGroup(
                     document,
-                    sourceId,
+                    routeSourceIds,
                     removalContext.lightRows,
                     overlappingRemovalIds
                   ),
@@ -1452,31 +1464,19 @@ export default function ContributionEditor() {
               nextKeepSelections = [...(editableGroup.keepSelections ?? [])];
             }
           }
-          nextSelections = traceEditorSpan(
-            'removal:apply-selection-edit',
-            () =>
-              applyMsfsSelectionEdit(
-                nextSelections,
-                { ...selection, sourceId: editSourceId },
-                removalEditMode,
-                section.binding.sourceParentLengthMeters
-              ),
-            { editMode: removalEditMode, existingSelectionCount: nextSelections.length }
-          );
-          nextKeepSelections = traceEditorSpan(
-            'removal:apply-keep-selection-edit',
-            () =>
-              applyMsfsSelectionEdit(
-                nextKeepSelections,
-                { ...selection, sourceId: editSourceId },
-                removalEditMode === 'erase' ? 'add' : 'erase',
-                section.binding.sourceParentLengthMeters
-              ),
-            {
-              editMode: removalEditMode,
-              existingKeepSelectionCount: nextKeepSelections.length,
-            }
-          );
+          const editSourceIds = new Set();
+          for (const binding of route.bindings) {
+            const id = canonicalMsfsRemovalSourceId(binding.sourceId);
+            const row = removalContext.lightRows.find(row =>
+              canonicalMsfsRemovalSourceId(row.id) === id ||
+              (row.sourceRowIds ?? []).some(alias => canonicalMsfsRemovalSourceId(alias) === id)
+            );
+            const selection = { ...removalSelectionFromBinding(binding), sourceId: String(row?.id ?? id) };
+            editSourceIds.add(selection.sourceId);
+            nextSelections = applyMsfsSelectionEdit(nextSelections, selection, removalEditMode, binding.sourceParentLengthMeters);
+            nextKeepSelections = applyMsfsSelectionEdit(nextKeepSelections, selection,
+              removalEditMode === 'erase' ? 'add' : 'erase', binding.sourceParentLengthMeters);
+          }
           setRemovalSectionStart(null);
           removalAbortRef.current?.abort();
           const abortController = new AbortController();
@@ -1518,7 +1518,7 @@ export default function ContributionEditor() {
               return;
             }
             const targetUnresolved = result.rejectedSourceIds.some(
-              (rejectedSourceId) => canonicalMsfsRemovalSourceId(rejectedSourceId) === editSourceId
+              (rejectedSourceId) => editSourceIds.has(canonicalMsfsRemovalSourceId(rejectedSourceId))
             );
             if (removalEditMode === 'add' && targetUnresolved) {
               showError(
@@ -1530,10 +1530,11 @@ export default function ContributionEditor() {
             traceEditorSpan('removal:dispatch-replacement', () =>
               dispatch({
                 type: 'replace-msfs-edited-removals',
+                preserveAutomatic: removalEditMode === 'add',
                 sourceIds: [
                   ...new Set([
                     ...editableGroup.sourceIds,
-                    editSourceId,
+                    ...editSourceIds,
                     ...(result.generatedSourceIds ?? []),
                   ]),
                 ],
@@ -1604,19 +1605,19 @@ export default function ContributionEditor() {
             setRemovalSectionStart({ sourceId, feature: removalFeature, projection });
             return;
           }
-          const match = referenceMatchFromProjections(
-            removalFeature,
-            removalSectionStart.projection,
-            projection
-          );
           if (
             distanceMeters(removalSectionStart.projection.coordinate, projection.coordinate) < 1
           ) {
             showError('Select an end point at least 1 metre from the start.');
             return;
           }
-          const sectionSelector = match?.selector ?? match?.selectors?.[0];
-          if (sectionSelector) {
+          const sectionSelectors = xplaneRemovalSectionSelectors(
+            removalFeature,
+            removalSectionStart.projection,
+            projection,
+            referenceScene.features
+          );
+          for (const sectionSelector of sectionSelectors) {
             dispatch({
               type: 'edit-xplane-removal',
               selector: sectionSelector,
@@ -1637,11 +1638,18 @@ export default function ContributionEditor() {
       const projection = nearestPointOnLine(coordinate, feature.geometry.coordinates);
       if (!projection) return;
       const sourceId = String(feature.properties?.sourceId ?? feature.id ?? '');
-      if (!followState || followState.sourceId !== sourceId) {
+      if (!followState || (document?.simulator !== 'msfs' && followState.sourceId !== sourceId)) {
         setFollowState({ sourceId, feature, first: projection });
         return;
       }
-      const coordinates = sliceLineBetween(
+      const route = document?.simulator === 'msfs'
+        ? routeReferenceLines(referenceScene.features, followState.feature, followState.first, feature, projection)
+        : null;
+      if (!route && followState.sourceId !== sourceId) {
+        showError('Those points are not joined by a simulator line. Choose another end point.');
+        return;
+      }
+      const coordinates = route?.coordinates ?? sliceLineBetween(
         feature.geometry.coordinates,
         followState.first,
         projection
@@ -1652,13 +1660,18 @@ export default function ContributionEditor() {
         document?.simulator === 'xplane'
           ? matchSnappedReference(coordinates, referenceScene.features)
           : null;
-      const match = overlapMatch ?? tracedMatch;
+      const match = route ? { bindings: route.bindings } : overlapMatch ?? tracedMatch;
       dispatch({
         type: 'update-object-geometry',
         id: selectedObject.partId,
         coordinates,
         match,
       });
+      if (document?.simulator === 'msfs') {
+        void syncAutomaticMsfsRemoval({ bindings: removalBindingsWithSharedRows(
+          document.objects, selectedObject.partId, removalBindingsFromMatch(match)
+        ) });
+      }
       setFollowState(null);
       setTool('select');
     },
@@ -1672,6 +1685,7 @@ export default function ContributionEditor() {
       removalEditMode,
       removalSectionStart,
       selectedObject,
+      syncAutomaticMsfsRemoval,
       showError,
       tool,
     ]
@@ -1717,9 +1731,7 @@ export default function ContributionEditor() {
   const extractReference = useCallback(
     (selection) => {
       if (!selection?.entries.length || !airport || !document) return;
-      const refreshesImportedMsfsRemovals =
-        document.simulator === 'msfs' &&
-        document.removals.some((removal) => removal.origin === 'imported');
+      const refreshesImportedMsfsRemovals = document.simulator === 'msfs';
       const fingerprint = scenerySelectionFingerprint(selection.entries);
       setSourceMismatch(
         Boolean(document.source?.fingerprint && document.source.fingerprint !== fingerprint)
@@ -1753,12 +1765,13 @@ export default function ContributionEditor() {
             setRenderBundle(message.result.renderBundle || null);
             setRemovalContext(message.result.removalContext || null);
             setImportedRemovalMigrationPending(
-              document.removals.some((removal) => removal.origin === 'imported')
+              document.simulator === 'msfs'
             );
             setSourceMismatch(false);
             dispatch({
               type: 'update-source',
               source: { name: selection.name, fingerprint },
+              xplaneSourceValidation: message.result.xplaneSourceValidation,
             });
             saveReferenceScene(
               icao,
@@ -1806,15 +1819,19 @@ export default function ContributionEditor() {
 
   const connectTextureLibrary = useCallback(
     async (library) => {
-      if (!library || !document?.source?.fingerprint) return;
-      const selection = mergeScenerySelections(sourceSelection, library);
-      setSourceSelection(selection);
-      setSourceProgress({
-        kind: 'textures',
-        stage: 'Resolving X-Plane library paths',
-        progress: 20,
-      });
       try {
+        if (!library) return;
+        if (!document?.source?.fingerprint) {
+          showError('Connect the airport scenery package before adding a texture library.');
+          return;
+        }
+        const selection = mergeScenerySelections(sourceSelection, library);
+        setSourceSelection(selection);
+        setSourceProgress({
+          kind: 'textures',
+          stage: 'Resolving X-Plane library paths',
+          progress: 20,
+        });
         const resolution = await resolveTextureLibraryInWorker(referenceScene, selection.entries);
         const resolvedScene = resolution.scene;
         setReferenceScene(resolvedScene);
@@ -1859,10 +1876,18 @@ export default function ContributionEditor() {
       if (files.length === 0) return;
       setSourceProgress({ kind: 'textures', stage: 'Reading selected textures', progress: 5 });
       requestAnimationFrame(() => {
-        setTimeout(() => connectTextureLibrary(selectionFromInput(files)), 0);
+        setTimeout(async () => {
+          try {
+            await connectTextureLibrary(selectionFromInput(files));
+          } catch (error) {
+            showError(error instanceof Error ? error.message : String(error));
+          } finally {
+            setSourceProgress(null);
+          }
+        }, 0);
       });
     },
-    [connectTextureLibrary]
+    [connectTextureLibrary, showError]
   );
 
   const handleDraftDrop = useCallback(
@@ -1908,12 +1933,12 @@ export default function ContributionEditor() {
   );
 
   const handleDownload = useCallback(() => {
-    if (!document || importedMsfsRemovalsPresent) return;
+    if (!document || importedMsfsRemovalsPresent || importedRemovalRefreshPending) return;
     downloadText(serializeDraftXml(document), `${icao}-Draft.xml`, 'application/xml');
-  }, [document, icao, importedMsfsRemovalsPresent]);
+  }, [document, icao, importedMsfsRemovalsPresent, importedRemovalRefreshPending]);
 
   const handleContinue = useCallback(async () => {
-    if (!document || importedMsfsRemovalsPresent) return;
+    if (!document || importedMsfsRemovalsPresent || importedRemovalRefreshPending) return;
     const blocking = issues.filter((issue) => issue.severity === 'error');
     if (blocking.length > 0) {
       showError(
@@ -1938,7 +1963,7 @@ export default function ContributionEditor() {
         airportName: airport?.name || '',
       },
     });
-  }, [airport?.name, document, icao, importedMsfsRemovalsPresent, issues, navigate, showError]);
+  }, [airport?.name, document, icao, importedMsfsRemovalsPresent, importedRemovalRefreshPending, issues, navigate, showError]);
 
   const objectList = useMemo(
     () => ({
@@ -2221,37 +2246,39 @@ export default function ContributionEditor() {
               <button
                 type="button"
                 onClick={handleDownload}
-                disabled={importedMsfsRemovalsPresent}
+                disabled={importedMsfsRemovalsPresent || importedRemovalRefreshPending}
                 className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 disabled:cursor-wait disabled:text-zinc-600 disabled:hover:bg-transparent"
               >
                 <Download className="h-4 w-4" />
                 <span className="hidden sm:inline">
-                  {importedRemovalRefreshPending
-                    ? 'Updating removals…'
-                    : importedMsfsRemovalsPresent
-                      ? 'Connect scenery first'
-                      : 'Download XML'}
+                  {importedMsfsRemovalsPresent && !importedRemovalRefreshPending
+                    ? 'Connect scenery first'
+                    : 'Download XML'}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={handleContinue}
-                disabled={importedMsfsRemovalsPresent}
+                disabled={importedMsfsRemovalsPresent || importedRemovalRefreshPending}
+                aria-label={importedRemovalRefreshPending ? removalProgressLabel : undefined}
+                title={importedRemovalRefreshPending ? removalProgressLabel : undefined}
                 className="inline-flex h-8 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 text-[11px] font-medium text-zinc-950 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 disabled:cursor-wait disabled:bg-zinc-700 disabled:text-zinc-400"
               >
-                <span className="hidden sm:inline">
-                  {importedRemovalRefreshPending
-                    ? 'Updating removals…'
-                    : importedMsfsRemovalsPresent
-                      ? 'Connect scenery first'
-                      : 'Test contribution'}
-                </span>
-                <span className="sm:hidden">
-                  {importedRemovalRefreshPending
-                    ? 'Updating…'
-                    : importedMsfsRemovalsPresent
-                      ? 'Connect scenery'
-                      : 'Test'}
+                <span className="relative">
+                  <span className={importedRemovalRefreshPending ? 'invisible' : undefined}>
+                    <span className="hidden sm:inline">
+                      {importedMsfsRemovalsPresent ? 'Connect scenery first' : 'Test contribution'}
+                    </span>
+                    <span className="sm:hidden">
+                      {importedMsfsRemovalsPresent ? 'Connect scenery' : 'Test'}
+                    </span>
+                  </span>
+                  {importedRemovalRefreshPending ? (
+                    <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center whitespace-nowrap">
+                      <span className="hidden sm:inline">{removalProgressLabel}</span>
+                      <span className="sm:hidden">…</span>
+                    </span>
+                  ) : null}
                 </span>
                 <ArrowRight className="h-4 w-4" />
               </button>
