@@ -16,6 +16,8 @@ import {
   Check,
 } from 'lucide-react';
 import { Toast } from '../shared/Toast';
+import { PageLoading } from '../shared/PageLoading';
+import { IconSwap } from '../shared/IconSwap';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import DOMPurify from 'dompurify';
 
@@ -30,7 +32,7 @@ const sanitizeNotamLinks = (content) => {
   // Add target="_blank" and rel="noopener noreferrer" for security
   const sanitizedContent = content.replace(
     linkRegex,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-150 hover:brightness-125">$1</a>'
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-[var(--duration-quick)] hover:brightness-125">$1</a>'
   );
   return DOMPurify.sanitize(sanitizedContent);
 };
@@ -90,7 +92,7 @@ const getNotamTypeStyles = (type) => {
 
 const getNotamTypes = () => ['warning', 'info', 'discord', 'success', 'error'];
 
-// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The single NOTAM editor intentionally keeps independent request, draft, copy, and dialog state local.
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/no-high-complexity-react-function, react-doctor/prefer-useReducer -- The single NOTAM editor intentionally keeps independent request, draft, copy, and dialog state local.
 const NotamManagement = () => {
   const [notamData, setNotamData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -309,22 +311,24 @@ const NotamManagement = () => {
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           aria-expanded={isOpen}
-          className="flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-white transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+          className="flex min-h-10 w-full items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-white transition-[background-color,border-color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
         >
           <div className="flex items-center space-x-2">
             <div
-              className={`w-3 h-3 rounded-full transition-colors duration-200 ${getNotamTypeStyles(currentType).circle}`}
+              className={`w-3 h-3 rounded-full transition-colors duration-[var(--duration-quick)] ${getNotamTypeStyles(currentType).circle}`}
             ></div>
-            <span className="capitalize transition-colors duration-200">{currentType}</span>
+            <span className="capitalize transition-colors duration-[var(--duration-quick)]">
+              {currentType}
+            </span>
           </div>
           <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform duration-150 ease-out ${isOpen ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 shrink-0 transition-transform duration-[var(--duration-quick)] ease-[var(--ease-out)] ${isOpen ? 'rotate-180' : ''}`}
           />
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-150">
-            {getNotamTypes().map((type, index) => (
+          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 animate-in fade-in-0 zoom-in-95 duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]">
+            {getNotamTypes().map((type) => (
               <button
                 type="button"
                 key={type}
@@ -332,20 +336,18 @@ const NotamManagement = () => {
                   setType(type);
                   setIsOpen(false);
                 }}
-                className={`flex min-h-10 w-full items-center space-x-2 px-4 py-2 text-left transition-[background-color,color] duration-150 ease-out hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
+                className={`flex min-h-10 w-full items-center space-x-2 px-4 py-2 text-left transition-[background-color,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-700 focus-visible:outline-none focus-visible:bg-zinc-700 ${
                   currentType === type
                     ? 'bg-zinc-700 text-blue-400'
                     : 'text-white hover:text-zinc-100'
                 }`}
-                style={{
-                  animationDelay: `${index * 25}ms`,
-                  animationFillMode: 'both',
-                }}
               >
                 <div
-                  className={`h-3 w-3 rounded-full transition-colors duration-150 ${getNotamTypeStyles(type).circle}`}
+                  className={`h-3 w-3 rounded-full transition-colors duration-[var(--duration-quick)] ${getNotamTypeStyles(type).circle}`}
                 ></div>
-                <span className="capitalize transition-colors duration-150">{type}</span>
+                <span className="capitalize transition-colors duration-[var(--duration-quick)]">
+                  {type}
+                </span>
               </button>
             ))}
           </div>
@@ -368,7 +370,7 @@ const NotamManagement = () => {
               <button
                 type="button"
                 onClick={handleStartAdd}
-                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
               >
                 <Plus className="w-4 h-4" />
                 New NOTAM
@@ -377,7 +379,7 @@ const NotamManagement = () => {
                 <button
                   type="button"
                   onClick={handleStartEdit}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 >
                   <Edit className="w-4 h-4" />
                   Edit Current
@@ -395,7 +397,7 @@ const NotamManagement = () => {
                   (isEditing && !hasEditChanges) ||
                   saving
                 }
-                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-medium text-blue-400 transition-[background-color,border-color,transform,opacity] duration-150 ease-out hover:bg-blue-500/30 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/20 px-4 py-2.5 text-sm font-medium text-blue-400 transition-[background-color,border-color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-blue-500/30 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
               >
                 {saving ? (
                   <>
@@ -418,7 +420,7 @@ const NotamManagement = () => {
                 type="button"
                 onClick={handleCancel}
                 disabled={saving}
-                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-400 transition-[background-color,color,transform,opacity] duration-150 ease-out hover:bg-zinc-800 hover:text-zinc-300 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-2 text-sm font-medium text-zinc-400 transition-[background-color,color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-800 hover:text-zinc-300 active:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
               >
                 <X className="w-4 h-4" />
                 Cancel
@@ -452,7 +454,7 @@ const NotamManagement = () => {
                 id="new-notam-content"
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
-                className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white placeholder-zinc-500 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white placeholder-zinc-500 transition-[background-color,border-color,box-shadow] duration-[var(--duration-quick)] ease-[var(--ease-out)] focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                 placeholder="Enter NOTAM content..."
               />
             </div>
@@ -517,7 +519,7 @@ const NotamManagement = () => {
                 id="edit-notam-content"
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white transition-[background-color,border-color,box-shadow] duration-150 ease-out focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                className="h-24 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 text-white transition-[background-color,border-color,box-shadow] duration-[var(--duration-quick)] ease-[var(--ease-out)] focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
               />
             </div>
 
@@ -567,10 +569,7 @@ const NotamManagement = () => {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader className="w-5 h-5 animate-spin text-zinc-400" />
-              <span className="ml-2 text-sm text-zinc-400">Loading NOTAM...</span>
-            </div>
+            <PageLoading label="Loading NOTAM…" variant="tool-detail" />
           ) : error ? (
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
               <p className="text-sm text-red-400">{error}</p>
@@ -585,11 +584,10 @@ const NotamManagement = () => {
                 className="absolute top-3 right-3 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors"
                 title="Copy NOTAM to clipboard"
               >
-                {copied ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
+                <IconSwap active={copied}>
+                  <Copy className="h-4 w-4" />
+                  <Check className="h-4 w-4 text-emerald-400" />
+                </IconSwap>
               </button>
               <div
                 className={`${getNotamTypeStyles(notamData.type).text} text-sm font-medium pr-10`}

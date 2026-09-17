@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/no-set-state-after-await-in-effect react-doctor/no-async-event-handler-without-reentry-guard -- Route requests share an AbortController; mutating controls expose and set busy state before awaiting, preventing practical re-entry. */
+
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../layout/Layout';
@@ -7,6 +9,7 @@ import { Dialog } from '../shared/Dialog';
 import { Dropdown } from '../shared/Dropdown';
 import { Toast } from '../shared/Toast';
 import { PageLoading } from '../shared/PageLoading';
+import { PointMarkerIcon } from '../shared/PointMarkerIcon';
 import PropTypes from 'prop-types';
 import {
   Plus,
@@ -151,202 +154,6 @@ const toLngLatPair = (coords) => {
     : null;
 };
 
-const getPointColor = (point) => {
-  switch (point.type) {
-    case 'lead_on':
-      return '#fbbf24';
-    case 'stopbar':
-      return '#ef4444';
-    case 'taxiway':
-      switch (point.color) {
-        case 'green-yellow':
-          return '#FFD700';
-        case 'green-blue':
-          return '#0000FF';
-        case 'green-orange':
-          return '#FFA500';
-        default:
-          return '#00FF00';
-      }
-    case 'stand':
-      return 'rgb(255, 141, 35)';
-    default:
-      return '#ef4444';
-  }
-};
-
-const PointMarkerIcon = ({ point }) => {
-  const color = getPointColor(point);
-
-  if (point.type === 'stopbar') {
-    return (
-      <div className="marker-container">
-        <div className={`marker-circle stopbar-marker ${point.orientation || 'left'}`}>
-          {point.directionality === 'uni-directional' &&
-            (point.orientation === 'left' ? (
-              <div className="marker-quarter marker-quarter-4"></div>
-            ) : (
-              <div className="marker-quarter marker-quarter-1"></div>
-            ))}
-        </div>
-      </div>
-    );
-  } else if (point.type === 'lead_on') {
-    return (
-      <div className="marker-container">
-        <div className="marker-circle lead-on-marker">
-          <div className="marker-quarter marker-quarter-1"></div>
-          <div className="marker-quarter marker-quarter-2"></div>
-          <div className="marker-quarter marker-quarter-3"></div>
-          <div className="marker-quarter marker-quarter-4"></div>
-        </div>
-      </div>
-    );
-  } else if (point.type === 'taxiway') {
-    if (point.directionality === 'bi-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker taxiway-green"></div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-blue-quarter-1"></div>
-              <div className="marker-quarter taxiway-blue-quarter-2"></div>
-              <div className="marker-quarter taxiway-blue-quarter-3"></div>
-              <div className="marker-quarter taxiway-blue-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-orange-quarter-1"></div>
-              <div className="marker-quarter taxiway-orange-quarter-2"></div>
-              <div className="marker-quarter taxiway-orange-quarter-3"></div>
-              <div className="marker-quarter taxiway-orange-quarter-4"></div>
-            </div>
-          </div>
-        );
-      }
-    } else if (point.directionality === 'uni-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle taxiway-green ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <div className="marker-quarter taxiway-quarter-L"></div>
-                ) : (
-                  <div className="marker-quarter taxiway-quarter-R"></div>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-blue-quarter-1"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-orange-quarter-1"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      }
-    }
-  }
-
-  return (
-    <div className="marker-container">
-      <div className="marker-circle" style={{ backgroundColor: color }}></div>
-    </div>
-  );
-};
-
-PointMarkerIcon.propTypes = {
-  point: PropTypes.shape({
-    id: PropTypes.string,
-    type: PropTypes.string.isRequired,
-    directionality: PropTypes.string,
-    color: PropTypes.string,
-    orientation: PropTypes.string,
-  }).isRequired,
-};
 
 const MapPreviewIcon = ({ className }) => <MapIcon className={`${className} relative top-px`} />;
 
@@ -503,7 +310,7 @@ const SATELLITE_STYLE = {
 
 // The page coordinates several independent dialogs and a map preview; combining that state or
 // splitting the component is a non-mechanical architecture change with substantial behavior risk.
-// oxlint-disable-next-line react-doctor/no-giant-component react-doctor/prefer-useReducer
+// oxlint-disable-next-line react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer -- Division CRUD, role assignments, dialogs, and the shared map preview depend on one route request lifecycle and coordinated refresh.
 const DivisionManagement = () => {
   const { id: divisionId } = useParams();
   const navigate = useNavigate();
@@ -526,6 +333,7 @@ const DivisionManagement = () => {
   const [airportToDelete, setAirportToDelete] = useState(null);
   const [deletingAirport, setDeletingAirport] = useState(false);
   const [updatingContributionAirportId, setUpdatingContributionAirportId] = useState(null);
+  const [contributionAirportToEnable, setContributionAirportToEnable] = useState(null);
   const token = getVatsimToken();
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isLeadDev, setIsLeadDev] = useState(false);
@@ -1077,7 +885,7 @@ const DivisionManagement = () => {
   };
 
   const handleContributionToggle = async (airport, contributionsEnabled) => {
-    if (!isDivisionMember) return;
+    if (!isDivisionMember || (contributionsEnabled && !getDataSubmitted(airport))) return;
 
     setUpdatingContributionAirportId(airport.id);
     setAirports((prev) =>
@@ -1140,6 +948,27 @@ const DivisionManagement = () => {
     }
   };
 
+  const requestContributionToggle = (airport) => {
+    if (airport.contributions_enabled) {
+      handleContributionToggle(airport, false);
+      return;
+    }
+
+    if (!getDataSubmitted(airport)) return;
+    setContributionAirportToEnable(airport);
+  };
+
+  const confirmEnableContributions = async () => {
+    const airport = contributionAirportToEnable;
+    if (!airport || !getDataSubmitted(airport)) {
+      setContributionAirportToEnable(null);
+      return;
+    }
+
+    await handleContributionToggle(airport, true);
+    setContributionAirportToEnable(null);
+  };
+
   if (loading) {
     return <PageLoading page label="Loading division management…" />;
   }
@@ -1196,7 +1025,7 @@ const DivisionManagement = () => {
                     return (
                       <div
                         key={member.id}
-                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-all duration-200"
+                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)]"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3 min-w-0">
@@ -1293,7 +1122,7 @@ const DivisionManagement = () => {
                     .map((airport) => (
                       <div
                         key={airport.id}
-                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-all duration-200"
+                        className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg hover:border-zinc-600/50 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)]"
                       >
                         <div className="flex items-start justify-between">
                           <div>
@@ -1347,7 +1176,11 @@ const DivisionManagement = () => {
                             <div>
                               <p className="text-sm text-white">Scenery Contributions</p>
                               <p className="text-xs text-zinc-500">
-                                {airport.contributions_enabled ? 'Enabled' : 'Disabled'}
+                                {airport.contributions_enabled
+                                  ? 'Enabled'
+                                  : getDataSubmitted(airport)
+                                    ? 'Disabled'
+                                    : 'Add objects before enabling'}
                               </p>
                             </div>
                             <button
@@ -1355,22 +1188,24 @@ const DivisionManagement = () => {
                               role="switch"
                               aria-checked={airport.contributions_enabled}
                               aria-label={`Toggle scenery contributions for ${airport.icao}`}
-                              onClick={() =>
-                                handleContributionToggle(airport, !airport.contributions_enabled)
-                              }
+                              onClick={() => requestContributionToggle(airport)}
                               disabled={
-                                !isDivisionMember || updatingContributionAirportId === airport.id
+                                !isDivisionMember ||
+                                updatingContributionAirportId === airport.id ||
+                                (!airport.contributions_enabled && !getDataSubmitted(airport))
                               }
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
                                 airport.contributions_enabled ? 'bg-emerald-500' : 'bg-zinc-700'
                               } ${
-                                !isDivisionMember || updatingContributionAirportId === airport.id
+                                !isDivisionMember ||
+                                updatingContributionAirportId === airport.id ||
+                                (!airport.contributions_enabled && !getDataSubmitted(airport))
                                   ? 'opacity-50 cursor-not-allowed'
                                   : 'cursor-pointer'
                               }`}
                             >
                               <span
-                                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
                                   airport.contributions_enabled ? 'translate-x-5' : 'translate-x-1'
                                 }`}
                               />
@@ -1457,7 +1292,7 @@ const DivisionManagement = () => {
                   const digits = paste.replace(/\D/g, '');
                   if (digits) setNewMemberCid((prev) => (prev + digits).replace(/\D/g, ''));
                 }}
-                className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                 placeholder="Enter CID"
                 required
                 disabled={addingMember}
@@ -1538,7 +1373,7 @@ const DivisionManagement = () => {
               type="text"
               value={newAirportIcao}
               onChange={(e) => setNewAirportIcao(e.target.value.toUpperCase())}
-              className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all uppercase"
+              className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] uppercase"
               maxLength={4}
               pattern="[A-Za-z]{4}"
               required
@@ -1576,6 +1411,31 @@ const DivisionManagement = () => {
           </div>
         </form>
       </Dialog>
+
+      {/* Enable Contributions Confirmation Dialog */}
+      <Dialog
+        open={!!contributionAirportToEnable}
+        onClose={() => setContributionAirportToEnable(null)}
+        icon={AlertOctagon}
+        iconColor="orange"
+        title={`Enable contributions for ${contributionAirportToEnable?.icao}?`}
+        description="Only enable scenery contributions once all airport data has been fully added. Enabling early may allow incomplete contributions."
+        closeOnBackdrop={!updatingContributionAirportId}
+        closeOnEscape={!updatingContributionAirportId}
+        isLoading={!!updatingContributionAirportId}
+        maxWidth="md"
+        buttons={[
+          {
+            label: 'Enable contributions',
+            onClick: confirmEnableContributions,
+          },
+          {
+            label: 'Cancel',
+            variant: 'outline',
+            onClick: () => setContributionAirportToEnable(null),
+          },
+        ]}
+      />
 
       {/* Remove Member Confirmation Dialog */}
       <Dialog

@@ -1,3 +1,5 @@
+/* oxlint-disable react-doctor/js-tosorted-immutable -- The supported Node test runtime lacks Array.prototype.toSorted. */
+
 import { isTargetLightClassification, stableId } from './classify.js';
 
 const EARTH_RADIUS_METERS = 6371008.8;
@@ -16,6 +18,8 @@ const MIN_DISTINCT_DISTANCE_METERS = 0.05;
 const INSERTION_DISTANCE_METERS = 4;
 const INSERTION_LENGTH_RATIO = 1.08;
 const MAX_FRAGMENT_JOIN_DISTANCE_METERS = 45;
+const MIN_ROW_DISCONTINUITY_METERS = 24;
+const ROW_DISCONTINUITY_SPACING_MULTIPLIER = 3.5;
 
 export const INFERRED_PLACEMENT_ROW_SOURCE_TYPE = 'inferred-bgl-placement-row';
 
@@ -103,7 +107,8 @@ function inferRowsForSourceFile(instances) {
   attachBySplittingInternalEdges(points, graph, candidateResult.byPoint);
   joinCompatiblePathEndpoints(points, graph, candidateResult.edges);
 
-  const paths = orderedGraphPaths(points, graph);
+  const connectedPaths = orderedGraphPaths(points, graph);
+  const paths = splitPathDiscontinuities(points, graph, connectedPaths);
   const rows = paths.map((path, index) => buildRow(points, graph, path, index));
   const assigned = new Set(paths.flat());
   const excluded = [];
@@ -140,6 +145,7 @@ function inferRowsForSourceFile(instances) {
       turnCandidatesRejected: graph.turnRejections,
       insertedPlacements: graph.insertedPlacements,
       joinedPathFragments: graph.joinedPathFragments,
+      splitPathDiscontinuities: paths.length - connectedPaths.length,
       rows: rows.length,
       maximumObservedLinkDistanceMeters: roundNumber(
         maximumSelectedEdgeValue(graph, 'distanceMeters')
@@ -678,6 +684,35 @@ function orderedGraphPaths(points, graph) {
   return paths.filter((path) => path.length >= 2);
 }
 
+function splitPathDiscontinuities(points, graph, paths) {
+  return paths.flatMap((path) => {
+    if (path.length < 4) return [path];
+    const distances = path.slice(1).map((pointIndex, index) => {
+      const edge = graph.edges.get(edgeKey(path[index], pointIndex));
+      return edge?.distanceMeters ?? distanceBetweenPoints(points[path[index]], points[pointIndex]);
+    });
+    const orderedDistances = [...distances].sort((left, right) => left - right);
+    const median = orderedDistances[Math.floor(orderedDistances.length / 2)] ?? 0;
+    const threshold = Math.max(
+      MIN_ROW_DISCONTINUITY_METERS,
+      median * ROW_DISCONTINUITY_SPACING_MULTIPLIER
+    );
+    const result = [];
+    let start = 0;
+    for (let index = 1; index < path.length; index += 1) {
+      const currentLength = index - start;
+      const remainingLength = path.length - index;
+      if (distances[index - 1] <= threshold || currentLength < 2 || remainingLength < 2) {
+        continue;
+      }
+      result.push(path.slice(start, index));
+      start = index;
+    }
+    result.push(path.slice(start));
+    return result;
+  });
+}
+
 function walkComponent(start, adjacency, visited) {
   const path = [];
   let previous = -1;
@@ -828,6 +863,10 @@ function pointToSegment(point, start, end) {
   };
 }
 
+function distanceBetweenPoints(left, right) {
+  return Math.hypot(right.x - left.x, right.y - left.y);
+}
+
 function segmentsProperlyIntersect(a, b, c, d) {
   const abC = orientation(a, b, c);
   const abD = orientation(a, b, d);
@@ -919,6 +958,7 @@ function emptyStats() {
     turnCandidatesRejected: 0,
     insertedPlacements: 0,
     joinedPathFragments: 0,
+    splitPathDiscontinuities: 0,
     rows: 0,
     maximumObservedLinkDistanceMeters: 0,
     maximumObservedHeadingErrorDegrees: 0,
@@ -941,6 +981,7 @@ function addStats(target, source) {
     'turnCandidatesRejected',
     'insertedPlacements',
     'joinedPathFragments',
+    'splitPathDiscontinuities',
   ]) {
     target[key] += source[key] ?? 0;
   }

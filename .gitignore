@@ -126,3 +126,23 @@ Thumbs.db
 
 # Local performance captures
 /performance-traces/
+
+# Local diagnostics and temporary research
+/diagnostics/
+/temp-*/
+/tmp-*/
+
+# Tests and test fixtures
+*.test.*
+*.spec.*
+__tests__/
+__fixtures__/
+/tests/
+/src/features/draft-generator/fixtures/
+# Keep contribution editor tests and fixtures
+!/src/features/contribution-editor/**/*.test.*
+!/src/features/contribution-editor/**/*.spec.*
+!/src/features/contribution-editor/**/__tests__/
+!/src/features/contribution-editor/**/__tests__/**
+!/src/features/contribution-editor/**/__fixtures__/
+!/src/features/contribution-editor/**/__fixtures__/**

@@ -16,6 +16,7 @@ import { useLocation } from 'react-router-dom';
 import { ConsentBanner } from '../shared/ConsentBanner';
 import { PageLoading } from '../shared/PageLoading';
 import { CONSENT_KEY } from '../../utils/posthogLoader';
+import { updatePageMetadata } from '../../utils/pageMetadata';
 
 const StableNavbar = memo(Navbar);
 const StableFooter = memo(Footer);
@@ -48,8 +49,10 @@ const ConsentLayer = memo(function ConsentLayer() {
 /* oxlint-disable react-doctor/advanced-event-handler-refs -- The Easter-egg listener intentionally follows its stable text-transform callbacks. */
 const LayoutFrame = ({ children }) => {
   const { pathname } = useLocation();
+  const isFullScreenEditor = /^\/contribute\/editor\/[^/]+\/?$/.test(pathname);
   const keyBufferRef = useRef('');
   const layoutRef = useRef(null);
+  const previousPathRef = useRef(pathname);
 
   // Function to reverse all text content
   const reverseAllText = useCallback(() => {
@@ -116,12 +119,29 @@ const LayoutFrame = ({ children }) => {
 
   // Page navigation effect
   useLayoutEffect(() => {
+    const routeChanged = previousPathRef.current !== pathname;
+    previousPathRef.current = pathname;
+    updatePageMetadata(pathname);
     window.scrollTo(0, 0);
 
     // Always restore text when navigating between pages
     if (layoutRef.current) {
       restoreAllText();
     }
+
+    if (routeChanged) {
+      const focusTimer = window.requestAnimationFrame(() => {
+        const heading = layoutRef.current?.querySelector('h1');
+        if (heading) {
+          heading.tabIndex = -1;
+          heading.focus({ preventScroll: true });
+        }
+      });
+
+      return () => window.cancelAnimationFrame(focusTimer);
+    }
+
+    return undefined;
   }, [pathname, restoreAllText]);
 
   // Console banner effect
@@ -154,13 +174,27 @@ Support BARS: https://stopbars.com/donate`,
       window.removeEventListener('keydown', handleKeyPress);
     };
   }, [handleKeyPress]);
+
+  if (isFullScreenEditor) {
+    return (
+      <div ref={layoutRef} className="h-dvh overflow-hidden bg-zinc-950 text-white">
+        <Suspense fallback={<PageLoading page label="Loading editor…" />}>
+          <div className="h-full">{children}</div>
+        </Suspense>
+        <ConsentLayer />
+      </div>
+    );
+  }
+
   return (
     <div ref={layoutRef} className="min-h-screen bg-zinc-950 text-white relative">
       <div className="flex flex-col min-h-screen">
         <div className="z-40">
           <StableNavbar />
         </div>
-        <main className="grow container mx-auto px-6 relative">
+        <main
+          className={pathname === '/' ? 'relative grow' : 'container relative mx-auto grow px-6'}
+        >
           <Suspense fallback={<PageLoading page label="Loading page…" />}>
             <div key={pathname} className="route-surface">
               {children}

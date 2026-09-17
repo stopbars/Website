@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import Map, { Source, Layer, NavigationControl, ScaleControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Layers } from 'lucide-react';
-import { computeDestinationPoint } from 'geolib';
+import { calculateRectangleCorners } from './removal-preview-geometry.js';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -59,6 +59,22 @@ const LIGHT_SORT_PRIORITY = {
   taxiway: 100,
 };
 
+const TYPE_COLORS = {
+  stopbar: '#fb7185',
+  lead_on: '#facc15',
+  stand: '#c084fc',
+  taxiway: '#38bdf8',
+};
+
+const getObjectColor = (objectId) => {
+  let hash = 0;
+  for (let index = 0; index < objectId.length; index += 1) {
+    hash = (hash * 31 + objectId.charCodeAt(index)) >>> 0;
+  }
+  const hue = Math.round((hash * 137.508) % 360);
+  return `hsl(${hue} 78% 64%)`;
+};
+
 // The map renderer is cohesive around one MapLibre lifecycle and its layer declarations.
 // oxlint-disable-next-line react-doctor/no-giant-component
 const XMLMap = ({
@@ -67,6 +83,13 @@ const XMLMap = ({
   height = '600px',
   showPolyLines = false,
   showRemoveAreas = false,
+  removeAreasStyle = 'fill',
+  showLights = true,
+  colorMode = 'operational',
+  visibleTypes,
+  selectedObjectId,
+  onObjectSelect,
+  styleControlPosition = 'top-right',
 }) => {
   const [viewState, setViewState] = useState({
     longitude: 0,
@@ -75,6 +98,7 @@ const XMLMap = ({
   });
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
+  const [hoveringObject, setHoveringObject] = useState(false);
   const mapRef = useRef(null);
   const pendingBoundsRef = useRef(null);
 
@@ -95,90 +119,122 @@ const XMLMap = ({
     }
   }, []);
 
-  const getLightAppearance = useCallback((light) => {
-    const heading = typeof light.heading === 'number' ? light.heading : 0;
-    let type = 'solid';
-    let color1 = '#cccccc';
-    let color2 = '#cccccc';
+  const getLightAppearance = useCallback(
+    (light) => {
+      const heading = typeof light.heading === 'number' ? light.heading : 0;
+      let type = 'solid';
+      let color1 = '#cccccc';
+      let color2 = '#cccccc';
 
-    if (light.type === 'stopbar') {
-      const isIHP =
-        light.properties?.IHP === 'true' || (typeof light.IHP === 'boolean' && light.IHP);
-      const stopbarColor = isIHP ? 'rgb(250, 204, 21)' : 'rgb(238, 49, 49)';
-      const rawDirectionality = (
-        light.properties?.directionality ||
-        light.directionality ||
-        ''
-      ).toLowerCase();
-      const isBi = rawDirectionality === 'bi-directional' || rawDirectionality === 'bi';
-
-      if (isBi) {
-        type = 'solid';
-        color1 = stopbarColor;
-      } else {
-        type = 'split';
-        color1 = stopbarColor;
-        color2 = 'rgb(77, 77, 77)';
+      if (colorMode === 'object') {
+        color1 = light.objectColor;
+        color2 = color1;
+        return { type, color1, color2, heading };
       }
-    } else if (light.type === 'lead_on') {
-      if (!light.color) {
-        type = 'solid';
-        color1 = '#4ade80';
-      } else if (light.color === 'yellow-green-uni') {
-        type = 'split';
-        color1 = 'rgb(255, 212, 41)';
-        color2 = 'rgb(65, 230, 125)';
-      } else if (light.color?.includes('green')) {
-        type = 'solid';
-        color1 = '#4ade80';
-      } else {
-        type = 'solid';
-        color1 = '#facc15';
+
+      if (colorMode === 'type') {
+        color1 = TYPE_COLORS[light.type] || '#a1a1aa';
+        color2 = color1;
+        return { type, color1, color2, heading };
       }
-    } else if (light.type === 'stand') {
-      type = 'split';
-      color1 = '#fbbf24';
-      color2 = 'rgb(77, 77, 77)';
-    } else if (light.type === 'taxiway') {
-      const lightProps = light.properties;
-      const lightOrientation = lightProps?.orientation || light.orientation || 'both';
-      const lightColor = (lightProps?.color || light.color || 'green').toLowerCase();
 
-      const colorMap = {
-        green: '#4ade80',
-        yellow: '#facc15',
-        blue: '#3b82f6',
-        orange: '#f97316',
-      };
+      if (colorMode === 'directionality') {
+        const directionality = (
+          light.properties?.directionality ||
+          light.directionality ||
+          light.orientation ||
+          ''
+        ).toLowerCase();
+        const isBidirectional =
+          directionality === 'bi-directional' ||
+          directionality === 'bi' ||
+          directionality === 'both';
+        const isDirectional = directionality.length > 0;
+        color1 = isBidirectional ? '#4ade80' : isDirectional ? '#fb923c' : '#a1a1aa';
+        color2 = color1;
+        return { type, color1, color2, heading };
+      }
 
-      if (lightColor.includes('-uni')) {
-        const baseColor = lightColor.split('-uni')[0];
-        const bgColor = colorMap[baseColor] || colorMap['green'];
-        type = 'split';
-        color1 = bgColor;
-        color2 = 'rgb(77, 77, 77)';
-      } else if (lightColor.includes('-') && (lightOrientation === 'both' || !lightOrientation)) {
-        const colors = lightColor.split('-');
-        if (colors.length === 2) {
-          type = 'split';
-          color1 = colorMap[colors[0]] || colorMap['green'];
-          color2 = colorMap[colors[1]] || colorMap['green'];
-        }
-      } else {
-        const bgColor = colorMap[lightColor] || colorMap['green'];
-        if (lightOrientation === 'both' || !lightOrientation) {
+      if (light.type === 'stopbar') {
+        const isIHP =
+          light.properties?.IHP === 'true' || (typeof light.IHP === 'boolean' && light.IHP);
+        const stopbarColor = isIHP ? 'rgb(250, 204, 21)' : 'rgb(238, 49, 49)';
+        const rawDirectionality = (
+          light.properties?.directionality ||
+          light.directionality ||
+          ''
+        ).toLowerCase();
+        const isBi = rawDirectionality === 'bi-directional' || rawDirectionality === 'bi';
+
+        if (isBi) {
           type = 'solid';
-          color1 = bgColor;
+          color1 = stopbarColor;
         } else {
+          type = 'split';
+          color1 = stopbarColor;
+          color2 = 'rgb(77, 77, 77)';
+        }
+      } else if (light.type === 'lead_on') {
+        if (!light.color) {
+          type = 'solid';
+          color1 = '#4ade80';
+        } else if (light.color === 'yellow-green-uni') {
+          type = 'split';
+          color1 = 'rgb(255, 212, 41)';
+          color2 = 'rgb(65, 230, 125)';
+        } else if (light.color?.includes('green')) {
+          type = 'solid';
+          color1 = '#4ade80';
+        } else {
+          type = 'solid';
+          color1 = '#facc15';
+        }
+      } else if (light.type === 'stand') {
+        type = 'split';
+        color1 = '#fbbf24';
+        color2 = 'rgb(77, 77, 77)';
+      } else if (light.type === 'taxiway') {
+        const lightProps = light.properties;
+        const lightOrientation = lightProps?.orientation || light.orientation || 'both';
+        const lightColor = (lightProps?.color || light.color || 'green').toLowerCase();
+
+        const colorMap = {
+          green: '#4ade80',
+          yellow: '#facc15',
+          blue: '#3b82f6',
+          orange: '#f97316',
+        };
+
+        if (lightColor.includes('-uni')) {
+          const baseColor = lightColor.split('-uni')[0];
+          const bgColor = colorMap[baseColor] || colorMap.green;
           type = 'split';
           color1 = bgColor;
           color2 = 'rgb(77, 77, 77)';
+        } else if (lightColor.includes('-') && (lightOrientation === 'both' || !lightOrientation)) {
+          const colors = lightColor.split('-');
+          if (colors.length === 2) {
+            type = 'split';
+            color1 = colorMap[colors[0]] || colorMap.green;
+            color2 = colorMap[colors[1]] || colorMap.green;
+          }
+        } else {
+          const bgColor = colorMap[lightColor] || colorMap.green;
+          if (lightOrientation === 'both' || !lightOrientation) {
+            type = 'solid';
+            color1 = bgColor;
+          } else {
+            type = 'split';
+            color1 = bgColor;
+            color2 = 'rgb(77, 77, 77)';
+          }
         }
       }
-    }
 
-    return { type, color1, color2, heading };
-  }, []);
+      return { type, color1, color2, heading };
+    },
+    [colorMode]
+  );
 
   const createMarkerImage = useCallback((type, color1, color2) => {
     const size = 24;
@@ -214,27 +270,6 @@ const XMLMap = ({
     return ctx.getImageData(0, 0, size, size);
   }, []);
 
-  const calculateRectangleCorners = useCallback(
-    (centerLat, centerLng, widthMeters, lengthMeters, heading) => {
-      const center = { latitude: centerLat, longitude: centerLng };
-      const halfWidth = widthMeters / 2;
-      const halfLength = lengthMeters / 2;
-      const distance = Math.sqrt(halfLength * halfLength + halfWidth * halfWidth);
-      const bottomLeft = computeDestinationPoint(center, distance, (heading + 225) % 360);
-      const bottomRight = computeDestinationPoint(center, distance, (heading + 315) % 360);
-      const topRight = computeDestinationPoint(center, distance, (heading + 45) % 360);
-      const topLeft = computeDestinationPoint(center, distance, (heading + 135) % 360);
-      return [
-        [bottomLeft.longitude, bottomLeft.latitude],
-        [bottomRight.longitude, bottomRight.latitude],
-        [topRight.longitude, topRight.latitude],
-        [topLeft.longitude, topLeft.latitude],
-        [bottomLeft.longitude, bottomLeft.latitude],
-      ];
-    },
-    []
-  );
-
   const parseRemoveAreasXML = useCallback(
     (xmlString) => {
       const parser = new DOMParser();
@@ -267,7 +302,7 @@ const XMLMap = ({
 
       return { areas, center: firstPosition };
     },
-    [calculateRectangleCorners]
+    []
   );
 
   const parseXML = useCallback((xmlString) => {
@@ -289,11 +324,20 @@ const XMLMap = ({
         propsElement?.querySelector('Directionality')?.textContent?.toLowerCase() || '';
       const orientation = propsElement?.querySelector('Orientation')?.textContent || '';
       const elevated = propsElement?.querySelector('Elevated')?.textContent === 'true';
+      const ihp = propsElement?.querySelector('IHP')?.textContent === 'true';
       const lightElements = obj.getElementsByTagName('Light');
 
       objectGroups[objId] = {
+        id: objId,
         type: objType,
         positions: [],
+        color,
+        directionality,
+        orientation,
+        elevated,
+        ihp,
+        objectColor: getObjectColor(objId),
+        lightCount: lightElements.length,
       };
 
       for (let j = 0; j < lightElements.length; j++) {
@@ -340,6 +384,7 @@ const XMLMap = ({
             elevated: lightElevated,
             IHP: lightIHP,
             objectId: objId,
+            objectColor: objectGroups[objId].objectColor,
             properties: lightProps
               ? {
                   color: lightProps.querySelector('Color')?.textContent || null,
@@ -365,23 +410,30 @@ const XMLMap = ({
         positions: group.positions,
         type: group.type,
         color: color,
+        objectColor: group.objectColor,
       };
     });
 
     return {
       lights: allLights,
       lines: lines,
+      objects: Object.values(objectGroups),
       center: firstPosition ? [...firstPosition] : null,
     };
   }, []);
 
-  const { parsedLights, polylines } = useMemo(() => {
+  const { parsedLights, polylines, parsedObjects } = useMemo(() => {
     if (!xmlData || !xmlData.includes('BarsObject')) {
-      return { parsedLights: [], polylines: [] };
+      return { parsedLights: [], polylines: [], parsedObjects: [] };
     }
-    const { lights, lines } = parseXML(xmlData);
-    return { parsedLights: lights, polylines: lines };
+    const { lights, lines, objects } = parseXML(xmlData);
+    return { parsedLights: lights, polylines: lines, parsedObjects: objects };
   }, [xmlData, parseXML]);
+
+  const objectById = useMemo(
+    () => new globalThis.Map(parsedObjects.map((object) => [object.id, object])),
+    [parsedObjects]
+  );
 
   const removeAreas = useMemo(() => {
     const areasSource = removeAreasXmlData || xmlData;
@@ -390,17 +442,24 @@ const XMLMap = ({
     return areas;
   }, [removeAreasXmlData, xmlData, parseRemoveAreasXML]);
 
+  const visibleTypeSet = useMemo(
+    () => (visibleTypes ? new Set(visibleTypes) : null),
+    [visibleTypes]
+  );
+
   const lightGeoJSON = useMemo(() => {
     if (!parsedLights.length) return null;
 
-    const features = parsedLights.map((light, index) => {
+    const features = parsedLights.reduce((visibleFeatures, light, index) => {
+      if (visibleTypeSet && !visibleTypeSet.has(light.type)) return visibleFeatures;
+
       const { type, color1, color2, heading } = getLightAppearance(light);
       const c1 = color1.replace(/[^\w]/g, '');
       const c2 = color2.replace(/[^\w]/g, '');
       const iconId = `marker-${type}-${c1}-${c2}`;
       const basePriority = LIGHT_SORT_PRIORITY[light.type] || 0;
 
-      return {
+      visibleFeatures.push({
         type: 'Feature',
         geometry: {
           type: 'Point',
@@ -414,16 +473,18 @@ const XMLMap = ({
           color1,
           color2,
           pointType: light.type,
+          objectId: light.objectId,
           sortKey: basePriority * 1_000 + index,
         },
-      };
-    });
+      });
+      return visibleFeatures;
+    }, []);
 
     return {
       type: 'FeatureCollection',
       features,
     };
-  }, [parsedLights, getLightAppearance]);
+  }, [parsedLights, getLightAppearance, visibleTypeSet]);
 
   const updateMapImages = useCallback(
     (map) => {
@@ -535,18 +596,29 @@ const XMLMap = ({
   const polylineGeoJSON = useMemo(() => {
     return {
       type: 'FeatureCollection',
-      features: polylines.map((line) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: line.positions,
-        },
-        properties: {
-          color: line.color,
-        },
-      })),
+      features: polylines.reduce((visibleFeatures, line) => {
+        if (visibleTypeSet && !visibleTypeSet.has(line.type)) return visibleFeatures;
+
+        visibleFeatures.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: line.positions,
+          },
+          properties: {
+            objectId: line.id,
+            color:
+              colorMode === 'object'
+                ? line.objectColor
+                : colorMode === 'type'
+                  ? TYPE_COLORS[line.type] || '#a1a1aa'
+                  : line.color,
+          },
+        });
+        return visibleFeatures;
+      }, []),
     };
-  }, [polylines]);
+  }, [polylines, colorMode, visibleTypeSet]);
 
   const removeAreasGeoJSON = useMemo(() => {
     return {
@@ -561,6 +633,39 @@ const XMLMap = ({
     };
   }, [removeAreas]);
 
+  const selectedObjectGeoJSON = useMemo(() => {
+    const selectedLine = polylines.find((line) => line.id === selectedObjectId);
+    if (!selectedLine || selectedLine.positions.length < 2) return null;
+
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: selectedLine.positions },
+          properties: {},
+        },
+      ],
+    };
+  }, [polylines, selectedObjectId]);
+
+  const handleObjectClick = useCallback(
+    (event) => {
+      const objectId = event.features?.find((feature) => feature.properties?.objectId)?.properties
+        ?.objectId;
+      if (!objectId || !onObjectSelect) return;
+      onObjectSelect(objectById.get(objectId) || null);
+    },
+    [objectById, onObjectSelect]
+  );
+
+  const interactiveLayerIds = useMemo(() => {
+    if (!onObjectSelect) return [];
+    return [showLights ? 'lights-layer' : null, showPolyLines ? 'polylines-layer' : null].filter(
+      Boolean
+    );
+  }, [onObjectSelect, showLights, showPolyLines]);
+
   return (
     <div className="h-[600px] rounded-lg overflow-hidden relative" style={{ height }}>
       {parsedLights.length > 0 || removeAreas.length > 0 ? (
@@ -571,6 +676,11 @@ const XMLMap = ({
             mapStyle={mapStyle}
             onLoad={handleMapLoad}
             onStyleData={(e) => updateMapImages(e.target)}
+            onClick={handleObjectClick}
+            onMouseEnter={() => setHoveringObject(true)}
+            onMouseLeave={() => setHoveringObject(false)}
+            interactiveLayerIds={interactiveLayerIds}
+            cursor={hoveringObject ? 'pointer' : 'grab'}
             style={{ width: '100%', height: '100%' }}
             ref={mapRef}
           >
@@ -580,14 +690,16 @@ const XMLMap = ({
             {/* Render remove areas if showing remove areas view */}
             {showRemoveAreas && (
               <Source id="remove-areas" type="geojson" data={removeAreasGeoJSON}>
-                <Layer
-                  id="remove-areas-fill"
-                  type="fill"
-                  paint={{
-                    'fill-color': '#ef4444',
-                    'fill-opacity': 0.2,
-                  }}
-                />
+                {removeAreasStyle === 'fill' ? (
+                  <Layer
+                    id="remove-areas-fill"
+                    type="fill"
+                    paint={{
+                      'fill-color': '#ef4444',
+                      'fill-opacity': 0.2,
+                    }}
+                  />
+                ) : null}
                 <Layer
                   id="remove-areas-outline"
                   type="line"
@@ -615,15 +727,38 @@ const XMLMap = ({
               </Source>
             )}
 
-            {/* Always render the light markers in normal mode */}
-            {!showRemoveAreas && lightGeoJSON && (
+            {selectedObjectGeoJSON && (
+              <Source id="selected-object" type="geojson" data={selectedObjectGeoJSON}>
+                <Layer
+                  id="selected-object-halo"
+                  type="line"
+                  paint={{
+                    'line-color': '#ffffff',
+                    'line-width': 7,
+                    'line-opacity': 0.85,
+                  }}
+                />
+                <Layer
+                  id="selected-object-line"
+                  type="line"
+                  paint={{
+                    'line-color': getObjectColor(selectedObjectId),
+                    'line-width': 4,
+                  }}
+                />
+              </Source>
+            )}
+
+            {showLights && lightGeoJSON && (
               <Source id="lights" type="geojson" data={lightGeoJSON}>
                 <Layer
                   id="lights-layer"
                   type="symbol"
                   layout={{
                     'icon-image': ['get', 'icon'],
-                    'icon-size': 1,
+                    'icon-size': selectedObjectId
+                      ? ['case', ['==', ['get', 'objectId'], selectedObjectId], 1.35, 0.82]
+                      : 1,
                     'icon-rotate': ['get', 'heading'],
                     'icon-allow-overlap': true,
                     'icon-ignore-placement': true,
@@ -635,13 +770,17 @@ const XMLMap = ({
             )}
           </Map>
 
-          <div className="absolute top-4 right-4 bg-zinc-900/90 border border-zinc-700 rounded-md p-1 z-10">
+          <div
+            className={`absolute z-10 rounded-lg border border-zinc-700 bg-zinc-900/90 p-1 ${
+              styleControlPosition === 'bottom-right' ? 'bottom-8 right-3' : 'right-4 top-4'
+            }`}
+          >
             <button
               type="button"
               onClick={toggleStyle}
-              className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 rounded transition-colors"
+              className="flex min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70"
             >
-              <Layers className="w-4 h-4" />
+              <Layers className="h-4 w-4" aria-hidden="true" />
               <span>{styleName}</span>
             </button>
           </div>
@@ -661,6 +800,13 @@ XMLMap.propTypes = {
   height: PropTypes.string,
   showPolyLines: PropTypes.bool,
   showRemoveAreas: PropTypes.bool,
+  removeAreasStyle: PropTypes.oneOf(['fill', 'outline']),
+  showLights: PropTypes.bool,
+  colorMode: PropTypes.oneOf(['operational', 'object', 'type', 'directionality']),
+  visibleTypes: PropTypes.arrayOf(PropTypes.string),
+  selectedObjectId: PropTypes.string,
+  onObjectSelect: PropTypes.func,
+  styleControlPosition: PropTypes.oneOf(['top-right', 'bottom-right']),
 };
 
 export default XMLMap;

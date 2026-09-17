@@ -1,8 +1,11 @@
+/* oxlint-disable react-doctor/js-combine-iterations -- Mailbox filtering and presentation mapping are intentionally distinct UI stages. */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { getVatsimToken } from '../../utils/cookieUtils';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
+import { PageLoading } from '../shared/PageLoading';
 import {
   Loader,
   Trash2,
@@ -49,7 +52,7 @@ StatusBadge.propTypes = {
   status: PropTypes.string,
 };
 
-// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- The mailbox list/detail workflow is cohesive and its request, selection, filter, and banner states transition independently.
+// oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/no-high-complexity-react-function, react-doctor/prefer-useReducer -- The mailbox list/detail workflow is cohesive and its request, selection, filter, and banner states transition independently.
 export default function ContactMessages() {
   const token = getVatsimToken();
   const apiBase = 'https://v2.stopbars.com';
@@ -197,11 +200,7 @@ export default function ContactMessages() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-40">
-        <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-      </div>
-    );
+    return <PageLoading label="Loading contact messages…" variant="tool-list" />;
   }
 
   return (
@@ -239,7 +238,7 @@ export default function ContactMessages() {
                   type="button"
                   key={msg.id}
                   onClick={() => setSelectedId(msg.id)}
-                  className={`w-full text-left rounded-xl border bg-zinc-900/50 p-4 cursor-pointer transition-[background-color,border-color,transform] duration-150 ease-out active:scale-[0.96] ${
+                  className={`w-full text-left rounded-xl border bg-zinc-900/50 p-4 cursor-pointer transition-[background-color,border-color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[0.96] ${
                     selectedId === msg.id
                       ? 'border-blue-500/50 bg-blue-500/5'
                       : 'border-zinc-800 hover:border-zinc-700'
@@ -303,7 +302,7 @@ export default function ContactMessages() {
                     key={s}
                     disabled={updatingStatusId === selectedMessage.id}
                     onClick={() => updateStatus(selectedMessage.id, s)}
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-[background-color,border-color,transform,opacity] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-[background-color,border-color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                   >
                     {updatingStatusId === selectedMessage.id ? (
                       <Loader className="w-3 h-3 animate-spin" />
@@ -325,7 +324,7 @@ export default function ContactMessages() {
                       });
                     }
                   }}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-700/50 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-[background-color,border-color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:border-zinc-600 hover:bg-zinc-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 >
                   <ExternalLink className="w-3 h-3" />
                   Reply
@@ -334,7 +333,7 @@ export default function ContactMessages() {
                   type="button"
                   onClick={() => setDeletingMessage(selectedMessage)}
                   disabled={isDeletingMessage}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-red-500/20 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-[background-color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-red-500/20 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 >
                   <Trash2 className="w-3 h-3" />
                   Delete

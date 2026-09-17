@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 const Badge = ({ children, onClick }) => (
   <button
     onClick={onClick}
-    className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 transition-all border border-zinc-700/50 hover:border-zinc-600"
+    className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] border border-zinc-700/50 hover:border-zinc-600"
     type="button"
   >
     {children}
@@ -57,10 +57,11 @@ export default function CacheManagement() {
         },
         body: JSON.stringify({ key, namespace }),
       });
-      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data?.error || `${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || `${response.status} ${response.statusText}`);
       }
+      const data = await response.json().catch(() => ({}));
       setResult({
         type: 'success',
         message: `Purged key "${key}" in namespace "${namespace}".`,
@@ -90,10 +91,11 @@ export default function CacheManagement() {
         },
         body: JSON.stringify({ namespace }),
       });
-      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data?.error || `${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || `${response.status} ${response.statusText}`);
       }
+      const data = await response.json().catch(() => ({}));
       setResult({ type: 'success', message: `Bumped namespace "${namespace}"`, details: data });
     } catch (e) {
       setResult({ type: 'error', message: e.message || 'Failed to purge namespace' });
@@ -113,10 +115,11 @@ export default function CacheManagement() {
         },
         // No body -> purge all namespaces
       });
-      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data?.error || `${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || `${response.status} ${response.statusText}`);
       }
+      const data = await response.json().catch(() => ({}));
       setResult({ type: 'success', message: 'Bumped all known namespaces', details: data });
     } catch (e) {
       setResult({ type: 'error', message: e.message || 'Failed to purge all namespaces' });
@@ -192,7 +195,7 @@ export default function CacheManagement() {
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 placeholder="e.g. /airports?icao=YSSY"
-                className="w-full px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                className="w-full px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
               />
             </div>
             <div>
@@ -209,12 +212,12 @@ export default function CacheManagement() {
                   value={namespace}
                   onChange={(e) => setNamespace(e.target.value)}
                   placeholder="e.g. airports"
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                 />
                 <button
                   type="button"
                   onClick={() => setNamespace('')}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-all text-sm"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] text-sm"
                 >
                   Clear
                 </button>
@@ -231,7 +234,7 @@ export default function CacheManagement() {
               type="button"
               onClick={handlePurgeKey}
               disabled={loading || !key || !namespace}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] font-medium text-sm"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -270,13 +273,13 @@ export default function CacheManagement() {
                   value={namespace}
                   onChange={(e) => setNamespace(e.target.value)}
                   placeholder="e.g. points"
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                 />
                 <button
                   type="button"
                   onClick={handlePurgeNamespace}
                   disabled={loading}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] font-medium text-sm"
                 >
                   {loading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -316,7 +319,7 @@ export default function CacheManagement() {
             type="button"
             onClick={handlePurgeAll}
             disabled={loading}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] font-medium text-sm"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bomb className="w-4 h-4" />}
             Purge ALL

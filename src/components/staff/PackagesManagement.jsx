@@ -3,29 +3,14 @@ import { Button } from '../shared/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../shared/Card';
 import { Toast } from '../shared/Toast';
 import { getVatsimToken } from '../../utils/cookieUtils';
-import { Upload, Package, Check, X, Info, FileArchive, RefreshCw } from 'lucide-react';
+import { Upload, Package, Check, X, Info, FileArchive, RefreshCw, ChevronDown } from 'lucide-react';
 
-/**
- * PackagesManagement
- * Staff-only tool to upload installer data packages.
- * CURRENT BACKEND (as of initial implementation) supports only type enum: [models, removals]
- *   - bars-models-2024.zip  (type = models)
- *   - bars-removals.zip     (type = removals)
- * We now also need to support bars-models-2020.zip. This REQUIRES a backend update adding a new
- *  enum value (e.g. models2020) OR an additional field (e.g. version) so that we can select which
- *  models key to overwrite. Until the backend is extended, selecting the 2020 option will attempt
- *  to POST with a tentative type value (`models2020`). If the backend hasn't been updated it will
- *  respond 400 (invalid type) and the UI will surface that error.
- *
- * Endpoint: POST https://v2.stopbars.com/staff/bars-packages/upload
- * Headers:  X-Vatsim-Token
- * multipart/form-data fields:
- *   file: .zip archive
- *   type: one of (models, removals, models2020*)  *pending backend support
- */
+/** Staff-only tool to upload packages consumed by the Installer. */
 // Maximum allowed upload size (frontend enforcement). Backend may still allow larger,
 // but UI restricts to 100MB per user request.
 const MAX_BYTES = 100 * 1024 * 1024;
+const SEMVER_REGEX =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 const readableSize = (bytes) => {
   if (!bytes && bytes !== 0) return '—';
@@ -46,12 +31,20 @@ const PACKAGE_TYPES = [
     filename: 'bars-models-2020.zip',
     description: 'MSFS 2020 models package.',
   },
+  {
+    id: 'xplane-bridge',
+    label: 'X-Plane Bridge',
+    filename: 'BARSXPlaneBridge.zip',
+    description: 'Native X-Plane plugin and model resources.',
+    versioned: true,
+  },
 ];
 
 /* oxlint-disable react-doctor/prefer-tag-over-role -- The composite drop zone contains nested action buttons and a file input, so it cannot validly become a native button. */
 // oxlint-disable-next-line react-doctor/no-giant-component, react-doctor/prefer-useReducer -- Package selection, drag state, request status, and feedback are independent within one upload workflow.
 const PackagesManagement = () => {
   const [selectedType, setSelectedType] = useState('models');
+  const [bridgeVersion, setBridgeVersion] = useState('');
   const [file, setFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [toast, setToast] = useState({
@@ -109,6 +102,16 @@ const PackagesManagement = () => {
       setToast({ show: true, title: 'Invalid file', description: v, variant: 'destructive' });
       return;
     }
+    const normalizedBridgeVersion = bridgeVersion.trim();
+    if (selectedType === 'xplane-bridge' && !SEMVER_REGEX.test(normalizedBridgeVersion)) {
+      setToast({
+        show: true,
+        title: 'Invalid version',
+        description: 'Enter a semantic version such as 1.0.3.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setToast((t) => ({ ...t, show: false }));
     setSuccess(null);
     try {
@@ -127,6 +130,7 @@ const PackagesManagement = () => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', selectedType);
+      if (selectedType === 'xplane-bridge') formData.append('version', normalizedBridgeVersion);
       const res = await fetch('https://v2.stopbars.com/staff/bars-packages/upload', {
         method: 'POST',
         headers: { 'X-Vatsim-Token': token },
@@ -182,14 +186,14 @@ const PackagesManagement = () => {
             <Package className="w-5 h-5 text-blue-400" /> BARS Packages
           </CardTitle>
           <p className="text-sm text-zinc-400 leading-relaxed">
-            Upload installer data packages. Each upload overwrites the existing object in storage. A
-            SHA-256 hash is computed server-side and stored as metadata. Access is restricted to the{' '}
+            Upload packages consumed by the Installer. A SHA-256 hash is computed server-side and
+            stored as metadata. Access is restricted to the{' '}
             <span className="text-zinc-300 font-medium">Lead Developer</span> role.
           </p>
           <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex gap-2 items-start">
             <Info className="w-4 h-4 mt-0.5" />
-            Ensure you select the correct package type before uploading—the backend stores to a
-            fixed key; prior version is permanently replaced.
+            Model packages replace their fixed object. Bridge packages are retained by version, and
+            the latest pointer advances only after the archive upload succeeds.
           </div>
         </CardHeader>
         <CardContent>
@@ -204,7 +208,7 @@ const PackagesManagement = () => {
                   onClick={() => {
                     setSelectedType(pt.id);
                   }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${active ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700/70'}`}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] ${active ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700/70'}`}
                 >
                   {' '}
                   {pt.label}
@@ -218,6 +222,30 @@ const PackagesManagement = () => {
               {PACKAGE_TYPES.find((p) => p.id === selectedType)?.filename}
             </code>
           </div>
+
+          {selectedType === 'xplane-bridge' && (
+            <div className="mb-6 max-w-xs">
+              <label
+                htmlFor="xplane-bridge-version"
+                className="mb-2 block text-sm font-medium text-zinc-200"
+              >
+                Bridge version
+              </label>
+              <input
+                id="xplane-bridge-version"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                placeholder="1.0.3"
+                value={bridgeVersion}
+                onChange={(event) => setBridgeVersion(event.target.value)}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-zinc-500 focus:border-blue-500"
+              />
+              <p className="mt-2 text-xs text-zinc-500">
+                Semantic version used for the immutable package path and Installer verification.
+              </p>
+            </div>
+          )}
 
           {/* Upload Zone */}
           <div
@@ -313,16 +341,16 @@ const PackagesManagement = () => {
           </div>
 
           {success && (
-            <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 relative">
+            <div
+              className="t-acc mt-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 relative"
+              data-open={showMeta}
+            >
               <div className="flex items-start gap-3">
                 <Check className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-medium">
-                    {success.type === 'models'
-                      ? 'Models 2024'
-                      : success.type === 'models2020'
-                        ? 'Models 2020'
-                        : 'Removals'}{' '}
+                    {PACKAGE_TYPES.find((packageType) => packageType.id === success.type)?.label ||
+                      success.type}{' '}
                     package uploaded successfully
                   </p>
                   <p className="text-emerald-300/80 text-[12px] mt-1">
@@ -339,53 +367,70 @@ const PackagesManagement = () => {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              {showMeta && (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-emerald-300/90">
-                  <div>
-                    <span className="text-emerald-400/60">Key:</span> {success.key}
-                  </div>
-                  <div>
-                    <span className="text-emerald-400/60">Size:</span> {readableSize(success.size)}
-                  </div>
-                  <div className="col-span-1 sm:col-span-2 break-all">
-                    <span className="text-emerald-400/60">SHA256:</span> {success.sha256}
-                  </div>
-                  {success.etag && (
-                    <div>
-                      <span className="text-emerald-400/60">ETag:</span> {success.etag}
-                    </div>
-                  )}
-                  {success.url && (
-                    <div className="col-span-1 sm:col-span-2 truncate">
-                      <span className="text-emerald-400/60">URL:</span>{' '}
-                      <a
-                        href={success.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline hover:text-emerald-200"
-                      >
-                        {success.url}
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
               <button
                 type="button"
                 onClick={() => setShowMeta(!showMeta)}
-                className="mt-3 text-xs underline decoration-dotted text-emerald-300/80 hover:text-emerald-200"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs text-emerald-300/80 underline decoration-dotted transition-colors hover:text-emerald-200"
+                aria-expanded={showMeta}
+                aria-controls="package-upload-details"
               >
                 {showMeta ? 'Hide details' : 'Show details'}
+                <span className="t-acc-chevron">
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
               </button>
+              <div className="t-acc-panel">
+                <div
+                  id="package-upload-details"
+                  className="t-acc-panel-inner"
+                  aria-hidden={!showMeta}
+                  inert={!showMeta}
+                >
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-emerald-300/90">
+                    <div>
+                      <span className="text-emerald-400/60">Key:</span> {success.key}
+                    </div>
+                    <div>
+                      <span className="text-emerald-400/60">Size:</span>{' '}
+                      {readableSize(success.size)}
+                    </div>
+                    {success.version && (
+                      <div>
+                        <span className="text-emerald-400/60">Version:</span> {success.version}
+                      </div>
+                    )}
+                    <div className="col-span-1 sm:col-span-2 break-all">
+                      <span className="text-emerald-400/60">SHA256:</span> {success.sha256}
+                    </div>
+                    {success.etag && (
+                      <div>
+                        <span className="text-emerald-400/60">ETag:</span> {success.etag}
+                      </div>
+                    )}
+                    {success.url && (
+                      <div className="col-span-1 sm:col-span-2 truncate">
+                        <span className="text-emerald-400/60">URL:</span>{' '}
+                        <a
+                          href={success.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline hover:text-emerald-200"
+                        >
+                          {success.url}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
           <div className="mt-10 text-[11px] text-zinc-500 leading-relaxed border-t border-zinc-800 pt-4">
             <p>
-              <strong>Notes:</strong> Uploading replaces the previous object under its fixed key.
-              The frontend does not compute hashes—trust the server response. If you accidentally
-              upload the wrong file, re-upload the correct one immediately; the previous one is no
-              longer retained.
+              <strong>Notes:</strong> Model uploads replace the object under their fixed key. Bridge
+              versions cannot be overwritten; publish a new version to correct a release. The
+              frontend does not compute hashes—the server response is authoritative.
             </p>
           </div>
         </CardContent>

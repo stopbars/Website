@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Cookie } from 'lucide-react';
 import { Button } from './Button';
 import { RouteLink } from './RouteLink';
@@ -13,6 +13,9 @@ import {
 } from '../../utils/posthogLoader';
 
 export const ConsentBanner = ({ show, setShow }) => {
+  const [isRendered, setIsRendered] = useState(show);
+  const [isVisible, setIsVisible] = useState(false);
+
   useEffect(() => {
     const consent = localStorage.getItem(CONSENT_KEY);
     const gpc = typeof navigator !== 'undefined' && navigator.globalPrivacyControl === true;
@@ -26,6 +29,21 @@ export const ConsentBanner = ({ show, setShow }) => {
       dispatchConsentChange('denied');
     }
   }, []);
+
+  useEffect(() => {
+    if (show) {
+      setIsRendered(true);
+      const frame = window.requestAnimationFrame(() => setIsVisible(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    setIsVisible(false);
+    if (!isRendered) return undefined;
+
+    const closeDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 350;
+    const timer = window.setTimeout(() => setIsRendered(false), closeDuration);
+    return () => window.clearTimeout(timer);
+  }, [isRendered, show]);
 
   const handleAccept = async () => {
     const posthog = await ensurePosthogInitialized();
@@ -44,10 +62,12 @@ export const ConsentBanner = ({ show, setShow }) => {
     setShow(false);
   };
 
-  if (!show) return null;
+  if (!isRendered) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-zinc-700 bg-zinc-900/95 p-5 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300">
+    <div
+      className={`fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-zinc-700 bg-zinc-900/95 p-5 backdrop-blur-sm transition-[filter,opacity,transform] ease-[var(--ease-smooth-out)] ${isVisible ? 'translate-y-0 scale-100 blur-0 opacity-100 duration-[var(--duration-slow)]' : 'pointer-events-none translate-y-2 scale-[var(--scale-small)] blur-[var(--blur-small)] opacity-0 duration-[var(--duration-medium)]'}`}
+    >
       <div className="flex flex-col">
         <div className="flex items-start gap-2 mb-3">
           <Cookie className="w-5 h-5 text-white/90" aria-hidden="true" />

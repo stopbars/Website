@@ -1,6 +1,6 @@
 ---
 name: react-grab
-description: Use when the user wants a hands-free loop where grabbing UI elements in the browser with React Grab feeds tasks to the agent automatically, with no copy-paste or manual handoff. Triggers include "watch React Grab", "monitor my grabs", "auto-process React Grab", and "watch my clipboard for grabs". Do not use for a one-off paste of a single grab.
+description: "Watch React Grab selections as a continuous task queue when explicitly requested. Do not use for a single pasted grab."
 ---
 
 # React Grab

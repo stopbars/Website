@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MSFS render verification</title>
+    <style>
+      html,
+      body,
+      #map {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #111827;
+      }
+      #status {
+        position: fixed;
+        z-index: 2;
+        top: 12px;
+        left: 12px;
+        max-width: min(520px, calc(100vw - 24px));
+        padding: 10px 12px;
+        border: 1px solid rgb(255 255 255 / 18%);
+        border-radius: 8px;
+        background: rgb(9 9 11 / 88%);
+        color: #f4f4f5;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="status">Starting Sydney verification…</div>
+    <script type="module">
+      import maplibregl from 'maplibre-gl';
+      import 'maplibre-gl/dist/maplibre-gl.css';
+      import { buildMsfsRenderSource } from '/src/features/msfs-renderer/msfs-render-bundle.js';
+      import { SimulatorTextureLayer } from '/src/features/contribution-editor/SimulatorTextureLayer.js';
+
+      const status = document.querySelector('#status');
+      const parameters = new URLSearchParams(location.search);
+      const packageOrigin = parameters.get('packageOrigin');
+      const airportIcao = (parameters.get('icao') || 'YSSY').toUpperCase();
+      const packageName = parameters.get('packageName') || 'MSFS scenery package';
+      const projectedMeshBasisOverride = parameters.get('projectedMeshBasis') || null;
+      window.verifyState = { phase: 'starting', errors: [], progress: [] };
+
+      try {
+        if (!packageOrigin) throw new Error('Missing packageOrigin query parameter.');
+        setStatus('Loading package manifest…');
+        const manifest = await fetch(`${packageOrigin}/manifest`).then(checkResponse).then((response) =>
+          response.json()
+        );
+        const entries = manifest.entries.map((entry) => ({
+          ...entry,
+          file: remoteFile(entry),
+        }));
+        setStatus(`Decoding ${entries.length.toLocaleString()} ${airportIcao} package files…`);
+        const source = await buildMsfsRenderSource(entries, {
+          projectedMeshBasisOverride,
+          onProgress(fraction, stage, detail) {
+            window.verifyState.progress.push({ fraction, stage, detail });
+            setStatus(`${stage}\n${detail || ''}\n${Math.round(fraction * 100)}%`);
+          },
+        });
+        const bundle = source.renderBundle;
+        window.verifySource = source;
+        window.verifyBundle = bundle;
+        const layer = new SimulatorTextureLayer(
+          (stats) => {
+            window.verifyState.stats = stats;
+          },
+          { id: 'msfs-verification-textures' }
+        );
+        layer.setGeometry(bundle.groups);
+        const map = new maplibregl.Map({
+          container: 'map',
+          center: [151.1772, -33.9461],
+          zoom: 15,
+          attributionControl: false,
+          preserveDrawingBuffer: true,
+          style: {
+            version: 8,
+            sources: {},
+            layers: [
+              {
+                id: 'background',
+                type: 'background',
+                paint: { 'background-color': '#18181b' },
+              },
+            ],
+          },
+        });
+        window.verifyMap = map;
+        window.verifyLayer = layer;
+        await new Promise((resolve) => map.once('load', resolve));
+        map.addLayer(layer);
+        window.verifyCenter = fitBundle(map, bundle.groups);
+
+        const direct = bundle.textures.filter((descriptor) => descriptor.image);
+        const encoded = bundle.textures.filter((descriptor) => !descriptor.image && descriptor.file);
+        for (const descriptor of direct) installTexture(layer, descriptor, descriptor.image);
+
+        const worker = new Worker(
+          new URL('/src/features/msfs-renderer/msfs-texture.worker.js', location.href),
+          { type: 'module' }
+        );
+        window.verifyTextureWorker = worker;
+        const pending = new Map();
+        let nextId = 1;
+        let schedulingTextures = true;
+        worker.onmessage = (event) => {
+          const descriptor = pending.get(event.data?.id);
+          if (!descriptor) return;
+          pending.delete(event.data.id);
+          if (event.data.image) installTexture(layer, descriptor, event.data.image);
+          if (event.data.error) window.verifyState.errors.push(event.data.error);
+          updateCompletion();
+        };
+        worker.onerror = (event) => {
+          window.verifyState.errors.push(event.message || 'Texture worker failed.');
+          pending.clear();
+          updateCompletion();
+        };
+
+        setStatus(
+          `Rendering ${bundle.groups.length.toLocaleString()} groups\n` +
+            `${direct.length.toLocaleString()} fallback textures ready\n` +
+            `${encoded.length.toLocaleString()} package textures decoding`
+        );
+        await Promise.all(
+          encoded.map(async (descriptor) => {
+            try {
+              const blob = await fetch(descriptor.file.url).then(checkResponse).then((response) =>
+                response.blob()
+              );
+              const originalFile = new File([blob], descriptor.file.name, { type: blob.type });
+              const originalEntry = entries.find(
+                (entry) => String(entry.path).toLowerCase() === String(descriptor.path).toLowerCase()
+              );
+              if (originalEntry) originalEntry.file = originalFile;
+              descriptor.file = new File([blob], descriptor.file.name, { type: blob.type });
+              const id = nextId++;
+              pending.set(id, descriptor);
+              worker.postMessage({
+                id,
+                descriptor,
+              });
+            } catch (error) {
+              window.verifyState.errors.push(error instanceof Error ? error.message : String(error));
+            }
+          })
+        );
+        schedulingTextures = false;
+        updateCompletion();
+
+        function updateCompletion() {
+          if (schedulingTextures || pending.size > 0) return;
+          map.triggerRepaint();
+          const stats = layer.getStats();
+          window.verifyState = {
+            ...window.verifyState,
+            phase: 'complete',
+            groups: bundle.groups.length,
+            textures: bundle.textures.length,
+            directTextures: direct.length,
+            packageTextures: encoded.length,
+            diagnostics: bundle.diagnostics,
+            stats,
+          };
+          setStatus(
+            `${airportIcao} render complete\n` +
+              `${stats.drawableGroups}/${stats.meshGroups} drawable groups\n` +
+              `${window.verifyState.errors.length} texture errors`
+          );
+        }
+
+        window.openEditorVerification = async () => {
+          const [
+            ReactModule,
+            ReactDomModule,
+            RouterModule,
+            sessionModule,
+            modelModule,
+            sceneModule,
+            ,
+            { default: ContributionEditor },
+          ] = await Promise.all([
+              import('react'),
+              import('react-dom/client'),
+              import('react-router-dom'),
+              import('/src/features/contribution-editor/editor-session.js'),
+              import('/src/features/contribution-editor/editor-model.js'),
+              import('/src/features/contribution-editor/reference-scene.js'),
+              import('/src/styles/globals.css'),
+              import('/src/pages/ContributionEditor.jsx'),
+            ]);
+          const originalOnAdd = SimulatorTextureLayer.prototype.onAdd;
+          SimulatorTextureLayer.prototype.onAdd = function (...args) {
+            if (this.id === 'msfs-scenery-textures') window.editorVerificationLayer = this;
+            return originalOnAdd.apply(this, args);
+          };
+          const referenceScene = sceneModule.buildReferenceScene(
+            {
+              referenceFeatures: source.referenceFeatures,
+              runways: source.runways,
+              lightRows: [],
+              instances: [],
+              referenceDiagnostics: source.diagnostics,
+            },
+            'msfs'
+          );
+          const editorDocument = modelModule.createEditorDocument({
+            icao: airportIcao,
+            simulator: 'msfs',
+            altitude: 6,
+            draftXml:
+              '<?xml version="1.0"?><FSData version="9.0"><Polygon displayName="BARS_VERIFY" altitude="6"><Vertex lat="-33.9461" lon="151.1772"/><Vertex lat="-33.9460" lon="151.1780"/></Polygon></FSData>',
+            source: { name: packageName, fingerprint: 'browser-verification' },
+          });
+          sessionModule.setEditorSession(airportIcao, {
+            airport: {
+              icao: airportIcao,
+              name: packageName,
+              latitude: window.verifyCenter[1],
+              longitude: window.verifyCenter[0],
+              elevation_m: 6,
+            },
+            document: editorDocument,
+            referenceScene,
+            renderBundle: bundle,
+            sourceSelection: { name: packageName, entries },
+          });
+          window.verifyTextureWorker?.terminate();
+          window.verifyMap?.remove();
+          document.body.innerHTML = '<div id="root"></div>';
+          const React = ReactModule.default;
+          const routeEntry = {
+            pathname: `/contribute/editor/${airportIcao}`,
+            state: { sessionKey: airportIcao },
+          };
+          ReactDomModule.createRoot(document.querySelector('#root')).render(
+            React.createElement(
+              RouterModule.MemoryRouter,
+              { initialEntries: [routeEntry] },
+              React.createElement(
+                RouterModule.Routes,
+                null,
+                React.createElement(RouterModule.Route, {
+                  path: '/contribute/editor/:icao',
+                  element: React.createElement(ContributionEditor),
+                })
+              )
+            )
+          );
+        };
+      } catch (error) {
+        window.verifyState = {
+          ...window.verifyState,
+          phase: 'error',
+          errors: [error instanceof Error ? error.stack || error.message : String(error)],
+        };
+        setStatus(window.verifyState.errors[0]);
+      }
+
+      function remoteFile(entry) {
+        const url = `${packageOrigin}/file?path=${encodeURIComponent(entry.path)}`;
+        let bufferPromise;
+        const readBuffer = () =>
+          (bufferPromise ||= fetch(url).then(checkResponse).then((response) => response.arrayBuffer()));
+        const file = {
+          name: entry.name,
+          size: entry.size,
+          url,
+          arrayBuffer: readBuffer,
+          slice(start = 0, end = entry.size) {
+            return {
+              arrayBuffer: async () => (await readBuffer()).slice(start, end),
+            };
+          },
+        };
+        return file;
+      }
+
+      function installTexture(layer, descriptor, image) {
+        layer.setTexture(descriptor.pattern, image, {
+          wrap: descriptor.wrap !== false,
+          lineTexture: descriptor.lineTexture === true,
+        });
+      }
+
+      function fitBundle(map, groups) {
+        const bounds = groups.reduce(
+          (result, group) => {
+            const value = group.mercatorBounds;
+            if (!Array.isArray(value)) return result;
+            result[0] = Math.min(result[0], value[0]);
+            result[1] = Math.min(result[1], value[1]);
+            result[2] = Math.max(result[2], value[2]);
+            result[3] = Math.max(result[3], value[3]);
+            return result;
+          },
+          [Infinity, Infinity, -Infinity, -Infinity]
+        );
+        if (!bounds.every(Number.isFinite)) return [0, 0];
+        const southwest = mercatorToLngLat(bounds[0], bounds[3]);
+        const northeast = mercatorToLngLat(bounds[2], bounds[1]);
+        map.fitBounds(
+          [southwest, northeast],
+          { padding: 36, duration: 0 }
+        );
+        return [(southwest[0] + northeast[0]) / 2, (southwest[1] + northeast[1]) / 2];
+      }
+
+      function mercatorToLngLat(x, y) {
+        const longitude = x * 360 - 180;
+        const latitude =
+          (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
+        return [longitude, latitude];
+      }
+
+      function checkResponse(response) {
+        if (!response.ok) throw new Error(`${response.status} ${response.url}`);
+        return response;
+      }
+
+      function setStatus(message) {
+        status.textContent = message;
+      }
+    </script>
+  </body>
+</html>

@@ -1,10 +1,57 @@
 import { useScroll } from '../../hooks/useScroll';
 import { UserCircle, LogOut, ChevronRight, Menu, X } from 'lucide-react';
 import { Button } from '../shared/Button';
+import { IconSwap } from '../shared/IconSwap';
 import { RouteLink } from '../shared/RouteLink';
 import { useAuth } from '../../hooks/useAuth';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
+
+const DISMISSED_NOTAM_KEY = 'dismissed-notam';
+const NOTAM_STYLES = {
+  warning: {
+    banner: 'border-amber-900/70 bg-amber-950/60',
+    text: 'text-amber-400',
+    button: 'text-amber-300 hover:bg-amber-400/10 hover:text-amber-200',
+  },
+  info: {
+    banner: 'border-blue-900/70 bg-blue-950/60',
+    text: 'text-blue-400',
+    button: 'text-blue-300 hover:bg-blue-400/10 hover:text-blue-200',
+  },
+  discord: {
+    banner: 'border-discord/30 bg-discord/10',
+    text: 'text-discord-text',
+    button: 'text-discord-text hover:bg-discord/10 hover:text-indigo-200',
+  },
+  success: {
+    banner: 'border-emerald-900/70 bg-emerald-950/60',
+    text: 'text-emerald-400',
+    button: 'text-emerald-300 hover:bg-emerald-400/10 hover:text-emerald-200',
+  },
+  error: {
+    banner: 'border-red-900/70 bg-red-950/60',
+    text: 'text-red-400',
+    button: 'text-red-300 hover:bg-red-400/10 hover:text-red-200',
+  },
+  default: {
+    banner: 'border-zinc-800 bg-zinc-950/90',
+    text: 'text-zinc-300',
+    button: 'text-zinc-300 hover:bg-white/5 hover:text-white',
+  },
+};
+
+const getNotamIdentity = (content, type) => JSON.stringify([type || 'warning', content || '']);
+
+const isNotamDismissed = (content, type) => {
+  if (!content) return false;
+
+  try {
+    return localStorage.getItem(DISMISSED_NOTAM_KEY) === getNotamIdentity(content, type);
+  } catch {
+    return false;
+  }
+};
 
 // Function to parse markdown-style links in NOTAM content
 const sanitizeNotamLinks = (content) => {
@@ -17,7 +64,7 @@ const sanitizeNotamLinks = (content) => {
   // Add target="_blank" and rel="noopener noreferrer" for security
   const sanitizedContent = content.replace(
     linkRegex,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-150 hover:brightness-125">$1</a>'
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline transition-[filter] duration-[var(--duration-quick)] hover:brightness-125">$1</a>'
   );
 
   // Sanitize the content to prevent XSS attacks
@@ -25,18 +72,20 @@ const sanitizeNotamLinks = (content) => {
 };
 
 // Navigation, account controls, mobile menu, and the NOTAM banner share responsive layout state.
-// oxlint-disable react-doctor/no-giant-component
+// oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function -- Desktop and mobile navigation share authentication, scroll, focus, and menu-close state; splitting those owners would duplicate synchronization effects.
 export const Navbar = () => {
   const scrolled = useScroll();
   const { user, logout, loading, initiateVatsimAuth } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showNotam, setShowNotam] = useState(true);
-  const [notamContent, setNotamContent] = useState(
-    () => localStorage.getItem('notam-content') || ''
-  );
-  const [notamType, setNotamType] = useState(() => localStorage.getItem('notam-type') || 'warning'); // Types: "warning", "info", "discord", etc.
-  const notamRef = useRef(null);
-  const [notamFitsOnOneLine, setNotamFitsOnOneLine] = useState(true);
+  const [cachedNotam] = useState(() => ({
+    content: localStorage.getItem('notam-content') || '',
+    type: localStorage.getItem('notam-type') || 'warning',
+  }));
+  const [notamContent, setNotamContent] = useState(cachedNotam.content);
+  const [notamType, setNotamType] = useState(cachedNotam.type); // Types: "warning", "info", "discord", etc.
+  const [showNotam, setShowNotam] = useState(() => {
+    return Boolean(cachedNotam.content) && !isNotamDismissed(cachedNotam.content, cachedNotam.type);
+  });
   const [authLoading, setAuthLoading] = useState(false);
   // Track when NOTAM state has been resolved to avoid initial border flash
   const [notamInitialized, setNotamInitialized] = useState(() => Boolean(notamContent));
@@ -85,7 +134,7 @@ export const Navbar = () => {
 
               setNotamContent(data.notam);
               setNotamType(data.type || 'warning');
-              setShowNotam(true);
+              setShowNotam(!isNotamDismissed(data.notam, data.type || 'warning'));
             } else {
               setShowNotam(false);
               // Clear cached NOTAM if the API returns none
@@ -98,7 +147,7 @@ export const Navbar = () => {
           if (cachedNotamContent) {
             setNotamContent(cachedNotamContent);
             setNotamType(cachedNotamType || 'warning');
-            setShowNotam(true);
+            setShowNotam(!isNotamDismissed(cachedNotamContent, cachedNotamType || 'warning'));
           } else {
             setShowNotam(false);
           }
@@ -111,7 +160,7 @@ export const Navbar = () => {
         if (cachedNotamContent) {
           setNotamContent(cachedNotamContent);
           setNotamType(cachedNotamType || 'warning');
-          setShowNotam(true);
+          setShowNotam(!isNotamDismissed(cachedNotamContent, cachedNotamType || 'warning'));
         } else {
           setShowNotam(false);
         }
@@ -124,99 +173,69 @@ export const Navbar = () => {
     fetchNotam();
     return () => controller.abort();
   }, []);
-  // Check if NOTAM text wraps to multiple lines
-  useEffect(() => {
-    if (notamRef.current && notamContent) {
-      const checkNotamHeight = () => {
-        const element = notamRef.current;
-        if (element) {
-          // Get the line height from computed styles
-          const computedStyle = window.getComputedStyle(element);
-          const lineHeight =
-            parseInt(computedStyle.lineHeight) || parseInt(computedStyle.fontSize) * 1.2;
-
-          // If the element's height is greater than the line height (with a small buffer),
-          // then the text is wrapping to multiple lines
-          const isSingleLine = element.offsetHeight <= lineHeight * 1.2;
-          setNotamFitsOnOneLine(isSingleLine);
-        }
-      };
-
-      // Initial check
-      checkNotamHeight();
-
-      // Also check on window resize as available width changes
-      const handleResize = () => {
-        checkNotamHeight();
-      };
-
-      window.addEventListener('resize', handleResize);
-      return () => {
-        window.removeEventListener('resize', handleResize);
-      };
-    }
-  }, [notamContent]);
-
   const toggleMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
-  const mobileLinkClasses =
-    'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
+  const dismissNotam = () => {
+    try {
+      localStorage.setItem(DISMISSED_NOTAM_KEY, getNotamIdentity(notamContent, notamType));
+    } catch {
+      // The notice can still be dismissed for this session when storage is unavailable.
+    }
+    setShowNotam(false);
+  };
 
-  const notamVisible = Boolean(notamContent) && showNotam && !scrolled && notamFitsOnOneLine;
+  const mobileLinkClasses =
+    'flex min-h-10 items-center space-x-3 rounded-lg p-3 text-zinc-300 transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-800/70 hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900';
+
+  const notamVisible = Boolean(notamContent) && showNotam;
+  const notamStyles = NOTAM_STYLES[notamType] || NOTAM_STYLES.default;
 
   return (
-    <>
-      {' '}
-      {/* NOTAM Banner - Always in the DOM but visibility controlled by classes */}
-      {notamContent && (
+    <header className="fixed inset-x-0 top-0 z-50">
+      {/* Keeping the NOTAM and navbar in one stack lets the navbar reclaim its exact height. */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
+          notamVisible ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+        aria-hidden={!notamVisible}
+        inert={!notamVisible}
+      >
         <div
-          className={`fixed left-0 top-0 z-60 w-full transform-gpu overflow-hidden border-b transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-            notamType === 'warning'
-              ? 'bg-amber-500/10 border-amber-500/20'
-              : notamType === 'info'
-                ? 'bg-blue-500/10 border-blue-500/20'
-                : notamType === 'discord'
-                  ? 'bg-indigo-500/10 border-indigo-500/20'
-                  : notamType === 'success'
-                    ? 'bg-emerald-500/10 border-emerald-500/20'
-                    : notamType === 'error'
-                      ? 'bg-red-500/10 border-red-500/20'
-                      : 'bg-zinc-700/20 border-zinc-600/30'
-          } ${notamVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-full opacity-0'}`}
+          className={`min-h-0 overflow-hidden transition-[opacity,transform] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)] ${
+            notamVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'
+          }`}
         >
-          <div className="container mx-auto px-4 py-3">
-            <div className="flex items-center justify-center">
-              {' '}
-              <p
-                ref={notamRef}
-                className={`text-sm font-medium ${
-                  notamType === 'warning'
-                    ? 'text-amber-400'
-                    : notamType === 'info'
-                      ? 'text-blue-400'
-                      : notamType === 'discord'
-                        ? 'text-indigo-300'
-                        : notamType === 'success'
-                          ? 'text-emerald-400'
-                          : notamType === 'error'
-                            ? 'text-red-400'
-                            : 'text-zinc-300'
-                }`}
-                dangerouslySetInnerHTML={{ __html: sanitizeNotamLinks(notamContent) }}
-              />
+          <div className={`border-b backdrop-blur-md ${notamStyles.banner}`}>
+            <div className="grid min-h-10 w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-center px-1">
+              <span aria-hidden="true" />
+              {notamContent && (
+                <p
+                  className={`mx-auto max-w-7xl break-words py-2 text-center text-sm font-medium ${notamStyles.text}`}
+                  dangerouslySetInnerHTML={{ __html: sanitizeNotamLinks(notamContent) }}
+                />
+              )}
+              <button
+                type="button"
+                onClick={dismissNotam}
+                className={`inline-flex size-7 items-center justify-center justify-self-end rounded-sm transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950 ${notamStyles.button}`}
+                aria-label="Dismiss NOTAM"
+                title="Dismiss NOTAM"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
             </div>
           </div>
         </div>
-      )}{' '}
+      </div>
       <nav
-        className={`fixed left-0 top-0 z-50 w-full transform-gpu border-b transition-[background-color,border-color,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`w-full border-b transition-[background-color,border-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] ${
           // Avoid showing the border until NOTAM state is initialized to prevent white flash
-          scrolled || (notamInitialized && (!showNotam || !notamFitsOnOneLine || !notamContent))
+          scrolled || (notamInitialized && (!showNotam || !notamContent))
             ? 'border-zinc-800 bg-zinc-950/90 backdrop-blur-md'
             : 'border-transparent bg-zinc-950'
-        } ${notamVisible ? 'translate-y-10' : 'translate-y-0'}`}
+        }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-20">
@@ -283,12 +302,11 @@ export const Navbar = () => {
                   disabled={authLoading || loading}
                   className="flex items-center space-x-2 px-4"
                 >
-                  <span>{authLoading || loading ? 'Loading...' : 'Continue with VATSIM'}</span>
-                  {authLoading || loading ? (
-                    <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin ml-2"></div>
-                  ) : (
-                    <ChevronRight className="w-5 h-5" />
-                  )}
+                  <span>{authLoading || loading ? 'Loading...' : 'Login with VATSIM'}</span>
+                  <IconSwap active={authLoading || loading}>
+                    <ChevronRight className="h-5 w-5" />
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  </IconSwap>
                 </Button>
               )}
             </div>
@@ -298,26 +316,27 @@ export const Navbar = () => {
               <button
                 onClick={toggleMenu}
                 type="button"
-                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md p-2 text-zinc-400 transition-[background-color,color,transform] duration-150 ease-out hover:bg-zinc-800/70 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md p-2 text-zinc-400 transition-[background-color,color,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] hover:bg-zinc-800/70 hover:text-white active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
                 aria-controls="mobile-menu"
                 aria-expanded={mobileMenuOpen}
               >
-                <span className="sr-only">Open main menu</span>
-                {mobileMenuOpen ? (
-                  <X className="block h-6 w-6" aria-hidden="true" />
-                ) : (
-                  <Menu className="block h-6 w-6" aria-hidden="true" />
-                )}
+                <span className="sr-only">
+                  {mobileMenuOpen ? 'Close main menu' : 'Open main menu'}
+                </span>
+                <IconSwap active={mobileMenuOpen}>
+                  <Menu className="block h-6 w-6" />
+                  <X className="block h-6 w-6" />
+                </IconSwap>
               </button>
             </div>
           </div>
         </div>
         {/* Mobile menu, show/hide based on menu state with smooth animation */}
         <div
-          className={`md:hidden fixed inset-x-0 transform transition-[opacity,transform] duration-200 ease-out ${
+          className={`md:hidden fixed inset-x-0 transform transition-[filter,opacity,transform] ease-[var(--ease-smooth-out)] ${
             mobileMenuOpen
-              ? 'translate-y-0 opacity-100'
-              : '-translate-y-2 opacity-0 pointer-events-none'
+              ? 'translate-y-0 scale-100 blur-0 opacity-100 duration-[var(--duration-fast)]'
+              : '-translate-y-2 scale-[var(--scale-medium)] blur-[var(--blur-small)] opacity-0 pointer-events-none duration-[var(--duration-quick)]'
           }`}
           id="mobile-menu"
         >
@@ -400,7 +419,7 @@ export const Navbar = () => {
                     className="flex items-center space-x-2 px-4 w-full justify-center h-12"
                   >
                     <span className="font-medium">
-                      {authLoading || loading ? 'Loading...' : 'Continue with VATSIM'}
+                      {authLoading || loading ? 'Loading...' : 'Login with VATSIM'}
                     </span>
                     {authLoading || loading ? (
                       <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin ml-2"></div>
@@ -414,6 +433,6 @@ export const Navbar = () => {
           </div>
         </div>
       </nav>
-    </>
+    </header>
   );
 };

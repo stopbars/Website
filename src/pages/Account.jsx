@@ -4,6 +4,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Dialog } from '../components/shared/Dialog';
+import { IconSwap } from '../components/shared/IconSwap';
 import {
   User,
   LogOut,
@@ -28,7 +29,7 @@ import { PageLoading } from '../components/shared/PageLoading';
 import { useNavigate } from 'react-router-dom';
 import { preloadRoute } from '../utils/routeModules';
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/exhaustive-deps -- Account hydration, privacy controls, and request lifecycles are one cohesive authenticated workflow; splitting or reducer migration is higher-risk than the validated legacy behavior. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-event-handler react-doctor/no-chain-state-updates react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/exhaustive-deps react-doctor/no-set-state-after-await-in-effect -- Account hydration and request lifecycles are cohesive; guarded authenticated requests preserve the established workflow. */
 const Account = () => {
   const navigate = useNavigate();
   const { user, loading, logout, setUser, refreshUserData } = useAuth();
@@ -222,18 +223,18 @@ const Account = () => {
         headers: { 'X-Vatsim-Token': token },
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
         if (response.status === 429) {
           // Rate limit - use the message from the API
           throw new Error(
-            data.message ||
+            errorData.message ||
               'You can only regenerate your API key once every 24 hours, please try again later.'
           );
         }
         throw new Error('Failed to regenerate API key');
       }
+      const data = await response.json();
 
       // Update the user object with the new API key
       setUser((prevUser) => ({
@@ -472,7 +473,7 @@ const Account = () => {
           <h1 className="text-4xl font-bold mb-8 text-white">Account Settings</h1>
           <div className="space-y-8">
             {staffRoles?.isStaff && (
-              <Card className="p-5 sm:p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
+              <Card className="p-5 sm:p-8 border border-zinc-800 hover:border-zinc-700 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-fast)]">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center space-x-3 mb-2">
@@ -502,7 +503,7 @@ const Account = () => {
               </Card>
             )}
 
-            <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
+            <Card className="p-8 border border-zinc-800 hover:border-zinc-700 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-fast)]">
               <div className="flex items-center space-x-3 mb-8">
                 <User className="w-6 h-6 text-blue-400" />
                 <h2 className="text-2xl font-semibold">Account Details</h2>
@@ -522,15 +523,11 @@ const Account = () => {
                         onClick={() => setShowApiKey(!showApiKey)}
                         className="min-w-22.5 shrink-0 hover:bg-zinc-800"
                       >
-                        {showApiKey ? (
-                          <>
-                            <EyeOff className="w-4 h-4 mr-2" /> Hide
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-4 h-4 mr-2" /> Show
-                          </>
-                        )}
+                        <IconSwap active={showApiKey} className="mr-2">
+                          <Eye className="h-4 w-4" />
+                          <EyeOff className="h-4 w-4" />
+                        </IconSwap>
+                        {showApiKey ? 'Hide' : 'Show'}
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-3 mt-3">
@@ -540,15 +537,11 @@ const Account = () => {
                         onClick={handleCopyApiKey}
                         className={`min-w-25 ${copySuccess ? 'bg-green-500/20 text-green-400' : 'hover:bg-zinc-800'}`}
                       >
-                        {copySuccess ? (
-                          <>
-                            <Check className="w-4 h-4 mr-2 text-green-400" /> Copied{' '}
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4 mr-2" /> Copy
-                          </>
-                        )}
+                        <IconSwap active={copySuccess} className="mr-2">
+                          <Copy className="h-4 w-4" />
+                          <Check className="h-4 w-4 text-green-400" />
+                        </IconSwap>
+                        {copySuccess ? 'Copied' : 'Copy'}
                       </Button>
                       <Button
                         variant="outline"
@@ -581,12 +574,12 @@ const Account = () => {
                             handleCopyVatsimCid();
                           }
                         }}
-                        className={`absolute left-0 top-0 inline-flex items-center font-medium transition-all duration-200 ${cidCopied ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'} ${user?.vatsim_id ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900' : ''}`}
+                        className={`absolute left-0 top-0 inline-flex items-center font-medium transition-[filter,opacity,transform] duration-[var(--duration-quick)] ease-[var(--ease-in-out)] ${cidCopied ? '-translate-y-[var(--distance-micro)] blur-[var(--blur-small)] opacity-0' : 'translate-y-0 blur-0 opacity-100'} ${user?.vatsim_id ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900' : ''}`}
                       >
                         {user?.vatsim_id || '—'}
                       </button>
                       <span
-                        className={`absolute left-0 top-0 inline-flex items-center font-medium text-green-400 transition-all duration-200 pointer-events-none ${cidCopied ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+                        className={`pointer-events-none absolute left-0 top-0 inline-flex items-center font-medium text-green-400 transition-[filter,opacity,transform] duration-[var(--duration-quick)] ease-[var(--ease-in-out)] ${cidCopied ? 'translate-y-0 blur-0 opacity-100' : 'translate-y-[var(--distance-micro)] blur-[var(--blur-small)] opacity-0'}`}
                       >
                         Copied!
                       </span>
@@ -666,12 +659,12 @@ const Account = () => {
                           aria-pressed={active}
                           aria-busy={savingThisOption}
                           onClick={() => handleUpdateDisplayMode(opt.value)}
-                          className={`text-left group relative rounded-lg border p-4 transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${active ? 'border-blue-500/60 bg-blue-500/10 shadow-[0_0_0_1px_rgba(59,130,246,0.12)]' : 'border-zinc-800/70 hover:border-zinc-600/60 hover:bg-zinc-800/40'}`}
+                          className={`text-left group relative rounded-lg border p-4 transition-[border-color,background-color,box-shadow,transform] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${active ? 'border-blue-500/60 bg-blue-500/10 shadow-[0_0_0_1px_oklch(0.623_0.214_259.815/0.12)]' : 'border-zinc-800/70 hover:border-zinc-600/60 hover:bg-zinc-800/40'}`}
                         >
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-medium">{opt.label}</span>
                             <span
-                              className={`grid place-items-center w-3 h-3 rounded-full border transition-[background-color,border-color,box-shadow] duration-200 ${active ? 'bg-blue-500 border-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'border-zinc-600 group-hover:border-zinc-400'}`}
+                              className={`grid place-items-center w-3 h-3 rounded-full border transition-[background-color,border-color,box-shadow] duration-[var(--duration-quick)] ${active ? 'bg-blue-500 border-blue-400 shadow-[0_0_0_3px_oklch(0.623_0.214_259.815/0.3)]' : 'border-zinc-600 group-hover:border-zinc-400'}`}
                             >
                               {savingThisOption && (
                                 <span className="w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse" />
@@ -708,7 +701,7 @@ const Account = () => {
             </Card>
 
             {userDivisions.length > 0 && (
-              <Card className="p-5 sm:p-8 border border-zinc-800 hover:border-zinc-700 transition-all duration-300">
+              <Card className="p-5 sm:p-8 border border-zinc-800 hover:border-zinc-700 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-fast)]">
                 <div className="flex items-center space-x-3 mb-6 sm:mb-8">
                   <Building2 className="w-6 h-6 text-blue-400" />
                   <h2 className="text-2xl font-semibold">Your Divisions</h2>
@@ -747,7 +740,7 @@ const Account = () => {
               </Card>
             )}
 
-            <Card className="p-5 sm:p-8 border-red-500/20 hover:border-red-500/30 transition-all duration-300">
+            <Card className="p-5 sm:p-8 border-red-500/20 hover:border-red-500/30 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-fast)]">
               <div className="flex items-center space-x-3 mb-6 sm:mb-8">
                 <AlertOctagon className="w-6 h-6 text-red-500" />
                 <h2 className="text-2xl font-semibold text-red-500">Danger Zone</h2>

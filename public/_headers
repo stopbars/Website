@@ -1,0 +1,41 @@
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+https://preview.stopbars.com/*
+  X-Robots-Tag: noindex, nofollow
+
+https://:worker.aussiescorcher.workers.dev/*
+  X-Robots-Tag: noindex, nofollow
+
+/account*
+  X-Robots-Tag: noindex, follow
+
+/auth*
+  X-Robots-Tag: noindex, follow
+
+/staff*
+  X-Robots-Tag: noindex, follow
+
+/divisions/*
+  X-Robots-Tag: noindex, follow
+
+/contribute/*
+  X-Robots-Tag: noindex, follow
+
+/gen*
+  X-Robots-Tag: noindex, follow
+
+/banned*
+  X-Robots-Tag: noindex, follow
+
+/discord*
+  X-Robots-Tag: noindex, follow
+
+/docs*
+  X-Robots-Tag: noindex, follow
+
+/documentation*
+  X-Robots-Tag: noindex, follow
+
+/donate*
+  X-Robots-Tag: noindex, follow

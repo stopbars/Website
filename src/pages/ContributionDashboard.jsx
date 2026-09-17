@@ -8,6 +8,8 @@ import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
 import { Dialog } from '../components/shared/Dialog';
+import { SimulatorBadge } from '../components/shared/SimulatorBadge';
+import { PageLoading } from '../components/shared/PageLoading';
 import {
   Trophy,
   Users,
@@ -19,9 +21,22 @@ import {
   AlertOctagon,
   Trash2,
   AlertCircle,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { getVatsimToken } from '../utils/cookieUtils';
+import { getSimulatorLabel } from '../utils/simulatorPresentation';
+import {
+  contributionSourceFileName,
+  isFsDataXml,
+  submittedArtifactDescriptor,
+} from '../utils/contributionContracts.js';
+
+const CONTRIBUTIONS_PER_PAGE = 5;
 
 const groupContributionsByAirport = (contributions) => {
   const grouped = contributions.reduce((acc, contribution) => {
@@ -41,6 +56,7 @@ const groupContributionsByAirport = (contributions) => {
         : null,
       rejectionReason: contribution.rejectionReason ?? null,
       userDisplayName: contribution.userDisplayName ?? null,
+      barsArtifactKey: contribution.barsArtifactKey ?? null,
     });
 
     return acc;
@@ -49,10 +65,11 @@ const groupContributionsByAirport = (contributions) => {
   return Object.values(grouped);
 };
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-initialize-state react-doctor/exhaustive-deps react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/js-combine-iterations -- Dashboard tabs, indicator measurement, request state, and bounded presentation lists are cohesive; staged list transforms remain clearer than accumulator rewrites. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-initialize-state react-doctor/exhaustive-deps react-doctor/no-fetch-in-effect react-doctor/prefer-module-scope-pure-function react-doctor/js-combine-iterations react-doctor/no-set-state-after-await-in-effect -- Dashboard requests use a mounted guard before post-await updates; tabs, measurement, request state, and bounded lists remain cohesive. */
 const ContributionDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const prefersReducedMotion = usePrefersReducedMotion();
   const vatsimToken = getVatsimToken();
   const vatsimUserId = useMemo(() => {
     if (!vatsimToken) {
@@ -74,13 +91,19 @@ const ContributionDashboard = () => {
   }, [vatsimToken]);
 
   const [loading, setLoading] = useState(true);
-  const [, setError] = useState(null);
+  const [error, setError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
   const [allContributions, setAllContributions] = useState([]);
   const [userContributions, setUserContributions] = useState([]);
   const [userContributionSummary, setUserContributionSummary] = useState(null);
   const [searchTerm, setSearchTerm] = useSearchQuery();
   const [currentTab, setCurrentTab] = useState('all');
+  const [pagination, setPagination] = useState(() => ({
+    tab: 'all',
+    searchTerm,
+    page: 1,
+  }));
   const [viewingRejection, setViewingRejection] = useState(null); // { airport, scenery, reason }
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, airport, scenery }
   const [showToast, setShowToast] = useState(false);
@@ -94,6 +117,7 @@ const ContributionDashboard = () => {
   const allTabRef = useRef(null);
   const userTabRef = useRef(null);
   const tabsContainerRef = useRef(null);
+  const contributionsPanelRef = useRef(null);
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
 
   // On mount, set tab indicator if refs are available (fixes first click animation issue)
@@ -151,10 +175,11 @@ const ContributionDashboard = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
 
         const [leaderboardResponse, contributionsResponse] = await Promise.all([
           fetch('https://v2.stopbars.com/contributions/leaderboard'),
-          fetch('https://v2.stopbars.com/contributions?status=approved&simple=true'),
+          fetch('https://v2.stopbars.com/contributions?status=approved&projection=metadata'),
         ]);
 
         if (!leaderboardResponse.ok) throw new Error('Failed to fetch leaderboard data');
@@ -178,22 +203,11 @@ const ContributionDashboard = () => {
         setAllContributions(initialContributions);
         setLoading(false);
 
-        const publicMetadataPromise = fetch('https://v2.stopbars.com/contributions?status=approved')
-          .then((response) => {
-            if (!response.ok) throw new Error('Failed to enrich contribution metadata');
-            return response.json();
-          })
-          .then((data) => groupContributionsByAirport(data.contributions || []))
-          .catch((error) => {
-            console.error(error);
-            return null;
-          });
-
         // User contributions (if user is logged in)
         let userContribsArray = [];
         if (vatsimUserId) {
           const userResponse = await fetch(
-            `https://v2.stopbars.com/contributions?user=${encodeURIComponent(vatsimUserId)}&summary=true`
+            `https://v2.stopbars.com/contributions?user=${encodeURIComponent(vatsimUserId)}&projection=metadata&summary=true`
           );
 
           if (userResponse.ok) {
@@ -207,8 +221,6 @@ const ContributionDashboard = () => {
           }
         }
 
-        const enrichedContributions = await publicMetadataPromise;
-        if (enrichedContributions) setAllContributions(enrichedContributions);
         setUserContributions(userContribsArray);
       } catch (err) {
         setError('Failed to load contribution data');
@@ -219,26 +231,34 @@ const ContributionDashboard = () => {
     };
 
     fetchData();
-  }, [vatsimToken, vatsimUserId]);
-  const handleDownload = async (airportCode, sceneryId) => {
+  }, [retryCount, vatsimToken, vatsimUserId]);
+  const handleDownload = async (contributionSummary) => {
     try {
-      // Fetch the specific contribution
-      const response = await fetch(`https://v2.stopbars.com/contributions/${sceneryId}`);
+      const response = await fetch(
+        `https://v2.stopbars.com/contributions/${contributionSummary.id}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch the contribution source');
+      const contribution = await response.json();
+      const descriptor = submittedArtifactDescriptor(contribution);
+      let sourceXml = contribution.submittedXml;
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch contribution data');
+      if (!sourceXml && descriptor.downloadUrl) {
+        const artifactResponse = await fetch(descriptor.downloadUrl);
+        if (!artifactResponse.ok) throw new Error('Failed to download the contribution source');
+        sourceXml = await artifactResponse.text();
       }
 
-      const contribution = await response.json();
-
-      // Create a blob with the XML content
-      const blob = new Blob([contribution.submittedXml], { type: 'application/xml' });
+      if (!sourceXml) throw new Error('The original contribution XML is unavailable');
+      if (!isFsDataXml(sourceXml)) {
+        throw new Error('The downloaded contribution source is not editable FSData XML');
+      }
+      const blob = new Blob([sourceXml], { type: descriptor.contentType });
 
       // Create a download link and trigger it
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${airportCode}-${contribution.packageName.replace(/\s+/g, '-')}.xml`;
+      a.download = contributionSourceFileName(contribution);
       document.body.appendChild(a);
       a.click();
 
@@ -249,13 +269,41 @@ const ContributionDashboard = () => {
       }, 100);
     } catch (error) {
       console.error('Download error:', error);
-      alert(`Error downloading XML: ${error.message}`);
+      alert(`Error downloading source XML: ${error.message}`);
     }
   };
 
   const handleContributeClick = () => {
     navigate('/contribute/new');
   };
+
+  const handleTabChange = (tab) => {
+    setCurrentTab(tab);
+    setPagination({ tab, searchTerm, page: 1 });
+  };
+
+  const handleSearchChange = (event) => {
+    const nextSearchTerm = event.target.value;
+    setSearchTerm(nextSearchTerm);
+    setPagination({ tab: currentTab, searchTerm: nextSearchTerm, page: 1 });
+  };
+
+  const handleTabKeyDown = (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+
+    const nextTab =
+      !user || event.key === 'Home'
+        ? 'all'
+        : event.key === 'End'
+          ? 'user'
+          : currentTab === 'all'
+            ? 'user'
+            : 'all';
+    handleTabChange(nextTab);
+    (nextTab === 'all' ? allTabRef : userTabRef).current?.focus();
+  };
+
   // For "all" tab, only show approved contributions
   // For "user" tab, show all contributions with their statuses
   const filteredContributions = (
@@ -263,48 +311,41 @@ const ContributionDashboard = () => {
   ).filter(
     (airport) =>
       airport.airport.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      airport.contributions.some((c) => c.scenery.toLowerCase().includes(searchTerm.toLowerCase()))
+      airport.contributions.some(
+        (contribution) =>
+          contribution.scenery.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          getSimulatorLabel(contribution.simulator).toLowerCase().includes(searchTerm.toLowerCase())
+      )
   );
+
+  const requestedPage =
+    pagination.tab === currentTab && pagination.searchTerm === searchTerm ? pagination.page : 1;
+  const totalPages = Math.ceil(filteredContributions.length / CONTRIBUTIONS_PER_PAGE);
+  const currentPage = Math.min(requestedPage, Math.max(totalPages, 1));
+  const firstContributionIndex = (currentPage - 1) * CONTRIBUTIONS_PER_PAGE;
+  const paginatedContributions = filteredContributions.slice(
+    firstContributionIndex,
+    firstContributionIndex + CONTRIBUTIONS_PER_PAGE
+  );
+  const lastContributionIndex = Math.min(
+    firstContributionIndex + CONTRIBUTIONS_PER_PAGE,
+    filteredContributions.length
+  );
+
+  const handlePageChange = (page) => {
+    setPagination({ tab: currentTab, searchTerm, page });
+    window.requestAnimationFrame(() => {
+      contributionsPanelRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
+  };
 
   if (loading) {
     return (
       <Layout>
-        <div className="min-h-screen pt-32 sm:pt-39 pb-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6" aria-busy="true">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold mb-2">Community Contributions</h1>
-                <p className="text-zinc-400 text-sm sm:text-base">
-                  Help expand the BARS compatibility by contributing your own scenery contributions
-                </p>
-              </div>
-              <div className="h-10 w-56 rounded-lg bg-zinc-800 animate-pulse" />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <Card className="order-2 lg:order-1 p-4 sm:p-6 min-h-80">
-                <div className="h-7 w-44 rounded bg-zinc-800 animate-pulse mb-6" />
-                <div className="space-y-4">
-                  {[0, 1, 2, 3].map((item) => (
-                    <div key={item} className="h-13 rounded-lg bg-zinc-800/60 animate-pulse" />
-                  ))}
-                </div>
-              </Card>
-              <div className="lg:col-span-2 order-1 lg:order-2 min-h-150">
-                <div className="h-10 border-b border-zinc-800 mb-6" />
-                <div className="h-10 rounded-lg bg-zinc-800/60 animate-pulse mb-6" />
-                <div className="space-y-6">
-                  {[0, 1, 2].map((item) => (
-                    <div
-                      key={item}
-                      className="h-36 rounded-lg border border-zinc-800 bg-zinc-900/40 animate-pulse"
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PageLoading page label="Loading contributions…" variant="contributions" />
       </Layout>
     );
   }
@@ -318,20 +359,18 @@ const ContributionDashboard = () => {
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold mb-2">Community Contributions</h1>
               <p className="text-zinc-400 text-sm sm:text-base">
-                Help expand the BARS compatibility by contributing your own scenery contributions
+                Browse and contribute airport lighting support for MSFS and X-Plane scenery.
               </p>
             </div>
             {!user ? (
-              <Tooltip content="You must be logged in to contribute an airport.">
-                <Button
-                  onClick={handleContributeClick}
-                  disabled
-                  className="flex items-center space-x-2 opacity-60 cursor-not-allowed"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Contribute New Airport</span>
-                </Button>
-              </Tooltip>
+              <Button
+                onClick={handleContributeClick}
+                disabled
+                className="flex items-center space-x-2 opacity-60 cursor-not-allowed"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Contribute New Airport</span>
+              </Button>
             ) : (
               <Button onClick={handleContributeClick} className="flex items-center space-x-2">
                 <Plus className="w-4 h-4" />
@@ -339,6 +378,35 @@ const ContributionDashboard = () => {
               </Button>
             )}
           </div>
+
+          {error ? (
+            <div
+              className="mb-8 flex flex-col gap-4 rounded-xl border border-amber-500/25 bg-amber-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+              role="alert"
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle
+                  className="mt-0.5 h-5 w-5 shrink-0 text-amber-300"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-sm font-medium text-amber-100">Unable to load contributions</p>
+                  <p className="mt-1 text-sm text-amber-200/75">
+                    Check your connection and try again.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setRetryCount((count) => count + 1)}
+                className="shrink-0"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
+                Retry
+              </Button>
+            </div>
+          ) : null}
 
           {/* Main content grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -350,24 +418,32 @@ const ContributionDashboard = () => {
               {/* Tabs */}
               <div
                 ref={tabsContainerRef}
+                role="tablist"
+                aria-label="Contribution views"
                 className="relative flex mb-6 border-b border-zinc-800 select-none"
               >
                 {/* Animated underline */}
                 {tabIndicator.ready && (
                   <span
-                    className="absolute bottom-0 h-0.5 bg-blue-500 transition-all duration-300 ease-out"
+                    className="absolute bottom-0 h-0.5 bg-blue-500 transition-[left,width] duration-[var(--duration-fast)] ease-[var(--ease-smooth-out)]"
                     style={{ left: tabIndicator.left, width: tabIndicator.width }}
                   />
                 )}
                 <button
                   type="button"
                   ref={allTabRef}
-                  className={`px-4 py-2 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                  id="contributions-tab-all"
+                  role="tab"
+                  aria-selected={currentTab === 'all'}
+                  aria-controls="contributions-panel"
+                  tabIndex={currentTab === 'all' ? 0 : -1}
+                  className={`px-4 py-2 relative z-10 cursor-pointer transition-colors duration-[var(--duration-quick)] border-b-2 ${
                     currentTab === 'all'
                       ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
                       : 'text-zinc-400 hover:text-zinc-200 border-transparent'
                   }`}
-                  onClick={() => setCurrentTab('all')}
+                  onClick={() => handleTabChange('all')}
+                  onKeyDown={handleTabKeyDown}
                 >
                   <div className="flex items-center space-x-2">
                     <Users className="w-4 h-4 shrink-0 max-[500px]:hidden" />
@@ -379,12 +455,18 @@ const ContributionDashboard = () => {
                     <button
                       type="button"
                       ref={userTabRef}
-                      className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                      id="contributions-tab-user"
+                      role="tab"
+                      aria-selected={currentTab === 'user'}
+                      aria-controls="contributions-panel"
+                      tabIndex={currentTab === 'user' ? 0 : -1}
+                      className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-[var(--duration-quick)] border-b-2 ${
                         currentTab === 'user'
                           ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
                           : 'text-zinc-400 hover:text-zinc-200 border-transparent'
                       } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
-                      onClick={() => user && setCurrentTab('user')}
+                      onClick={() => user && handleTabChange('user')}
+                      onKeyDown={handleTabKeyDown}
                       disabled={!user}
                     >
                       <div className="flex items-center space-x-2">
@@ -397,12 +479,18 @@ const ContributionDashboard = () => {
                   <button
                     type="button"
                     ref={userTabRef}
-                    className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-200 border-b-2 ${
+                    id="contributions-tab-user"
+                    role="tab"
+                    aria-selected={currentTab === 'user'}
+                    aria-controls="contributions-panel"
+                    tabIndex={currentTab === 'user' ? 0 : -1}
+                    className={`px-4 py-2 ml-4 relative z-10 cursor-pointer transition-colors duration-[var(--duration-quick)] border-b-2 ${
                       currentTab === 'user'
                         ? `${tabIndicator.ready ? 'text-white border-transparent' : 'text-white border-blue-500'}`
                         : 'text-zinc-400 hover:text-zinc-200 border-transparent'
                     } ${!user ? 'opacity-40 cursor-not-allowed' : ''}`}
-                    onClick={() => user && setCurrentTab('user')}
+                    onClick={() => user && handleTabChange('user')}
+                    onKeyDown={handleTabKeyDown}
                     disabled={!user}
                   >
                     <div className="flex items-center space-x-2">
@@ -412,6 +500,24 @@ const ContributionDashboard = () => {
                   </button>
                 )}
               </div>
+
+              {currentTab === 'user' && user?.fast_track?.enabled ? (
+                <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-4">
+                  <ShieldCheck
+                    className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-emerald-200">
+                      Fast-track contributions enabled
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-emerald-100/70">
+                      You can choose fast-track publishing from the final details step. Some
+                      submissions may still need staff review.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
 
               {/* User Contribution Summary */}
               {currentTab === 'user' && userContributionSummary && (
@@ -444,15 +550,31 @@ const ContributionDashboard = () => {
                 <input
                   type="text"
                   aria-label="Search contributions"
-                  placeholder="Search by airport or scenery..."
+                  placeholder="Search by airport, scenery, or simulator..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                   className="w-full px-10 py-2 bg-zinc-800 rounded-lg border border-zinc-700 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               {/* Contribution list */}
-              <div className="space-y-6">
+              <div
+                ref={contributionsPanelRef}
+                id="contributions-panel"
+                role="tabpanel"
+                aria-labelledby={`contributions-tab-${currentTab}`}
+                tabIndex={0}
+                className="scroll-mt-28"
+              >
+                <output
+                  className="mb-4 block text-sm tabular-nums text-zinc-500"
+                  aria-live="polite"
+                >
+                  {filteredContributions.length === 0
+                    ? 'No airports to show'
+                    : `Showing ${firstContributionIndex + 1}–${lastContributionIndex} of ${filteredContributions.length} ${filteredContributions.length === 1 ? 'airport' : 'airports'}`}
+                </output>
+
                 {filteredContributions.length === 0 && (
                   <div className="p-8 text-center bg-zinc-800/50 rounded-lg">
                     {currentTab === 'user' && !user ? (
@@ -472,133 +594,87 @@ const ContributionDashboard = () => {
                   </div>
                 )}
 
-                {filteredContributions.map((airport) => (
-                  <Card
-                    key={airport.airport}
-                    className="p-4 sm:p-6 hover:border-zinc-700 transition-colors"
-                  >
-                    <div className="space-y-4">
-                      {/* Airport Header */}
-                      <div className="flex items-center justify-between border-b border-zinc-700 pb-4">
-                        <div>
-                          <div className="flex items-center space-x-3 mb-1">
-                            <h3 className="font-semibold text-xl">{airport.airport}</h3>
+                <div className="space-y-6">
+                  {paginatedContributions.map((airport) => (
+                    <Card
+                      key={airport.airport}
+                      className="p-4 sm:p-6 hover:border-zinc-700 transition-colors"
+                    >
+                      <div className="space-y-4">
+                        {/* Airport Header */}
+                        <div className="flex items-center justify-between border-b border-zinc-700 pb-4">
+                          <div>
+                            <div className="flex items-center space-x-3 mb-1">
+                              <h3 className="font-semibold text-xl">{airport.airport}</h3>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      {/* Scenery Packages */}
-                      <div className="space-y-3">
-                        {airport.contributions
-                          .filter((contribution) =>
-                            currentTab === 'all' ? contribution.status === 'approved' : true
-                          )
-                          .map((contribution) => (
-                            <div
-                              key={contribution.id}
-                              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg ${
-                                contribution.status === 'approved'
-                                  ? 'bg-zinc-800/50'
-                                  : contribution.status === 'pending'
-                                    ? 'bg-amber-900/20 border border-amber-900/40'
-                                    : contribution.status === 'rejected'
-                                      ? 'bg-red-900/20 border border-red-900/40'
-                                      : 'bg-zinc-800/50'
-                              }`}
-                            >
-                              <div className="space-y-1 min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-medium break-all">
-                                    {contribution.scenery}
-                                  </span>
-                                  {contribution.simulator && (
-                                    <span
-                                      className={`text-xs px-2 py-0.5 rounded-full border ${
-                                        contribution.simulator === 'msfs2024'
-                                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                                          : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                                      }`}
-                                    >
-                                      {contribution.simulator === 'msfs2024'
-                                        ? 'MSFS 2024'
-                                        : contribution.simulator === 'msfs2020'
-                                          ? 'MSFS 2020'
-                                          : contribution.simulator}
+                        {/* Scenery Packages */}
+                        <div className="space-y-3">
+                          {airport.contributions
+                            .filter((contribution) =>
+                              currentTab === 'all' ? contribution.status === 'approved' : true
+                            )
+                            .map((contribution) => (
+                              <div
+                                key={contribution.id}
+                                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg ${
+                                  contribution.status === 'approved'
+                                    ? 'bg-zinc-800/50'
+                                    : contribution.status === 'pending'
+                                      ? 'bg-amber-900/20 border border-amber-900/40'
+                                      : contribution.status === 'rejected'
+                                        ? 'bg-red-900/20 border border-red-900/40'
+                                        : 'bg-zinc-800/50'
+                                }`}
+                              >
+                                <div className="space-y-1 min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium break-all">
+                                      {contribution.scenery}
                                     </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center space-x-2">
+                                    {contribution.simulator && (
+                                      <SimulatorBadge simulator={contribution.simulator} />
+                                    )}
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <div className="text-xs text-zinc-400">
+                                      Last updated: {contribution.lastUpdated ?? 'Loading…'}
+                                    </div>
+                                    {currentTab === 'user' && (
+                                      <span
+                                        className={`text-xs px-2 py-0.5 rounded-full ${
+                                          contribution.status === 'approved'
+                                            ? 'bg-green-900/40 text-green-300'
+                                            : contribution.status === 'pending'
+                                              ? 'bg-amber-900/40 text-amber-300'
+                                              : 'bg-red-900/40 text-red-300'
+                                        }`}
+                                      >
+                                        {contribution.status.charAt(0).toUpperCase() +
+                                          contribution.status.slice(1)}
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="text-xs text-zinc-400">
-                                    Last updated: {contribution.lastUpdated ?? 'Loading…'}
+                                    Last contributor: {contribution.userDisplayName ?? 'Loading…'}
                                   </div>
-                                  {currentTab === 'user' && (
-                                    <span
-                                      className={`text-xs px-2 py-0.5 rounded-full ${
-                                        contribution.status === 'approved'
-                                          ? 'bg-green-900/40 text-green-300'
-                                          : contribution.status === 'pending'
-                                            ? 'bg-amber-900/40 text-amber-300'
-                                            : 'bg-red-900/40 text-red-300'
-                                      }`}
-                                    >
-                                      {contribution.status.charAt(0).toUpperCase() +
-                                        contribution.status.slice(1)}
-                                    </span>
-                                  )}
                                 </div>
-                                <div className="text-xs text-zinc-400">
-                                  Last contributor: {contribution.userDisplayName ?? 'Loading…'}
-                                </div>
-                              </div>
-                              {contribution.status === 'approved' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDownload(airport.airport, contribution.id)}
-                                  className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center justify-center gap-2"
-                                  title="Download XML"
-                                >
-                                  <FileDown className="w-4 h-4" />
-                                  Download XML
-                                </button>
-                              )}
-                              {contribution.status === 'pending' && (
-                                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                                  <Button
-                                    className="px-4! py-2! text-sm bg-amber-600! hover:bg-amber-700! text-white! w-full sm:w-auto"
-                                    onClick={() =>
-                                      setConfirmDelete({
-                                        id: contribution.id,
-                                        airport: airport.airport,
-                                        scenery: contribution.scenery,
-                                        status: contribution.status,
-                                      })
-                                    }
+                                {contribution.status === 'approved' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownload(contribution)}
+                                    className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] flex items-center justify-center gap-2"
+                                    title="Download editable source XML"
                                   >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete
-                                  </Button>
-                                </div>
-                              )}
-                              {contribution.status === 'rejected' &&
-                                (contribution.rejectionReason ? (
-                                  <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setViewingRejection({
-                                          airport: airport.airport,
-                                          scenery: contribution.scenery,
-                                          reason: contribution.rejectionReason,
-                                        })
-                                      }
-                                      className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-all duration-200 ease-in-out flex items-center justify-center gap-2 cursor-pointer"
-                                      title="View Reason"
-                                    >
-                                      <AlertOctagon className="w-4 h-4" />
-                                      View Reason
-                                    </button>
+                                    <FileDown className="w-4 h-4" />
+                                    Download source XML
+                                  </button>
+                                )}
+                                {contribution.status === 'pending' && (
+                                  <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                                     <Button
-                                      variant="destructive"
-                                      className="px-4! py-2! text-sm"
+                                      className="px-4! py-2! text-sm bg-amber-600! hover:bg-amber-700! text-white! w-full sm:w-auto"
                                       onClick={() =>
                                         setConfirmDelete({
                                           id: contribution.id,
@@ -612,32 +688,101 @@ const ContributionDashboard = () => {
                                       Delete
                                     </Button>
                                   </div>
-                                ) : (
-                                  <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
-                                    <div className="text-xs text-zinc-400">No reason provided</div>
-                                    <Button
-                                      variant="destructive"
-                                      className="px-4! py-2! text-sm w-full sm:w-auto"
-                                      onClick={() =>
-                                        setConfirmDelete({
-                                          id: contribution.id,
-                                          airport: airport.airport,
-                                          scenery: contribution.scenery,
-                                          status: contribution.status,
-                                        })
-                                      }
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Delete
-                                    </Button>
-                                  </div>
-                                ))}
-                            </div>
-                          ))}
+                                )}
+                                {contribution.status === 'rejected' &&
+                                  (contribution.rejectionReason ? (
+                                    <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setViewingRejection({
+                                            airport: airport.airport,
+                                            scenery: contribution.scenery,
+                                            reason: contribution.rejectionReason,
+                                          })
+                                        }
+                                        className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-zinc-100 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] flex items-center justify-center gap-2 cursor-pointer"
+                                        title="View Reason"
+                                      >
+                                        <AlertOctagon className="w-4 h-4" />
+                                        View Reason
+                                      </button>
+                                      <Button
+                                        variant="destructive"
+                                        className="px-4! py-2! text-sm"
+                                        onClick={() =>
+                                          setConfirmDelete({
+                                            id: contribution.id,
+                                            airport: airport.airport,
+                                            scenery: contribution.scenery,
+                                            status: contribution.status,
+                                          })
+                                        }
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
+                                      <div className="text-xs text-zinc-400">
+                                        No reason provided
+                                      </div>
+                                      <Button
+                                        variant="destructive"
+                                        className="px-4! py-2! text-sm w-full sm:w-auto"
+                                        onClick={() =>
+                                          setConfirmDelete({
+                                            id: contribution.id,
+                                            airport: airport.airport,
+                                            scenery: contribution.scenery,
+                                            status: contribution.status,
+                                          })
+                                        }
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  ))}
+                              </div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  ))}
+                </div>
+
+                {totalPages > 1 ? (
+                  <nav
+                    className="mt-8 flex items-center justify-between gap-4 border-t border-zinc-800 pt-6"
+                    aria-label="Contribution pages"
+                  >
+                    <Button
+                      variant="outline"
+                      className="px-3 sm:px-4"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      aria-label="Previous contribution page"
+                    >
+                      <ChevronLeft className="motion-back h-4 w-4" aria-hidden="true" />
+                      <span className="hidden sm:inline">Previous</span>
+                    </Button>
+                    <span className="text-sm tabular-nums text-zinc-400">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="px-3 sm:px-4"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      aria-label="Next contribution page"
+                    >
+                      <span className="hidden sm:inline">Next</span>
+                      <ChevronRight className="motion-forward h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </nav>
+                ) : null}
               </div>
             </div>
           </div>

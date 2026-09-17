@@ -1,104 +1,66 @@
-import { MessagesSquare, FileText, HeartHandshake, ExternalLink } from 'lucide-react';
+import { Download } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../shared/Button';
 
+/* oxlint-disable react-doctor/no-fetch-in-effect -- This one-shot installer request owns its AbortController and mirrors the hero download availability check. */
 export const Support = () => {
+  const downloadInfoRef = useRef(null);
+  const [downloadAvailable, setDownloadAvailable] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchInstaller = async () => {
+      try {
+        const response = await fetch('https://v2.stopbars.com/releases/latest?product=Installer', {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        downloadInfoRef.current = await response.json();
+        setDownloadAvailable(Boolean(downloadInfoRef.current?.downloadUrl));
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        setDownloadAvailable(false);
+      }
+    };
+
+    fetchInstaller();
+    return () => controller.abort();
+  }, []);
+
+  const downloadInstaller = () => {
+    const downloadUrl = downloadInfoRef.current?.downloadUrl;
+    if (!downloadUrl) return;
+
+    try {
+      navigator.sendBeacon('https://v2.stopbars.com/download?product=Installer', '');
+    } catch {
+      // Download tracking must never prevent the installer download.
+    }
+
+    window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <section className="deferred-section py-32 relative overflow-hidden" id="support">
-      <div className="relative max-w-7xl mx-auto px-6">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">We&apos;re here to help</h2>
-          <p className="text-zinc-400 text-lg">
-            Get support, report issues, stay updated with the latest news.
+    <section className="deferred-section home-section" id="support">
+      <div className="home-shell">
+        <div className="home-download-panel home-panel mx-auto max-w-5xl overflow-hidden px-6 py-12 text-center sm:px-12 sm:py-16">
+          <h2 className="home-section-title">Ready to use BARS?</h2>
+          <p className="home-section-copy mx-auto max-w-xl text-zinc-300 sm:text-lg">
+            Download BARS for Microsoft Flight Simulator and X-Plane.
           </p>
-        </div>
-
-        {/* Main Support Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Documentation Card */}
-          <div className="group relative p-8 rounded-2xl bg-linear-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-colors duration-300 flex flex-col">
-            <div className="relative flex flex-col flex-1">
-              <div className="w-14 h-14 mb-6 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                <FileText className="w-7 h-7 text-zinc-400" />
-              </div>
-
-              <h3 className="text-xl font-semibold mb-3">Documentation</h3>
-              <p className="text-zinc-400 text-sm mb-6 leading-relaxed flex-1">
-                Comprehensive guides covering installation, configuration, and usage for all
-                products.
-              </p>
-
-              <Button
-                variant="secondary"
-                className="w-full group/btn bg-zinc-800 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 mt-auto"
-                onClick={() =>
-                  window.open('https://docs.stopbars.com', '_blank', 'noopener,noreferrer')
-                }
-                aria-label="View installation and configuration guides"
-              >
-                View Documentation
-                <ExternalLink className="ml-2 h-4 w-4 opacity-50 group-hover/btn:opacity-100 transition-opacity" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Support BARS Card */}
-          <div className="group relative p-8 rounded-2xl bg-linear-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-colors duration-300 flex flex-col">
-            <div className="relative flex flex-col flex-1">
-              <div className="w-14 h-14 mb-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <HeartHandshake className="w-7 h-7 text-emerald-400" />
-              </div>
-
-              <h3 className="text-xl font-semibold mb-3">Support BARS</h3>
-              <p className="text-zinc-400 text-sm mb-6 leading-relaxed flex-1">
-                We&apos;re 100% community‑funded. Your donation helps cover servers and development,
-                keeping it free.
-              </p>
-
-              <Button
-                variant="secondary"
-                className="w-full group/btn bg-zinc-800 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 mt-auto"
-                onClick={() =>
-                  window.open(
-                    'https://opencollective.com/stopbars',
-                    '_blank',
-                    'noopener,noreferrer'
-                  )
-                }
-                aria-label="Support BARS with a donation on Open Collective"
-              >
-                Open Collective
-                <ExternalLink className="ml-2 h-4 w-4 opacity-50 group-hover/btn:opacity-100 transition-opacity" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Community Card */}
-          <div className="group relative p-8 rounded-2xl bg-linear-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-colors duration-300 flex flex-col">
-            <div className="relative flex flex-col flex-1">
-              <div className="w-14 h-14 mb-6 rounded-2xl bg-[#5865F2]/10 border border-[#5865F2]/20 flex items-center justify-center">
-                <MessagesSquare className="w-7 h-7 text-[#5865F2]" />
-              </div>
-
-              <h3 className="text-xl font-semibold mb-3">Join the Community</h3>
-              <p className="text-zinc-400 text-sm mb-6 leading-relaxed flex-1">
-                Connect with other BARS users, get help from the community, see previews of upcoming
-                features.
-              </p>
-
-              <Button
-                variant="secondary"
-                className="w-full group/btn bg-zinc-800 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 mt-auto"
-                onClick={() =>
-                  window.open('https://stopbars.com/discord', '_blank', 'noopener,noreferrer')
-                }
-                aria-label="Join BARS Discord community for support and updates"
-              >
-                Discord Server
-                <ExternalLink className="ml-2 h-4 w-4 opacity-50 group-hover/btn:opacity-100 transition-opacity" />
-              </Button>
-            </div>
-          </div>
+          <Button
+            variant="primary"
+            className="mt-8 min-h-12 px-8 text-base"
+            disabled={!downloadAvailable}
+            onClick={downloadInstaller}
+            aria-label="Download BARS"
+          >
+            <Download className="size-4" aria-hidden="true" />
+            {downloadAvailable ? 'Download BARS' : 'Download unavailable'}
+          </Button>
         </div>
       </div>
     </section>

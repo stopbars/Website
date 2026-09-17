@@ -6,6 +6,7 @@ import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
 import { Dropdown } from '../shared/Dropdown';
+import { PageLoading } from '../shared/PageLoading';
 import { Loader, Trash2, UserPlus, UserCheck, Users, AlertOctagon } from 'lucide-react';
 
 // Staff roles allowed by backend enum StaffRole
@@ -46,14 +47,17 @@ function StaffMemberForm({ onSubmit, onValidationError }) {
 
   return (
     <>
-      <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
+      <Card className="p-6 hover:border-zinc-600/50 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)]">
         <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-zinc-400" />
           Add Staff Member
         </h3>
         <form onSubmit={openConfirmation} className="grid md:grid-cols-4 gap-4 items-end">
           <div className="md:col-span-2">
-            <label htmlFor="staff-vatsim-id" className="block text-sm font-medium text-zinc-400 mb-2">
+            <label
+              htmlFor="staff-vatsim-id"
+              className="block text-sm font-medium text-zinc-400 mb-2"
+            >
               VATSIM CID
             </label>
             <input
@@ -64,7 +68,7 @@ function StaffMemberForm({ onSubmit, onValidationError }) {
                 setForm((current) => ({ ...current, vatsimId: event.target.value }))
               }
               placeholder="e.g., 1234567"
-              className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-zinc-500 transition-all"
+              className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-zinc-500 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
             />
           </div>
           <div>
@@ -76,7 +80,11 @@ function StaffMemberForm({ onSubmit, onValidationError }) {
             />
           </div>
           <div className="flex gap-2">
-            <Button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2">
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 flex items-center justify-center gap-2"
+            >
               <UserPlus className="w-4 h-4" />
               Add
             </Button>
@@ -258,11 +266,7 @@ export default function StaffManagement() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-40">
-        <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-      </div>
-    );
+    return <PageLoading label="Loading staff members…" variant="tool-list" />;
   }
 
   return (
@@ -303,7 +307,7 @@ export default function StaffManagement() {
           <StaffMemberForm onSubmit={handleSubmit} onValidationError={handleValidationError} />
 
           {/* Staff List */}
-          <Card className="p-6 hover:border-zinc-600/50 transition-all duration-200">
+          <Card className="p-6 hover:border-zinc-600/50 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)]">
             <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-zinc-400" />
               Current Staff
@@ -325,9 +329,15 @@ export default function StaffManagement() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800">
-                    {staff.map((member, idx) => (
+                    {staff.map((member) => (
                       <tr
-                        key={member.vatsim_id || member.vatsimId || member.user_id || idx}
+                        key={
+                          member.vatsim_id ||
+                          member.vatsimId ||
+                          member.user_id ||
+                          member.email ||
+                          member.name
+                        }
                         className="hover:bg-zinc-800/50 transition-colors"
                       >
                         <td className="py-3 px-4 font-mono text-zinc-300">
@@ -346,7 +356,7 @@ export default function StaffManagement() {
                             <button
                               type="button"
                               onClick={() => setRemovingMember(member)}
-                              className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-all"
+                              className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
                               title="Remove staff member"
                             >
                               <Trash2 className="w-4 h-4" />

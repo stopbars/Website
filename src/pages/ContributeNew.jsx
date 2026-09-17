@@ -1,10 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Toast } from '../components/shared/Toast';
-import { AlertCircle, Search, Loader, BookOpen, ChevronRight } from 'lucide-react';
+import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
+import { AlertCircle, ArrowRight, BookOpen, Search } from 'lucide-react';
+
+const AIRPORT_SUGGESTIONS = ['YSSY', 'EGLL', 'KJFK', 'WSSS', 'OMDB', 'KLAX', 'RJTT'];
+const SUGGESTION_INTERVAL_MS = 2000;
+const SUGGESTION_TRANSITION_MS = 150;
+const CONTRIBUTION_GUIDE_URL = 'https://docs.stopbars.com/contributions';
 
 const ContributeNew = () => {
   const navigate = useNavigate();
@@ -21,42 +27,28 @@ const ContributeNew = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen pt-32 pb-20 flex items-center">
-        <div className="w-full max-w-3xl mx-auto px-6">
-          <div className="mb-12 text-center">
-            <h1 className="text-3xl font-bold mb-4">Contribute to BARS</h1>
-            <p className="text-zinc-400 max-w-xl mx-auto"></p>
-          </div>
+      <div className="min-h-screen pb-20 pt-32">
+        <div className="mx-auto w-full max-w-4xl px-6">
+          <ContributionFlowHeader
+            current="airport"
+            title="Start a contribution"
+            align="center"
+            showGuide={false}
+          />
 
-          <Card className="p-8 max-w-lg mx-auto">
-            <h2 className="text-xl font-medium mb-6">Step 1: Select Airport</h2>
-
+          <Card className="mx-auto max-w-xl p-6 sm:p-8">
+            <p className="mb-6 text-center text-sm text-zinc-400 text-pretty">
+              Enter the airport ICAO to review its current BARS layout.
+            </p>
             <AirportSearchForm />
-
-            <div className="mt-8 pt-6 border-t border-zinc-800">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  window.open(
-                    'https://docs.stopbars.com/contributions',
-                    '_blank',
-                    'noopener,noreferrer'
-                  )
-                }
-                className="flex items-center justify-center w-full"
-              >
-                <BookOpen className="w-4 h-4 mr-2" />
-                View Contribution Guide
-              </Button>
-            </div>
           </Card>
         </div>
       </div>
 
       {/* Toast for error messages */}
       <Toast
-        title="Error Loading Airport"
-        description="Failed to load airport data, please try again."
+        title="Unable to load airport"
+        description="Check the ICAO and try again."
         variant="destructive"
         show={showToast}
         onClose={() => setShowToast(false)}
@@ -68,78 +60,144 @@ const ContributeNew = () => {
 function AirportSearchForm() {
   const navigate = useNavigate();
   const [icao, setIcao] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [isSuggestionTransitioning, setIsSuggestionTransitioning] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    () =>
+      typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+  const icaoInputRef = useRef(null);
+  const currentSuggestion = AIRPORT_SUGGESTIONS[suggestionIndex];
+  const nextSuggestion = AIRPORT_SUGGESTIONS[(suggestionIndex + 1) % AIRPORT_SUGGESTIONS.length];
 
-  const handleSubmit = async (event) => {
+  useEffect(() => {
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleMotionPreferenceChange = (event) => {
+      setPrefersReducedMotion(event.matches);
+      setIsSuggestionTransitioning(false);
+    };
+
+    motionPreference.addEventListener('change', handleMotionPreferenceChange);
+    return () => motionPreference.removeEventListener('change', handleMotionPreferenceChange);
+  }, []);
+
+  useEffect(() => {
+    if (icao || isFocused || prefersReducedMotion) return undefined;
+
+    let transitionTimer;
+    const cycleTimer = window.setInterval(() => {
+      setIsSuggestionTransitioning(true);
+      transitionTimer = window.setTimeout(() => {
+        setSuggestionIndex((index) => (index + 1) % AIRPORT_SUGGESTIONS.length);
+        setIsSuggestionTransitioning(false);
+      }, SUGGESTION_TRANSITION_MS);
+    }, SUGGESTION_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(cycleTimer);
+      window.clearTimeout(transitionTimer);
+    };
+  }, [icao, isFocused, prefersReducedMotion]);
+
+  const handleSubmit = (event) => {
     event.preventDefault();
 
     if (!icao) {
-      setError('Please enter an airport ICAO code');
+      setError('Enter a four-character airport ICAO.');
+      icaoInputRef.current?.focus();
       return;
     }
 
     if (!/^[A-Za-z0-9]{4}$/.test(icao)) {
-      setError('ICAO code must be exactly 4 characters (letters and numbers only)');
+      setError('Use exactly four letters or numbers.');
+      icaoInputRef.current?.focus();
       return;
     }
 
-    setIsSearching(true);
     setError('');
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      navigate(`/contribute/map/${icao.toUpperCase()}`);
-    } catch (submitError) {
-      setError('Failed to verify airport. Please try again.');
-      console.error(submitError);
-    } finally {
-      setIsSearching(false);
-    }
+    navigate(`/contribute/map/${icao.toUpperCase()}`);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <label htmlFor="icao" className="block text-sm font-medium mb-2">
-          Enter Airport ICAO Code
+        <label htmlFor="icao" className="mb-2 block text-sm font-medium text-zinc-200">
+          Airport ICAO
         </label>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
+          <Search
+            className="absolute left-3 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-zinc-500"
+            aria-hidden="true"
+          />
           <input
             id="icao"
+            ref={icaoInputRef}
+            name="airport-icao"
             type="text"
+            autoComplete="off"
+            spellCheck="false"
             value={icao}
             onChange={(event) => {
               setIcao(event.target.value.toUpperCase());
               setError('');
+              setIsSuggestionTransitioning(false);
             }}
-            placeholder="e.g. YSSY, EGLL, OMDB"
+            onFocus={() => {
+              setIsFocused(true);
+              setIsSuggestionTransitioning(false);
+            }}
+            onBlur={() => setIsFocused(false)}
             maxLength={4}
-            className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-lg uppercase"
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'icao-error' : undefined}
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 pl-10 text-lg uppercase text-white outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-600 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/35"
           />
+          <span
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-y-0 left-10 right-4 z-10 overflow-hidden transition-opacity duration-[var(--duration-quick)] ${
+              icao || isFocused ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            <span
+              className={`absolute inset-y-0 flex items-center text-lg text-zinc-600 ${
+                isSuggestionTransitioning ? 'airport-suggestion-exit' : ''
+              }`}
+            >
+              {currentSuggestion}
+            </span>
+            <span
+              className={`airport-suggestion-next absolute inset-y-0 flex items-center text-lg text-zinc-600 ${
+                isSuggestionTransitioning ? 'airport-suggestion-enter' : ''
+              }`}
+            >
+              {nextSuggestion}
+            </span>
+          </span>
         </div>
         {error && (
-          <div className="mt-2 flex items-center text-red-500 text-sm">
-            <AlertCircle className="w-4 h-4 mr-1" />
+          <div id="icao-error" className="mt-2 flex items-center gap-1.5 text-sm text-red-400">
+            <AlertCircle className="h-4 w-4" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={isSearching}>
-        {isSearching ? (
-          <div className="flex items-center justify-center">
-            <Loader className="w-4 h-4 mr-2 animate-spin" />
-            <span>Searching...</span>
-          </div>
-        ) : (
-          <>
-            Continue to Next Step
-            <ChevronRight className="w-4 h-4 ml-2" />
-          </>
-        )}
+      <Button type="submit" className="w-full">
+        Review airport
+        <ArrowRight className="motion-forward h-4 w-4" aria-hidden="true" />
       </Button>
+
+      <a
+        href={CONTRIBUTION_GUIDE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-800/50 px-4 py-3 text-center text-sm font-medium whitespace-nowrap text-zinc-300 transition-[background-color,border-color,color,transform,opacity] duration-[var(--duration-quick)] ease-[var(--ease-smooth-out)] hover:border-zinc-600 hover:bg-zinc-800 hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+      >
+        <BookOpen className="h-4 w-4" aria-hidden="true" />
+        View contribution guide
+      </a>
     </form>
   );
 }

@@ -230,7 +230,7 @@ export default function AuthGrant() {
                   className="w-full sm:w-auto"
                 >
                   Login to review
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="motion-forward h-4 w-4" />
                 </Button>
               ) : (
                 <Button
@@ -240,7 +240,7 @@ export default function AuthGrant() {
                   className="w-full sm:w-auto"
                 >
                   Grant access
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="motion-forward h-4 w-4" />
                 </Button>
               )}
             </div>

@@ -6,6 +6,7 @@ import { Card } from '../shared/Card';
 import { Dialog } from '../shared/Dialog';
 import { Toast } from '../shared/Toast';
 import { Tooltip } from '../shared/Tooltip';
+import { PageLoading } from '../shared/PageLoading';
 import {
   User,
   Users,
@@ -17,13 +18,14 @@ import {
   ChevronRight,
   Trash2,
   AlertOctagon,
-  Loader,
   IdCard,
   KeyRound,
   Globe,
   Map,
   MapPin,
   Ban,
+  Shield,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatLocalDateTime } from '../../utils/dateUtils';
 import { getVatsimToken } from '../../utils/cookieUtils';
@@ -140,6 +142,9 @@ const UserManagement = () => {
   const [totalUsers, setTotalUsers] = useState(0);
   const [copiedEmail, setCopiedEmail] = useState(null);
   const [copiedCid, setCopiedCid] = useState(null);
+  const [fastTrackUser, setFastTrackUser] = useState(null);
+  const [fastTrackEnabled, setFastTrackEnabled] = useState(false);
+  const [isSavingFastTrack, setIsSavingFastTrack] = useState(false);
 
   // Toast states
   const [showSuccessToast, setShowSuccessToast] = useState(false);
@@ -284,6 +289,64 @@ const UserManagement = () => {
     setRegeneratingUser(null);
     setRegenerateConfirmation('');
   };
+
+  const openFastTrack = (user) => {
+    setFastTrackUser(user);
+    setFastTrackEnabled(user.fast_track?.enabled === true);
+  };
+
+  const closeFastTrack = () => {
+    if (isSavingFastTrack) return;
+    setFastTrackUser(null);
+    setFastTrackEnabled(false);
+  };
+
+  const saveFastTrack = async () => {
+    if (!fastTrackUser) return;
+    setIsSavingFastTrack(true);
+    try {
+      const response = await fetch(
+        `https://v2.stopbars.com/staff/users/${fastTrackUser.id}/fast-track`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Vatsim-Token': getVatsimToken(),
+          },
+          body: JSON.stringify({ enabled: fastTrackEnabled }),
+        }
+      );
+      if (!response.ok) {
+        const errorResult = await response.json().catch(() => ({}));
+        throw new Error(errorResult.error || 'Unable to update fast-track access');
+      }
+      const result = await response.json();
+
+      setUsers((current) =>
+        current.map((user) =>
+          user.id === fastTrackUser.id
+            ? {
+                ...user,
+                fast_track: result.fastTrack || { enabled: false, expires_at: null },
+              }
+            : user
+        )
+      );
+      setSuccessMessage(
+        fastTrackEnabled
+          ? `Fast-track access updated for ${getDisplayName(fastTrackUser)}.`
+          : `Fast-track access removed for ${getDisplayName(fastTrackUser)}.`
+      );
+      setShowSuccessToast(true);
+      setFastTrackUser(null);
+      setFastTrackEnabled(false);
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to update fast-track access');
+      setShowErrorToast(true);
+    } finally {
+      setIsSavingFastTrack(false);
+    }
+  };
   const filteredUsers = users.filter(
     (user) =>
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -345,7 +408,7 @@ const UserManagement = () => {
               placeholder="Search users..."
               value={searchTerm}
               onChange={handleSearch}
-              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-all"
+              className="pl-9 pr-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 w-full sm:w-64 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform]"
             />
           </div>
         </div>
@@ -354,9 +417,7 @@ const UserManagement = () => {
       {/* Users List */}
       <div className="space-y-4">
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader className="w-6 h-6 animate-spin text-zinc-400" />
-          </div>
+          <PageLoading label="Loading users…" variant="tool-card-grid" />
         ) : (
           <>
             <div className="grid content-start grid-cols-1 items-stretch gap-4 md:min-h-248 md:grid-cols-2 xl:min-h-164 xl:grid-cols-3">
@@ -369,7 +430,7 @@ const UserManagement = () => {
               {paginatedUsers.map((user) => (
                 <Card
                   key={user.id}
-                  className="flex min-h-80 flex-col p-5 transition-all duration-200 hover:border-zinc-600/50 hover:bg-zinc-800/30 md:h-80"
+                  className="flex min-h-80 flex-col p-5 transition-[background-color,border-color,color,box-shadow,filter,opacity,transform] duration-[var(--duration-quick)] hover:border-zinc-600/50 hover:bg-zinc-800/30 md:h-80"
                 >
                   <div className="flex h-full flex-1 flex-col gap-4">
                     {/* User Header */}
@@ -388,6 +449,31 @@ const UserManagement = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openFastTrack(user)}
+                          className={`inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 ${
+                            user.fast_track?.enabled
+                              ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 hover:text-emerald-300'
+                              : 'text-zinc-400 hover:bg-zinc-800 hover:text-emerald-400'
+                          }`}
+                          aria-label={`${
+                            user.fast_track?.enabled
+                              ? 'Fast-track access enabled.'
+                              : 'Fast-track access disabled.'
+                          } Manage access for ${getDisplayName(user)}`}
+                          title={
+                            user.fast_track?.enabled
+                              ? `Fast-track enabled until ${formatLocalDateTime(user.fast_track.expires_at)}`
+                              : 'Fast-track disabled'
+                          }
+                        >
+                          {user.fast_track?.enabled ? (
+                            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                          ) : (
+                            <Shield className="h-4 w-4" aria-hidden="true" />
+                          )}
+                        </button>
                         <button
                           type="button"
                           onClick={() => setRegeneratingUser(user)}
@@ -428,7 +514,7 @@ const UserManagement = () => {
                               handleCopyEmail(user.id, user.email);
                             }
                           }}
-                          className={`min-w-0 truncate cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedEmail === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                          className={`min-w-0 truncate cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-[var(--duration-quick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedEmail === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
                         >
                           {user.email}
                         </button>
@@ -446,7 +532,7 @@ const UserManagement = () => {
                                 handleCopyCid(user.id, user.vatsim_id);
                               }
                             }}
-                            className={`cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedCid === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
+                            className={`cursor-pointer bg-transparent border-0 p-0 text-left transition-colors duration-[var(--duration-quick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded ${copiedCid === user.id ? 'text-green-400' : 'text-zinc-300 hover:text-white'}`}
                           >
                             {user.vatsim_id}
                           </button>
@@ -507,6 +593,80 @@ const UserManagement = () => {
             </div>
 
             {/* Delete Confirmation Modal */}
+            <Dialog
+              open={!!fastTrackUser}
+              onClose={closeFastTrack}
+              icon={ShieldCheck}
+              iconColor="green"
+              title="Manage fast-track access"
+              description="Eligible submissions can publish after automated checks when the contributor opts in. Access expires after 12 months and any rejected contribution pauses it."
+              isLoading={isSavingFastTrack}
+              closeOnBackdrop={!isSavingFastTrack}
+              closeOnEscape={!isSavingFastTrack}
+              buttons={[
+                {
+                  label: 'Save access',
+                  onClick: saveFastTrack,
+                  variant: 'primary',
+                  icon: ShieldCheck,
+                  loadingLabel: 'Saving access...',
+                  requiresValidation: true,
+                },
+                {
+                  label: 'Cancel',
+                  variant: 'outline',
+                  onClick: closeFastTrack,
+                },
+              ]}
+            >
+              <div className="space-y-5">
+                <div className="rounded-lg bg-zinc-800/60 p-4">
+                  <p className="font-medium text-white">
+                    {fastTrackUser ? getDisplayName(fastTrackUser) : ''}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-500">VATSIM {fastTrackUser?.vatsim_id}</p>
+                  <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-lg bg-zinc-900/70 p-2">
+                      <dt className="text-xs text-zinc-500">Approved</dt>
+                      <dd className="mt-1 font-semibold tabular-nums text-zinc-200">
+                        {fastTrackUser?.contribution_stats?.approved ?? 0}
+                      </dd>
+                    </div>
+                    <div className="rounded-lg bg-zinc-900/70 p-2">
+                      <dt className="text-xs text-zinc-500">Airports</dt>
+                      <dd className="mt-1 font-semibold tabular-nums text-zinc-200">
+                        {fastTrackUser?.contribution_stats?.airports ?? 0}
+                      </dd>
+                    </div>
+                    <div className="rounded-lg bg-zinc-900/70 p-2">
+                      <dt className="text-xs text-zinc-500">Rejected</dt>
+                      <dd className="mt-1 font-semibold tabular-nums text-zinc-200">
+                        {fastTrackUser?.contribution_stats?.rejected ?? 0}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-800/40 px-3 py-3 transition-colors hover:border-zinc-600">
+                  <input
+                    type="checkbox"
+                    checked={fastTrackEnabled}
+                    onChange={(event) => setFastTrackEnabled(event.target.checked)}
+                    disabled={isSavingFastTrack}
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-zinc-200">
+                      Enable fast-track access
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-zinc-500">
+                      The contributor chooses whether to use it for each submission.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </Dialog>
+
             <Dialog
               open={!!deletingUser}
               onClose={cancelDelete}

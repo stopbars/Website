@@ -3,9 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
-import { Button } from '../components/shared/Button';
-import { Breadcrumb, BreadcrumbItem } from '../components/shared/Breadcrumb';
-import { AlertCircle, ChevronRight, CopyIcon, Info, Check, Layers, FileCode2 } from 'lucide-react';
+import { PageLoading } from '../components/shared/PageLoading';
+import { RouteLink } from '../components/shared/RouteLink.jsx';
+import { ContributionFlowHeader } from '../components/contributions/ContributionFlowHeader';
+import { IconSwap } from '../components/shared/IconSwap';
+import { PointMarkerIcon } from '../components/shared/PointMarkerIcon';
+import { AlertCircle, ArrowRight, CopyIcon, Info, Check, Layers } from 'lucide-react';
 import Map, {
   Source,
   Layer,
@@ -15,10 +18,11 @@ import Map, {
   ScaleControl,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { getContributionDisabledMessage } from '../utils/contributionPolicy';
 import {
-  fetchContributionPolicy,
-  getContributionDisabledMessage,
-} from '../utils/contributionPolicy';
+  getCachedContributionContext,
+  loadContributionContext,
+} from '../utils/contributionFlowData.js';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -209,11 +213,10 @@ const PointPopupContent = React.memo(({ point }) => {
             <span
               className={`shrink-0 transition-colors ${copiedId === point.id ? 'text-green-400' : 'text-zinc-500 group-hover:text-zinc-300'}`}
             >
-              {copiedId === point.id ? (
-                <Check className="w-3.5 h-3.5" />
-              ) : (
-                <CopyIcon className="w-3.5 h-3.5" />
-              )}
+              <IconSwap active={copiedId === point.id}>
+                <CopyIcon className="h-3.5 w-3.5" />
+                <Check className="h-3.5 w-3.5" />
+              </IconSwap>
             </span>
           </button>
         </div>
@@ -267,196 +270,6 @@ PointPopupContent.propTypes = {
   }).isRequired,
 };
 
-const getPointColor = (point) => {
-  switch (point.type) {
-    case 'lead_on':
-      return '#fbbf24';
-    case 'stopbar':
-      return '#ef4444';
-    case 'taxiway':
-      switch (point.color) {
-        case 'green-yellow':
-          return '#FFD700'; // Green-Yellow
-        case 'green-blue':
-          return '#0000FF'; // Green-Blue
-        case 'green-orange':
-          return '#FFA500'; // Green-Orange
-        default:
-          return '#00FF00'; // Normal green
-      }
-    case 'stand':
-      return 'rgb(255, 141, 35)';
-    default:
-      return '#ef4444';
-  }
-};
-
-const PointMarkerIcon = ({ point }) => {
-  const color = getPointColor(point);
-
-  if (point.type === 'stopbar') {
-    return (
-      <div className="marker-container">
-        <div className={`marker-circle stopbar-marker ${point.orientation || 'left'}`}>
-          {point.directionality === 'uni-directional' &&
-            (point.orientation === 'left' ? (
-              <div className="marker-quarter marker-quarter-4"></div>
-            ) : (
-              <div className="marker-quarter marker-quarter-1"></div>
-            ))}
-        </div>
-      </div>
-    );
-  } else if (point.type === 'lead_on') {
-    return (
-      <div className="marker-container">
-        <div className="marker-circle lead-on-marker">
-          <div className="marker-quarter marker-quarter-1"></div>
-          <div className="marker-quarter marker-quarter-2"></div>
-          <div className="marker-quarter marker-quarter-3"></div>
-          <div className="marker-quarter marker-quarter-4"></div>
-        </div>
-      </div>
-    );
-  } else if (point.type === 'taxiway') {
-    if (point.directionality === 'bi-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker taxiway-green"></div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-              <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-blue-quarter-1"></div>
-              <div className="marker-quarter taxiway-blue-quarter-2"></div>
-              <div className="marker-quarter taxiway-blue-quarter-3"></div>
-              <div className="marker-quarter taxiway-blue-quarter-4"></div>
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className="marker-circle lead-on-marker">
-              <div className="marker-quarter taxiway-orange-quarter-1"></div>
-              <div className="marker-quarter taxiway-orange-quarter-2"></div>
-              <div className="marker-quarter taxiway-orange-quarter-3"></div>
-              <div className="marker-quarter taxiway-orange-quarter-4"></div>
-            </div>
-          </div>
-        );
-      }
-    } else if (point.directionality === 'uni-directional') {
-      if (point.color === 'green') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle taxiway-green ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <div className="marker-quarter taxiway-quarter-L"></div>
-                ) : (
-                  <div className="marker-quarter taxiway-quarter-R"></div>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-yellow') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-yellow-quarter-1"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-2"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-3"></div>
-                    <div className="marker-quarter taxiway-yellow-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-blue') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-blue-quarter-1"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-2"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-3"></div>
-                    <div className="marker-quarter taxiway-blue-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      } else if (point.color === 'green-orange') {
-        return (
-          <div className="marker-container">
-            <div className={`marker-circle ${point.orientation || 'left'}`}>
-              {point.directionality === 'uni-directional' &&
-                (point.orientation === 'left' ? (
-                  <>
-                    <div className="marker-quarter taxiway-orange-quarter-1"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-quarter-L"></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="marker-quarter taxiway-quarter-R"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-2"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-3"></div>
-                    <div className="marker-quarter taxiway-orange-quarter-4"></div>
-                  </>
-                ))}
-            </div>
-          </div>
-        );
-      }
-    }
-  }
-
-  return (
-    <div className="marker-container">
-      <div className="marker-circle" style={{ backgroundColor: color }}></div>
-    </div>
-  );
-};
-
-PointMarkerIcon.propTypes = {
-  point: PropTypes.object.isRequired,
-};
 
 const style = document.createElement('style');
 style.textContent = `
@@ -696,16 +509,17 @@ const INTERACTIVE_LAYER_IDS = [
 const CLICK_RADIUS_PX = 10;
 const TOUCH_RADIUS_PX = 14;
 
-/* oxlint-disable react-doctor/no-giant-component react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect -- Map state, viewport, selection, and draft navigation share one MapLibre lifecycle; the request is a guarded route-load fetch. */
+/* oxlint-disable react-doctor/no-giant-component react-doctor/no-high-complexity-react-function react-doctor/prefer-useReducer react-doctor/no-fetch-in-effect react-doctor/no-loading-flag-reset-outside-finally -- Map state, viewport, selection, and draft navigation share one MapLibre lifecycle; the request is guarded, and its loading flag is reset inside finally after the cancellation check. */
 const ContributeMap = () => {
   const { icao } = useParams();
   const navigate = useNavigate();
   const mapRef = useRef(null);
+  const cachedContext = useMemo(() => getCachedContributionContext(icao), [icao]);
 
-  const [loading, setLoading] = useState(true);
-  const [airport, setAirport] = useState(null);
-  const [points, setPoints] = useState([]);
-  const [contributionPolicy, setContributionPolicy] = useState(null);
+  const [loading, setLoading] = useState(() => !cachedContext);
+  const [airport, setAirport] = useState(() => cachedContext?.airport ?? null);
+  const [points, setPoints] = useState(() => cachedContext?.points ?? []);
+  const [contributionPolicy, setContributionPolicy] = useState(() => cachedContext?.policy ?? null);
   const [activePointId, setActivePointId] = useState(null);
   const [mapStyle, setMapStyle] = useState(SATELLITE_STYLE);
   const [styleName, setStyleName] = useState('Satellite');
@@ -717,75 +531,46 @@ const ContributeMap = () => {
   const owningDivisionLabel = contributionPolicy?.divisionName || 'the owning Division';
 
   useEffect(() => {
+    if (cachedContext) return undefined;
+    let cancelled = false;
     const fetchData = async () => {
       try {
         setLoading(true);
-
-        const pointsRequest = fetch(`https://v2.stopbars.com/airports/${icao}/points`);
-        const [airportResponse, policy] = await Promise.all([
-          fetch(`https://v2.stopbars.com/airports?icao=${icao}`),
-          fetchContributionPolicy(icao),
-        ]);
-        if (!airportResponse.ok) {
-          throw new Error('Failed to fetch airport data');
-        }
-        const airportData = await airportResponse.json();
-        setContributionPolicy(policy);
-
-        setAirport({
-          icao: airportData.icao,
-          name: airportData.name,
-          latitude: airportData.latitude,
-          longitude: airportData.longitude,
-        });
+        const context = await loadContributionContext(icao);
+        if (cancelled) return;
+        setContributionPolicy(context.policy);
+        setAirport(context.airport);
+        setPoints(context.points);
 
         const hasBoundingBox =
-          typeof airportData.bbox_min_lat === 'number' &&
-          typeof airportData.bbox_min_lon === 'number' &&
-          typeof airportData.bbox_max_lat === 'number' &&
-          typeof airportData.bbox_max_lon === 'number';
+          typeof context.airport.bbox_min_lat === 'number' &&
+          typeof context.airport.bbox_min_lon === 'number' &&
+          typeof context.airport.bbox_max_lat === 'number' &&
+          typeof context.airport.bbox_max_lon === 'number';
 
         if (hasBoundingBox && mapRef.current) {
           mapRef.current.fitBounds(
             [
-              [airportData.bbox_min_lon, airportData.bbox_min_lat],
-              [airportData.bbox_max_lon, airportData.bbox_max_lat],
+              [context.airport.bbox_min_lon, context.airport.bbox_min_lat],
+              [context.airport.bbox_max_lon, context.airport.bbox_max_lat],
             ],
             { padding: 40 }
           );
         }
-
-        setLoading(false);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-
-        const pointsResponse = await pointsRequest;
-        if (!pointsResponse.ok) {
-          throw new Error('Failed to fetch points data');
-        }
-        const pointsData = await pointsResponse.json();
-        const transformedPoints = pointsData.map((point) => ({
-          id: point.id,
-          type: point.type,
-          name: point.name,
-          coordinates: point.coordinates,
-          directionality: point.directionality,
-          color: point.color || undefined,
-          elevated: point.elevated,
-          ihp: point.ihp,
-        }));
-
-        setPoints(transformedPoints);
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
         navigate('/contribute/new', { state: { error: 'airport_load_failed' } });
-        return;
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchData();
-  }, [icao, navigate]);
+    return () => {
+      cancelled = true;
+    };
+  }, [cachedContext, icao, navigate]);
 
   const { markers, lowerLinesSource, upperLinesSource, lowerCapsSource, upperCapsSource } =
     useMemo(() => {
@@ -953,11 +738,6 @@ const ContributeMap = () => {
     [mapRef]
   );
 
-  const handleContinue = () => {
-    if (contributionsDisabled) return;
-    navigate(`/contribute/test/${icao}`);
-  };
-
   const toggleStyle = () => {
     if (styleName === 'Satellite') {
       setMapStyle(STREET_STYLE);
@@ -994,52 +774,19 @@ const ContributeMap = () => {
   }, [activePointId]);
 
   if (loading) {
-    return (
-      <Layout>
-        <div className="min-h-screen pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-6" aria-busy="true">
-            <div className="mb-12 mt-6">
-              <div className="flex items-center space-x-2 mb-12">
-                <Breadcrumb>
-                  <BreadcrumbItem title="Contribute" link="/contribute" />
-                  <BreadcrumbItem title="Airport" link="/contribute/new" />
-                  <BreadcrumbItem title="Map" />
-                </Breadcrumb>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 h-150 rounded-lg border border-zinc-800 bg-zinc-900/50 animate-pulse" />
-              <div className="space-y-6">
-                <Card className="p-6 min-h-48 animate-pulse">
-                  <div className="h-6 w-36 rounded bg-zinc-800 mb-5" />
-                  <div className="space-y-3">
-                    <div className="h-4 w-full rounded bg-zinc-800" />
-                    <div className="h-4 w-4/5 rounded bg-zinc-800" />
-                    <div className="h-10 w-full rounded bg-zinc-800 mt-6" />
-                  </div>
-                </Card>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Layout>
-    );
+    return <PageLoading page variant="flow-map" label="Loading airport review…" />;
   }
 
   return (
     <Layout>
       <div className="min-h-screen pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-12 mt-6">
-            <div className="flex items-center space-x-2 mb-12">
-              <Breadcrumb>
-                <BreadcrumbItem title="Contribute" link="/contribute" />
-                <BreadcrumbItem title="Airport" link="/contribute/new" />
-                <BreadcrumbItem title="Map" />
-              </Breadcrumb>
-            </div>
-          </div>
+          <ContributionFlowHeader
+            current="review"
+            title="Review airport"
+            icao={icao}
+            context={`${airport.icao} · ${airport.name}`}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
@@ -1270,98 +1017,72 @@ const ContributeMap = () => {
               </div>
             </div>
 
-            <div className="space-y-6">
-              {/* Airport info */}
+            <aside aria-label="Contribution actions">
               <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Airport Information</h2>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-zinc-400">ICAO Code</p>
-                    <p className="font-medium">{airport.icao}</p>
+                {contributionsDisabled ? (
+                  <div className="flex items-start gap-3" role="alert">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                    <div>
+                      <p className="text-sm text-amber-300">{disabledContributionMessage}</p>
+                      {import.meta.env.DEV ? (
+                        <p className="mt-1 text-xs text-amber-300/80">
+                          The XML generator remains available in local development.
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Airport Name</p>
-                    <p className="font-medium">{airport.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-400">Location</p>
-                    <p className="font-medium">
-                      {airport.latitude.toFixed(4)}, {airport.longitude.toFixed(4)}
+                ) : points.length === 0 ? (
+                  <div className="flex items-start gap-3" role="status">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                    <p className="text-sm text-amber-300">
+                      No airport lighting data is available from {owningDivisionLabel}. Check back
+                      later or contact the Division requesting this airport.
                     </p>
                   </div>
-                </div>
-              </Card>
+                ) : (
+                  <div className="flex items-start gap-3" role="status">
+                    <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-400" />
+                    <p className="text-sm text-zinc-300">
+                      Review the current BARS layout, then create XML for your scenery package.
+                    </p>
+                  </div>
+                )}
 
-              {/* Draft Generator */}
-              <Card className="p-6">
-                <h2 className="text-xl font-medium mb-4">Draft generator</h2>
-                <button
-                  type="button"
-                  onClick={
+                <RouteLink
+                  to={draftGeneratorDisabled ? '#' : `/contribute/generator/${icao}`}
+                  aria-disabled={draftGeneratorDisabled}
+                  tabIndex={draftGeneratorDisabled ? -1 : undefined}
+                  onClick={(event) => {
+                    if (draftGeneratorDisabled) event.preventDefault();
+                  }}
+                  className={`mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-lg border px-6 py-4 text-center font-semibold transition-[background-color,border-color,color,transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
                     draftGeneratorDisabled
-                      ? undefined
-                      : () => navigate(`/contribute/generator/${icao}`)
-                  }
-                  disabled={draftGeneratorDisabled}
-                  className={`w-full flex items-center p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 transition-all ${
-                    draftGeneratorDisabled
-                      ? 'opacity-50 cursor-not-allowed'
-                      : 'hover:bg-zinc-800 hover:border-zinc-600'
+                      ? 'pointer-events-none cursor-not-allowed border-transparent bg-white text-zinc-950 opacity-40'
+                      : 'border-transparent bg-white text-zinc-950 hover:bg-zinc-100 active:scale-[0.96]'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
-                    <FileCode2 className="w-5 h-5 text-emerald-400" />
+                  Create contribution XML
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </RouteLink>
+
+                {points.length > 0 && !contributionsDisabled ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                    <RouteLink
+                      to={`/contribute/editor/${icao}`}
+                      className="flex min-h-10 items-center justify-center rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    >
+                      Skip to editor
+                    </RouteLink>
+                    <RouteLink
+                      to={`/contribute/test/${icao}`}
+                      className="flex min-h-10 items-center justify-center rounded-lg px-3 text-sm text-zinc-500 transition-colors hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    >
+                      Skip to test
+                    </RouteLink>
                   </div>
-                  <span className="ml-3 text-sm font-medium text-white">Open Draft Generator</span>
-                  <ChevronRight className="w-4 h-4 text-zinc-500 ml-auto" />
-                </button>
+                ) : null}
               </Card>
-
-              {contributionsDisabled ? (
-                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm text-amber-400">{disabledContributionMessage}</p>
-                    {import.meta.env.DEV ? (
-                      <p className="mt-1 text-xs text-amber-300">
-                        The draft generator remains available in local development.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              ) : points.length === 0 ? (
-                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center">
-                  <AlertCircle className="w-5 h-5 text-amber-400 mr-3 shrink-0" />
-                  <p className="text-sm text-amber-400">
-                    This airport currently has no airport lighting data submitted by{' '}
-                    {owningDivisionLabel}. Please check back later, or contact the Division
-                    requesting this airport.
-                  </p>
-                </div>
-              ) : (
-                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center">
-                  <Info className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
-                  <p className="text-sm text-blue-400">
-                    This is the existing airport data for this airport, set by {owningDivisionLabel}
-                    . Your contribution will add support for a specific simulator scenery package.
-                  </p>
-                </div>
-              )}
-
-              <Button
-                onClick={points.length === 0 || contributionsDisabled ? undefined : handleContinue}
-                disabled={points.length === 0 || contributionsDisabled}
-                aria-disabled={points.length === 0 || contributionsDisabled}
-                className={`w-full ${
-                  points.length === 0 || contributionsDisabled
-                    ? 'opacity-50 cursor-not-allowed'
-                    : ''
-                }`}
-              >
-                <span>Continue to Next Step</span>
-                <ChevronRight className="w-4 h-4 ml-2" />
-              </Button>
-            </div>
+            </aside>
           </div>
         </div>
       </div>
