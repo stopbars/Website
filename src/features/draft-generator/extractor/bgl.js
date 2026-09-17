@@ -923,7 +923,8 @@ function classifyAirportLightRowPreset(preset) {
     compactPreset.includes('taxionin') ||
     normalizedPreset.includes('ils_zone') ||
     normalizedPreset.includes('exit') ||
-    normalizedPreset === 'orangeblank'
+    normalizedPreset === 'orangeblank' ||
+    normalizedPreset === 'orange'
   ) {
     return {
       classification: 'lead-on',
@@ -944,7 +945,8 @@ function classifyAirportLightRowPreset(preset) {
     normalizedPreset === 'center_lights' ||
     normalizedPreset === 'center_lights_rev' ||
     normalizedPreset === 'taxi_yellow' ||
-    normalizedPreset === 'greenblank'
+    normalizedPreset === 'greenblank' ||
+    normalizedPreset === 'green'
   ) {
     return {
       classification: 'taxi-centerline',
@@ -1808,7 +1810,7 @@ function parseTaxiwayPathTable(buffer, pathTable, points, taxiNames) {
 function shouldReconstructTaxiwayPath(pathRecord) {
   return (
     pathRecord.centerLineLighted &&
-    pathRecord.pathType === TAXIWAY_PATH_TYPE_TAXI &&
+    TAXIWAY_PATH_BRIDGE_TYPES.has(pathRecord.pathType) &&
     pathRecord.lengthMeters >= MIN_TAXIWAY_PATH_LENGTH_METERS &&
     pathRecord.lengthMeters <= MAX_TAXIWAY_PATH_LENGTH_METERS
   );
@@ -1861,7 +1863,7 @@ function buildTaxiwayPathLightRow(sourceFile, graph, pathRecord) {
     classificationReasons: [
       'decoded compiled TaxiwayPoint and TaxiwayPath records',
       'TaxiwayPath centerline-light bit is set',
-      'TaxiwayPath type is TAXI',
+      `TaxiwayPath type is ${pathRecord.pathType === TAXIWAY_PATH_TYPE_PATH ? 'PATH' : 'TAXI'}`,
     ],
   };
 }

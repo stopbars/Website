@@ -5,6 +5,7 @@ import {
   generateRemovalGeometry,
   removalModeForRow,
   targetLightPointsForRow,
+  usesContinuousColorPresetRemoval,
 } from './extractor/extract.js';
 import {
   haversineDistanceMeters,
@@ -38,6 +39,7 @@ const MAXIMUM_COMPILED_TARGET_END_CAP_METERS = 1;
 const COMPILED_TARGET_END_CAP_SPACING_RATIO = 0.25;
 const SELECTIVE_TARGET_KEEP_CLEARANCE_METERS = 0.25;
 const COMPILED_TARGET_IDENTITY_TOLERANCE_METERS = 0.01;
+const DIVISION_STOPBAR_ENDPOINT_TOLERANCE_METERS = 0.1;
 
 export function buildDraftOutput(data, matching, options) {
   const isXPlane = data.meta?.simulator === 'xplane';
@@ -159,6 +161,7 @@ function constrainRemovalMatchesAtReplacementBoundaries(matches, replacements, i
   const instancesById = new Map(instances.map((instance) => [String(instance.id), instance]));
 
   return matches.map((match) => {
+    if (match.division.type !== 'lead_on') return match;
     const replacement = replacementsByDivisionId.get(String(match.division.id));
     const boundary = replacement?.row.replacementStopbarBoundary;
     const stopbar = stopbarsByDivisionId.get(String(boundary?.stopbarDivisionId ?? ''));
@@ -250,7 +253,9 @@ function constrainRemovalMatchesAtReplacementBoundaries(matches, replacements, i
 
 function auditGeneratedGuidanceStopbarCrossings(replacements) {
   const leadOns = replacements.filter(
-    (match) => match.division.type === 'lead_on' && (match.row.vertices?.length ?? 0) >= 2
+    (match) =>
+      ['lead_on', 'taxiway'].includes(match.division.type) &&
+      (match.row.vertices?.length ?? 0) >= 2
   );
   const stopbars = replacements.filter(
     (match) => match.division.type === 'stopbar' && (match.row.vertices?.length ?? 0) >= 2
@@ -259,7 +264,10 @@ function auditGeneratedGuidanceStopbarCrossings(replacements) {
   for (const leadOn of leadOns) {
     for (const stopbar of stopbars) {
       for (const crossing of guidanceStopbarCrossings(leadOn.row.vertices, stopbar.row.vertices)) {
-        if (crossing.intersectionRatio <= 0.000001 || crossing.intersectionRatio >= 0.999999) {
+        if (
+          crossing.leadProgress <= 0.000001 ||
+          crossing.leadProgress >= leadOn.row.vertices.length - 1 - 0.000001
+        ) {
           continue;
         }
         interiorCrossings.push({
@@ -275,7 +283,8 @@ function auditGeneratedGuidanceStopbarCrossings(replacements) {
     }
   }
   return {
-    leadOnReplacementCount: leadOns.length,
+    leadOnReplacementCount: leadOns.filter((match) => match.division.type === 'lead_on').length,
+    taxiwayReplacementCount: leadOns.filter((match) => match.division.type === 'taxiway').length,
     stopbarReplacementCount: stopbars.length,
     remainingInteriorCrossingCount: interiorCrossings.length,
     interiorCrossings,
@@ -395,17 +404,18 @@ function replacementMatches(matches) {
     };
     replacements.push(replacement);
   }
-  return trimLeadOnReplacementsAtMatchedStopbars(
+  return trimGuidanceReplacementsAtMatchedStopbars(
     joinLogicalGuidanceReplacementGaps(replacements),
     matches
   );
 }
 
-function trimLeadOnReplacementsAtMatchedStopbars(replacements, sourceMatches) {
+function trimGuidanceReplacementsAtMatchedStopbars(replacements, sourceMatches) {
   const stopbars = replacements.filter(
     (match) => match.division.type === 'stopbar' && (match.row.vertices?.length ?? 0) >= 2
   );
   return replacements.map((match) => {
+    if (match.division.type === 'taxiway') return trimTaxiwayAtMatchedStopbars(match, stopbars);
     if (match.division.type !== 'lead_on' || (match.row.vertices?.length ?? 0) < 2) return match;
 
     const namedStopbars = stopbars.filter(
@@ -472,6 +482,67 @@ function trimLeadOnReplacementsAtMatchedStopbars(replacements, sourceMatches) {
       },
     };
   });
+}
+
+function trimTaxiwayAtMatchedStopbars(match, stopbars) {
+  const coordinates = match.division.coordinates ?? [];
+  if (coordinates.length < 2 || (match.row.vertices?.length ?? 0) < 2) return match;
+  let trimmed = match;
+  for (const stopbar of stopbars) {
+    const boundary = (stopbar.division.coordinates ?? []).map((point) => ({
+      lat: Number(point.lat),
+      lon: Number(point.lon ?? point.lng),
+    }));
+    if (boundary.length < 2) continue;
+    const endpointTouches = [coordinates[0], coordinates.at(-1)].map(
+      (point) =>
+        pointToPolylineDistanceMeters(
+          { lat: Number(point.lat), lon: Number(point.lon ?? point.lng) },
+          boundary
+        ) <= DIVISION_STOPBAR_ENDPOINT_TOLERANCE_METERS
+    );
+    // An interior crossing does not establish that this stopbar owns a route endpoint.
+    if (endpointTouches[0] === endpointTouches[1]) continue;
+    const vertices = trimmed.row.vertices;
+    const crossings = guidanceStopbarCrossings(vertices, stopbar.row.vertices).filter(
+      (crossing) =>
+        crossing.leadProgress > 0.000001 &&
+        crossing.leadProgress < vertices.length - 1 - 0.000001
+    );
+    if (crossings.length === 0) continue;
+    const forward =
+      coordinateProgressAlongDivision(vertices[0], coordinates) <=
+      coordinateProgressAlongDivision(vertices.at(-1), coordinates);
+    const retainBefore = endpointTouches[1] === forward;
+    const crossing = retainBefore ? crossings[0] : crossings.at(-1);
+    const retained = (retainBefore
+      ? vertices.slice(0, crossing.leadSegmentIndex + 1)
+      : vertices.slice(crossing.leadSegmentIndex + 1)
+    ).filter((vertex) => haversineDistanceMeters(vertex, crossing.intersection) > 0.001);
+    const clipped = retainBefore
+      ? [...retained, crossing.intersection]
+      : [crossing.intersection, ...retained];
+    if (clipped.length < 2) continue;
+    trimmed = {
+      ...trimmed,
+      row: {
+        ...trimmed.row,
+        vertices: clipped,
+        replacementGeometryDerived: 'matched-stopbar-boundary-trim',
+        replacementSourceVertexCount: match.row.vertices.length,
+        replacementStopbarBoundary: {
+          stopbarDivisionId: String(stopbar.division.id),
+          stopbarName: stopbar.division.name,
+          crossingLeadSegmentIndex: crossing.leadSegmentIndex,
+          crossingFraction: Number(crossing.intersectionRatio.toFixed(6)),
+          boundaryBasis: 'exact-source-geometry-intersection',
+          originalVertexCount: match.row.vertices.length,
+          finalVertexCount: clipped.length,
+        },
+      },
+    };
+  }
+  return trimmed;
 }
 
 function leadOnBeforeStopbarFollowsDivision(guidanceVertices, crossing, divisionCoordinates = []) {
@@ -1255,17 +1326,24 @@ function withCompiledParentTargets(row, parent, sourceRowIds = row.sourceRowIds)
     targetSourceRows.length > 1
       ? MERGED_COMPILED_TARGET_SECTION_TOLERANCE_METERS
       : COMPILED_TARGET_SECTION_TOLERANCE_METERS;
-  const endpointToleranceMeters = compiledTargetEndpointToleranceMeters(targetSourceRows);
-  const endpointCapMeters = compiledTargetEndpointCapMeters(targetSourceRows);
-  const removalTargetPointsOverride = targetSourceRows
-    .flatMap((sourceRow) => targetLightPointsForRow(sourceRow))
-    .filter(
+  const spacingSourceRows = targetSourceRows.filter(isCompiledSpacingTargetRow);
+  const endpointToleranceMeters = spacingSourceRows.length
+    ? compiledTargetEndpointToleranceMeters(spacingSourceRows)
+    : 0;
+  const endpointCapMeters = spacingSourceRows.length
+    ? compiledTargetEndpointCapMeters(spacingSourceRows)
+    : 0;
+  const removalTargetPointsOverride = targetSourceRows.flatMap((sourceRow) =>
+    targetLightPointsForRow(sourceRow).filter(
       (point) =>
+        (!row.sourceParentRowId && !isCompiledSpacingTargetRow(sourceRow)) ||
         pointToPolylineDistanceMeters(point, row.vertices) <= sectionToleranceMeters ||
-        endpoints.some(
-          (endpoint) => haversineDistanceMeters(point, endpoint) <= endpointToleranceMeters
-        )
-    );
+        (isCompiledSpacingTargetRow(sourceRow) &&
+          endpoints.some(
+            (endpoint) => haversineDistanceMeters(point, endpoint) <= endpointToleranceMeters
+          ))
+    )
+  );
   return {
     ...row,
     ...(sourceRowIds ? { sourceRowIds } : {}),
@@ -1288,9 +1366,12 @@ function compiledTargetSourceRows(row) {
   return candidates.filter(
     (sourceRow) =>
       sourceRow?.sourceType === 'bgl-airport-light-row' &&
-      (sourceRow.compiledLightPlacement === 'spacing' ||
-        sourceRow.removalTargetSampling === 'spacing')
+      (row.removalTargetSourceRows?.length > 0 || isCompiledSpacingTargetRow(sourceRow))
   );
+}
+
+function isCompiledSpacingTargetRow(row) {
+  return row.compiledLightPlacement === 'spacing' || row.removalTargetSampling === 'spacing';
 }
 
 function compiledTargetEndpointToleranceMeters(targetSourceRows) {
@@ -1397,8 +1478,9 @@ function selectiveTargetMustKeepZones(data, selectedRows, selectedSourceInstance
     }
     const selectedSections = selectedSectionsByParent.get(row.id);
     const targetSourceRows = compiledTargetSourceRows(row);
+    const continuousOnly = targetSourceRows.length > 0 && usesContinuousColorPresetRemoval(row);
     const protectedSegments =
-      targetSourceRows.length > 0
+      targetSourceRows.length > 0 && !continuousOnly
         ? []
         : selectedSections
           ? unselectedRowSegments(row.vertices, selectedSections)
@@ -1411,6 +1493,7 @@ function selectiveTargetMustKeepZones(data, selectedRows, selectedSourceInstance
         sourceFile: row.sourceFile,
         sourceType: row.sourceType,
         classification: row.classification,
+        ...(continuousOnly ? { continuousOnly: true } : {}),
         geometryType: vertices.length === 1 ? 'Point' : 'LineString',
         ...(vertices.length === 1 ? { point: vertices[0] } : { vertices }),
         clearanceMeters: SELECTIVE_TARGET_KEEP_CLEARANCE_METERS,

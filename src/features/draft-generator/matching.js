@@ -5642,6 +5642,7 @@ export function consolidateCoLocatedSimulatorRows(lightRows) {
     maximumDistanceMeters: MAXIMUM_EDITOR_COLOCATED_GUIDANCE_DISTANCE_METERS,
     requireEqualEvidencePriority: false,
     requireSharedSourceFile: false,
+    requireEqualRemovalEligibility: true,
   });
   const unmatchable = rows.filter((row) => !isMatchableSimulatorRow(row));
   const result = [
@@ -5707,6 +5708,9 @@ function mergeCoLocatedSimulatorRows(items, referenceLatitude, options = {}) {
       ? nearbyGroups(item).find(
           (candidate) =>
             candidate.family === family &&
+            (!options.requireEqualRemovalEligibility ||
+              (candidate.members[0].raw.removalEligible !== false) ===
+                (item.raw.removalEligible !== false)) &&
             (!requireEqualEvidencePriority ||
               evidencePriority(candidate.members[0].raw) === evidencePriority(item.raw)) &&
             candidate.members.some(
@@ -5787,10 +5791,7 @@ function compiledRemovalTargetSourceRows(members) {
   for (const member of members) {
     const candidates = member.raw.removalTargetSourceRows ?? [member.raw];
     for (const row of candidates) {
-      if (
-        row?.sourceType !== 'bgl-airport-light-row' ||
-        (row.compiledLightPlacement !== 'spacing' && row.removalTargetSampling !== 'spacing')
-      ) {
+      if (row?.sourceType !== 'bgl-airport-light-row') {
         continue;
       }
       const id = String(row.id ?? '');

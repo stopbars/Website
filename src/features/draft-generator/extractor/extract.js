@@ -6,6 +6,7 @@ import {
   classifyObject,
   isLikelyLightClassification,
   isTargetLightClassification,
+  msfsColorPresetClassification,
   stableId,
 } from './classify.js';
 import {
@@ -16,6 +17,7 @@ import {
   nearestPointOnPolyline,
   offsetPointMeters,
   pointInPolygon,
+  preparePointInPolygon,
   pointToPolylineDistanceMeters,
   polylineCorridorPolygon,
   polylineToPolylineDistanceMeters,
@@ -818,6 +820,17 @@ export function generateRemovalGeometry(
   );
 
   const removalGroups = buildRemovalGroups(targetRows, sizes.lightrow, mergeCache);
+  for (const row of targetRows.filter(usesContinuousColorPresetRemoval)) {
+    const group = groupFromRow(row, sizes.lightrow);
+    removalGroups.push({
+      ...group,
+      id: stableId(group.id, 'continuous-colour-preset'),
+      removalMode: 'polygon',
+      targetPoints: [],
+      endpointTargetPoints: [],
+      endpointCapMeters: 0,
+    });
+  }
   const groupingMilliseconds = performance.now() - groupingStartedAt;
   const polygonBuildStartedAt = performance.now();
   for (const group of removalGroups) {
@@ -1005,6 +1018,7 @@ function coordinateRingSignature(coordinates) {
 }
 
 function protectionZonesForTarget(group, zones) {
+  if (group.removalMode !== 'polygon') zones = zones.filter((zone) => !zone.continuousOnly);
   if (group.classification === 'stopbar') {
     return zones.filter((zone) => zone.explicitEditorKeep === true || isRunwayMustKeepZone(zone));
   }
@@ -1061,6 +1075,22 @@ function isRunwayMustKeepZone(zone) {
 }
 
 function buildProtectedRemovalPolygons(group, mustKeepZones, mustKeepBounds, mustKeepSpatialIndex) {
+  if (POLYGON_FALLBACK_LIGHT_ROW_TYPES.has(group.sourceType) && group.vertices.length > 1) {
+    // Native paths describe topology, not lamp centres. Overlap the ends so
+    // adjoining paths retain coverage after conversion to rectangular supports.
+    const vertices = [...group.vertices];
+    const widthMeters = Math.max(4, group.widthMeters);
+    const extend = (end, neighbour) => interpolatePoint(
+      end, neighbour, -widthMeters / 2 / Math.max(0.05, haversineDistanceMeters(end, neighbour))
+    );
+    vertices[0] = extend(group.vertices[0], group.vertices[1]);
+    vertices[vertices.length - 1] = extend(group.vertices.at(-1), group.vertices.at(-2));
+    const nearProtectedLight = mustKeepZones.some((zone) =>
+      distanceFromZoneToPolyline(zone, vertices) <=
+        widthMeters / 2 + (zone.clearanceMeters ?? 0) + PROTECTION_GEOMETRY_TOLERANCE_METERS
+    );
+    if (!nearProtectedLight) group = { ...group, vertices, widthMeters };
+  }
   const defaultRing = polylineCorridorPolygon(group.vertices, group.widthMeters);
   if (defaultRing.length === 0) {
     return { polygons: [], conflicts: [] };
@@ -1118,6 +1148,7 @@ function buildProtectedRemovalPolygons(group, mustKeepZones, mustKeepBounds, mus
       }
     }
     addCompiledBoundaryCaps(group, polygons, mustKeepZones);
+    addMergedVertexTargetCaps(group, polygons, mustKeepZones);
     const uncoveredPoints = assignTargetPointCounts(polygons, group.targetPoints);
     return {
       polygons,
@@ -1151,6 +1182,7 @@ function buildProtectedRemovalPolygons(group, mustKeepZones, mustKeepBounds, mus
     }),
   ];
   addCompiledBoundaryCaps(group, polygons, mustKeepZones);
+  addMergedVertexTargetCaps(group, polygons, mustKeepZones);
   const uncoveredPoints = assignTargetPointCounts(polygons, group.targetPoints);
   const conflicts = [
     ...endpointCaps.conflicts,
@@ -1173,6 +1205,34 @@ function buildProtectedRemovalPolygons(group, mustKeepZones, mustKeepBounds, mus
   ];
 
   return { polygons, conflicts };
+}
+
+function addMergedVertexTargetCaps(group, polygons, zones) {
+  const sourcePoints = new Set(
+    (group.sourceRows ?? []).flatMap((row) =>
+      (row.removalTargetSourceRows ?? [])
+        .filter((source) => !isCompiledSpacingLightRow(source))
+        .flatMap((source) => targetLightPointsForRow(source).map(normalizedVertexSignature))
+    )
+  );
+  if (sourcePoints.size === 0) return;
+  for (const point of group.targetPoints) {
+    if (!sourcePoints.has(normalizedVertexSignature(point))) continue;
+    if (polygons.some((polygon) => pointInCoordinateRing(point, polygon.coordinates))) continue;
+    const cap = buildSafePointRemoval(
+      point,
+      0.5,
+      zones,
+      stableId(group.id, 'merged-vertex-target', point.lat, point.lon)
+    );
+    if (cap.polygon) {
+      polygons.push({
+        ...cap.polygon,
+        protectionMode: 'merged-vertex-target',
+        reason: `${group.reason}; exact source light lies beyond the merged row corridor`,
+      });
+    }
+  }
 }
 
 function addCompiledBoundaryCaps(group, polygons, zones) {
@@ -2009,9 +2069,11 @@ function findPartialOverlapVertices(left, right, mergeCache) {
             continue;
           }
           const coordinates = polylineCorridorPolygon(vertices, left.widthMeters);
+          const ring = coordinateRingPoints(coordinates);
+          const contains = preparePointInPolygon(ring);
           if (
             coordinates.length < 4 ||
-            !targetPoints.every((point) => pointInCoordinateRing(point, coordinates))
+            !targetPoints.every((point) => contains(point) || pointToPolylineDistanceMeters(point, ring) <= 0.01)
           ) {
             continue;
           }
@@ -2178,11 +2240,11 @@ function cachedRemovalBoundaryWithinExistingUnion(coordinates, originalRings, ca
 
 function removalBoundaryWithinExistingUnion(coordinates, originalRings) {
   const boundary = coordinateRingPoints(coordinates);
-  const indexedRings = originalRings.map((ring) => ({ ring, bounds: pointBounds(ring) }));
+  const indexedRings = originalRings.map((ring) => ({ contains: preparePointInPolygon(ring), bounds: pointBounds(ring) }));
   const covered = (point) =>
     indexedRings.some(
-      ({ ring, bounds }) =>
-        pointWithinPaddedBounds(point, bounds, 0.002) && pointInPolygon(point, ring)
+      ({ contains, bounds }) =>
+        pointWithinPaddedBounds(point, bounds, 0.002) && contains(point)
     );
   for (let index = 1; index < boundary.length; index += 1) {
     const start = boundary[index - 1];
@@ -2462,6 +2524,15 @@ function shouldSampleRemovalTargetsBySpacing(row) {
 
 export function removalModeForRow(row) {
   return POLYGON_FALLBACK_LIGHT_ROW_TYPES.has(row.sourceType) ? 'polygon' : 'targets';
+}
+
+export function usesContinuousColorPresetRemoval(row) {
+  // Measured legacy colour-preset lamps can fall between decoded spacing targets.
+  // Supplement those targets inside the selected source corridor and its protection cuts.
+  const sources = [row, ...(row.removalTargetSourceRows ?? [])];
+  return sources.some((source) =>
+    isCompiledSpacingLightRow(source) && msfsColorPresetClassification(source.preset)
+  );
 }
 
 function uniquePoints(points) {

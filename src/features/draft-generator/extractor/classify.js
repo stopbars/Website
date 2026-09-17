@@ -1,5 +1,35 @@
 import { createHash } from 'node:crypto';
 
+export function msfsColorPresetClassification(preset) {
+  switch (String(preset ?? '').trim().toLowerCase()) {
+    case 'green': return 'taxi-centerline';
+    case 'orange': return 'lead-on';
+    default: return null;
+  }
+}
+
+export function normalizeMsfsLightRowClassifications(data) {
+  const recoveredIds = new Set();
+  const lightRows = (data?.lightRows ?? []).map((row) => {
+    if (row.sourceType !== 'bgl-airport-light-row' || row.classification !== 'unknown-light') return row;
+    const classification = msfsColorPresetClassification(row.preset);
+    if (!classification) return row;
+    recoveredIds.add(String(row.id));
+    return { ...row, classification };
+  });
+  if (recoveredIds.size === 0) return data;
+  return {
+    ...data,
+    lightRows,
+    mustKeepZones: (data.mustKeepZones ?? []).filter((zone) =>
+      !(recoveredIds.has(String(zone.sourceId)) &&
+        zone.classification === 'unknown-light' &&
+        zone.lightType === 'source-light-row' &&
+        zone.explicitEditorKeep !== true)
+    ),
+  };
+}
+
 const LIGHT_EVIDENCE_TERMS = [
   'light',
   'centerlight',

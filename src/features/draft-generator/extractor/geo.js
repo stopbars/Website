@@ -246,7 +246,15 @@ export function nearestPointOnPolyline(point, vertices) {
 }
 
 export function pointInPolygon(point, vertices) {
+  return pointInCleanedPolygon(point, removeDuplicateVertices(vertices));
+}
+
+export function preparePointInPolygon(vertices) {
   const cleanedVertices = removeDuplicateVertices(vertices);
+  return (point) => pointInCleanedPolygon(point, cleanedVertices);
+}
+
+function pointInCleanedPolygon(point, cleanedVertices) {
   if (cleanedVertices.length < 3) {
     return false;
   }
