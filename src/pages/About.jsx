@@ -5,6 +5,8 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/shared/Card';
 import { Tooltip } from '../components/shared/Tooltip';
 import { useRevealGroup } from '../hooks/useRevealGroup';
+import { OptimizedImage } from '../components/shared/OptimizedImage';
+import { ImageLightbox } from '../components/home/ImageLightbox';
 
 const TeamMemberCard = ({ name, position, email }) => {
   const [copied, setCopied] = useState(false);
@@ -43,18 +45,21 @@ TeamMemberCard.propTypes = {
 
 const About = () => {
   const contentRef = useRef(null);
+  const [selectedImage, setSelectedImage] = useState(null);
   useRevealGroup(contentRef);
 
   return (
     <Layout>
       {/* Hero Banner */}
       <div className="relative w-full h-50 sm:h-75 md:h-112.5 mt-23.75 sm:mt-16 overflow-hidden">
-        <img
+        <OptimizedImage
           src="/AboutBanner.webp"
+          sizes="(min-width: 768px) max(100vw, 1210px), (min-width: 640px) max(100vw, 807px), max(100vw, 538px)"
           alt="About banner"
           width="1803"
           height="671"
           fetchPriority="high"
+          loading="eager"
           decoding="async"
           className="w-full h-full object-cover object-center"
           draggable={false}
@@ -114,33 +119,51 @@ const About = () => {
             <p className="text-zinc-400 leading-relaxed">
               BARS development began in late 2024, after the idea of a vatSys plugin to manage
               stopbars came up amongst members of the community. The{' '}
-              <a
-                href="/earliest-prototype.png"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white border-b border-red-500/70 hover:border-red-400 transition-colors"
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                onClick={() =>
+                  setSelectedImage({
+                    title: 'Earliest prototype',
+                    image: '/earliest-prototype.png',
+                    imageAlt: 'Early BARS stopbar control prototype',
+                  })
+                }
+                className="inline cursor-zoom-in text-white border-b border-red-500/70 hover:border-red-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-400"
               >
                 earliest prototype
-              </a>{' '}
+              </button>{' '}
               was a simple controller only plugin that showed stopbar state changes only inside the
               client, displayed through a simple ground window. That quickly led to a{' '}
-              <a
-                href="/polished-plugin.png"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white border-b border-red-500/70 hover:border-red-400 transition-colors"
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                onClick={() =>
+                  setSelectedImage({
+                    title: 'Polished plugin',
+                    image: '/polished-plugin.png',
+                    imageAlt: 'BARS plugin with its updated control interface',
+                  })
+                }
+                className="inline cursor-zoom-in text-white border-b border-red-500/70 hover:border-red-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-400"
               >
                 more polished plugin
-              </a>
+              </button>
               , experiments with SimConnect, object placement, and the first{' '}
-              <a
-                href="/first-sim-renders.png"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white border-b border-red-500/70 hover:border-red-400 transition-colors"
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                onClick={() =>
+                  setSelectedImage({
+                    title: 'First simulator renders',
+                    image: '/first-sim-renders.png',
+                    imageAlt: 'First BARS airfield lighting renders in the simulator',
+                  })
+                }
+                className="inline cursor-zoom-in text-white border-b border-red-500/70 hover:border-red-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-400"
               >
                 visible in-sim lighting renders
-              </a>
+              </button>
               . This proved that the idea was possible, and was only the start of something much
               bigger.
             </p>
@@ -216,6 +239,9 @@ const About = () => {
           </div>
         </div>
       </section>
+      {selectedImage && (
+        <ImageLightbox feature={selectedImage} onClose={() => setSelectedImage(null)} />
+      )}
     </Layout>
   );
 };

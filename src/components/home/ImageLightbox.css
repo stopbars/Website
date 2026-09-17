@@ -1,0 +1,110 @@
+.feature-lightbox {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 4.5rem 1.5rem;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+  cursor: zoom-out;
+  animation: feature-lightbox-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.feature-lightbox[open] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-lightbox::backdrop {
+  background: rgb(9 9 11 / 0.92);
+  animation: feature-lightbox-in 280ms ease-out both;
+}
+
+.feature-lightbox-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0.75rem;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.35);
+  cursor: default;
+  animation: feature-lightbox-rise 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.feature-lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--color-border-strong, #3f3f46);
+  border-radius: 999px;
+  background: var(--color-bg-surface, #18181b);
+  color: var(--color-text-primary, #fafafa);
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+
+.feature-lightbox-close:hover {
+  background: #3f3f46;
+}
+.feature-lightbox-close:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+}
+
+.feature-lightbox.is-closing,
+.feature-lightbox.is-closing::backdrop {
+  animation: feature-lightbox-out 180ms ease-out both;
+}
+
+@keyframes feature-lightbox-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes feature-lightbox-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes feature-lightbox-rise {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .feature-lightbox {
+    padding: 4.5rem 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-lightbox,
+  .feature-lightbox::backdrop,
+  .feature-lightbox-image {
+    animation: none;
+  }
+  .feature-lightbox-close {
+    transition: none;
+  }
+}

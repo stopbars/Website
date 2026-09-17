@@ -540,7 +540,6 @@ h1[tabindex='-1']:focus {
     oklch(0.16 0.006 285.885 / 0.58) 36%,
     transparent 72%
   );
-  backdrop-filter: blur(5px);
   mask-image: radial-gradient(ellipse at left bottom, black 0%, black 38%, transparent 74%);
   content: '';
 }

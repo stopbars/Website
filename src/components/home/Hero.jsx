@@ -131,7 +131,9 @@ export const Hero = () => {
           style={{ transitionDelay: 'calc(var(--duration-micro) + var(--duration-micro))' }}
         >
           <div className="relative h-96 overflow-hidden rounded-3xl border border-zinc-800 md:h-128">
-            <ComingSoonMedia className="absolute inset-0" />
+            <ComingSoonMedia className="absolute inset-0">
+              <strong className="font-bold">Trailer Coming soon</strong>
+            </ComingSoonMedia>
           </div>
         </div>
       </div>

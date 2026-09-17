@@ -7,8 +7,6 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test:msfs-renderer": "node --test src/features/contribution-editor/msfs-removal.test.js src/features/contribution-editor/reference-scene.test.js src/features/contribution-editor/XPlaneTextureLayer.test.js",
-    "test": "node --test src/context/authRequest.test.js src/features/contribution-editor/dds-texture.test.js src/features/contribution-editor/marking-patterns.test.js src/features/contribution-editor/msfs-removal.test.js src/features/contribution-editor/scenery-texture.test.js src/features/contribution-editor/texture-assets.test.js src/features/contribution-editor/XPlaneTextureLayer.test.js src/features/contribution-editor/xplane-mercator-geometry.test.js src/features/contribution-editor/xplane-texture-geometry.test.js src/features/contribution-editor/xplane-texture-resolution.test.js src/features/contribution-editor/reference-scene.test.js src/features/contribution-editor/editor-model.test.js src/features/contribution-editor/geoman-editor.test.js src/features/contribution-editor/editor-snapping.test.js src/features/contribution-editor/editor-geometry.test.js src/features/contribution-editor/editor-state.test.js src/features/contribution-editor/editor-session.test.js src/features/draft-generator/matching.test.js src/features/draft-generator/airport-upload-validation.test.js src/features/draft-generator/msfs-reference.test.js src/features/draft-generator/xplane-apt.test.js src/features/draft-generator/xplane-dsf.test.js src/utils/contributionContracts.test.js src/utils/coordinateParsing.test.js",
     "doctor": "react-doctor --verbose",
     "perf:trace": "node scripts/perf-trace.mjs",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\" \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
@@ -50,11 +48,12 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
-    "prettier": "^3.8.3",
     "playwright": "^1.61.1",
+    "prettier": "^3.8.3",
     "react-doctor": "^0.5.8",
     "react-grab": "^0.1.47",
     "react-scan": "^0.5.7",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4.2.4",
     "vite": "^8.0.10"
   }
