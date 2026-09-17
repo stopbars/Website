@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import Map, { Source, Layer, NavigationControl, ScaleControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Layers } from 'lucide-react';
-import { computeDestinationPoint } from 'geolib';
+import { calculateRectangleCorners } from './removal-preview-geometry.js';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -270,27 +270,6 @@ const XMLMap = ({
     return ctx.getImageData(0, 0, size, size);
   }, []);
 
-  const calculateRectangleCorners = useCallback(
-    (centerLat, centerLng, widthMeters, lengthMeters, heading) => {
-      const center = { latitude: centerLat, longitude: centerLng };
-      const halfWidth = widthMeters / 2;
-      const halfLength = lengthMeters / 2;
-      const distance = Math.sqrt(halfLength * halfLength + halfWidth * halfWidth);
-      const bottomLeft = computeDestinationPoint(center, distance, (heading + 225) % 360);
-      const bottomRight = computeDestinationPoint(center, distance, (heading + 315) % 360);
-      const topRight = computeDestinationPoint(center, distance, (heading + 45) % 360);
-      const topLeft = computeDestinationPoint(center, distance, (heading + 135) % 360);
-      return [
-        [bottomLeft.longitude, bottomLeft.latitude],
-        [bottomRight.longitude, bottomRight.latitude],
-        [topRight.longitude, topRight.latitude],
-        [topLeft.longitude, topLeft.latitude],
-        [bottomLeft.longitude, bottomLeft.latitude],
-      ];
-    },
-    []
-  );
-
   const parseRemoveAreasXML = useCallback(
     (xmlString) => {
       const parser = new DOMParser();
@@ -323,7 +302,7 @@ const XMLMap = ({
 
       return { areas, center: firstPosition };
     },
-    [calculateRectangleCorners]
+    []
   );
 
   const parseXML = useCallback((xmlString) => {
