@@ -451,17 +451,10 @@ function samplePathAtSpacing(path, spacing) {
 function distanceMeters(first, second) {
   const latitude = ((first[1] + second[1]) / 2) * (Math.PI / 180);
   const sinLatitude = Math.sin(latitude);
-  const denominator = Math.sqrt(
-    1 - WGS84_ECCENTRICITY_SQUARED * sinLatitude * sinLatitude
-  );
+  const denominator = Math.sqrt(1 - WGS84_ECCENTRICITY_SQUARED * sinLatitude * sinLatitude);
   const primeVerticalRadius = EARTH_RADIUS / denominator;
-  const meridionalRadius =
-    (EARTH_RADIUS * (1 - WGS84_ECCENTRICITY_SQUARED)) / denominator ** 3;
-  const dx =
-    (second[0] - first[0]) *
-    (Math.PI / 180) *
-    primeVerticalRadius *
-    Math.cos(latitude);
+  const meridionalRadius = (EARTH_RADIUS * (1 - WGS84_ECCENTRICITY_SQUARED)) / denominator ** 3;
+  const dx = (second[0] - first[0]) * (Math.PI / 180) * primeVerticalRadius * Math.cos(latitude);
   const dy = (second[1] - first[1]) * (Math.PI / 180) * meridionalRadius;
   return Math.hypot(dx, dy);
 }
@@ -1629,7 +1622,8 @@ async function parseModelRecord(arrayBuffer, fallbackGuid) {
           .map((value) => value.toString(16).padStart(2, '0'))
           .join(' ');
         throw new Error(
-          `${name || fallbackGuid} has unsupported GLBZ data (${head}): ${error.message}`
+          `${name || fallbackGuid} has unsupported GLBZ data (${head}): ${error.message}`,
+          { cause: error }
         );
       }
       if (unpacked.length !== unpackedSize) {
@@ -2500,8 +2494,7 @@ export function attachApronFallbackDiagnostics(apronBoundaries, groups) {
       if (!Number.isFinite(sourceRecordOffset)) continue;
       const diagnostic = {
         fallbackRenderMode: range.fallbackRenderMode ?? group.fallbackRenderMode ?? null,
-        fallbackEvidenceBasis:
-          range.fallbackEvidence?.basis ?? group.fallbackEvidenceBasis ?? null,
+        fallbackEvidenceBasis: range.fallbackEvidence?.basis ?? group.fallbackEvidenceBasis ?? null,
       };
       for (const [key, value] of Object.entries(range.fallbackEvidence ?? {})) {
         if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
@@ -2553,8 +2546,7 @@ export function unresolvedApronFallbackEvidence(mesh, { materialName = '' } = {}
   const normalizedMaterialName = String(materialName).toLowerCase();
   const namedAlphaPatternCarrier = /(concrete.*joint|hatched|zebra)/i.test(materialName);
   const namedAsphalt = /asphalt/i.test(materialName);
-  const sourceColored =
-    Number(coloration.alpha || 0) > 0 && hasVisibleRecordTint(coloration);
+  const sourceColored = Number(coloration.alpha || 0) > 0 && hasVisibleRecordTint(coloration);
   const triangleDensityPer1000SquareMeters =
     (mesh.triangles.length * 1000) / Math.max(areaSquareMeters, 0.001);
   const boundsWidthMeters = Math.max(bounds[2] - bounds[0], 0.001);
@@ -2976,15 +2968,15 @@ export function unresolvedApronFallbackEvidence(mesh, { materialName = '' } = {}
           groundMergingSolidPavement ||
           colorlessGroundMergingRoadPavement
         ? 'dark-pavement'
-      : narrowPavementDetail
+        : narrowPavementDetail
           ? 'dark-pavement-line'
           : namedAsphalt && Number(properties.drawStage || 0) === 0
             ? 'dark-pavement'
-          : Number(properties.drawStage || 0) === 0 &&
-              Number(properties.priority || 0) === 0 &&
-              orientedShortSideMeters >= 8
-            ? 'light-pavement'
-            : 'source-color',
+            : Number(properties.drawStage || 0) === 0 &&
+                Number(properties.priority || 0) === 0 &&
+                orientedShortSideMeters >= 8
+              ? 'light-pavement'
+              : 'source-color',
     sourceColored,
     materialName: normalizedMaterialName,
     namedAlphaPatternCarrier,
@@ -3653,19 +3645,6 @@ function collectCoordinateTree(output, coordinates) {
   for (const child of coordinates) collectCoordinateTree(output, child);
 }
 
-function expandCoordinateTree(bounds, coordinates) {
-  if (!Array.isArray(coordinates)) return;
-  if (
-    coordinates.length >= 2 &&
-    Number.isFinite(coordinates[0]) &&
-    Number.isFinite(coordinates[1])
-  ) {
-    expandBounds(bounds, coordinates);
-    return;
-  }
-  for (const child of coordinates) expandCoordinateTree(bounds, child);
-}
-
 function selectProjectedMeshBasisFromModels(models, referenceBounds, sequenceStart, airportData) {
   if (!models.some(({ model }) => model.glbs.length)) return null;
   if (!referenceBounds) {
@@ -4114,12 +4093,7 @@ function localMetersToCoordinate(east, north, originLongitude, originLatitude) {
   ];
 }
 
-export function projectedMeshLocalMetersToCoordinate(
-  east,
-  north,
-  originLongitude,
-  originLatitude
-) {
+export function projectedMeshLocalMetersToCoordinate(east, north, originLongitude, originLatitude) {
   // Compiled MSFS projected meshes use a flat-earth latitude scale that is distinct from the
   // Web Mercator longitude scale. Using one spherical or ellipsoidal radius for both axes makes
   // the north/south error grow with distance from the SceneryObject placement while east/west

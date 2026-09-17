@@ -8,6 +8,14 @@ export default [
   {
     ignores: [
       'dist',
+      'diagnostics/**',
+      'performance-traces/**',
+      'temp/**',
+      'tmp/**',
+      'temp-*/**',
+      'tmp-*/**',
+      // Generated upstream WebAssembly runtime, not application source.
+      'src/features/msfs-renderer/vendor/texture2ddecoder/wasm/**',
       'src/features/draft-generator/extractor/**',
       'src/features/draft-generator/shims/**',
     ],
