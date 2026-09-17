@@ -46,6 +46,10 @@ import { ExperimentalBadge } from '../components/contributions/ExperimentalBadge
 import { ContributionGuideLink } from '../components/contributions/ContributionGuideLink';
 import EditorMap from '../features/contribution-editor/EditorMap';
 import {
+  attachEditorAutosaveLifecycle,
+  createEditorAutosave,
+} from '../features/contribution-editor/editor-autosave.js';
+import {
   barsIdSuggestions,
   colorForObjectId,
   createEditorDocument,
@@ -55,7 +59,6 @@ import {
   parseDraftXml,
   serializeDraftXml,
   objectColorKey,
-  syncOriginalDivisionMetadata,
 } from '../features/contribution-editor/editor-model.js';
 import {
   distanceMeters,
@@ -212,11 +215,9 @@ export default function ContributionEditor() {
   const textureLibraryInputRef = useRef(null);
   const workerRef = useRef(null);
   const requestIdRef = useRef(0);
-  const autosaveTimerRef = useRef(null);
   const workspaceSaveTimerRef = useRef(null);
   const textureStatusTimerRef = useRef(null);
   const pendingTextureStatusUpdatesRef = useRef([]);
-  const initialSaveRef = useRef(false);
   const originalDivisionRefreshRef = useRef('');
   const removalRequestRef = useRef(0);
   const removalAbortRef = useRef(null);
@@ -489,7 +490,6 @@ export default function ContributionEditor() {
     [document?.objects, uniqueObjectColors]
   );
   const latestDocumentRef = useRef(document);
-  const latestDirtyRef = useRef(Boolean(state?.dirty));
   const workspaceSnapshot = useMemo(
     () => ({
       selectedId: state?.selectedId ?? null,
@@ -530,8 +530,7 @@ export default function ContributionEditor() {
       viewport: viewportRef.current,
     };
     latestDocumentRef.current = document;
-    latestDirtyRef.current = Boolean(state?.dirty);
-  }, [document, state?.dirty, workspaceSnapshot]);
+  }, [document, workspaceSnapshot]);
   useLayoutEffect(() => {
     if (hydrationRef.current.icao !== icao) {
       hydrationRef.current = { icao, enabled: !skippedGeneration };
@@ -629,6 +628,31 @@ export default function ContributionEditor() {
   const showError = useCallback((description) => {
     setToast({ show: true, title: 'Contribution editor', description, variant: 'destructive' });
   }, []);
+
+  const autosave = useMemo(
+    () =>
+      createEditorAutosave({
+        save: (document) =>
+          traceEditorAsync(
+            'editor:autosave',
+            () => saveEditorDraft(document, { normalized: true }),
+            { objectCount: document.objects.length, removalCount: document.removals.length }
+          ),
+        onSaved: (document, record) => {
+          setSavedAt(record.savedAt);
+          dispatch({ type: 'mark-saved', document });
+        },
+        onError: () =>
+          showError(
+            'Your latest edits could not be saved. Keep this tab open and download your draft.'
+          ),
+      }),
+    [showError]
+  );
+  useLayoutEffect(() => {
+    if (!hydrationPending) autosave.schedule(document);
+  }, [autosave, document, hydrationPending]);
+  useEffect(() => attachEditorAutosaveLifecycle(autosave), [autosave]);
 
   useEffect(() => {
     if (document?.simulator !== 'xplane' || !document.source?.fingerprint) {
@@ -761,12 +785,7 @@ export default function ContributionEditor() {
         if (controller.signal.aborted) return;
         const originalDivisions = originalDivisionsFromPoints(points);
         originalDivisionRefreshRef.current = refreshKey;
-        const nextDocument = syncOriginalDivisionMetadata(
-          latestDocumentRef.current,
-          originalDivisions
-        );
         dispatch({ type: 'sync-original-divisions', originalDivisions });
-        saveEditorDraft(nextDocument).catch(() => {});
       })
       .catch((error) => {
         if (error.name !== 'AbortError') {
@@ -815,24 +834,6 @@ export default function ContributionEditor() {
       cancelled = true;
     };
   }, [icao, requestedSimulator, showError]);
-
-  useEffect(() => {
-    if (!state?.dirty || !document) return undefined;
-    clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(async () => {
-      const record = await traceEditorAsync(
-        'editor:autosave',
-        () => saveEditorDraft(document, { normalized: true }),
-        {
-          objectCount: document.objects.length,
-          removalCount: document.removals.length,
-        }
-      );
-      setSavedAt(record.savedAt);
-      dispatch({ type: 'mark-saved' });
-    }, 650);
-    return () => clearTimeout(autosaveTimerRef.current);
-  }, [document, state?.dirty]);
 
   useEffect(() => {
     if (!document) return undefined;
@@ -909,12 +910,6 @@ export default function ContributionEditor() {
   }, [document, removalContext, showError]);
 
   useEffect(() => {
-    if (!document || initialSaveRef.current) return;
-    initialSaveRef.current = true;
-    saveEditorDraft(document, { normalized: true }).then((record) => setSavedAt(record.savedAt));
-  }, [document]);
-
-  useEffect(() => {
     const handleKeyDown = (event) => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
@@ -967,13 +962,9 @@ export default function ContributionEditor() {
       removalAbortRef.current?.abort();
       importedRemovalAbortRef.current?.abort();
       removalWorkerClientRef.current?.terminate();
-      clearTimeout(autosaveTimerRef.current);
       clearTimeout(workspaceSaveTimerRef.current);
       clearTimeout(textureStatusTimerRef.current);
       pendingTextureStatusUpdatesRef.current = [];
-      if (latestDirtyRef.current && latestDocumentRef.current) {
-        saveEditorDraft(latestDocumentRef.current);
-      }
       if (latestDocumentRef.current) {
         saveEditorWorkspace(icao, latestDocumentRef.current.simulator, latestWorkspaceRef.current);
       }
@@ -1709,9 +1700,6 @@ export default function ContributionEditor() {
           originalDivisions: latestDocumentRef.current?.originalDivisions,
         });
         dispatch({ type: 'replace-document', document: next });
-        saveEditorDraft(next)
-          .then(() => setSavedAt(new Date()))
-          .catch(() => {});
         setReferenceScene({ ...EMPTY_SCENE, simulator: next.simulator });
         setRenderBundle(null);
         setRemovalContext(null);

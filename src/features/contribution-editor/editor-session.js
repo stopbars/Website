@@ -66,20 +66,18 @@ export async function saveEditorDraft(document, options = {}) {
   };
   MEMORY_DRAFTS.set(record.key, record);
   MEMORY_ACTIVE_SIMULATORS.set(activeSimulatorRecord.key, activeSimulatorRecord);
+  let persisted = false;
   if (shouldWriteLocalDraftFallback(normalized)) {
-    writeLocalRecord(record.key, record);
+    persisted = writeLocalRecord(record.key, record);
   } else {
     removeLocalRecord(record.key);
   }
   writeLocalRecord(activeSimulatorRecord.key, activeSimulatorRecord);
   const database = await openDatabase();
   if (database) {
-    await Promise.all([
-      putDatabaseRecord(database, record),
-      putDatabaseRecord(database, activeSimulatorRecord),
-    ]);
+    persisted = (await putDatabaseRecords(database, [record, activeSimulatorRecord])) || persisted;
   }
-  return record;
+  return { ...record, persisted };
 }
 
 function shouldWriteLocalDraftFallback(document) {
@@ -676,12 +674,23 @@ async function pruneTextureCache(database) {
 }
 
 async function putDatabaseRecord(database, record) {
+  return putDatabaseRecords(database, [record]);
+}
+
+async function putDatabaseRecords(database, records) {
   try {
-    await requestPromise(
-      database.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(record)
-    );
+    const transaction = database.transaction(STORE_NAME, 'readwrite');
+    const completion = transactionPromise(transaction);
+    try {
+      const store = transaction.objectStore(STORE_NAME);
+      for (const record of records) store.put(record);
+    } catch {
+      transaction.abort();
+    }
+    await completion;
+    return true;
   } catch {
-    // The local mirror keeps compact editor drafts available when IndexedDB is blocked.
+    return false;
   }
 }
 
@@ -707,10 +716,14 @@ async function deleteDatabaseRecord(database, key) {
 
 function writeLocalRecord(key, record) {
   try {
-    globalThis.localStorage?.removeItem(key);
-    globalThis.localStorage?.setItem(key, JSON.stringify(record));
+    const storage = globalThis.localStorage;
+    if (!storage) return false;
+    storage.removeItem(key);
+    storage.setItem(key, JSON.stringify(record));
+    return true;
   } catch {
     removeLocalRecord(key);
+    return false;
   }
 }
 

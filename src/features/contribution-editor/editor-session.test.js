@@ -295,6 +295,87 @@ test('keeps texture cache keys separate across scenery fingerprints', () => {
   );
 });
 
+test('reports whether a draft has durable storage instead of only an in-memory copy', async (t) => {
+  const originalStorage = globalThis.localStorage;
+  t.after(() => {
+    globalThis.localStorage = originalStorage;
+  });
+  const document = { icao: 'YDUR', simulator: 'xplane', objects: [] };
+  globalThis.localStorage = undefined;
+  assert.equal((await saveEditorDraft(document)).persisted, false);
+  globalThis.localStorage = createMemoryStorage();
+  assert.equal((await saveEditorDraft(document)).persisted, true);
+  globalThis.localStorage = {
+    setItem() {
+      throw new Error('Storage full');
+    },
+    removeItem() {},
+  };
+  assert.equal((await saveEditorDraft(document)).persisted, false);
+});
+
+test('waits for the IndexedDB transaction to commit and reports aborts for large drafts', async (t) => {
+  const originalIndexedDB = globalThis.indexedDB;
+  const originalStorage = globalThis.localStorage;
+  const transactions = [];
+  const database = {
+    close() {},
+    transaction() {
+      const transaction = {
+        records: [],
+        objectStore: () => ({
+          put(record) {
+            transaction.records.push(record);
+            const request = {};
+            queueMicrotask(() => request.onsuccess?.());
+            return request;
+          },
+        }),
+      };
+      transactions.push(transaction);
+      return transaction;
+    },
+  };
+  globalThis.indexedDB = {
+    open() {
+      const request = { result: database };
+      queueMicrotask(() => request.onsuccess());
+      return request;
+    },
+  };
+  globalThis.localStorage = createMemoryStorage();
+  t.after(() => {
+    database.onversionchange?.();
+    globalThis.indexedDB = originalIndexedDB;
+    globalThis.localStorage = originalStorage;
+  });
+  const document = {
+    icao: 'YIDB',
+    simulator: 'xplane',
+    objects: Array.from({ length: 1001 }, (_, index) => ({
+      id: `BARS_${index}`,
+      coordinates: [
+        [115, -32],
+        [115.001, -32.001],
+      ],
+    })),
+  };
+  let settled = false;
+  const saving = saveEditorDraft(document).then((record) => {
+    settled = true;
+    return record;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(settled, false);
+  assert.equal(transactions[0].records.length, 2);
+  transactions[0].oncomplete();
+  assert.equal((await saving).persisted, true);
+  const failed = saveEditorDraft(document);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  transactions[1].onabort();
+  assert.equal((await failed).persisted, false);
+});
+
 test('tracks unresolved apt.dat markings by code even before their stock line resolves', () => {
   assert.equal(
     xPlaneTextureDefinitionKey({

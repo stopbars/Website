@@ -25,6 +25,18 @@ const document = {
   ],
 };
 
+test('mark-saved only clears dirty state for the document that was persisted', () => {
+  const initial = createEditorState(document);
+  const changed = editorReducer(initial, {
+    type: 'update-object',
+    id: initial.present.objects[0].partId,
+    changes: { name: 'Edited' },
+  });
+  assert.equal(changed.dirty, true);
+  assert.equal(editorReducer(changed, { type: 'mark-saved', document: initial.present }), changed);
+  assert.equal(editorReducer(changed, { type: 'mark-saved', document: changed.present }).dirty, false);
+});
+
 test('selecting the current object preserves the editor state identity', () => {
   const initial = createEditorState(document);
   const selected = editorReducer(initial, {

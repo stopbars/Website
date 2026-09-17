@@ -43,7 +43,7 @@ export function editorReducer(state, action) {
     case 'redo':
       return redo(state);
     case 'mark-saved':
-      return { ...state, dirty: false };
+      return state.present === action.document ? { ...state, dirty: false } : state;
     case 'mark-tested':
       return {
         ...state,
