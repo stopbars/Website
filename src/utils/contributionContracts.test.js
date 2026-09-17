@@ -5,11 +5,42 @@ import {
   contributionSourceFileName,
   contributionSubmissionError,
   contributionSubmissionProof,
+  contributionSimulatorOptions,
+  prepareContributionSubmissionProof,
   isFsDataXml,
   publicationError,
   publishedBarsArtifactDescriptor,
   submittedArtifactDescriptor,
 } from './contributionContracts.js';
+
+test('MSFS editions share a simulator family while X-Plane stays separate', () => {
+  for (const testedSimulator of ['msfs2020', 'msfs2024', 'xplane']) {
+    const proof = { generationToken: 'token', generationHash: 'hash', testedSimulator };
+    for (const simulator of ['msfs2020', 'msfs2024', 'xplane']) {
+      const compatible = (testedSimulator === 'xplane') === (simulator === 'xplane');
+      assert.equal(contributionProofError(proof, simulator) === '', compatible);
+      assert.equal(contributionSimulatorOptions(testedSimulator).includes(simulator), compatible);
+    }
+  }
+});
+
+test('changing MSFS editions prepares the same draft and checks its tested hash', async () => {
+  const proof = { generationToken: 'old', generationHash: 'hash', testedSimulator: 'msfs2024' };
+  const xml = '<FSData version="9.0" />';
+  const result = await prepareContributionSubmissionProof(proof, 'msfs2020', xml, 'EGLL', async (url, options) => {
+    assert.equal(url, 'https://v2.stopbars.com/supports/generate');
+    assert.equal(options.body.get('simulator'), 'msfs2020');
+    assert.equal(await options.body.get('xmlFile').text(), xml);
+    return { ok: true, json: async () => ({ token: 'new', generationHash: 'hash' }) };
+  });
+  assert.equal(result.generationToken, 'new');
+  assert.equal(result.testedSimulator, 'msfs2020');
+  await assert.rejects(prepareContributionSubmissionProof(proof, 'msfs2020', xml, 'EGLL', async () => ({
+    ok: true, json: async () => ({ token: 'new', generationHash: 'changed' }),
+  })), /no longer matches/);
+  assert.equal(await prepareContributionSubmissionProof(proof, 'msfs2024', xml, 'EGLL', () => assert.fail('unexpected request')), proof);
+  await assert.rejects(prepareContributionSubmissionProof(proof, 'xplane', xml, 'EGLL', () => assert.fail('unexpected request')), /simulator changed/);
+});
 
 test('preserves the tested contribution proof from navigation state', () => {
   assert.deepEqual(

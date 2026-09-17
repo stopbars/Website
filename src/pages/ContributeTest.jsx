@@ -41,7 +41,9 @@ const ContributeTest = () => {
     typeof location.state?.draftFileName === 'string'
       ? location.state.draftFileName
       : `${icao}-Draft.xml`;
-  const incomingSimulator = location.state?.simulator === 'xplane' ? 'xplane' : undefined;
+  const incomingSimulator = ['msfs2020', 'msfs2024', 'xplane'].includes(location.state?.simulator)
+    ? location.state.simulator
+    : undefined;
   const incomingDraftHash =
     typeof location.state?.draftHash === 'string' ? location.state.draftHash : '';
   const incomingAirportName =
@@ -289,21 +291,24 @@ const ContributeTest = () => {
         body: formData,
       });
 
-      // Check for rate limiting before trying to parse JSON
-      if (response.status === 429) {
-        setErrorTitle('Rate Limited');
-        setError('You are being rate limited, please try again shortly.');
+      const responseText = await response.text();
+      if (response.status === 429 || /^\s*rate[ -]limit/i.test(responseText)) {
+        setErrorTitle('Rate limited');
+        setError('You have been rate limited. Please try again shortly.');
         setShowErrorToast(true);
-        setIsValidating(false);
         return;
       }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Unable to prepare the test.');
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error('Unable to prepare the test. Please try again shortly.');
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'Unable to prepare the test.');
+      }
 
       // MSFS returns previewable support geometry; X-Plane removals are applied locally.
       if (data.supportsXml) {

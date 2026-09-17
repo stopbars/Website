@@ -20,6 +20,8 @@ import {
   contributionProofError,
   contributionSubmissionError,
   contributionSubmissionProof,
+  contributionSimulatorOptions,
+  prepareContributionSubmissionProof,
 } from '../utils/contributionContracts.js';
 
 const FAST_TRACK_PREFERENCE_PREFIX = 'bars:contributions:fast-track:v1:';
@@ -41,6 +43,7 @@ const ContributeDetails = () => {
   const { user } = useAuth();
   const vatsimToken = getVatsimToken();
   const submissionProof = contributionSubmissionProof(navigationState);
+  const allowedSimulators = contributionSimulatorOptions(submissionProof.testedSimulator);
   const cachedAirport = getCachedContributionAirport(icao);
   const cachedPolicy = getCachedContributionPolicy(icao);
 
@@ -67,7 +70,9 @@ const ContributeDetails = () => {
     readFastTrackPreference(user?.vatsim_id)
   );
   const [simulator, setSimulator] = useState(() =>
-    navigationState?.simulator === 'xplane' ? 'xplane' : 'msfs2024'
+    ['msfs2020', 'msfs2024', 'xplane'].includes(navigationState?.simulator)
+      ? navigationState.simulator
+      : 'msfs2024'
   );
   const contributionsDisabled =
     contributionPolicy?.managed && !contributionPolicy?.contributionsEnabled;
@@ -196,7 +201,8 @@ const ContributeDetails = () => {
     }
 
     event.preventDefault();
-    const simulators = ['msfs2024', 'msfs2020', 'xplane'];
+    const simulators = allowedSimulators;
+    if (!simulators.length) return;
     const currentIndex = simulators.indexOf(simulator);
     const nextIndex =
       event.key === 'Home'
@@ -282,13 +288,19 @@ const ContributeDetails = () => {
         reader.readAsText(selectedFile);
       });
 
+      const preparedProof = await prepareContributionSubmissionProof(
+        submissionProof,
+        simulator,
+        fileContent,
+        icao
+      );
       const payload = {
         airportIcao: icao,
         packageName: sceneryName,
         simulator: simulator,
         submittedXml: fileContent,
-        generationToken: submissionProof.generationToken,
-        generationHash: submissionProof.generationHash,
+        generationToken: preparedProof.generationToken,
+        generationHash: preparedProof.generationHash,
         notes: notesRef.current || undefined,
         fastTrackRequested: user.fast_track?.enabled === true && fastTrackRequested,
       };
@@ -425,6 +437,7 @@ const ContributeDetails = () => {
                         aria-checked={simulator === 'msfs2024'}
                         tabIndex={simulator === 'msfs2024' ? 0 : -1}
                         data-simulator="msfs2024"
+                        disabled={!allowedSimulators.includes('msfs2024') || isSubmitting}
                         onClick={() => setSimulator('msfs2024')}
                         onKeyDown={selectAdjacentSimulator}
                         className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ${
@@ -441,6 +454,7 @@ const ContributeDetails = () => {
                         aria-checked={simulator === 'msfs2020'}
                         tabIndex={simulator === 'msfs2020' ? 0 : -1}
                         data-simulator="msfs2020"
+                        disabled={!allowedSimulators.includes('msfs2020') || isSubmitting}
                         onClick={() => setSimulator('msfs2020')}
                         onKeyDown={selectAdjacentSimulator}
                         className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ${
@@ -457,6 +471,7 @@ const ContributeDetails = () => {
                         aria-checked={simulator === 'xplane'}
                         tabIndex={simulator === 'xplane' ? 0 : -1}
                         data-simulator="xplane"
+                        disabled={!allowedSimulators.includes('xplane') || isSubmitting}
                         onClick={() => setSimulator('xplane')}
                         onKeyDown={selectAdjacentSimulator}
                         className={`flex items-center justify-center p-3 rounded-lg border-2 transition-[background-color,border-color,color] duration-[var(--duration-quick)] ${
