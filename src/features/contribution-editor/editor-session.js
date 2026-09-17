@@ -249,9 +249,10 @@ function normalizeSession(session) {
 
 export async function cacheReferenceTextures(fingerprint, scene, entries) {
   const normalizedFingerprint = String(fingerprint ?? '');
+  if (!normalizedFingerprint) return { cached: 0, bytes: 0, paths: [] };
   const database = await openDatabase();
   if (!database) return { cached: 0, bytes: 0, paths: [] };
-  await cacheTextureDefinitions(database, scene);
+  await cacheTextureDefinitions(database, normalizedFingerprint, scene);
   const referencedPaths = new Set(
     (scene?.features ?? [])
       .map((feature) => normalizeTexturePath(feature.properties?.textureAssetPath))
@@ -295,31 +296,36 @@ export async function cacheReferenceTextures(fingerprint, scene, entries) {
 export async function loadReferenceTextures(fingerprint, paths) {
   const normalizedFingerprint = String(fingerprint ?? '');
   const normalizedPaths = [...new Set((paths ?? []).map(normalizeTexturePath).filter(Boolean))];
-  if (normalizedPaths.length === 0) return new Map();
+  if (!normalizedFingerprint || normalizedPaths.length === 0) return new Map();
   const database = await openDatabase();
   if (!database) return new Map();
   try {
     const transaction = database.transaction(TEXTURE_STORE_NAME, 'readonly');
     const store = transaction.objectStore(TEXTURE_STORE_NAME);
-    const globalRecords = await Promise.all(
+    const scopedRecords = await Promise.all(
       normalizedPaths.map((path) =>
         requestPromise(store.get(textureCacheKey(normalizedFingerprint, path)))
       )
     );
-    const globalByPath = new Map(
-      globalRecords.filter((record) => record?.blob).map((record) => [record.path, record])
+    const scopedByPath = new Map(
+      scopedRecords.filter((record) => record?.blob).map((record) => [record.path, record])
     );
-    const missingPaths = normalizedPaths.filter((path) => !globalByPath.has(path));
+    const missingPaths = normalizedPaths.filter((path) => !scopedByPath.has(path));
     const legacyRecords =
-      normalizedFingerprint && missingPaths.length > 0
+      missingPaths.length > 0
         ? await Promise.all(
             missingPaths.map((path) =>
-              requestPromise(store.get(legacyTextureCacheKey(normalizedFingerprint, path)))
+              requestPromise(store.get(`global:${path}`))
             )
           )
         : [];
-    const records = [...globalByPath.values(), ...legacyRecords.filter((record) => record?.blob)];
-    const available = records.filter((record) => record?.blob);
+    // Global records can only be migrated back to the package that supplied their bytes.
+    const available = [
+      ...scopedByPath.values(),
+      ...legacyRecords.filter(
+        (record) => record?.blob && record.fingerprint === normalizedFingerprint
+      ),
+    ];
     if (available.length > 0) {
       const touchedAt = Date.now();
       const writeTransaction = database.transaction(TEXTURE_STORE_NAME, 'readwrite');
@@ -327,7 +333,7 @@ export async function loadReferenceTextures(fingerprint, paths) {
       for (const record of available) {
         writeStore.put({
           ...record,
-          key: textureCacheKey('', record.path),
+          key: textureCacheKey(normalizedFingerprint, record.path),
           lastAccess: touchedAt,
         });
       }
@@ -347,7 +353,9 @@ export async function requestPersistentEditorStorage() {
   }
 }
 
-export async function hydrateReferenceTextureDefinitions(scene) {
+export async function hydrateReferenceTextureDefinitions(scene, fingerprint) {
+  const normalizedFingerprint = String(fingerprint ?? '');
+  if (!normalizedFingerprint) return { scene, resolvedDefinitions: 0 };
   const features = scene?.features ?? [];
   const definitions = [
     ...new Set(
@@ -365,26 +373,15 @@ export async function hydrateReferenceTextureDefinitions(scene) {
     const transaction = database.transaction(TEXTURE_DEFINITION_STORE_NAME, 'readonly');
     const store = transaction.objectStore(TEXTURE_DEFINITION_STORE_NAME);
     const records = await Promise.all(
-      definitions.map((definition) => requestPromise(store.get(definition)))
+      definitions.map((definition) =>
+        requestPromise(store.get(textureCacheKey(normalizedFingerprint, definition)))
+      )
     );
     const cached = new Map(
       records
         .filter((record) => record?.properties)
-        .map((record) => [record.key, record.properties])
+        .map((record) => [record.definition, record.properties])
     );
-    const missingAptDefinitions = definitions.filter(
-      (definition) => definition.startsWith('apt-marking:') && !cached.has(definition)
-    );
-    if (missingAptDefinitions.length > 0) {
-      const legacyRecords = await requestPromise(store.getAll());
-      for (const definition of missingAptDefinitions) {
-        const markingCode = Number(definition.slice('apt-marking:'.length));
-        const legacy = legacyRecords.find(
-          (record) => record?.properties && stockAptDefinitionCode(record.key) === markingCode
-        );
-        if (legacy) cached.set(definition, legacy.properties);
-      }
-    }
     if (cached.size === 0) return { scene, resolvedDefinitions: 0 };
     return {
       scene: {
@@ -413,8 +410,8 @@ export async function hydrateReferenceTextureDefinitions(scene) {
   }
 }
 
-export function textureCacheKey(_fingerprint, path) {
-  return `global:${normalizeTexturePath(path)}`;
+export function textureCacheKey(fingerprint, path) {
+  return `${String(fingerprint ?? '')}:${normalizeTexturePath(path)}`;
 }
 
 export function documentKey(icao, simulator) {
@@ -568,16 +565,19 @@ function openDatabase() {
   return databasePromise;
 }
 
-async function cacheTextureDefinitions(database, scene) {
+async function cacheTextureDefinitions(database, fingerprint, scene) {
   const records = new Map();
   for (const feature of scene?.features ?? []) {
     const properties = feature.properties ?? {};
     if (!isCacheableXPlaneDefinition(properties) || properties.textureDefinitionResolved !== true) {
       continue;
     }
-    const key = xPlaneTextureDefinitionKey(properties);
+    const definition = xPlaneTextureDefinitionKey(properties);
+    const key = textureCacheKey(fingerprint, definition);
     records.set(key, {
       key,
+      definition,
+      fingerprint,
       properties: textureDefinitionProperties(properties),
       lastAccess: Date.now(),
     });
@@ -612,12 +612,6 @@ export function xPlaneTextureDefinitionKey(properties = {}) {
     : '';
 }
 
-function stockAptDefinitionCode(value) {
-  const name = normalizeTexturePath(value).split('/').at(-1) || '';
-  const match = /^(\d+)_.*\.lin$/.exec(name);
-  return match ? Number(match[1]) : null;
-}
-
 function textureDefinitionProperties(properties) {
   const keys = [
     'sourceAssetPath',
@@ -648,10 +642,6 @@ function textureDefinitionProperties(properties) {
   return Object.fromEntries(
     keys.filter((key) => properties[key] !== undefined).map((key) => [key, properties[key]])
   );
-}
-
-function legacyTextureCacheKey(fingerprint, path) {
-  return `${String(fingerprint ?? '')}:${normalizeTexturePath(path)}`;
 }
 
 function requestPromise(request) {

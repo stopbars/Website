@@ -689,7 +689,7 @@ export default function ContributionEditor() {
       return undefined;
     }
     let cancelled = false;
-    hydrateReferenceTextureDefinitions(referenceScene).then((result) => {
+    hydrateReferenceTextureDefinitions(referenceScene, document.source?.fingerprint).then((result) => {
       if (cancelled || result.resolvedDefinitions === 0) return;
       setReferenceScene(result.scene);
       if (document.source?.fingerprint) {

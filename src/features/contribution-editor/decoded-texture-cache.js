@@ -40,8 +40,9 @@ export function createDecodedTextureCache(maxBytes = DEFAULT_MAX_BYTES) {
   };
 }
 
-export function decodedTextureKey(path, properties = {}, lineTexture = false) {
+export function decodedTextureKey(path, properties = {}, lineTexture = false, sourceFingerprint = '') {
   return JSON.stringify([
+    String(sourceFingerprint),
     String(path ?? '').toLowerCase(),
     Boolean(lineTexture),
     properties.textureScaleX ?? null,

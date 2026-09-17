@@ -1417,7 +1417,12 @@ const EditorMap = memo(function EditorMap({
       let missing = 0;
       let skipped = 0;
       for (const [pattern, texture] of textureList) {
-        const decodedKey = decodedTextureKey(texture.path, texture.properties, texture.lineTexture);
+        const decodedKey = decodedTextureKey(
+          texture.path,
+          texture.properties,
+          texture.lineTexture,
+          sourceFingerprint
+        );
         const decoded = decodedTextureCache.get(decodedKey);
         if (decoded) {
           jobs.push({

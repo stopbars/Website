@@ -284,12 +284,12 @@ test('keeps a simulator reference scene available across SPA navigation', async 
 test('normalizes persisted texture cache keys across dropped Windows paths', () => {
   assert.equal(
     textureCacheKey('42:abcdef00', '.\\Resources\\default scenery\\line.dds'),
-    'global:resources/default scenery/line.dds'
+    '42:abcdef00:resources/default scenery/line.dds'
   );
 });
 
-test('shares the same texture cache key across airport scenery fingerprints', () => {
-  assert.equal(
+test('keeps texture cache keys separate across scenery fingerprints', () => {
+  assert.notEqual(
     textureCacheKey('YPPH-fingerprint', 'Resources/default scenery/shared.dds'),
     textureCacheKey('EGLL-fingerprint', 'Resources/default scenery/shared.dds')
   );

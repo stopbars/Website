@@ -11,6 +11,17 @@ function image(bytes) {
 }
 
 describe('decoded texture cache', () => {
+  it('keeps decoded pixels separate when scenery packages use the same texture path', () => {
+    const cache = createDecodedTextureCache();
+    const first = decodedTextureKey('textures/paint.dds', {}, false, 'package-a');
+    const second = decodedTextureKey('textures/paint.dds', {}, false, 'package-b');
+    const firstImage = image(4);
+    const secondImage = image(8);
+    cache.set(first, firstImage);
+    cache.set(second, secondImage);
+    assert.equal(cache.get(first), firstImage);
+    assert.equal(cache.get(second), secondImage);
+  });
   it('keeps recently used decoded pixels and evicts the oldest entry', () => {
     const cache = createDecodedTextureCache(8);
     cache.set('first', image(4));
