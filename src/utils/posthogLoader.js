@@ -11,6 +11,7 @@ const IS_DEV = import.meta.env.MODE === 'development';
 const baseOptions = {
   api_host: POSTHOG_HOST,
   debug: IS_DEV,
+  person_profiles: 'never',
   disable_session_recording: IS_DEV,
   autocapture: false,
   capture_exceptions: false,
